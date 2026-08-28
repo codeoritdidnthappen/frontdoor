@@ -64,7 +64,9 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 1. **Branch.** Work begins from an up-to-date `main`. Create one branch per ticket, named so
    the ticket is identifiable from the branch name. Never commit directly to `main`.
 2. **Code.** Keep commits small and scoped to the ticket. Each commit message says what
-   changed and why, and references the ticket.
+   changed and why, and references the ticket. Attribute every commit to the human author
+   alone — no `Co-Authored-By` trailers, no "generated with" notes, and no other credit for
+   Claude, Codex, or any other AI assistant, in the commit message or the PR description.
 3. **Test.** Before pushing, run the project's tests and checks locally. New behavior gets new
    tests. Never push a branch you haven't seen pass.
 4. **Sync.** Bring the branch up to date with `main` before opening the PR, and resolve
