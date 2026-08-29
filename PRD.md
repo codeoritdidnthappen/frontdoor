@@ -46,6 +46,13 @@ Capture angle became continuously measurable when capture moved into an instrume
 Committed before first capture and before any image was processed. Reported as an amendment at
 Demo Day.
 
+**Amendment A-2 (2026-08-29) — the success criterion names its arm.** The criterion above reads
+"MAE ≤ 0.25" on the sealed test split" without saying which of the four arms it judges. It is fixed
+to **Arm A** (D-022); the other arms are reported without a pass/fail bar. Reason: an unnamed arm
+lets the hypothesis be scored against whichever arm looks best once results are seen, which is the
+exact failure pre-registration exists to prevent. Committed 2026-08-29, before first capture and
+before any image was processed. Reported as an amendment at Demo Day.
+
 ## 3. Scope
 
 **In scope**
@@ -53,8 +60,8 @@ Demo Day.
 - One measurement type — **threshold rise** — characterized completely.
 - Single RGB frame, no depth sensor required at inference.
 - Opaque-door entrances.
-- Four scale-recovery arms compared head to head (§5), spanning an accuracy-versus-usability
-  gradient (D-013).
+- Four scale-recovery arms (§5) spanning an accuracy-versus-usability gradient (D-013); Arm A′ is
+  evaluated on a subset of entrances (D-021).
 - Explicit abstention when the confidence interval straddles a decision line.
 
 **Out of scope (explicitly not being built)**
@@ -88,6 +95,10 @@ Demo Day.
 | D-017 | **The seal is enforced in code.** Manifest with image hashes committed at capture; the loader refuses sealed rows without an explicit flag; the unsealing run appends to a committed audit log. | "How do we know you didn't peek?" needs an answer that is not our word. Turns D-007 from a claim into an artifact. |
 | D-018 | **Dataset: bytes in object storage, records in git.** Entrance ID and caliper reading are entered in the app at capture and written to a per-capture sidecar. | Low single-digit gigabytes is the wrong shape for a repo. Binding truth to image at the shutter press removes the reconciliation step where datasets rot. |
 | D-019 | **Capture angle is pre-registered as a continuous error-versus-angle model on the sealed split**; the other four condition variables are reported from dev as exploratory. | A curve fitted against a continuously measured angle is affordable at 12-18 sealed entrances; a five-way contingency table is not. Amends the §2 analysis plan — see Amendment A-1. |
+| D-021 | **Arm A′ is captured on a subset of entrances**, and the capture app prescribes the shot list — which placement, angle and distance remain outstanding — refusing to mark an entrance complete until the plan is met. | A credit card occupies one plane at a time, so covering both placements everywhere would double an already tight capture load. A subset prices what the easier protocol costs without doubling field time, and putting the plan in the instrument makes protocol compliance enforced rather than remembered. A′ results are exploratory, not confirmatory. |
+| D-022 | **The pre-registered success criterion applies to Arm A only.** Other arms are reported without a pass/fail bar. | The criterion named no arm, which would have allowed the hypothesis to be scored against whichever arm looked best after unsealing. See Amendment A-2. |
+| D-023 | **Three splits — dev, calib, sealed — assigned at capture from the first photo**, deterministically from a hash of the entrance ID plus a seed committed before capture. | D-011's calibration split must be distinct from sealed but is unconfirmed until Sep 3, and splits are immutable once assigned; carving calib later would breach that rule. If D-011 is dropped, calib folds back into dev. Deterministic assignment also means four operators on four phones cannot disagree about an entrance, and anyone can reproduce the assignment. |
+| D-024 | **Stage 1 ROI taps happen in-app at capture** and are written to the capture sidecar. | The taps are inputs to every measurement, so they belong inside the seal and under the same hashing as the image. Tapping at the entrance also means an unusable frame is found while someone is still standing in front of the door. |
 | D-020 | **LiDAR captured on every entrance and quarantined** from the metrology code path; loaded only by the evaluation harness. | Free once capture is instrumented, and it strengthens deliverable #5. If depth sits where the method can reach it, it eventually gets used to tune. Supersedes the matched-subset scope in §6. |
 
 **Proposed, not yet locked**
@@ -98,8 +109,9 @@ Demo Day.
 
 ## 5. System design
 
-**Stage 1 — ROI selection.** Operator taps the threshold edges and the reference card in the
-captured frame. No learned model in v1 (D-004).
+**Stage 1 — ROI selection.** The operator taps the threshold edges and the reference card in the app
+immediately after the shutter; the taps are written to the capture sidecar and hashed with it, so
+they sit inside the seal (D-024). No learned model in v1 (D-004).
 
 **Stage 2 — Metric recovery.** Four arms behind one interface, compared head to head. Interfaces
 and rationale in [`ARCHITECTURE.md`](ARCHITECTURE.md) §5.
@@ -109,20 +121,26 @@ and rationale in [`ARCHITECTURE.md`](ARCHITECTURE.md) §5.
   inside that plane. Needs no intrinsics, no pose, no depth. The monocular accuracy ceiling (D-013).
 - **Arm A′ (D-013):** the same metrology with the card **flat on the ground** — ground-plane
   homography decomposed with intrinsics to recover camera pose, height solved off the plane. The
-  path a user can realistically perform.
-- **Arm B:** learned monocular depth + reference-object scaling. The proposal's original approach,
-  retained as the comparison point.
+  path a user can realistically perform. Captured on a subset only (D-021), so its result is
+  exploratory rather than confirmatory.
+- **Arm B:** learned monocular depth + reference-object scaling, on the same vertical-card frame as
+  Arm A. The proposal's original approach, retained as the comparison point.
 - **Arm C:** learned monocular depth + intrinsics-only scaling, no reference object. The most usable
   and least accurate arm, and the one that carries the usability claim (D-013); cut on 2026-09-02
   if weak.
 
 **Stage 3 — Compliance reasoning.** Map the measurement and its interval to the ADA lines; emit
-pass, fail, or abstain (D-009). The abstention rule's parameters are frozen in version control
-before the sealed run — an unfrozen threshold is a dial fitted to the test set.
+pass, fail, or abstain (D-009). The abstention rule's parameters are frozen in `config/abstention.yaml`,
+committed before the sealed run — an unfrozen threshold is a dial fitted to the test set.
 
 ## 6. Data and ground truth
 
-- **Target:** 40-60 entrances, each captured at 3-4 angles × 2 distances × available lighting.
+- **Target:** 40-60 entrances. Every entrance is captured at 3-4 angles × 2 distances × available
+  lighting with the card **vertical against the riser** (Arm A). A defined subset additionally
+  receives ground-card captures for Arm A′ (D-021).
+- **The app prescribes the shot list** (D-021): it tells the operator which placement, angle and
+  distance are still outstanding for this entrance, and will not mark the entrance complete until
+  the plan is satisfied.
 - **Ground truth:** digital caliper to ±0.01" on threshold rise, recorded per entrance (D-003).
 - **LiDAR reference:** depth captured on **every** entrance and quarantined from the metrology code
   path (D-020), loaded only for the monocular-vs-LiDAR comparison. LiDAR is a comparison, not ground
@@ -136,13 +154,16 @@ before the sealed run — an unfrozen threshold is a dial fitted to the test set
   angle is derived** from the recovered plane pose rather than estimated by the operator (D-019).
 - **Ground truth binds at the shutter press** (D-018): entrance ID and caliper reading are entered in
   the app, not reconciled against filenames afterward.
-- **Split assignment happens at collection time**, before any image is processed (D-007).
+- **Split assignment happens at collection time**, before any image is processed (D-007). Three
+  splits — dev, calib, sealed (D-023) — assigned **deterministically** from a hash of the entrance ID
+  plus a seed committed before the first photo, so four operators on four phones cannot disagree
+  about an entrance and anyone can reproduce the assignment.
 - **Constraint that drove topic choice:** storefronts are publicly observable and need no permission.
 
 ## 7. Evaluation protocol
 
 1. **Pre-registration** (§2) committed to the repo on 2026-08-28, before first capture.
-2. **Sealed test split** — ~30% of entrances, assigned randomly at collection, not processed and not
+2. **Sealed test split** — ~30% of entrances, assigned deterministically at collection (D-023), not processed and not
    viewed until results freeze on 2026-09-07. Run once. Anything noticed in it afterward is reported
    as exploratory, never as confirmatory. **Enforced in code, not by promise** (D-017): the loader
    refuses sealed rows without an explicit flag, and the single unsealing run appends to a committed
@@ -150,8 +171,11 @@ before the sealed run — an unfrozen threshold is a dial fitted to the test set
 3. **Reported metrics.** From the sealed split: MAE in inches per arm; classification accuracy and
    false-pass rate at the 1/2" line (1/4" secondary); the pre-registered continuous error-versus-angle
    model (D-019); interval calibration (do the stated intervals contain truth at the stated rate?);
-   abstention rate; monocular vs. LiDAR. From the dev split, labelled exploratory: error stratified by
-   distance, lighting, surface material and occlusion.
+   abstention rate; monocular vs. LiDAR. **The pass/fail bar applies to Arm A only** (D-022); every
+   other arm is reported without one. From the dev split, labelled exploratory: error stratified by
+   distance, lighting, surface material and occlusion, and the Arm A′ comparison (D-021). Abstention
+   rate is reported per decision line — at the 1/4" line, given the error scale, a rate approaching
+   100% is a plausible and reportable outcome rather than a malfunction.
 4. **Negative results are presented as findings**, with error attributed to conditions rather than
    aggregated into one number.
 
@@ -161,7 +185,7 @@ before the sealed run — an unfrozen threshold is a dial fitted to the test set
 2. Working measurement pipeline, demonstrable live on an iPhone (D-005).
 3. Error budget — accuracy by measurement type and capture condition, including the
    error-versus-angle curve.
-4. Ablation — metrology vs. depth+reference vs. depth+intrinsics.
+4. Ablation — metrology (Arm A, with Arm A′ on a subset) vs. depth+reference vs. depth+intrinsics.
 5. Comparison against LiDAR on every entrance (D-020).
 6. Written findings and a capture protocol stating when an estimate is trustworthy.
 7. Demo Day slide deck.
@@ -172,12 +196,19 @@ Four parallel tracks. Owners are roles, not yet names (see §12).
 
 | Dates | Field capture | Metrology (A/A′) | Depth baseline (B/C) | Demo + deck |
 |-------|---------------|-------------------|----------------------|-------------|
-| Aug 28-30 | Start paid developer account (R-7). Buy caliper. Build capture app (D-014); verify calibration-data delivery on team devices (R-9). Bench-test LiDAR against caliper (R-10). First 15 entrances, split assigned at capture. | Derive rise-error vs. capture angle before capture scales up. Homography + card detection end to end on 3 test images. | Off-the-shelf depth model running, establishes the floor. | Server endpoint stub; demo app is the capture app plus rendering. |
+| Aug 28-30 | Start paid developer account (R-7). Buy caliper. **Capture app ships before any capture** (D-014): calibration-data delivery verified on team devices (R-9), shot-list prompting (D-021) and in-app ROI taps (D-024) working. Commit the split seed (D-023). Bench-test LiDAR against caliper (R-10). First entrances begin the moment the app is live. | Derive rise-error vs. capture angle before capture scales up. Homography + card detection end to end on 3 test images. | Off-the-shelf depth model running, establishes the floor. | Server endpoint stub; demo app is the capture app plus rendering. |
 | Aug 31-Sep 2 | Dataset to 40+ entrances; LiDAR captured automatically per D-020. | Arms A and A′ metrically correct on dev split. | Arms B and C end to end. **Cut decision on Arm C, Sep 2.** | Upload → result round trip working. |
 | Sep 3-5 | Complete to 60 if pace allows; otherwise stop and label. | Conformal calibration; abstention rule implemented. | — | Error-analysis notebook and charts. |
 | Sep 6-7 | — | Iterate on the dominant failure mode. **Results freeze Sep 7. Unseal test split, run once.** | — | Deck built from frozen numbers. |
 | Sep 8 | Cursor Workshop. Rehearse live demo. Backup recording captured. | | | |
 | Sep 9 | **Demo Day** — 10 min + 5 min Q&A. | | | |
+| Sep 10 | **Gauntlet Showcase** — top projects re-present, live streamed to staff, hiring partners and outside viewers. | | | |
+| Sep 11 | Graduation. | | | |
+
+**Build-in-public runs across the whole window, not at the end.** §11's six posts map to the
+milestones above: post 1 on Aug 30, post 2 when the dataset passes 40 entrances, post 3 at the first
+honest error number, post 4 at the Sep 2 arm cut, post 5 with the LiDAR comparison, post 6 on
+Demo Day. Per-person targets are graded, so each team member posts on their own account.
 
 ## 10. Demo Day plan
 
@@ -206,10 +237,12 @@ research community is a reasonable tag given the work builds on that line.
 
 - **O-1. Team roster.** Four people confirmed as a count; names and role assignments not recorded.
   Blocks §9 ownership.
-- **O-2. Caliper not yet in hand.** D-003 depends on it and ground-truth capture starts Aug 28.
-  Same-day purchase.
-- **O-3. No tripod or measuring aids confirmed.** The controlled-angle subset that makes the
-  angle-error curve interpretable needs a repeatable way to fix camera pose.
+- **O-2. Caliper not yet in hand.** D-003 depends on it and capture begins the moment the app ships
+  (D-014). Same-day purchase.
+- **O-3. No tripod or measuring aids confirmed.** D-019 made capture angle a measured quantity per
+  frame, so a controlled-angle subset is no longer needed to make the angle curve interpretable —
+  this item's original reason has gone. What remains is whether a pose aid is wanted for the Demo
+  Day rehearsal. Close it or restate it.
 - **O-4. D-011 unconfirmed.** Interval method must be settled before Sep 3.
 - **O-5. Tickets not yet filed.** Tracker chosen: **GitHub Issues** on this repo — already
   configured and currently empty. `CLAUDE.md` §5 requires every change to trace to a ticket; O-1 to
@@ -221,7 +254,7 @@ research community is a reasonable tag given the work builds on that line.
 |----|------|------------|
 | R-1 | Metrology accuracy lands far off the ADA lines | Reframe as characterization; the error budget is the contribution either way (this is why D-007 exists) |
 | R-2 | Data collection consumes the timeline | 40 entrances is the floor, 60 the goal; well-labeled beats numerous |
-| R-3 | Credit card too small in frame at realistic distance to anchor scale precisely | Reduced by D-012: at ~2.5m on a 12MP frame the card spans roughly 100px, so scale is well conditioned and obliquity dominates the budget instead. Printed marker on a subset remains the fallback, reported as the reference-object ablation |
+| R-3 | Credit card too small in frame at realistic distance to anchor scale precisely | Reduced by D-012: at ~2.5m on a 12MP frame the card spans roughly 100px, so scale is well conditioned and obliquity dominates the budget instead. Capture distance capped at 3m, and the error-versus-distance data tests that cap directly. No crafted, folded or printed reference object is used — the reference is an ordinary card as carried |
 | R-4 | Venue connectivity fails and the thin client cannot reach the server | Fallback chain per D-016: cellular → venue wifi → identical server image on a laptop → pre-recorded demo |
 | R-5 | Sealed split burned early or corrupted by a bug in the single run | Dry-run the full evaluation on the dev split first; the unsealing run executes a script already exercised end to end |
 | R-6 | Occlusion (mats, sandwich boards) sits directly in the ROI | Tagged as a condition; expected to appear in the error budget as a named failure mode rather than be engineered around |

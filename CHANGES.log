@@ -133,3 +133,77 @@ Ticket tracker chosen: GitHub Issues on this repo (O-5). Backlog not yet filed.
 Scope explicitly unchanged: Track 2; threshold rise as the sole primary measurement; the
 pre-registered primary metric, success criterion and decision lines in PRD 2; glass doors as a
 documented failure class; no consumer map, no legal compliance determinations.
+
+## 2026-08-29 (second pass) — Pre-ticket review of PRD.md and ARCHITECTURE.md
+
+Source: adversarial read of both documents before the ticket backlog is written. Eighteen findings;
+four needed decisions, the rest were corrections. All are reflected in PRD.md and ARCHITECTURE.md.
+
+- D-021  Arm A-prime is captured on a SUBSET of entrances, and the capture app prescribes the shot
+         list — which placement, angle and distance remain outstanding — refusing to mark an
+         entrance complete until the plan is met. Reason: a credit card occupies one plane at a
+         time, so covering both placements everywhere would double an already tight capture load.
+         A subset prices the easier protocol without doubling field time, and putting the plan in
+         the instrument makes protocol compliance enforced rather than remembered. A-prime results
+         are exploratory, not confirmatory.
+         Rejected alternative: a folded or printed marker spanning both planes in one frame. The
+         reference object must be an ordinary card as carried — nothing crafted, folded or
+         manipulated. R-3's printed-marker fallback was removed accordingly and replaced with a
+         3m capture-distance cap tested by the error-versus-distance data.
+- D-022  The pre-registered success criterion applies to ARM A ONLY. Other arms are reported
+         without a pass/fail bar. Reason: the criterion named no arm, which would have allowed the
+         hypothesis to be scored against whichever of four arms looked best after unsealing.
+         See Amendment A-2.
+- D-023  Three splits — dev, calib, sealed — assigned at capture from the first photo,
+         DETERMINISTICALLY from a hash of the entrance ID plus a seed committed before capture.
+         Reason: D-011's calibration split must be distinct from sealed but is unconfirmed until
+         Sep 3, while splits are immutable once assigned, so carving calib later would breach
+         D-007. If D-011 is dropped, calib folds back into dev at analysis time. Determinism also
+         removes the cross-device conflict: four operators on four phones cannot disagree about an
+         entrance, and anyone can reproduce the assignment without trusting us.
+         Supersedes: "assigned randomly at collection" in PRD 6 and 7.
+- D-024  Stage 1 ROI taps happen IN-APP at capture and are written to the capture sidecar. Reason:
+         the taps are inputs to every measurement, so they belong inside the seal and under the
+         same hashing as the image. Tapping at the entrance also means an unusable frame is found
+         while someone is still standing in front of the door.
+
+AMENDMENT to the pre-registration (PRD 2), logged per that section's own rule:
+
+- A-2    The success criterion names its arm. "MAE <= 0.25 inch on the sealed test split" did not
+         say which of four arms it judged; it is fixed to Arm A. Reason: an unnamed arm lets the
+         hypothesis be scored against whichever arm looks best once results are seen, which is the
+         exact failure pre-registration exists to prevent. Committed 2026-08-29, before first
+         capture and before any image was processed. To be reported as an amendment at Demo Day.
+
+Corrections made without a decision:
+
+- SEAL_AUDIT.log was matched by the boilerplate `*.log` ignore rule, exactly as CHANGES.log had
+  been. The file whose only purpose is proving the sealed set was opened once, on a known commit,
+  would never have been committed. Negation rule added.
+- The manifest hashed the image and depth map but not the sidecar, leaving the caliper reading —
+  the value every number is scored against — editable without trace. `sidecar_sha256` added.
+- PRD 9's Aug 28-30 cell asked for the capture app and the first 15 entrances in the same window,
+  which D-014 forbids. Rewritten so capture begins when the app ships.
+- Gauntlet Showcase (Sep 10) and Graduation (Sep 11) were missing from PRD 9 despite appearing in
+  requirements/Capstone_Requirements.pdf; top projects re-present at the Showcase. Rows added.
+- Build-in-public (PRD 11) is graded per person with a Sep 9 deadline but had no schedule. Its six
+  planned posts are now mapped to timeline milestones.
+- O-3's stated reason — a controlled-angle subset to make the angle curve interpretable — was
+  obsoleted by D-019, which makes angle a measured quantity per frame. Restated; close or rewrite.
+- O-2 still said capture starts Aug 28; superseded by D-014.
+- Arm A "needs no intrinsics" was overstated: a homography assumes a pinhole camera, so lens
+  distortion must still be corrected, and the card may sit where distortion is largest. The
+  distortion table arrives with calibration data anyway. Caveat added.
+- Arm B's card placement was unstated; it uses the same vertical-card frame as Arm A.
+- "Abstention parameters frozen in version control" named no file; fixed to config/abstention.yaml.
+- R-8 gave no floor for cutting the entrance target. Floor set at 30 entrances, below which a 30%
+  sealed split cannot support the error-versus-angle curve; Arm A-prime captures are dropped before
+  entrances are.
+- Abstention rate near 100% at the 1/4 inch line is now named in PRD 7 as a plausible reportable
+  outcome rather than a malfunction.
+- D-016's fallback said the phone tethers to the laptop; corrected to the laptop joining the
+  phone's hotspot.
+
+Scope explicitly unchanged: Track 2; threshold rise as the sole primary measurement; the
+pre-registered primary metric, success threshold and decision lines in PRD 2; glass doors as a
+documented failure class; no consumer map, no legal compliance determinations.

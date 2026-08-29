@@ -94,6 +94,9 @@ CoreMotion device motion. No ARKit (D-014, §2).
   "intrinsics":     {"fx": 2934.1, "fy": 2934.1, "cx": 2016.4, "cy": 1512.7},
   "gravity":        [0.02, -0.98, -0.19],
   "card_placement": "vertical",
+  "roi":            {"threshold_top":    [1904, 2210],
+                     "threshold_bottom": [1897, 2263],
+                     "card_corners": [[1712,2088],[1889,2091],[1887,2196],[1710,2193]]},
   "ground_truth":   {"rise_in": 0.53, "instrument": "caliper"},
   "conditions":     {"distance_m": 2.5, "lighting": "overcast",
                      "surface": "concrete", "occlusion": "none"},
@@ -101,12 +104,23 @@ CoreMotion device motion. No ARKit (D-014, §2).
 }
 ```
 
+`card_placement` is `vertical` or `ground`; `split` is `dev`, `calib` or `sealed` (D-023).
+
 Three things this shape buys:
 
 - **Ground truth binds at the shutter press.** The operator enters the entrance ID and the caliper
   reading in the app. There is no later reconciliation of a spreadsheet against filenames.
 - **Split is assigned when an entrance ID is first created** (D-007), before any image is processed,
-  and is immutable thereafter.
+  and is immutable thereafter. Assignment is **deterministic** — a hash of the entrance ID plus a
+  seed committed before the first photo — so four operators on four devices cannot disagree about an
+  entrance, and anyone can reproduce the split without trusting us (D-023).
+- **The app prescribes the shot list** (D-021). It knows which placement, angle and distance are
+  still outstanding for the entrance in hand and will not mark it complete until the plan is met.
+  Arm A′ frames are requested only for entrances in the A′ subset. Protocol compliance is enforced
+  by the instrument rather than remembered in the field.
+- **ROI taps are collected in-app, right after the shutter** (D-024), while the operator is still at
+  the entrance and can re-shoot an unusable frame. They are inputs to every measurement, so they are
+  hashed with the rest of the record and sit inside the seal.
 - **Capture angle is derived, not typed.** Obliquity comes from the recovered plane pose (§5), with
   gravity as an independent cross-check. This is what makes the angle curve in §7 a measurement
   rather than an operator's estimate.
@@ -119,7 +133,8 @@ occlusion stay deliberately uncontrolled — realistic capture is the condition 
 Pure Python, no network, no I/O beyond what it is handed. Input is one image plus one sidecar;
 output is a measurement with an interval, or an abstention.
 
-**Stage 1 — ROI.** The operator taps the threshold edges and the reference card (D-004). Learned
+**Stage 1 — ROI.** The operator taps the threshold edges and the reference card in the app at
+capture time; the taps travel in the sidecar (D-024, D-004). Learned
 segmentation remains a stretch goal.
 
 **Stage 2 — scale recovery.** Four arms behind one interface, so the harness can run any of them
@@ -128,20 +143,28 @@ over the same input:
 | Arm | Scale source | Needs intrinsics | Role |
 |-----|--------------|------------------|------|
 | **A** | card **vertical against the riser**; homography from its four corners maps the riser plane; rise measured in-plane | no | primary; monocular accuracy ceiling |
-| **A′** | card **flat on the ground**; ground homography, decomposed with intrinsics to camera pose, height solved off the plane | yes | realistic-user path |
-| **B** | learned monocular depth, scaled by the reference object | yes | baseline to beat |
+| **A′** | card **flat on the ground**; ground homography, decomposed with intrinsics to camera pose, height solved off the plane | yes | realistic-user path; **subset only** (D-021), exploratory |
+| **B** | learned monocular depth, scaled by the reference object, on the same vertical-card frame as A | yes | baseline to beat |
 | **C** | learned monocular depth, intrinsics-only scaling, no reference object | yes | most usable, least accurate |
 
 Arm A needs no camera model because scale and measurement share one surface: a homography built
 from a known rectangle already absorbs the projection, so any length inside that plane is metric.
 This is the reason A is the primary arm (D-012, D-013).
 
+One caveat on "no intrinsics": a homography assumes a pinhole camera, so lens distortion still has
+to be corrected before the corners are used — and the card may sit toward the frame edge, where
+distortion is largest. The distortion table arrives with the calibration data anyway (§4), so this
+costs nothing; it just means Arm A is free of *pose and focal length*, not of all camera knowledge.
+
+**The pre-registered success bar applies to Arm A alone** (D-022). Every other arm is reported
+without a pass/fail criterion.
+
 Arms A, A′ and C form a deliberate accuracy-versus-usability gradient, which is the ablation the
 PRD promises as deliverable #4. Arm C carries the "works with what you already carry" usability
 claim, since it is the only arm an unaided user can actually perform (D-013).
 
 **Stage 3 — compliance reasoning.** Map measurement and interval to the ADA lines; emit pass, fail,
-or abstain. The abstention rule's parameters are frozen in version control before the sealed run
+or abstain. The abstention rule's parameters are frozen in `config/abstention.yaml` before the sealed run
 (D-009, §7) — an unfrozen threshold is a dial fitted to the test set.
 
 ## 6. Server and the live demo
@@ -155,7 +178,8 @@ It holds no state and owns no metrology. Its only job is to be reachable from a 
 
 1. cellular to the cloud VM
 2. venue wifi to the cloud VM
-3. the identical server image running on a team laptop, phone tethered to it
+3. the identical server image running on a team laptop, with the laptop joined to the phone's
+   personal hotspot
 4. the pre-recorded measurement captured Sep 8
 
 Steps 1–3 run the same container image, so a fallback changes the network path and nothing else.
@@ -166,12 +190,23 @@ The harness is the second entrypoint over the core library. It produces every nu
 budget, and it is the component that enforces D-007 mechanically rather than by promise.
 
 **Manifest.** `data/manifest.csv`, committed to git, one row per capture: `capture_id`,
-`entrance_id`, `image_sha256`, `depth_sha256`, `split`. Written at capture time, never edited.
+`entrance_id`, `image_sha256`, `depth_sha256`, `sidecar_sha256`, `split`. Written at capture time,
+never edited.
+
+The sidecar hash matters as much as the image hash: the caliper reading and the ROI taps live in the
+sidecar, and ground truth is what every number is scored against. Hashing the image but not the
+truth would leave the most consequential value in the dataset editable without trace.
+
+`split` takes three values — `dev`, `calib`, `sealed` (D-023). `calib` exists from the first photo
+whether or not D-011 is adopted; if conformal prediction is dropped, `calib` folds back into `dev`
+at analysis time. Carving a calibration split later would have breached D-007's immutability rule.
 
 **Refusal.** The dataset loader filters on `split`. Sealed rows are unreadable without an explicit
 `--include-sealed` flag; there is no code path that reaches a sealed image incidentally.
 
-**Audit.** Any run passing `--include-sealed` appends one line to `SEAL_AUDIT.log`, committed:
+**Audit.** Any run passing `--include-sealed` appends one line to `SEAL_AUDIT.log` — committed, and
+explicitly negated in `.gitignore`, which would otherwise swallow it under the boilerplate `*.log`
+rule and leave the seal with no evidence at all:
 timestamp, git commit SHA, manifest SHA-256, full command line, operator. The audit log is the
 evidence that the sealed set was opened once, on 2026-09-07, against a known state of the code.
 
@@ -233,7 +268,7 @@ reference (D-003). Whether LiDAR clears your own bar is an open empirical questi
 | ID | Risk | Mitigation |
 |----|------|------------|
 | R-7 | App signing is on the critical path for the whole dataset; free-account builds expire after 7 days, landing mid-capture | Paid developer account started immediately; capture app is small enough to re-sign if needed |
-| R-8 | Fewer capture devices than parallel field tracks assume | Detected at roster assignment (O-1); response is to cut the entrance target, not the protocol |
+| R-8 | Fewer capture devices than parallel field tracks assume | Detected at roster assignment (O-1); response is to cut the entrance target, not the protocol. Floor is **30 entrances**: below that a 30% sealed split leaves under 10 entrances, too few to fit the error-versus-angle curve that D-019 makes the confirmatory result. Hitting the floor means dropping Arm A′ captures (D-021) before dropping entrances |
 | R-9 | Calibration-data delivery unavailable on target devices | Verified day one; ARKit fallback, accepting the resolution cost in §2 |
 | R-10 | LiDAR is coarser than the 0.25" bar, so the "accuracy ceiling" sits below the success criterion | Bench-test against the caliper in week one; if confirmed, deliverable #5 is reframed as evidence the decision line is below what phone depth sensors deliver |
 | R-11 | Demo app and capture app drift apart, so Demo Day exhibits uncharacterised behaviour | Demo app is the capture app plus rendering; one capture path, one metrology library |
