@@ -1,0 +1,49 @@
+"""Tests for deterministic split assignment (TICK-011, #19)."""
+
+import random
+from collections import Counter
+
+from frontdoor.split import SEED, assign_split, main
+
+IDS = [f"E-{n:03d}" for n in range(1000)]
+
+
+def test_committed_seed_is_64_hex_chars():
+    assert len(SEED) == 64
+    int(SEED, 16)
+
+
+def test_same_id_gives_same_split_twice():
+    for entrance_id in IDS[:50]:
+        assert assign_split(entrance_id) == assign_split(entrance_id)
+
+
+def test_assignment_is_order_independent():
+    expected = {i: assign_split(i) for i in IDS}
+    shuffled = random.Random(1).sample(IDS, len(IDS))
+    assert {i: assign_split(i) for i in shuffled} == expected
+
+
+def test_roughly_thirty_percent_sealed():
+    counts = Counter(assign_split(i) for i in IDS)
+    assert set(counts) == {"dev", "calib", "sealed"}
+    assert 0.25 <= counts["sealed"] / len(IDS) <= 0.35
+    assert 0.15 <= counts["calib"] / len(IDS) <= 0.25
+
+
+def test_changed_seed_changes_assignments():
+    other_seed = "0" * 64
+    assert [assign_split(i, seed=other_seed) for i in IDS] != [assign_split(i) for i in IDS]
+
+
+def test_known_answers_with_committed_seed():
+    # Pinned so that any change to the seed or the algorithm fails loudly (D-007: immutable).
+    assert assign_split("E-001") == "dev"
+    assert assign_split("E-002") == "sealed"
+    assert assign_split("E-014") == "sealed"
+    assert assign_split("E-042") == "calib"
+
+
+def test_cli_prints_one_line_per_id(capsys):
+    main(["E-001", "E-014"])
+    assert capsys.readouterr().out.splitlines() == ["E-001,dev", "E-014,sealed"]
