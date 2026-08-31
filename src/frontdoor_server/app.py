@@ -10,7 +10,7 @@ import json
 from importlib import resources
 
 from flask import Flask, request
-from jsonschema import ValidationError
+from jsonschema import Draft202012Validator, ValidationError
 
 from frontdoor.sidecar import validate_sidecar
 
@@ -20,32 +20,88 @@ RESPONSE_SCHEMA = json.loads(
     .read_text(encoding="utf-8")
 )
 
+_response_validator = Draft202012Validator(RESPONSE_SCHEMA)
+
 # Fixed placeholder values. The repdigit rises are deliberately synthetic so nobody reads stub
 # output as a measurement, and the four arms between them exercise every decision value, giving
 # TICK-063 all three render states to build against. Intervals are consistent with the decisions:
-# an interval straddling a line abstains at that line (D-009).
+# an interval straddling a line abstains at that line, and says so (D-009, TICK-222).
 STUB_ARMS = {
     "A": {
         "rise_in": 0.11,
         "interval_in": {"low": 0.09, "high": 0.13},
-        "decisions": {"half_inch": "pass", "quarter_inch": "pass"},
+        "decisions": {
+            "half_inch": {"verdict": "pass"},
+            "quarter_inch": {"verdict": "pass"},
+        },
     },
     "A_prime": {
         "rise_in": 0.22,
         "interval_in": {"low": 0.17, "high": 0.27},
-        "decisions": {"half_inch": "pass", "quarter_inch": "abstain"},
+        "decisions": {
+            "half_inch": {"verdict": "pass"},
+            "quarter_inch": {
+                "verdict": "abstain",
+                "explanation": (
+                    "The 0.17-0.27 in interval straddles the 1/4 in line, so this capture "
+                    "cannot be classified against it either way."
+                ),
+            },
+        },
     },
     "B": {
         "rise_in": 0.44,
         "interval_in": {"low": 0.31, "high": 0.57},
-        "decisions": {"half_inch": "abstain", "quarter_inch": "fail"},
+        "decisions": {
+            "half_inch": {
+                "verdict": "abstain",
+                "explanation": (
+                    "The 0.31-0.57 in interval straddles the 1/2 in line, so this capture "
+                    "cannot be classified against it either way."
+                ),
+            },
+            "quarter_inch": {"verdict": "fail"},
+        },
     },
     "C": {
         "rise_in": 0.77,
         "interval_in": {"low": 0.60, "high": 0.94},
-        "decisions": {"half_inch": "fail", "quarter_inch": "fail"},
+        "decisions": {
+            "half_inch": {"verdict": "fail"},
+            "quarter_inch": {"verdict": "fail"},
+        },
     },
 }
+
+
+def validate_measure_response(body):
+    """Validate a response against the full contract, schema plus cross-field rules.
+
+    JSON Schema cannot compare two sibling numbers, so the two constraints that make an interval
+    mean anything live here (TICK-223). A point estimate outside its own interval is not a
+    measurement with uncertainty, it is two unrelated numbers, and every decision D-009 derives
+    from them is meaningless.
+
+    Cross-field errors carry the same path as schema errors, so a caller reporting json_path
+    locates both kinds the same way.
+
+    Raises jsonschema.ValidationError; returns None on success.
+    """
+    _response_validator.validate(body)
+    for name, arm in body["arms"].items():
+        if "rise_in" not in arm:
+            continue
+        low, high = arm["interval_in"]["low"], arm["interval_in"]["high"]
+        if low > high:
+            raise ValidationError(
+                f"arm {name}: interval_in is inverted, low {low} exceeds high {high}",
+                path=["arms", name, "interval_in"],
+            )
+        if not low <= arm["rise_in"] <= high:
+            raise ValidationError(
+                f"arm {name}: rise_in {arm['rise_in']} lies outside its own interval [{low}, {high}]",
+                path=["arms", name, "rise_in"],
+            )
 
 
 def _error(message, detail, field=None):
