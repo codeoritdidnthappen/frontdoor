@@ -204,8 +204,10 @@ research community is a reasonable tag given the work builds on that line.
 
 ## 12. Open items — blocking
 
-- **O-1. Team roster.** Four people confirmed as a count; names and role assignments not recorded.
-  Blocks §9 ownership.
+- **O-1. Team roster.** Four people confirmed as a count; names, X handles and device count
+  recorded in [TEAM.md](TEAM.md) (TICK-003, #15), which also fixes the R-8 response rule if fewer
+  than three LiDAR-capable iPhones are available. Closes when that note is filled from devices in
+  hand.
 - **O-2. Caliper not yet in hand.** D-003 depends on it and ground-truth capture starts Aug 28.
   Same-day purchase.
 - **O-3. No tripod or measuring aids confirmed.** The controlled-angle subset that makes the
