@@ -168,7 +168,9 @@ before the sealed run — an unfrozen threshold is a dial fitted to the test set
 
 ## 9. Timeline and ownership
 
-Four parallel tracks. Owners are roles, not yet names (see §12).
+Four parallel tracks. Owners are **named** — the roster and the full work division are in
+[TEAM.md](TEAM.md), and every open issue is assigned in GitHub. Tickets are assigned, not
+self-assigned; the earlier convention in O-1 is superseded.
 
 | Dates | Field capture | Metrology (A/A′) | Depth baseline (B/C) | Demo + deck |
 |-------|---------------|-------------------|----------------------|-------------|

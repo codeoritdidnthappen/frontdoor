@@ -4,8 +4,9 @@ Closes PRD §12 open item **O-1**. Records who is on the team and what capture h
 and fixes the response rule for **R-8** (fewer capture devices than the parallel field tracks
 assume).
 
-This note records *facts and one decision*. It does **not** assign tickets to people: the team
-self-assigns and rotates.
+This note records *facts and one decision*, and names the **work division** the backlog is
+assigned from. It supersedes the earlier self-assign-and-rotate convention recorded in O-1:
+**tickets are assigned, not self-assigned.** Every open issue names an owner.
 
 Sources: [PRD.md](PRD.md) §9, §11, §12 · [ARCHITECTURE.md](ARCHITECTURE.md) §10 (A-1, A-3), §11 (R-8) ·
 [CHANGES.log](CHANGES.log) D-002, D-010, D-013.
@@ -89,9 +90,12 @@ conflict below becomes moot — everything funnels through James regardless.
 ## 3. Work division
 
 PRD §9 runs four parallel tracks and every one is covered. The division below goes further than
-TICK-003's "at least one person can cover each" — it is the working split agreed for this sprint,
-not a reassignment of the self-assign-and-rotate principle. Anyone may pick up anyone else's ticket;
-this records who carries what by default.
+TICK-003's "at least one person can cover each": it is the assignment the backlog now carries.
+**Tickets are assigned, not self-assigned** — this supersedes the self-assign-and-rotate convention
+from O-1, and every open issue names an owner in GitHub.
+
+Work can still move between people. When it does, **reassign the ticket rather than clearing it**,
+so no issue is ever left without a name against it.
 
 Two constraints shape it, both from §2:
 
