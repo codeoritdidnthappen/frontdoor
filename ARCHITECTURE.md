@@ -146,15 +146,15 @@ or abstain. The abstention rule's parameters are frozen in version control befor
 
 ## 6. Server and the live demo
 
-A single stateless endpoint on a cloud VM (D-016): `POST /measure` takes the image and sidecar,
+A single stateless endpoint on a free-tier host (D-016, D-026): `POST /measure` takes the image and sidecar,
 calls the core library, returns per-arm measurement, interval, and decision.
 
 It holds no state and owns no metrology. Its only job is to be reachable from a phone on stage.
 
 **Fallback chain**, in order, for a venue where presentations happen in an interior atrium:
 
-1. cellular to the cloud VM
-2. venue wifi to the cloud VM
+1. cellular to the host
+2. venue wifi to the host
 3. the identical server image running on a team laptop, phone tethered to it
 4. the pre-recorded measurement captured Sep 8
 
@@ -188,8 +188,9 @@ result affordable at this sample size; a contingency table over five variables i
 
 ## 8. Data architecture
 
-**Bytes in object storage, records in git** (D-018). Images and depth maps live in a bucket beside
-the cloud VM that runs evaluation. The repository holds the manifest, labels, condition tags,
+**Bytes in object storage, records in git** (D-018). Images and depth maps live in free-tier
+object storage (D-026) beside whatever host runs evaluation — which may be a team Mac rather than
+the server host; that choice is open and must be logged when taken (#50). The repository holds the manifest, labels, condition tags,
 hashes, the seal audit log, and the frozen abstention parameters — everything needed to verify a
 result, and nothing large enough to make the repo unusable.
 
@@ -232,7 +233,7 @@ reference (D-003). Whether LiDAR clears your own bar is an open empirical questi
 
 | ID | Risk | Mitigation |
 |----|------|------------|
-| R-7 | App signing is on the critical path for the whole dataset; free-account builds expire after 7 days, landing mid-capture | Paid developer account started immediately; capture app is small enough to re-sign if needed |
+| R-7 | App signing is on the critical path for the whole dataset; free-provisioning builds expire after 7 days, landing mid-capture | **Accepted, not mitigated by purchase** (D-025). Managed by a committed signing calendar with no gap through Sep 11, including a mandatory re-sign by Sep 6. James runs Windows and holds the only LiDAR device, so each of his installs is a scheduled physical session with a Mac owner |
 | R-8 | Fewer capture devices than parallel field tracks assume | Detected at roster assignment (O-1); response is to cut the entrance target, not the protocol |
 | R-9 | Calibration-data delivery unavailable on target devices | Verified day one; ARKit fallback, accepting the resolution cost in §2 |
 | R-10 | LiDAR is coarser than the 0.25" bar, so the "accuracy ceiling" sits below the success criterion | Bench-test against the caliper in week one; if confirmed, deliverable #5 is reframed as evidence the decision line is below what phone depth sensors deliver |

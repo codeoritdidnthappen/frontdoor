@@ -133,3 +133,56 @@ Ticket tracker chosen: GitHub Issues on this repo (O-5). Backlog not yet filed.
 Scope explicitly unchanged: Track 2; threshold rise as the sole primary measurement; the
 pre-registered primary metric, success criterion and decision lines in PRD 2; glass doors as a
 documented failure class; no consumer map, no legal compliance determinations.
+
+## 2026-08-31 — Roster reality, free-tier infrastructure
+
+Source: TEAM.md device audit (TICK-003, #15) and a cost decision taken by the team.
+
+- D-025  Paid Apple Developer Program will NOT be purchased. The capture app is signed with FREE
+         PROVISIONING and installed over a cable from a team Mac. Reason: the app needs no
+         paid-gated capability -- AVFoundation capture, depth delivery and CoreMotion require only
+         Info.plist usage descriptions. Accepted cost: builds expire after 7 days (R-7), so signing
+         becomes a scheduled activity rather than a one-off. A build signed 2026-08-31 expires
+         2026-09-07, BEFORE Demo Day, so a re-sign no later than 2026-09-06 is mandatory.
+         Compounding factor: James holds the only LiDAR device and runs Windows, so he cannot
+         re-sign his own build; every install for him is a physical session with a Mac owner.
+         Supersedes: TICK-001's requirement to enrol and pay by 2026-08-29.
+- D-026  All hosted infrastructure runs on PROVIDER FREE TIERS. No spend is authorised for object
+         storage or the server host. Reason: cost decision. Consequences that are now load-bearing:
+         projected dataset volume is 2-5 GB, so a 5 GB allowance is marginal and 10 GB comfortable;
+         billing must be incapable of starting silently; and the D-020 depth quarantine must be
+         satisfied by TWO BUCKETS where a provider scopes credentials per bucket rather than per
+         prefix -- the denial is the requirement, not the layout.
+         Open, and required before TICK-062 (#50) closes: which arms POST /measure serves live (a
+         free instance may not hold the depth model), and whether the evaluation harness runs on
+         the free host or locally on a team Mac. The latter contradicts the "bucket beside the VM"
+         premise in ARCHITECTURE sections 7-8 and must be logged if chosen.
+         Supersedes: the unstated assumption in D-016 and D-018 that hosting would be paid.
+- A-1/A-3  FALSIFIED by the device audit; recorded in ARCHITECTURE section 10 and TEAM.md section 2.
+         R-8 has fired. Its response rule does not clear the binding constraint: D-020 requires
+         LiDAR on every entrance and only one device produces it. Relaxing D-020 to a matched
+         subset remains an OPEN protocol decision, deliberately not taken here.
+
+## Decision-log gap — D-021 to D-024 reconstructed, NOT original text
+
+These four decision IDs are referenced throughout the ticket backlog but were never written into
+this log. The statements below are RECONSTRUCTED from how each ID is used in tickets, and need
+confirmation by whoever took the original decisions. They are recorded so the IDs resolve to
+something rather than dangling; they are not claimed to be the original wording.
+
+- D-021  (reconstructed) Per-entrance shot plan is enforced by the instrument: the app tells the
+         operator which card placement, angle bucket and distance bucket remain outstanding and
+         refuses to mark the entrance complete until the plan is met. Arm A-prime ground-card
+         frames are requested only for entrances in the A-prime subset, whose membership is fixed
+         in advance by a documented rule. Referenced by: #31, #72, #85, #91.
+- D-022  (reconstructed) Compliance verdicts are reported for Arm A ONLY. No pass/fail bar or
+         threshold line is attached to Arms A-prime, B or C; those arms report measurement error
+         alone. Referenced by: #91, #93, #95, #72.
+- D-023  (reconstructed) Three-way split -- dev, calib, sealed -- assigned deterministically from a
+         committed seed at entrance creation and immutable thereafter, with calib reserved for
+         interval calibration so conformal intervals are never calibrated on dev or on sealed data.
+         Referenced by: #45, #53, #84.
+- D-024  (reconstructed) One capture writes one image, one depth map and one JSON sidecar, hashed
+         at the shutter press, with entrance ID, caliper ground truth and condition tags bound in
+         at capture time rather than reconciled afterwards. Referenced by: #32, #83, #85.
+
