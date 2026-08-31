@@ -10,10 +10,12 @@ requires-python = ">=3.11"
 dependencies = ["jsonschema>=4.21"]
 
 [project.optional-dependencies]
-dev = ["pytest>=8"]
+server = ["flask>=3"]
+dev = ["pytest>=8", "flask>=3"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
 frontdoor = ["*.json"]
+frontdoor_server = ["*.json"]
