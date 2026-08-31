@@ -133,3 +133,22 @@ Ticket tracker chosen: GitHub Issues on this repo (O-5). Backlog not yet filed.
 Scope explicitly unchanged: Track 2; threshold rise as the sole primary measurement; the
 pre-registered primary metric, success criterion and decision lines in PRD 2; glass doors as a
 documented failure class; no consumer map, no legal compliance determinations.
+
+## 2026-08-30 — Split seed committed (TICK-011, issue #19)
+
+Source: GitHub issue #19, making D-007's sealed split a checkable assignment rather than a
+promise. Committed before the first capture.
+
+- Split seed committed in src/frontdoor/split_seed.json at commit
+  bab15548d9439ea3ff6aa0579cb4a35ceb5f199d (2026-08-30). Assignment is
+  sha256(entrance_id + seed), first 8 bytes as a big-endian unsigned integer mod 100: below 30
+  sealed, below 50 calib, otherwise dev. Documented in src/frontdoor/split.py and reproducible
+  by a third party from the seed file and that description alone; `python -m frontdoor.split`
+  prints the assignment for any list of entrance IDs.
+- Target proportions fixed at 30% sealed / 20% calib / 50% dev. The PRD fixes only the ~30%
+  sealed share (D-007). The 20% calib share exists so that split conformal prediction (D-011,
+  unconfirmed, O-4) has a held-out set distinct from sealed without carving one out after
+  capture. If D-011 is dropped, calib folds back into dev at analysis time; no assignment is
+  ever changed.
+- Over 1000 synthetic IDs the seed yields 30.3% sealed / 18.4% calib / 51.3% dev. The actual
+  proportions over the real entrance IDs are to be recorded here once capture completes.
