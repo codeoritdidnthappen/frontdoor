@@ -160,3 +160,25 @@ def test_invalid_sha256_rejected(record, field, digest):
 def test_real_sha256_digest_accepted(record, field):
     record[field]["sha256"] = hashlib.sha256(b"sidecar-hash-fixture").hexdigest()
     validate_sidecar(record)
+
+
+@pytest.mark.parametrize(
+    "timestamp",
+    [
+        "banana",
+        "",
+        "2026-13-45T99:99:99Z",
+        "2026-08-30",
+        "2026-08-30T14:22:31+00:00",
+    ],
+)
+def test_invalid_captured_at_rejected(record, timestamp):
+    record["captured_at"] = timestamp
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+def test_date_time_format_checker_is_registered():
+    from jsonschema import Draft202012Validator
+
+    assert "date-time" in Draft202012Validator.FORMAT_CHECKER.checkers
