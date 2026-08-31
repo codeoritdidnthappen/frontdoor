@@ -18,12 +18,14 @@ deliberately not published to this public repo.
 
 | # | Name | GitHub | X handle | Carries |
 |---|------|--------|----------|---------|
-| 1 | David | `codeoritdidnthappen` | _TBD_ | Metrology (all four arms), confirmatory metrics, charts |
-| 2 | James | `james-merithew` | _TBD_ | Field capture, then demo and deck |
+| 1 | David | `codeoritdidnthappen` | @codehappened | Metrology (all four arms), confirmatory metrics, charts |
+| 2 | James | `james-merithew` | @JamesMerithew | Field capture, then demo and deck |
 | 3 | Emily | `wliang002` | _TBD_ | Capture app, client-side contract |
 | 4 | Ruben | `rubanikov` | _TBD_ | Data integrity, seal enforcement, server deploy |
 
-Track detail in §3. X handles are the one item still outstanding.
+Track detail in §3. Emily's and Ruben's X handles are the one item still outstanding — all
+four are needed, since PRD §11 grades build-in-public per person and #82 has to check four
+accounts against the floors.
 
 Every member needs an X account recorded: build-in-public is graded **per person**, not per
 project (PRD §11) — four accounts, not one.
