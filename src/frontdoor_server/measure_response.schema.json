@@ -1,0 +1,72 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/codeoritdidnthappen/frontdoor/blob/main/src/frontdoor_server/measure_response.schema.json",
+  "title": "Measure response",
+  "description": "Response from POST /measure. One entry per scale-recovery arm (ARCHITECTURE.md section 5). Frozen by TICK-060 before any metrology exists, so client rendering (TICK-063) and the library (TICK-043 onward) proceed in parallel; TICK-061 fills real values in behind this identical shape.",
+  "type": "object",
+  "properties": {
+    "stub": {
+      "type": "boolean",
+      "description": "True while the endpoint returns fixed placeholder values instead of measurements. TICK-061 sets it false. Clients must surface it, so stub output is never mistaken for a measurement."
+    },
+    "capture_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Echoed from the request sidecar, so a response is always tied back to the capture it came from."
+    },
+    "arms": {
+      "type": "object",
+      "description": "Keyed by arm name from the metrology registry (TICK-040). Arm A is the primary arm and is always present; A_prime, B and C may be absent, since Arm C can be cut on Sep 2 (D-013) and a capture may not support every arm.",
+      "properties": {
+        "A": { "$ref": "#/$defs/arm_result" },
+        "A_prime": { "$ref": "#/$defs/arm_result" },
+        "B": { "$ref": "#/$defs/arm_result" },
+        "C": { "$ref": "#/$defs/arm_result" }
+      },
+      "required": ["A"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["stub", "capture_id", "arms"],
+  "additionalProperties": false,
+  "$defs": {
+    "arm_result": {
+      "type": "object",
+      "description": "One arm's answer for one capture: a measurement, its interval, and a decision per ADA line.",
+      "properties": {
+        "rise_in": {
+          "type": "number",
+          "description": "Threshold rise in inches. Always present, including when a decision is abstain."
+        },
+        "interval_in": { "$ref": "#/$defs/interval" },
+        "decisions": { "$ref": "#/$defs/decisions" }
+      },
+      "required": ["rise_in", "interval_in", "decisions"],
+      "additionalProperties": false
+    },
+    "interval": {
+      "type": "object",
+      "description": "Confidence interval on rise_in, in inches. Method settled by TICK-050; the shape does not depend on which method wins.",
+      "properties": {
+        "low": { "type": "number" },
+        "high": { "type": "number" }
+      },
+      "required": ["low", "high"],
+      "additionalProperties": false
+    },
+    "decisions": {
+      "type": "object",
+      "description": "One decision per ADA line. The 1/2 inch line is the pre-registered primary and the 1/4 inch line the secondary (PRD.md section 2); they are computed independently, so one may abstain while the other does not.",
+      "properties": {
+        "half_inch": { "$ref": "#/$defs/decision" },
+        "quarter_inch": { "$ref": "#/$defs/decision" }
+      },
+      "required": ["half_inch", "quarter_inch"],
+      "additionalProperties": false
+    },
+    "decision": {
+      "enum": ["pass", "fail", "abstain"],
+      "description": "abstain is a first-class outcome (D-009), emitted when the interval straddles the line. It is a decision value, never a missing or null measurement: rise_in and interval_in are present regardless."
+    }
+  }
+}
