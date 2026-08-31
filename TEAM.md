@@ -22,11 +22,11 @@ deliberately not published to this public repo.
 | 1 | David | `codeoritdidnthappen` | @codehappened | Metrology (all four arms), confirmatory metrics, charts |
 | 2 | James | `james-merithew` | @JamesMerithew | Field capture, then demo and deck |
 | 3 | Emily | `wliang002` | _TBD_ | Capture app, client-side contract |
-| 4 | Ruben | `rubanikov` | _TBD_ | Data integrity, seal enforcement, server deploy |
+| 4 | Ruben | `rubanikov` | @rubanikov | Data integrity, seal enforcement, server deploy |
 
-Track detail in §3. Emily's and Ruben's X handles are the one item still outstanding — all
-four are needed, since PRD §11 grades build-in-public per person and #82 has to check four
-accounts against the floors.
+Track detail in §3. **Emily's X handle is the one item still outstanding** — all four are
+needed, since PRD §11 grades build-in-public per person and #82 has to check four accounts
+against the floors.
 
 Every member needs an X account recorded: build-in-public is graded **per person**, not per
 project (PRD §11) — four accounts, not one.
