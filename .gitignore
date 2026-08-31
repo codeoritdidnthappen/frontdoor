@@ -1,6 +1,13 @@
 # Project
 requirements/
 
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+
 # Mac
 .DS_Store
 
