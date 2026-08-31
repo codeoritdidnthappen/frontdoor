@@ -16,12 +16,12 @@ Ticket: TICK-003 (#15).
 Team size is confirmed at four (D-010). Recorded by first name plus X handle; full legal names are
 deliberately not published to this public repo.
 
-| # | Name | X handle | Carries |
-|---|------|----------|---------|
-| 1 | David | _TBD_ | Metrology (all four arms), confirmatory metrics, charts |
-| 2 | James | _TBD_ | Field capture, then demo and deck |
-| 3 | Emily | _TBD_ | Capture app, client-side contract |
-| 4 | Ruben | _TBD_ | Data integrity, seal enforcement, server deploy |
+| # | Name | GitHub | X handle | Carries |
+|---|------|--------|----------|---------|
+| 1 | David | `codeoritdidnthappen` | _TBD_ | Metrology (all four arms), confirmatory metrics, charts |
+| 2 | James | `james-merithew` | _TBD_ | Field capture, then demo and deck |
+| 3 | Emily | `wliang002` | _TBD_ | Capture app, client-side contract |
+| 4 | Ruben | `rubanikov` | _TBD_ | Data integrity, seal enforcement, server deploy |
 
 Track detail in §3. X handles are the one item still outstanding.
 
@@ -101,6 +101,9 @@ Two constraints shape it, both from §2:
 
 A third rule applies throughout: **nobody verifies their own work.** Every `qa` ticket is held by
 someone who did not build the thing under test.
+
+The division below is implemented as GitHub assignees across all 93 open issues: David 29,
+Ruben 26, Emily 20, James 18.
 
 | Track | Holder | Tickets |
 |-------|--------|---------|
