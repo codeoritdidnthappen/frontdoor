@@ -182,3 +182,13 @@ def test_date_time_format_checker_is_registered():
     from jsonschema import Draft202012Validator
 
     assert "date-time" in Draft202012Validator.FORMAT_CHECKER.checkers
+
+
+@pytest.mark.parametrize(
+    "entrance_id",
+    ["e-014", "E-014 ", " E-014", "E-14", "E-0014", ""],
+)
+def test_noncanonical_entrance_id_rejected_by_schema(record, entrance_id):
+    record["entrance_id"] = entrance_id
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)

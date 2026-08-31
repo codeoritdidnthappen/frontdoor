@@ -6,7 +6,11 @@
   "type": "object",
   "properties": {
     "capture_id": { "type": "string", "minLength": 1 },
-    "entrance_id": { "type": "string", "minLength": 1 },
+    "entrance_id": {
+      "type": "string",
+      "pattern": "^E-[0-9]{3}$",
+      "description": "Canonical entrance ID: E- followed by exactly three digits (NFC, no surrounding whitespace). Same rule as frontdoor.split.canonical_entrance_id."
+    },
     "captured_at": {
       "type": "string",
       "format": "date-time",
