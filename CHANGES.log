@@ -163,6 +163,16 @@ Source: TEAM.md device audit (TICK-003, #15) and a cost decision taken by the te
          LiDAR on every entrance and only one device produces it. Relaxing D-020 to a matched
          subset remains an OPEN protocol decision, deliberately not taken here.
 
+- D-027  Tickets are ASSIGNED, not self-assigned. Every open issue names an owner in GitHub,
+         following the work division in TEAM.md section 3. Reason: the self-assign-and-rotate
+         convention left the whole backlog owner-less, and the device audit showed the division is
+         constrained by hardware rather than preference -- only one person can capture entrances,
+         and only one can build and test the capture app unaided. An unowned backlog cannot express
+         that. Work may still move between people; the rule is to REASSIGN rather than clear, so no
+         ticket is ever left without a name against it.
+         Supersedes: D-010's "ownership assigned by role, names pending", O-1's self-assign
+         convention, and the "Unassigned by design" footer previously carried by 90 tickets.
+
 ## Decision-log gap — D-021 to D-024 reconstructed, NOT original text
 
 These four decision IDs are referenced throughout the ticket backlog but were never written into
