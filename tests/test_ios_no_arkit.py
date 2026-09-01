@@ -16,7 +16,10 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-IOS_SOURCES = REPO_ROOT / "ios" / "FrontdoorCapture"
+# The whole ios/ tree, matching the shell guard's ROOT. Scoped to the app target, this left
+# ios/FrontdoorCaptureTests/ invisible to CI while the Xcode guard caught it — and CI is the
+# half that runs on every pull request (see #151).
+IOS_SOURCES = REPO_ROOT / "ios"
 GUARD = REPO_ROOT / "ios" / "Scripts" / "assert-no-arkit.sh"
 
 # Matches code, not prose. The codebase has to be able to name ARKit in comments explaining why
