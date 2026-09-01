@@ -382,3 +382,56 @@ def test_every_framework_error_token_is_in_the_committed_enum(client):
     for _, method, path, _status in FRAMEWORK_ERROR_CASES:
         token = getattr(client, method)(path).get_json()["error"]
         assert token in allowed, f"{token!r} is returned but absent from the error enum"
+
+
+from frontdoor_server.app import MAX_REQUEST_BYTES
+
+MAX_OVERSIZE = MAX_REQUEST_BYTES + 1024
+
+
+def test_the_request_ceiling_is_explicit_not_a_framework_default(client):
+    """413 must be a decision. Flask's MAX_FORM_MEMORY_SIZE only covers non-file form fields, so
+    the realistic oversized body — the image part — would not be capped, and the default differs
+    across the flask>=3 range pyproject pins."""
+    from frontdoor_server.app import MAX_REQUEST_BYTES, create_app
+
+    assert create_app().config["MAX_CONTENT_LENGTH"] == MAX_REQUEST_BYTES
+
+
+def test_an_oversized_file_part_is_also_capped(client):
+    """The image is a file part, which the form-memory limit does not cover."""
+    import io
+
+    big = io.BytesIO(b"x" * (MAX_OVERSIZE))
+    response = client.post("/measure", data={"image": (big, "big.jpg"), "sidecar": "{}"})
+    assert response.status_code == 413
+    assert response.headers["Content-Type"].startswith("application/json")
+    _error_validator().validate(response.get_json())
+
+
+def test_a_405_keeps_its_allow_header():
+    """RFC 9110 requires Allow on every 405; rebuilding the body must not drop Werkzeug's headers."""
+    from frontdoor_server.app import create_app
+
+    response = create_app().test_client().get("/measure")
+    assert response.status_code == 405
+    assert "POST" in response.headers.get("Allow", "")
+
+
+def test_an_unmapped_status_still_uses_a_committed_token():
+    """A token outside the enum would satisfy 'always JSON' while violating the contract."""
+    from werkzeug.exceptions import TooManyRequests
+
+    from frontdoor_server.app import create_app
+
+    app = create_app()
+
+    @app.get("/boom")
+    def _boom():
+        raise TooManyRequests()
+
+    response = app.test_client().get("/boom")
+    assert response.status_code == 429
+    body = response.get_json()
+    assert body["error"] in set(_error_schema()["properties"]["error"]["enum"])
+    _error_validator().validate(body)

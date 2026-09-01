@@ -1,43 +1,67 @@
+import AVFoundation
 import XCTest
 @testable import FrontdoorCapture
 
 /// The probe's resume discipline (#150).
 ///
-/// A checked continuation may be resumed exactly once; resuming twice is a crash. Three things race
-/// to do it — the photo delegate, the 15-second timeout, and cancellation when the operator taps
-/// Done — so the winner is settled by a lock rather than by luck.
-///
-/// This is the part that can be tested without a camera. The timeout firing at all is the fix:
-/// the previous shape raced the capture inside a task group, and a task group does not return until
-/// every child finishes, so cancelling a child suspended on a continuation left it stranded and the
-/// timeout could never propagate.
-final class CapabilityProbeResumeGuardTests: XCTestCase {
+/// A checked continuation may be resumed exactly once; twice is a crash. Three things race to do
+/// it — the photo delegate, the 15-second timeout, and cancellation when the operator taps Done —
+/// and cancellation can arrive *before* the continuation exists, which is how an earlier fix left
+/// it permanently stranded.
+final class CaptureBoxTests: XCTestCase {
 
-    func testOnlyTheFirstClaimantWins() {
-        let guardObject = CapabilityProbe.ResumeGuard()
-        XCTAssertTrue(guardObject.claim(), "the first claimant must be allowed to resume")
-        XCTAssertFalse(guardObject.claim(), "a second resume would crash the process")
-        XCTAssertFalse(guardObject.claim())
+    private enum ProbeTestError: Error { case stub, first, second }
+
+    func testTheFirstOutcomeWinsAndLaterOnesAreAbsorbed() async {
+        let box = CapabilityProbe.CaptureBox()
+        let task = Task {
+            try await withCheckedThrowingContinuation { c in
+                box.attach(c)
+                box.finish(.failure(ProbeTestError.first))
+                box.finish(.failure(ProbeTestError.second))  // must not crash, must not win
+            }
+        }
+        do { _ = try await task.value; XCTFail("expected the first failure") }
+        catch { XCTAssertEqual(error as? ProbeTestError, .first) }
     }
 
-    func testExactlyOneClaimSucceedsUnderConcurrency() {
-        // The delegate arrives on an AVFoundation queue, the timeout on a Task, cancellation on the
-        // main actor. Whichever ordering the system picks, exactly one must win.
-        for _ in 0..<200 {
-            let guardObject = CapabilityProbe.ResumeGuard()
-            let winners = Atomic()
-            DispatchQueue.concurrentPerform(iterations: 16) { _ in
-                if guardObject.claim() { winners.increment() }
+    func testAnOutcomeArrivingBeforeAttachIsReplayed() async {
+        // This is the case that hung the probe: cancellation ran before the continuation existed,
+        // consumed the right to resume, and found nothing to resume.
+        let box = CapabilityProbe.CaptureBox()
+        box.finish(.failure(CancellationError()))
+        let task = Task {
+            try await withCheckedThrowingContinuation { c in box.attach(c) }
+        }
+        do { _ = try await task.value; XCTFail("expected the replayed cancellation") }
+        catch { XCTAssertTrue(error is CancellationError) }
+    }
+
+    func testConcurrentFinishersProduceExactlyOneResume() async {
+        // Delegate, timeout and cancellation arrive on different threads. Whichever ordering the
+        // system picks, the continuation must be resumed once and only once.
+        for _ in 0..<100 {
+            let box = CapabilityProbe.CaptureBox()
+            let task = Task {
+                try await withCheckedThrowingContinuation { c in
+                    box.attach(c)
+                    DispatchQueue.concurrentPerform(iterations: 16) { _ in
+                        box.finish(.failure(ProbeTestError.stub))
+                    }
+                }
             }
-            XCTAssertEqual(winners.value, 1, "exactly one claimant must resume the continuation")
+            do { _ = try await task.value; XCTFail("expected a failure") }
+            catch { XCTAssertEqual(error as? ProbeTestError, .stub) }
         }
     }
-}
 
-/// Minimal counter; XCTest has no built-in atomic and the point of the test is the race.
-private final class Atomic: @unchecked Sendable {
-    private let lock = NSLock()
-    private var count = 0
-    var value: Int { lock.lock(); defer { lock.unlock() }; return count }
-    func increment() { lock.lock(); count += 1; lock.unlock() }
+    func testFinishingCancelsTheDeadline() {
+        let box = CapabilityProbe.CaptureBox()
+        let deadline = Task<Void, Never> { try? await Task.sleep(for: .seconds(60)) }
+        box.deadline = deadline
+        let task = Task { try await withCheckedThrowingContinuation { c in box.attach(c) } }
+        box.finish(.failure(ProbeTestError.stub))
+        XCTAssertTrue(deadline.isCancelled, "a finished capture must not leave its timeout running")
+        task.cancel()
+    }
 }

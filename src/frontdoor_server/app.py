@@ -51,6 +51,10 @@ def _bounded_detail(detail):
 
 #: Messages for statuses raised before any view runs. Werkzeug's own text is fine for a browser
 #: and useless to a client that needs to tell an operator what to do next.
+#: Ceiling for a whole request. A full-resolution still plus its depth map and sidecar is a few
+#: tens of megabytes; 64 MB leaves room without letting a runaway upload exhaust a free-tier host.
+MAX_REQUEST_BYTES = 64 * 1024 * 1024
+
 _HTTP_ERROR_MESSAGES = {
     404: "no such endpoint",
     405: "wrong method for this endpoint",
@@ -150,6 +154,10 @@ def validate_measure_response(body):
 
 def create_app():
     app = Flask(__name__)
+    # An explicit ceiling, so 413 is a decision rather than a side effect of Flask's default
+    # MAX_FORM_MEMORY_SIZE — which only covers non-file form fields, leaving the realistic oversized
+    # body (the image part) uncapped, and which differs across the flask>=3 range this pins.
+    app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
 
     @app.get("/health")
     def health():
@@ -201,12 +209,23 @@ def create_app():
     # cannot slip back to HTML.
     @app.errorhandler(HTTPException)
     def _http_error_as_json(exc):
+        # Unmapped statuses fall back to a token that IS in the committed enum. Inventing one --
+        # 408, 429, 431, or a Werkzeug 400 for a malformed multipart boundary -- would satisfy the
+        # "always JSON" rule while violating the schema the client branches on, which is a subtler
+        # version of the same failure.
         body, status = _error(
-            _HTTP_ERROR_MESSAGES.get(exc.code, "request failed"),
+            _HTTP_ERROR_MESSAGES.get(exc.code, "internal error"),
             exc.description or exc.name,
             status=exc.code or 500,
         )
-        return jsonify(body), status
+        # Werkzeug's own headers carry things the status is meaningless without: Allow on a 405 is
+        # required by RFC 9110, and Retry-After/WWW-Authenticate would matter if those arise.
+        response = jsonify(body)
+        response.status_code = status
+        for header, value in exc.get_headers():
+            if header.lower() != "content-type":
+                response.headers.setdefault(header, value)
+        return response
 
     # An unhandled exception must not return a traceback or an HTML 500 page either. QA saw zero
     # 500s across 84 requests, so this is a guard rather than a fix.

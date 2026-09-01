@@ -241,9 +241,12 @@ final class CaptureController: ObservableObject {
         // exposure, and a timestamp taken there describes when processing finished rather than when
         // the shutter fired (#163).
         let capturedAt = CaptureValidation.timestamp(for: Date())
-        // The sensor's full resolution, so validation can confirm the frame is uncropped. Read from
-        // the output rather than assumed, and carried across the async hop with everything else.
-        let sensorMax = output.maxPhotoDimensions
+        // The SENSOR's maximum, read from the active format — not output.maxPhotoDimensions, which
+        // is the value we requested. Comparing the delivered frame against our own request is
+        // tautological: it passes whenever the request was honoured, including when the request
+        // itself was below the sensor maximum because applyConfiguration could not read it or a
+        // reconfiguration lowered it. That is precisely the case the check exists to catch.
+        let sensorMax = device.activeFormat.supportedMaxPhotoDimensions.last
 
         let token = UUID()
         let delegate = PhotoCaptureDelegate(token: token) { [weak self] finished, result in
@@ -309,7 +312,7 @@ final class CaptureController: ObservableObject {
         zoomFactor: Double,
         lens: String,
         capturedAt: String,
-        sensorMax: CMVideoDimensions
+        sensorMax: CMVideoDimensions?
     ) {
         // Intrinsics ride in on the depth data (see applyConfiguration), with the photo's own
         // calibration kept as a fallback in case a future configuration can supply it directly.
@@ -335,8 +338,8 @@ final class CaptureController: ObservableObject {
             lens: lens,
             zoomFactor: zoomFactor,
             capturedAt: capturedAt,
-            sensorWidth: sensorMax.width > 0 ? Int(sensorMax.width) : nil,
-            sensorHeight: sensorMax.height > 0 ? Int(sensorMax.height) : nil,
+            sensorWidth: sensorMax.map { Int($0.width) },
+            sensorHeight: sensorMax.map { Int($0.height) },
             // Absence is recorded, never punished: depth is a comparison, so a frame without it
             // must still cost nothing (D-020, TICK-023).
             depth: DepthCapture.record(from: captured.depthData)

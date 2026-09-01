@@ -108,6 +108,25 @@ def test_a_linked_framework_in_project_yml_fails(tmp_path):
 
 
 def test_an_empty_tree_does_not_pass_vacuously(tmp_path):
-    """A guard that reports success on nothing would hide a broken path or a moved directory."""
-    result = guard(tmp_path / "does-not-exist")
-    assert result.returncode == 0, "an absent tree currently passes; see #151 if this changes"
+    """A guard reporting success over nothing would hide a renamed or moved source tree.
+
+    Without this, `test_the_real_tree_passes` goes green over zero files if ios/FrontdoorCapture
+    is ever moved, and D-015 is unenforced with a green check.
+    """
+    assert guard(tmp_path / "does-not-exist").returncode == 1
+    assert guard(tmp_path).returncode == 1
+
+
+def test_the_guard_reports_how_many_files_it_scanned(tmp_path):
+    """The count is what makes a vacuous pass visible to a human reading CI output."""
+    result = guard(IOS_TREE)
+    assert result.returncode == 0
+    assert "swift files scanned" in result.stdout, result.stdout
+
+
+def test_a_source_in_a_path_with_spaces_is_still_scanned(tmp_path):
+    """Word-splitting find(1) skipped these silently, which is a bypass of the only D-015 rule."""
+    spaced = tmp_path / "My Sources"
+    spaced.mkdir(parents=True)
+    (spaced / "Leak.swift").write_text("import ARKit\n", encoding="utf-8")
+    assert guard(tmp_path).returncode == 1

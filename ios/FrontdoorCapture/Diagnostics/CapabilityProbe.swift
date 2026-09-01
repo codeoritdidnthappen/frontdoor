@@ -285,54 +285,88 @@ enum CapabilityProbe {
         with settings: AVCapturePhotoSettings,
         from output: AVCapturePhotoOutput
     ) async throws -> AVCapturePhoto {
-        // The timeout resumes the continuation rather than racing it in a task group (#150).
+        // Three things race to finish this capture: the photo delegate, the 15-second timeout, and
+        // cancellation when the operator taps Done. A continuation may be resumed exactly once, and
+        // resuming it twice is a crash, so the box settles the winner under a lock.
         //
-        // A task group does not return until every child finishes, and cancelling a child suspended
-        // on withCheckedThrowingContinuation does not resume it. So the previous shape threw
-        // ProbeError.timedOut on schedule and then waited forever for the stranded capture task —
-        // the timeout fired and could never propagate. A camera that never returns a photo hung the
-        // probe with no way out but force-quitting, on hardware the probe exists to characterise.
-        let box = DelegateBox()
-        let resumed = ResumeGuard()
+        // It also holds the continuation itself rather than the delegate. onCancel can run before —
+        // or during — the operation body, so a box keyed on the delegate has a window where
+        // cancellation consumes the right to resume and then finds nothing to resume, leaving the
+        // continuation permanently stranded. Recording the outcome and replaying it on attach
+        // closes that window.
+        //
+        // The earlier shape raced the capture inside withThrowingTaskGroup. A task group does not
+        // return until every child finishes, and cancelling a child suspended on a continuation
+        // does not resume it, so the timeout fired on schedule and could never propagate (#150).
+        let box = CaptureBox()
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
-                let delegate = ProbeDelegate(continuation: continuation, guardedBy: resumed)
-                box.delegate = delegate
-                let deadline = Task {
+                box.attach(continuation)
+                let delegate = ProbeDelegate(box: box)
+                box.retain(delegate)
+                box.deadline = Task {
                     try? await Task.sleep(for: captureTimeout)
-                    if resumed.claim() { continuation.resume(throwing: ProbeError.timedOut) }
+                    box.finish(.failure(ProbeError.timedOut))
                 }
-                box.deadline = deadline
                 output.capturePhoto(with: settings, delegate: delegate)
             }
         } onCancel: {
-            // Dismissing the sheet mid-capture must not strand the continuation either.
-            box.deadline?.cancel()
-            if resumed.claim() { box.resumeCancelled() }
+            box.finish(.failure(CancellationError()))
         }
     }
 
     /// AVCapturePhotoOutput holds its delegate weakly, so it has to be retained for the duration
     /// of one capture — but per call, never in a shared static.
-    private final class DelegateBox: @unchecked Sendable {
-        var delegate: ProbeDelegate?
-        var deadline: Task<Void, Never>?
-
-        /// Resumes the continuation as cancelled. Only ever called once, behind ResumeGuard.
-        func resumeCancelled() { delegate?.resumeCancelled() }
-    }
-
-    /// A continuation may be resumed exactly once. The photo delegate, the timeout and the
-    /// cancellation handler all race to do it, so the winner is settled here rather than by luck.
-    final class ResumeGuard: @unchecked Sendable {
+    /// Owns the continuation, the delegate's lifetime and the timeout, and guarantees exactly one
+    /// resume. AVCapturePhotoOutput holds its delegate weakly, so the box keeps it alive.
+    final class CaptureBox: @unchecked Sendable {
         private let lock = NSLock()
-        private var taken = false
+        private var continuation: CheckedContinuation<AVCapturePhoto, Error>?
+        private var pending: Result<AVCapturePhoto, Error>?
+        private var finished = false
+        private var delegate: AnyObject?
+        private var _deadline: Task<Void, Never>?
 
-        func claim() -> Bool {
-            lock.lock(); defer { lock.unlock() }
-            if taken { return false }
-            taken = true
-            return true
+        var deadline: Task<Void, Never>? {
+            get { lock.lock(); defer { lock.unlock() }; return _deadline }
+            set { lock.lock(); _deadline = newValue; lock.unlock() }
+        }
+
+        func retain(_ object: AnyObject) { lock.lock(); delegate = object; lock.unlock() }
+
+        /// Attaches the continuation, replaying an outcome that arrived before it existed.
+        func attach(_ continuation: CheckedContinuation<AVCapturePhoto, Error>) {
+            lock.lock()
+            if let pending, !finished {
+                finished = true
+                lock.unlock()
+                continuation.resume(with: pending)
+                return
+            }
+            self.continuation = continuation
+            lock.unlock()
+        }
+
+        /// Finishes once. Later callers, and callers arriving before attach, are absorbed.
+        func finish(_ result: Result<AVCapturePhoto, Error>) {
+            lock.lock()
+            if finished { lock.unlock(); return }
+            // The deadline is cancelled on the first outcome either way. Returning early without
+            // cancelling — the path taken when cancellation beats attach — leaves a live timer
+            // holding the box for its full duration.
+            let deadline = _deadline
+            _deadline = nil
+            guard let continuation else {
+                if pending == nil { pending = result }
+                lock.unlock()
+                deadline?.cancel()
+                return
+            }
+            finished = true
+            self.continuation = nil
+            lock.unlock()
+            deadline?.cancel()
+            continuation.resume(with: result)
         }
     }
 
@@ -352,28 +386,18 @@ enum CapabilityProbe {
 }
 
 private final class ProbeDelegate: NSObject, AVCapturePhotoCaptureDelegate {
-    private let continuation: CheckedContinuation<AVCapturePhoto, Error>
-    private let resumed: CapabilityProbe.ResumeGuard
+    private let box: CapabilityProbe.CaptureBox
 
-    init(
-        continuation: CheckedContinuation<AVCapturePhoto, Error>,
-        guardedBy resumed: CapabilityProbe.ResumeGuard
-    ) {
-        self.continuation = continuation
-        self.resumed = resumed
-    }
+    init(box: CapabilityProbe.CaptureBox) { self.box = box }
 
     func photoOutput(
         _ output: AVCapturePhotoOutput,
         didFinishProcessingPhoto photo: AVCapturePhoto,
         error: Error?
     ) {
-        // The timeout may already have resumed this; resuming twice is a crash.
-        guard resumed.claim() else { return }
-        if let error { continuation.resume(throwing: error) } else { continuation.resume(returning: photo) }
+        // The timeout or a cancellation may already have finished this; the box absorbs the loser.
+        box.finish(error.map { .failure($0) } ?? .success(photo))
     }
-
-    func resumeCancelled() { continuation.resume(throwing: CancellationError()) }
 }
 
 private func hardwareIdentifier() -> String {

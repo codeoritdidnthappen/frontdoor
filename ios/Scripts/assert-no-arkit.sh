@@ -43,7 +43,17 @@ strip_comments() {
         }' "$1"
 }
 
-for f in $(find "$ROOT" -name '*.swift' -type f 2>/dev/null); do
+# NUL-delimited, because word-splitting $(find ...) silently skips any path containing a space --
+# and a skipped file is an unscanned file, which is a bypass of the only implementation of D-015.
+scanned=0
+while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    if [ ! -r "$f" ]; then
+        echo "error: cannot read $f; refusing to report a pass over a file that was not scanned." >&2
+        status=1
+        continue
+    fi
+    scanned=$((scanned + 1))
     hits=$(strip_comments "$f" | grep -nE "$IMPORTS|$SYMBOLS" || true)
     if [ -n "$hits" ]; then
         if [ "$status" -eq 0 ]; then
@@ -52,7 +62,9 @@ for f in $(find "$ROOT" -name '*.swift' -type f 2>/dev/null); do
         echo "$hits" | sed "s|^|error: $f:|" >&2
         status=1
     fi
-done
+done <<EOF
+$(find "$ROOT" -name '*.swift' -type f 2>/dev/null)
+EOF
 
 # A dependency line links the framework even with no import anywhere.
 if [ -f "$ROOT/project.yml" ]; then
@@ -63,5 +75,13 @@ if [ -f "$ROOT/project.yml" ]; then
     fi
 fi
 
-[ "$status" -eq 0 ] && echo "no-arkit check passed: $ROOT"
+# Zero files scanned is a failure, not a pass. A renamed or moved tree would otherwise report
+# success over nothing, and D-015 would be unenforced with a green check -- the same silent-pass
+# class as the space-in-path bypass this loop was rewritten to close.
+if [ "$scanned" -eq 0 ]; then
+    echo "error: no Swift sources found under $ROOT. Refusing to report a pass over nothing." >&2
+    status=1
+fi
+
+[ "$status" -eq 0 ] && echo "no-arkit check passed: $ROOT ($scanned swift files scanned)"
 exit "$status"

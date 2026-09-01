@@ -17,9 +17,8 @@ depth bucket.
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 import sys
 from dataclasses import dataclass
 
@@ -58,8 +57,12 @@ def _load_dotenv_once():
     if _dotenv_loaded:
         return
     _dotenv_loaded = True
-    env_path = Path(__file__).resolve().parents[2] / ".env"
-    if env_path.is_file():
+    # Search upward from the working directory rather than deriving the repo root from __file__.
+    # parents[2] is the repo root only for a source checkout or editable install; installed
+    # normally it is site-packages' parent, so the runbook's promise would silently not hold --
+    # and could pick up an unrelated .env.
+    env_path = find_dotenv(usecwd=True)
+    if env_path:
         load_dotenv(env_path, override=False)
 
 
