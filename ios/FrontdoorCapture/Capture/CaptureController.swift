@@ -93,36 +93,43 @@ final class CaptureController: ObservableObject {
     private func configureSession() async -> CaptureUnavailable? {
         await withCheckedContinuation { continuation in
             sessionQueue.async { [session, output] in
-                guard let device = AVCaptureDevice.default(
-                    Self.lens, for: .video, position: .back
-                ) else {
-                    continuation.resume(returning: .noCaptureDevice)
+                if let failure = Self.applyConfiguration(to: session, output: output) {
+                    continuation.resume(returning: failure)
                     return
                 }
-                session.beginConfiguration()
-                session.sessionPreset = .photo
-                defer { session.commitConfiguration() }
-
-                do {
-                    let input = try AVCaptureDeviceInput(device: device)
-                    guard session.canAddInput(input), session.canAddOutput(output) else {
-                        continuation.resume(
-                            returning: .configurationFailed("the device rejected the photo input")
-                        )
-                        return
-                    }
-                    session.addInput(input)
-                    session.addOutput(output)
-                } catch {
-                    continuation.resume(
-                        returning: .configurationFailed(error.localizedDescription)
-                    )
-                    return
-                }
+                // startRunning() must be outside beginConfiguration/commitConfiguration.
+                // AVFoundation raises NSGenericException otherwise, and only on a device: the
+                // simulator has no capture device, so configuration returns before this line.
                 session.startRunning()
                 continuation.resume(returning: nil)
             }
         }
+    }
+
+    /// Applies the whole configuration inside one begin/commit pair. Returns the reason it could
+    /// not be applied, or nil. Every exit path commits, via `defer`.
+    private static func applyConfiguration(
+        to session: AVCaptureSession,
+        output: AVCapturePhotoOutput
+    ) -> CaptureUnavailable? {
+        guard let device = AVCaptureDevice.default(lens, for: .video, position: .back) else {
+            return .noCaptureDevice
+        }
+        session.beginConfiguration()
+        defer { session.commitConfiguration() }
+        session.sessionPreset = .photo
+
+        do {
+            let input = try AVCaptureDeviceInput(device: device)
+            guard session.canAddInput(input), session.canAddOutput(output) else {
+                return .configurationFailed("the device rejected the photo input")
+            }
+            session.addInput(input)
+            session.addOutput(output)
+        } catch {
+            return .configurationFailed(error.localizedDescription)
+        }
+        return nil
     }
 }
 
