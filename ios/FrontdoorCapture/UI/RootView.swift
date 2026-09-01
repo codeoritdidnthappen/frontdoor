@@ -4,6 +4,7 @@ import SwiftUI
 /// actually pointing it at something, and leaving the viewfinder does not mean leaving the app.
 struct RootView: View {
     @StateObject private var controller = CaptureController()
+    @Environment(\.scenePhase) private var scenePhase
     @State private var isCapturing = false
 
     var body: some View {
@@ -15,5 +16,11 @@ struct RootView: View {
             }
         }
         .animation(.default, value: isCapturing)
+        // Camera authorisation can change while the app is away — the operator taps Open Settings,
+        // grants it, and comes back. Re-sample on foreground so the home screen cannot keep
+        // showing Denied over a permission that has since been granted.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { controller.refreshReadiness() }
+        }
     }
 }

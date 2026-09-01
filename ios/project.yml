@@ -41,5 +41,5 @@ targets:
       - sdk: CoreMotion.framework
     preBuildScripts:
       - name: "Assert no ARKit (D-015)"
-        script: '"$SRCROOT/Scripts/assert-no-arkit.sh" "$SRCROOT/FrontdoorCapture"'
+        script: '"$SRCROOT/Scripts/assert-no-arkit.sh" "$SRCROOT"'
         basedOnDependencyAnalysis: false

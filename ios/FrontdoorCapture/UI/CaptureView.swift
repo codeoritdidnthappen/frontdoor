@@ -7,6 +7,7 @@ import SwiftUI
 /// capture path (R-11).
 struct CaptureView: View {
     @ObservedObject var controller: CaptureController
+    @Environment(\.scenePhase) private var scenePhase
     let onClose: () -> Void
 
     var body: some View {
@@ -25,6 +26,19 @@ struct CaptureView: View {
             }
         }
         .task { await controller.start() }
+        // Leaving the app is not a reason to keep the camera on: the indicator would stay lit and
+        // the session would be interrupted out from under us. Stop on the way out, restart on the
+        // way back, so returning to the viewfinder shows a live preview rather than a dead one.
+        .onChange(of: scenePhase) { _, phase in
+            switch phase {
+            case .active:
+                Task { await controller.start() }
+            case .background, .inactive:
+                controller.stop()
+            @unknown default:
+                controller.stop()
+            }
+        }
     }
 
     private func unavailable(_ reason: CaptureUnavailable) -> some View {
@@ -57,7 +71,18 @@ struct CaptureView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .ignoresSafeArea()
 
-            controls
+            VStack(spacing: 0) {
+                if let failure = controller.lastCaptureError {
+                    Text(failure)
+                        .font(.footnote)
+                        .foregroundStyle(.white)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                        .background(.orange.opacity(0.85))
+                }
+                controls
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .topLeading) { closeButton }
@@ -105,10 +130,17 @@ struct CaptureView: View {
             }
             .accessibilityLabel("Take photo")
 
-            Text("\(controller.photosTaken)")
-                .font(.title3.monospacedDigit().weight(.semibold))
-                .foregroundStyle(.white)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+            VStack(alignment: .trailing, spacing: 2) {
+                Text("\(controller.photosTaken)")
+                    .font(.title3.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.white)
+                if controller.lastCaptureError != nil {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(.horizontal, 24)
         .padding(.top, 16)

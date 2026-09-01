@@ -8,6 +8,7 @@ enum CaptureUnavailable: Equatable {
     case noCaptureDevice
     case motionUnavailable
     case configurationFailed(String)
+    case interrupted(String)
 
     /// Shown verbatim. The app degrades to this rather than crashing.
     var message: String {
@@ -31,6 +32,11 @@ enum CaptureUnavailable: Equatable {
             """
         case .configurationFailed(let detail):
             return "The capture session could not be configured: \(detail)"
+        case .interrupted(let detail):
+            return """
+            Capture was interrupted: \(detail). Nothing was recorded. Close and reopen the \
+            viewfinder once the camera is free.
+            """
         }
     }
 }

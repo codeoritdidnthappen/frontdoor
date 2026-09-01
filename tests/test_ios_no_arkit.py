@@ -75,3 +75,23 @@ def test_the_xcode_guard_script_agrees_with_this_test(tmp_path):
     result = subprocess.run([str(GUARD), str(dirty)], capture_output=True, text=True)
     assert result.returncode != 0
     assert "ARKit" in result.stderr
+
+
+def test_the_xcode_guard_also_catches_a_linked_framework(tmp_path):
+    """Importing ARKit is not the only way to link it.
+
+    A `- sdk: ARKit.framework` dependency links the framework with no import anywhere, so a guard
+    that only greps Swift would pass while ARKit is in the target.
+    """
+    if not GUARD.exists():
+        pytest.skip("guard script not present")
+
+    scratch = tmp_path / "yml"
+    scratch.mkdir()
+    (scratch / "Fine.swift").write_text("import AVFoundation\n", encoding="utf-8")
+    (scratch / "project.yml").write_text(
+        "targets:\n  X:\n    dependencies:\n      - sdk: ARKit.framework\n", encoding="utf-8"
+    )
+    result = subprocess.run([str(GUARD), str(scratch)], capture_output=True, text=True)
+    assert result.returncode != 0
+    assert "project.yml" in result.stderr

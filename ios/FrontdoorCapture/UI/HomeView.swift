@@ -28,21 +28,21 @@ struct HomeView: View {
             VStack(spacing: 0) {
                 statusRow(
                     "Camera",
-                    ok: controller.cameraAuthorization != .denied
-                        && controller.cameraAuthorization != .restricted,
+                    ok: controller.readiness.cameraAuthorization != .denied
+                        && controller.readiness.cameraAuthorization != .restricted,
                     detail: cameraDetail
                 )
                 Divider().padding(.leading, 48)
                 statusRow(
                     "Device motion",
-                    ok: controller.motionAvailable,
-                    detail: controller.motionAvailable ? "Available" : "Unavailable"
+                    ok: controller.readiness.motionAvailable,
+                    detail: controller.readiness.motionAvailable ? "Available" : "Unavailable"
                 )
             }
             .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
             .padding(.horizontal, 24)
 
-            if let blocked = controller.blockingReason {
+            if let blocked = controller.readiness.blockingReason {
                 VStack(spacing: 12) {
                     Text(blocked.message)
                         .font(.footnote)
@@ -65,7 +65,7 @@ struct HomeView: View {
                     .padding(.vertical, 16)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(controller.blockingReason != nil)
+            .disabled(controller.readiness.blockingReason != nil)
             .padding(.horizontal, 24)
 
             Text("\(controller.photosTaken) captured this session")
@@ -76,7 +76,7 @@ struct HomeView: View {
     }
 
     private var cameraDetail: String {
-        switch controller.cameraAuthorization {
+        switch controller.readiness.cameraAuthorization {
         case .authorized: return "Allowed"
         case .notDetermined: return "Will ask on first capture"
         case .denied: return "Denied"

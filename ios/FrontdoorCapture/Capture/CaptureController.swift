@@ -20,11 +20,33 @@ final class CaptureController: ObservableObject {
         case unavailable(CaptureUnavailable)
     }
 
+    /// What the instrument can do right now, sampled rather than computed on demand.
+    ///
+    /// Authorisation changes while the app is backgrounded — the operator goes to Settings and
+    /// grants the camera — and a computed property gives SwiftUI nothing to react to. This is
+    /// published and re-sampled on foreground, so the home screen cannot go stale.
+    struct Readiness: Equatable {
+        var cameraAuthorization: AVAuthorizationStatus = .notDetermined
+        var motionAvailable: Bool = false
+
+        var blockingReason: CaptureUnavailable? {
+            if !motionAvailable { return .motionUnavailable }
+            switch cameraAuthorization {
+            case .denied: return .cameraDenied
+            case .restricted: return .cameraRestricted
+            default: return nil
+            }
+        }
+    }
+
     @Published private(set) var state: State = .stopped
+    @Published private(set) var readiness = Readiness()
     @Published private(set) var photosTaken = 0
     /// Most recent still, held in memory only so the operator can see that capture worked.
     /// Nothing is written to disk here — the capture record is TICK-028.
     @Published private(set) var lastThumbnail: UIImage?
+    /// Set when a shutter press produced no image. Cleared by the next success.
+    @Published private(set) var lastCaptureError: String?
 
     let session = AVCaptureSession()
 
@@ -32,44 +54,54 @@ final class CaptureController: ObservableObject {
     private let output = AVCapturePhotoOutput()
     private let sessionQueue = DispatchQueue(label: "com.frontdoor.capture.session")
     private var delegates: [PhotoCaptureDelegate] = []
+    private var observers: [NSObjectProtocol] = []
+    /// Invalidates an in-flight `start()` when `stop()` or another `start()` supersedes it.
+    private var startGeneration = 0
 
     /// Fixed capture geometry: 1x main lens, no digital zoom, no crop (ARCHITECTURE.md section 4).
     private static let lens: AVCaptureDevice.DeviceType = .builtInWideAngleCamera
 
-    // MARK: - Readiness, checkable before the camera is switched on
-
-    var motionAvailable: Bool { motion.isDeviceMotionAvailable }
-
-    var cameraAuthorization: AVAuthorizationStatus {
-        AVCaptureDevice.authorizationStatus(for: .video)
+    init() {
+        refreshReadiness()
+        observeSession()
     }
 
-    /// Why capture could not start, checkable without starting it. Lets the home screen say what
-    /// is wrong before the operator taps anything.
-    var blockingReason: CaptureUnavailable? {
-        if !motionAvailable { return .motionUnavailable }
-        switch cameraAuthorization {
-        case .denied: return .cameraDenied
-        case .restricted: return .cameraRestricted
-        default: return nil
-        }
+    deinit {
+        observers.forEach(NotificationCenter.default.removeObserver)
+    }
+
+    // MARK: - Readiness
+
+    /// Re-samples what the system will allow. Call on foreground: the operator may have changed
+    /// camera permission in Settings while the app was away.
+    func refreshReadiness() {
+        readiness = Readiness(
+            cameraAuthorization: AVCaptureDevice.authorizationStatus(for: .video),
+            motionAvailable: motion.isDeviceMotionAvailable
+        )
     }
 
     // MARK: - Lifecycle
 
     func start() async {
         guard state != .running else { return }
+        startGeneration += 1
+        let generation = startGeneration
         state = .starting
+        refreshReadiness()
 
-        guard motionAvailable else {
+        guard readiness.motionAvailable else {
             state = .unavailable(.motionUnavailable)
             return
         }
-        switch cameraAuthorization {
+        switch readiness.cameraAuthorization {
         case .authorized:
             break
         case .notDetermined:
-            guard await AVCaptureDevice.requestAccess(for: .video) else {
+            let granted = await AVCaptureDevice.requestAccess(for: .video)
+            guard generation == startGeneration else { return }
+            refreshReadiness()
+            guard granted else {
                 state = .unavailable(.cameraDenied)
                 return
             }
@@ -84,18 +116,23 @@ final class CaptureController: ObservableObject {
             return
         }
 
-        if let failure = await configureSession() {
+        let failure = await configureSession()
+        // stop(), or another start(), ran while we were configuring. Committing .running here
+        // would claim a live session over a stopped one, and the guard above would then refuse
+        // every future start.
+        guard generation == startGeneration else { return }
+        if let failure {
             state = .unavailable(failure)
             return
         }
-        motion.startDeviceMotionUpdates()
         state = .running
     }
 
     /// Stops the camera and releases it. The operator can leave the viewfinder without killing
     /// the app, and the camera indicator goes out when they do.
     func stop() {
-        motion.stopDeviceMotionUpdates()
+        startGeneration += 1
+        delegates.removeAll()
         sessionQueue.async { [session] in
             if session.isRunning { session.stopRunning() }
         }
@@ -107,6 +144,59 @@ final class CaptureController: ObservableObject {
         UIApplication.shared.open(url)
     }
 
+    // MARK: - Interruption
+
+    /// A capture session can be taken away — a call, another app claiming the camera, Split View.
+    /// Without these the UI keeps drawing a viewfinder over a dead session and the shutter
+    /// silently does nothing.
+    private func observeSession() {
+        let center = NotificationCenter.default
+        let onMain = OperationQueue.main
+
+        observers.append(center.addObserver(
+            forName: AVCaptureSession.wasInterruptedNotification, object: session, queue: onMain
+        ) { [weak self] note in
+            let reason = Self.describe(note)
+            Task { @MainActor in self?.state = .unavailable(.interrupted(reason)) }
+        })
+
+        observers.append(center.addObserver(
+            forName: AVCaptureSession.interruptionEndedNotification, object: session, queue: onMain
+        ) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, case .unavailable(.interrupted) = self.state else { return }
+                self.state = .stopped
+                await self.start()
+            }
+        })
+
+        observers.append(center.addObserver(
+            forName: AVCaptureSession.runtimeErrorNotification, object: session, queue: onMain
+        ) { [weak self] note in
+            let error = note.userInfo?[AVCaptureSessionErrorKey] as? NSError
+            let detail = error?.localizedDescription ?? "unknown runtime error"
+            Task { @MainActor in self?.state = .unavailable(.configurationFailed(detail)) }
+        })
+    }
+
+    private static func describe(_ note: Notification) -> String {
+        guard
+            let raw = note.userInfo?[AVCaptureSessionInterruptionReasonKey] as? Int,
+            let reason = AVCaptureSession.InterruptionReason(rawValue: raw)
+        else { return "the camera became unavailable" }
+
+        switch reason {
+        case .videoDeviceNotAvailableInBackground: return "the app moved to the background"
+        case .audioDeviceInUseByAnotherClient, .videoDeviceInUseByAnotherClient:
+            return "another app is using the camera"
+        case .videoDeviceNotAvailableWithMultipleForegroundApps:
+            return "the camera is unavailable in this multitasking mode"
+        case .videoDeviceNotAvailableDueToSystemPressure:
+            return "the system throttled the camera"
+        @unknown default: return "the camera became unavailable"
+        }
+    }
+
     // MARK: - Capture
 
     /// Takes one photo. TICK-022 onward attach intrinsics, gravity, depth and the sidecar; this
@@ -114,11 +204,19 @@ final class CaptureController: ObservableObject {
     func capturePhoto() {
         guard state == .running else { return }
         let token = UUID()
-        let delegate = PhotoCaptureDelegate(token: token) { [weak self] finished, image in
+        let delegate = PhotoCaptureDelegate(token: token) { [weak self] finished, result in
             Task { @MainActor in
                 guard let self else { return }
-                self.photosTaken += 1
-                if let image { self.lastThumbnail = image }
+                switch result {
+                case .success(let image):
+                    self.photosTaken += 1
+                    self.lastThumbnail = image
+                    self.lastCaptureError = nil
+                case .failure(let message):
+                    // Deliberately does not increment. A count that rises on failure is worse
+                    // than no count: it tells the operator a still exists when none does.
+                    self.lastCaptureError = message
+                }
                 self.delegates.removeAll { $0.token == finished }
             }
         }
@@ -175,10 +273,15 @@ final class CaptureController: ObservableObject {
 
 /// AVCapturePhotoOutput holds its delegate weakly, so one is kept alive per in-flight capture.
 private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
-    let token: UUID
-    private let onFinish: (UUID, UIImage?) -> Void
+    enum Result {
+        case success(UIImage)
+        case failure(String)
+    }
 
-    init(token: UUID, onFinish: @escaping (UUID, UIImage?) -> Void) {
+    let token: UUID
+    private let onFinish: (UUID, Result) -> Void
+
+    init(token: UUID, onFinish: @escaping (UUID, Result) -> Void) {
         self.token = token
         self.onFinish = onFinish
     }
@@ -188,7 +291,14 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
         didFinishProcessingPhoto photo: AVCapturePhoto,
         error: Error?
     ) {
-        let image = photo.fileDataRepresentation().flatMap(UIImage.init(data:))
-        onFinish(token, image)
+        if let error {
+            onFinish(token, .failure(error.localizedDescription))
+            return
+        }
+        guard let image = photo.fileDataRepresentation().flatMap(UIImage.init(data:)) else {
+            onFinish(token, .failure("the camera returned no image data"))
+            return
+        }
+        onFinish(token, .success(image))
     }
 }
