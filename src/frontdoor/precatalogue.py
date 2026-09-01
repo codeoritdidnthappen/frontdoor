@@ -54,6 +54,16 @@ STREETVIEW_IMAGE_URL = "https://maps.googleapis.com/maps/api/streetview"
 IMAGE_SIZE = "640x640"
 IMAGE_FOV = 90
 
+# A next_page_token is not valid the instant it is issued: requesting with it
+# too soon returns INVALID_REQUEST. Undocumented in length, universally ~2s.
+PAGE_TOKEN_DELAY_S = 2.0
+PAGE_TOKEN_ATTEMPTS = 4
+
+# Nearby Search never returns more than three pages of 20. A block that comes
+# back full was not necessarily finished -- it was cut off, and the difference
+# is invisible from the response.
+NEARBY_SEARCH_MAX_RESULTS = 60
+
 DATASET_FILENAME = "precatalogue.json"
 SUMMARY_FILENAME = "precatalogue_summary.json"
 
@@ -86,6 +96,39 @@ class DemoArea:
     blocks: tuple  # of {"name", "lat", "lng", "radius_m"}
     headings_per_business: int
     max_maps_calls: int
+    # The declared area, when the config gave one. The search circle that
+    # covers a box is much larger than the box, so results are filtered back
+    # to this. None when the config defined blocks directly -- a circle is
+    # then the area itself and there is nothing to filter against.
+    bounds: dict | None = None
+
+    def contains(self, location):
+        """Is this location inside the declared area?
+
+        True when no box was declared: the blocks are then the area. False for
+        a location the API returned without usable coordinates -- it cannot be
+        placed on a map or coverage-checked, and passing it on would send
+        "None,None" to the metadata endpoint.
+        """
+        lat, lng = location.get("lat"), location.get("lng")
+        if not isinstance(lat, (int, float)) or isinstance(lat, bool):
+            return False
+        if not isinstance(lng, (int, float)) or isinstance(lng, bool):
+            return False
+        if self.bounds is None:
+            return True
+        return (self.bounds["south"] <= lat <= self.bounds["north"]
+                and self.bounds["west"] <= lng <= self.bounds["east"])
+
+
+@dataclass(frozen=True)
+class Enumeration:
+    """Businesses found, and the blocks where the API may have cut the list
+    short. Truncation is reported rather than inferred from a count that looks
+    complete."""
+
+    places: tuple
+    truncated_blocks: tuple
 
 
 def load_api_key(env=None):
@@ -174,10 +217,13 @@ def load_demo_area(path=None):
             "demo-area config must define exactly one of 'bounding_box' or "
             "'blocks'"
         )
+    bounds = None
     if has_box:
         if not isinstance(raw["bounding_box"], dict):
             raise ConfigError("bounding_box must be an object")
         blocks = (_block_from_bounding_box(raw["bounding_box"], name),)
+        bounds = {key: float(raw["bounding_box"][key])
+                  for key in ("south", "west", "north", "east")}
     else:
         if not isinstance(raw["blocks"], list) or not raw["blocks"]:
             raise ConfigError("blocks must be a non-empty list")
@@ -203,6 +249,7 @@ def load_demo_area(path=None):
         blocks=blocks,
         headings_per_business=headings,
         max_maps_calls=cap,
+        bounds=bounds,
     )
 
 
@@ -239,9 +286,20 @@ class MapsCallCounter:
         self.counts[kind] += 1
 
 
-def enumerate_places(area, api_key, counter, fetch_json=_http_get_json):
-    """Enumerate the demo area's businesses, deduplicated by place_id."""
+def enumerate_places(area, api_key, counter, fetch_json=_http_get_json,
+                     sleep=time.sleep):
+    """Enumerate the demo area's businesses, deduplicated by place_id.
+
+    Returns an Enumeration: the places, and the blocks whose result list came
+    back full and may therefore have been cut short by the API.
+
+    Results are filtered back to the declared bounding box. The search circle
+    that covers a box is close to twice its area, so roughly half of what the
+    API returns for a box can sit outside the area the team actually declared
+    -- and those results also consume the 60 the API is willing to give.
+    """
     places = {}
+    truncated = []
     for block in area.blocks:
         params = {
             "location": f"{block['lat']},{block['lng']}",
@@ -249,33 +307,64 @@ def enumerate_places(area, api_key, counter, fetch_json=_http_get_json):
             "type": "establishment",
             "key": api_key,
         }
+        returned = 0
         while True:
-            counter.tick("places")
-            page = fetch_json(PLACES_SEARCH_URL, params)
-            status = page.get("status")
-            if status not in ("OK", "ZERO_RESULTS"):
-                raise PrecatalogueError(
-                    f"Places search failed for block {block['name']!r}: "
-                    f"status {status!r}"
-                )
+            page = _fetch_places_page(
+                params, block, counter, fetch_json, sleep)
             for result in page.get("results", []):
+                returned += 1
                 place_id = result.get("place_id")
-                location = result.get("geometry", {}).get("location", {})
                 if not place_id or place_id in places:
+                    continue
+                location = {
+                    "lat": result.get("geometry", {})
+                                 .get("location", {}).get("lat"),
+                    "lng": result.get("geometry", {})
+                                 .get("location", {}).get("lng"),
+                }
+                if not area.contains(location):
                     continue
                 places[place_id] = {
                     "place_id": place_id,
                     "name": result.get("name", ""),
-                    "location": {
-                        "lat": location.get("lat"),
-                        "lng": location.get("lng"),
-                    },
+                    "location": location,
                 }
             token = page.get("next_page_token")
             if not token:
                 break
             params = {"pagetoken": token, "key": api_key}
-    return list(places.values())
+        if returned >= NEARBY_SEARCH_MAX_RESULTS:
+            truncated.append(block["name"])
+    return Enumeration(places=tuple(places.values()),
+                       truncated_blocks=tuple(truncated))
+
+
+def _fetch_places_page(params, block, counter, fetch_json, sleep):
+    """One page of Nearby Search, waiting out the next_page_token delay.
+
+    A token is not valid the moment it is handed over; asking with it straight
+    away answers INVALID_REQUEST. Without the wait every area holding more than
+    one page of businesses fails on its second request, which is every area
+    worth pre-cataloguing.
+    """
+    paged = "pagetoken" in params
+    for attempt in range(PAGE_TOKEN_ATTEMPTS):
+        if paged:
+            sleep(PAGE_TOKEN_DELAY_S)
+        counter.tick("places")
+        page = fetch_json(PLACES_SEARCH_URL, params)
+        status = page.get("status")
+        if status in ("OK", "ZERO_RESULTS"):
+            return page
+        # Only a paged request can be waiting on a token; an unpaged
+        # INVALID_REQUEST is a malformed query and retrying cannot fix it.
+        if status == "INVALID_REQUEST" and paged \
+                and attempt < PAGE_TOKEN_ATTEMPTS - 1:
+            continue
+        raise PrecatalogueError(
+            f"Places search failed for block {block['name']!r}: "
+            f"status {status!r}"
+        )
 
 
 def streetview_metadata(location, api_key, counter, fetch_json=_http_get_json):
@@ -388,12 +477,23 @@ def _screened_row(place, metadata, headings, assessments):
 
 
 def _write_json(path, payload):
-    path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n",
-                    encoding="utf-8")
+    """Write via a temporary file in the same directory, then rename.
+
+    The dataset is rewritten after every completed row, so a plain write_text
+    gives one truncate-then-write window per business. An interrupt inside any
+    of them would leave invalid JSON, and the next run reads this file to know
+    what it already has -- losing it discards every row already paid for.
+    os.replace is atomic on the same filesystem.
+    """
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n",
+                   encoding="utf-8")
+    os.replace(tmp, path)
 
 
 def run_precatalogue(area=None, out_dir="data", *, engine=None, env=None,
-                     fetch_json=_http_get_json, fetch_bytes=_http_get_bytes):
+                     fetch_json=_http_get_json, fetch_bytes=_http_get_bytes,
+                     sleep=time.sleep):
     """Run the batch: enumerate, coverage-check, retrieve, screen, write.
 
     Idempotent and resumable: the dataset is keyed by place_id, existing rows
@@ -417,10 +517,15 @@ def run_precatalogue(area=None, out_dir="data", *, engine=None, env=None,
 
     counter = MapsCallCounter(area.max_maps_calls)
     stopped = None
+    stopped_is_error = False
     skipped_existing = 0
     enumerated = []
+    truncated_blocks = ()
     try:
-        enumerated = enumerate_places(area, api_key, counter, fetch_json)
+        enumeration = enumerate_places(
+            area, api_key, counter, fetch_json, sleep)
+        enumerated = list(enumeration.places)
+        truncated_blocks = enumeration.truncated_blocks
         for place in enumerated:
             place_id = place["place_id"]
             if place_id in dataset:
@@ -431,6 +536,11 @@ def run_precatalogue(area=None, out_dir="data", *, engine=None, env=None,
             if metadata.get("status") != "OK":
                 row = _uncovered_row(
                     place, metadata.get("status", "UNKNOWN"))
+            elif not metadata.get("pano_id"):
+                # Status said OK but there is no panorama to request. Sending
+                # an empty pano is a 400 that would end the whole batch; the
+                # honest reading is that this business has nothing to look at.
+                row = _uncovered_row(place, "NO_PANO_ID")
             else:
                 pano_location = metadata.get("location", place["location"])
                 headings = storefront_headings(
@@ -439,14 +549,22 @@ def run_precatalogue(area=None, out_dir="data", *, engine=None, env=None,
                 assessments = []
                 for heading in headings:
                     image = fetch_streetview_image(
-                        metadata.get("pano_id", ""), heading, api_key,
+                        metadata["pano_id"], heading, api_key,
                         counter, fetch_bytes)
                     assessments.append(engine.assess_image(image))
                 row = _screened_row(place, metadata, headings, assessments)
             dataset[place_id] = row
             _write_json(dataset_path, dataset)
     except (MapsCallCapError, SpendCapError) as exc:
+        # Expected, and the point of the caps. Resumable.
         stopped = f"{type(exc).__name__}: {exc}"
+    except Exception as exc:  # noqa: BLE001 - the summary is the whole point
+        # A timeout, a 500, OVER_QUERY_LIMIT. The rows already written survive
+        # because the dataset is flushed per row, but the accounting for what
+        # they cost only exists here -- letting this propagate would throw away
+        # the call counts and spend for work already paid for.
+        stopped = f"{type(exc).__name__}: {exc}"
+        stopped_is_error = True
 
     enumerated_ids = {place["place_id"] for place in enumerated}
     rows = [dataset[pid] for pid in enumerated_ids if pid in dataset]
@@ -461,9 +579,13 @@ def run_precatalogue(area=None, out_dir="data", *, engine=None, env=None,
         "skipped_existing": skipped_existing,
         "maps_api_calls": {**counter.counts, "total": counter.total},
         "maps_call_cap": area.max_maps_calls,
+        # Named, not inferred: a block that returned the API's maximum was cut
+        # off there, and a count that looks complete cannot show it.
+        "truncated_blocks": list(truncated_blocks),
         "model_spend_usd_estimate": round(engine.spent_usd, 4),
         "wall_clock_s": round(time.perf_counter() - t0, 3),
         "stopped": stopped,
+        "stopped_is_error": stopped_is_error,
     }
     _write_json(out_dir / SUMMARY_FILENAME, summary)
     return summary
@@ -482,7 +604,9 @@ def main(argv=None):
         print(exc, file=sys.stderr)
         return 1
     print(json.dumps(summary, indent=2, sort_keys=True))
-    return 0
+    # A cap stop is a clean, resumable finish. A crash is not, and a run that
+    # died partway through must not report success to whatever called it.
+    return 1 if summary["stopped_is_error"] else 0
 
 
 if __name__ == "__main__":
