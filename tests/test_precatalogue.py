@@ -16,6 +16,8 @@ from frontdoor.precatalogue import (
     SUMMARY_FILENAME,
     ConfigError,
     MapsCallCapError,
+    NEARBY_SEARCH_MAX_RESULTS,
+    PAGE_TOKEN_DELAY_S,
     MapsCallCounter,
     PrecatalogueError,
     bearing_deg,
@@ -67,6 +69,16 @@ def metadata_ok(date="2024-06", pano="pano-1", lat=30.0049, lng=-97.7951):
         "pano_id": pano,
         "location": {"lat": lat, "lng": lng},
     }
+
+
+class FakeClock:
+    """Records sleeps instead of taking them."""
+
+    def __init__(self):
+        self.slept = []
+
+    def __call__(self, seconds):
+        self.slept.append(seconds)
 
 
 class FakeFetcher:
@@ -128,7 +140,7 @@ def run(tmp_path, fetcher, engine, config_path=None, **kwargs):
         engine=engine,
         fetch_json=fetcher.fetch_json,
         fetch_bytes=fetcher.fetch_bytes,
-        **kwargs,
+        **{"sleep": FakeClock(), **kwargs},
     )
 
 
@@ -229,10 +241,13 @@ def test_enumeration_pages_and_dedupes(tmp_path):
     ])
     area = load_demo_area(write_config(tmp_path))
     counter = MapsCallCounter(area.max_maps_calls)
-    places = enumerate_places(area, API_KEY, counter, fetcher.fetch_json)
+    found = enumerate_places(area, API_KEY, counter, fetcher.fetch_json,
+                             FakeClock())
+    places = list(found.places)
     assert [p["place_id"] for p in places] == ["p1", "p2", "p3"]
     assert places[0]["location"] == {"lat": 30.005, "lng": -97.795}
     assert counter.counts["places"] == 2
+    assert found.truncated_blocks == ()
     assert fetcher.params_for(PLACES_SEARCH_URL)[1] == {
         "pagetoken": "tok", "key": API_KEY}
 
@@ -242,7 +257,7 @@ def test_enumeration_error_status_raises(tmp_path):
     area = load_demo_area(write_config(tmp_path))
     with pytest.raises(PrecatalogueError, match="REQUEST_DENIED"):
         enumerate_places(area, API_KEY, MapsCallCounter(10),
-                         fetcher.fetch_json)
+                         fetcher.fetch_json, FakeClock())
 
 
 # ---------------------------------------------------------------- headings
@@ -440,3 +455,163 @@ def test_no_api_key_in_dataset_or_summary(tmp_path, env):
     for name in (DATASET_FILENAME, SUMMARY_FILENAME):
         text = (tmp_path / "out" / name).read_text(encoding="utf-8")
         assert API_KEY not in text
+
+
+# ------------------------------------------------- live-API behaviour (#177)
+# Every test above mocks the network, which is right, but it means the suite
+# only ever sees the API behaving as the code expects. These cover the ways
+# the real Places and Street View endpoints differ from that.
+
+
+def test_a_paged_request_waits_for_the_token_to_become_valid(tmp_path):
+    """A next_page_token is not valid the moment it is issued.
+
+    Without the wait the second page answers INVALID_REQUEST and the run dies,
+    so any area with more than 20 businesses -- every area worth doing -- never
+    completes.
+    """
+    fetcher = FakeFetcher(places_pages=[
+        {"status": "OK", "results": [place("p1")], "next_page_token": "tok"},
+        {"status": "OK", "results": [place("p2")]},
+    ])
+    clock = FakeClock()
+    area = load_demo_area(write_config(tmp_path))
+    enumerate_places(area, API_KEY, MapsCallCounter(10), fetcher.fetch_json,
+                     clock)
+    assert clock.slept == [PAGE_TOKEN_DELAY_S], (
+        "exactly the paged request waits; the first page must not"
+    )
+
+
+def test_invalid_request_on_a_paged_call_is_retried(tmp_path):
+    fetcher = FakeFetcher(places_pages=[
+        {"status": "OK", "results": [place("p1")], "next_page_token": "tok"},
+        {"status": "INVALID_REQUEST"},
+        {"status": "OK", "results": [place("p2")]},
+    ])
+    clock = FakeClock()
+    found = enumerate_places(
+        load_demo_area(write_config(tmp_path)), API_KEY, MapsCallCounter(10),
+        fetcher.fetch_json, clock)
+    assert [p["place_id"] for p in found.places] == ["p1", "p2"]
+    assert len(clock.slept) == 2
+
+
+def test_invalid_request_without_a_token_is_not_retried(tmp_path):
+    """A first-page INVALID_REQUEST is a malformed query. Retrying it burns
+    calls against the cap and cannot succeed."""
+    fetcher = FakeFetcher(places_pages=[{"status": "INVALID_REQUEST"}])
+    counter = MapsCallCounter(10)
+    with pytest.raises(PrecatalogueError, match="INVALID_REQUEST"):
+        enumerate_places(load_demo_area(write_config(tmp_path)), API_KEY,
+                         counter, fetcher.fetch_json, FakeClock())
+    assert counter.counts["places"] == 1
+
+
+def test_results_outside_the_declared_box_are_dropped(tmp_path):
+    """The circle covering a box is nearly twice its area. Businesses in the
+    margin are not in the demo area and must not reach the map."""
+    fetcher = FakeFetcher(places_pages=[{"status": "OK", "results": [
+        place("inside", lat=30.005, lng=-97.795),
+        place("north-of-it", lat=30.02, lng=-97.795),
+        place("east-of-it", lat=30.005, lng=-97.70),
+    ]}])
+    found = enumerate_places(
+        load_demo_area(write_config(tmp_path)), API_KEY, MapsCallCounter(10),
+        fetcher.fetch_json, FakeClock())
+    assert [p["place_id"] for p in found.places] == ["inside"]
+
+
+def test_a_result_without_coordinates_is_dropped(tmp_path):
+    """It cannot be coverage-checked: its location would reach the metadata
+    endpoint as the string "None,None"."""
+    nowhere = {"place_id": "no-geo", "name": "Shop", "geometry": {}}
+    fetcher = FakeFetcher(places_pages=[
+        {"status": "OK", "results": [nowhere, place("ok")]}])
+    found = enumerate_places(
+        load_demo_area(write_config(tmp_path)), API_KEY, MapsCallCounter(10),
+        fetcher.fetch_json, FakeClock())
+    assert [p["place_id"] for p in found.places] == ["ok"]
+
+
+def test_a_block_returning_the_api_maximum_is_reported_as_truncated(tmp_path):
+    """Nearby Search stops at 60. A full list is indistinguishable from a
+    complete one in the response, so the summary has to say so."""
+    full = [place(f"p{i}") for i in range(NEARBY_SEARCH_MAX_RESULTS)]
+    fetcher = FakeFetcher(places_pages=[{"status": "OK", "results": full}])
+    found = enumerate_places(
+        load_demo_area(write_config(tmp_path)), API_KEY, MapsCallCounter(10),
+        fetcher.fetch_json, FakeClock())
+    assert found.truncated_blocks == ("test-area",)
+
+
+def test_the_summary_names_truncated_blocks(tmp_path, env):
+    full = [place(f"p{i}") for i in range(NEARBY_SEARCH_MAX_RESULTS)]
+    fetcher = FakeFetcher(
+        places_pages=[{"status": "OK", "results": full}],
+        metadata=[{"status": "ZERO_RESULTS"}] * NEARBY_SEARCH_MAX_RESULTS,
+    )
+    summary = run(tmp_path, fetcher, StubEngine())
+    assert summary["truncated_blocks"] == ["test-area"]
+
+
+def test_metadata_ok_without_a_pano_id_is_uncovered_not_a_crash(tmp_path, env):
+    """Requesting an image with an empty pano is a 400 that would end the
+    batch. Nothing to look at is the same as no coverage."""
+    fetcher = FakeFetcher(
+        places_pages=[{"status": "OK", "results": [place("p1")]}],
+        metadata=[{"status": "OK", "date": "2024-06", "location": {
+            "lat": 30.005, "lng": -97.795}}],
+    )
+    summary = run(tmp_path, fetcher, StubEngine())
+    row = json.loads(
+        (tmp_path / "out" / DATASET_FILENAME).read_text())["p1"]
+    assert row["covered"] is False
+    assert row["coverage_status"] == "NO_PANO_ID"
+    assert summary["stopped"] is None
+    assert fetcher.params_for(STREETVIEW_IMAGE_URL) == []
+
+
+def test_an_unexpected_failure_still_writes_the_summary(tmp_path, env):
+    """The rows survive -- they are flushed per row -- but what they cost is
+    only recorded in the summary."""
+    class Exploding(FakeFetcher):
+        def fetch_bytes(self, url, params):
+            raise TimeoutError("street view timed out")
+
+    fetcher = Exploding(
+        places_pages=[{"status": "OK", "results": [place("p1")]}],
+        metadata=[metadata_ok()],
+    )
+    summary = run(tmp_path, fetcher, StubEngine())
+    assert summary["stopped_is_error"] is True
+    assert "TimeoutError" in summary["stopped"]
+    # places + metadata + the image call that was billed before it failed.
+    # Preserving exactly this is why the summary must survive a crash.
+    assert summary["maps_api_calls"] == {
+        "places": 1, "metadata": 1, "image": 1, "total": 3}
+    assert (tmp_path / "out" / SUMMARY_FILENAME).exists()
+
+
+def test_a_cap_stop_is_not_reported_as_an_error(tmp_path, env):
+    fetcher = FakeFetcher(
+        places_pages=[{"status": "OK", "results": [place("p1")]}],
+        metadata=[metadata_ok()],
+    )
+    summary = run(tmp_path, fetcher, StubEngine(fail_after=0))
+    assert summary["stopped_is_error"] is False
+    assert "SpendCapError" in summary["stopped"]
+
+
+def test_the_dataset_is_never_left_half_written(tmp_path, env):
+    """The dataset is rewritten after every row. A plain write truncates
+    first, so an interrupt in any of those windows would leave invalid JSON --
+    and this file is how the next run knows what it already paid for."""
+    fetcher = FakeFetcher(
+        places_pages=[{"status": "OK", "results": [place("p1")]}],
+        metadata=[metadata_ok()],
+    )
+    run(tmp_path, fetcher, StubEngine())
+    out = tmp_path / "out"
+    assert list(out.glob("*.tmp")) == [], "temp files must be renamed away"
+    json.loads((out / DATASET_FILENAME).read_text())
