@@ -237,6 +237,13 @@ final class CaptureController: ObservableObject {
         let gravity = motion.deviceMotion.map {
             GravitySample(x: $0.gravity.x, y: $0.gravity.y, z: $0.gravity.z)
         }
+        // Sampled here for the same reason gravity is: the delegate callback arrives after the
+        // exposure, and a timestamp taken there describes when processing finished rather than when
+        // the shutter fired (#163).
+        let capturedAt = CaptureValidation.timestamp(for: Date())
+        // The sensor's full resolution, so validation can confirm the frame is uncropped. Read from
+        // the output rather than assumed, and carried across the async hop with everything else.
+        let sensorMax = output.maxPhotoDimensions
 
         let token = UUID()
         let delegate = PhotoCaptureDelegate(token: token) { [weak self] finished, result in
@@ -244,7 +251,10 @@ final class CaptureController: ObservableObject {
                 guard let self else { return }
                 switch result {
                 case .success(let captured):
-                    self.accept(captured, gravity: gravity, zoomFactor: zoomFactor, lens: lens)
+                    self.accept(
+                        captured, gravity: gravity, zoomFactor: zoomFactor, lens: lens,
+                        capturedAt: capturedAt, sensorMax: sensorMax
+                    )
                 case .failure(let message):
                     // Deliberately does not increment. A count that rises on failure is worse
                     // than no count: it tells the operator a still exists when none does.
@@ -297,7 +307,9 @@ final class CaptureController: ObservableObject {
         _ captured: CapturedPhoto,
         gravity: GravitySample?,
         zoomFactor: Double,
-        lens: String
+        lens: String,
+        capturedAt: String,
+        sensorMax: CMVideoDimensions
     ) {
         // Intrinsics ride in on the depth data (see applyConfiguration), with the photo's own
         // calibration kept as a fallback in case a future configuration can supply it directly.
@@ -322,6 +334,9 @@ final class CaptureController: ObservableObject {
             deviceModel: CaptureValidation.hardwareIdentifier(),
             lens: lens,
             zoomFactor: zoomFactor,
+            capturedAt: capturedAt,
+            sensorWidth: sensorMax.width > 0 ? Int(sensorMax.width) : nil,
+            sensorHeight: sensorMax.height > 0 ? Int(sensorMax.height) : nil,
             // Absence is recorded, never punished: depth is a comparison, so a frame without it
             // must still cost nothing (D-020, TICK-023).
             depth: DepthCapture.record(from: captured.depthData)
