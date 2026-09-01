@@ -5,8 +5,10 @@ sanity-checked before forty entrances are collected under it. The empirical curv
 the sealed split; a large disagreement between the two means one of them is wrong and must be
 resolved before the sealed run.
 
-Independently re-derived in TICK-234 (#138) — `docs/rise-error-vs-angle-independent.md`. The two
-tables agree to <1%; F-001 through F-005 survived.
+Independently re-derived in TICK-244 (#159) — `docs/rise-error-vs-angle-independent.md`, via 3D
+projection and a four-corner homography Monte Carlo rather than the tap/scale algebra below.
+The tables agree to ≤3%; F-001 through F-005 survived. TICK-234 (#138) recorded the same
+survival using the algebra in this note; TICK-244 replaced that write-up.
 
 ## 1. Setup
 
