@@ -2,6 +2,7 @@ import AVFoundation
 import CoreMotion
 import SwiftUI
 import UIKit
+import simd
 
 /// Owns the AVFoundation session and the CoreMotion manager.
 ///
@@ -45,8 +46,11 @@ final class CaptureController: ObservableObject {
     /// Most recent still, held in memory only so the operator can see that capture worked.
     /// Nothing is written to disk here — the capture record is TICK-028.
     @Published private(set) var lastThumbnail: UIImage?
-    /// Set when a shutter press produced no image. Cleared by the next success.
+    /// Set when a shutter press produced no image, or produced one the method cannot use.
+    /// Cleared by the next success.
     @Published private(set) var lastCaptureError: String?
+    /// Records accepted this session. TICK-028 writes these to sidecars; nothing is persisted yet.
+    @Published private(set) var records: [CaptureRecord] = []
 
     let session = AVCaptureSession()
 
@@ -57,6 +61,10 @@ final class CaptureController: ObservableObject {
     private var observers: [NSObjectProtocol] = []
     /// Invalidates an in-flight `start()` when `stop()` or another `start()` supersedes it.
     private var startGeneration = 0
+    /// Sensor maximum for the active format, so "full resolution" is a comparison not an
+    /// assumption. Set when the session is configured.
+    private var sensorDimensions: (width: Int, height: Int)?
+    private var activeDevice: AVCaptureDevice?
 
     /// Fixed capture geometry: 1x main lens, no digital zoom, no crop (ARCHITECTURE.md section 4).
     private static let lens: AVCaptureDevice.DeviceType = .builtInWideAngleCamera
@@ -125,12 +133,15 @@ final class CaptureController: ObservableObject {
             state = .unavailable(failure)
             return
         }
+        // Started only now that something reads it: capturePhoto() samples gravity at the shutter.
+        motion.startDeviceMotionUpdates()
         state = .running
     }
 
     /// Stops the camera and releases it. The operator can leave the viewfinder without killing
     /// the app, and the camera indicator goes out when they do.
     func stop() {
+        motion.stopDeviceMotionUpdates()
         startGeneration += 1
         delegates.removeAll()
         sessionQueue.async { [session] in
@@ -203,15 +214,20 @@ final class CaptureController: ObservableObject {
     /// stage claims nothing beyond "a still was produced", and shows it so that is checkable.
     func capturePhoto() {
         guard state == .running else { return }
+        // Read gravity now, not in the completion: the vector must describe the instant of
+        // capture, and the completion arrives long enough afterwards for the phone to have moved.
+        let gravityAtShutter = motion.deviceMotion.map {
+            SIMD3<Double>($0.gravity.x, $0.gravity.y, $0.gravity.z)
+        }
+        let zoomAtShutter = activeDevice.map { Double($0.videoZoomFactor) } ?? .nan
+
         let token = UUID()
         let delegate = PhotoCaptureDelegate(token: token) { [weak self] finished, result in
             Task { @MainActor in
                 guard let self else { return }
                 switch result {
-                case .success(let image):
-                    self.photosTaken += 1
-                    self.lastThumbnail = image
-                    self.lastCaptureError = nil
+                case .success(let capture):
+                    self.accept(capture, zoom: zoomAtShutter, gravity: gravityAtShutter)
                 case .failure(let message):
                     // Deliberately does not increment. A count that rises on failure is worse
                     // than no count: it tells the operator a still exists when none does.
@@ -221,60 +237,160 @@ final class CaptureController: ObservableObject {
             }
         }
         delegates.append(delegate)
+
+        let settings = AVCapturePhotoSettings()
+        if let sensorDimensions {
+            settings.maxPhotoDimensions = CMVideoDimensions(
+                width: Int32(sensorDimensions.width), height: Int32(sensorDimensions.height)
+            )
+        }
+        if output.isCameraCalibrationDataDeliverySupported {
+            settings.isCameraCalibrationDataDeliveryEnabled = true
+        }
         sessionQueue.async { [output] in
-            output.capturePhoto(with: AVCapturePhotoSettings(), delegate: delegate)
+            output.capturePhoto(with: settings, delegate: delegate)
         }
     }
 
+    /// A frame is kept only if it carries everything the method needs. Anything else is discarded
+    /// with a reason, because a record that looks complete and is not corrupts the dataset far
+    /// more expensively than a missing one.
+    private func accept(_ capture: CapturedFrame, zoom: Double, gravity: SIMD3<Double>?) {
+        if let rejection = CaptureValidator.rejection(
+            zoomFactor: zoom,
+            intrinsics: capture.intrinsics,
+            gravity: gravity,
+            deliveredWidth: capture.pixelWidth,
+            deliveredHeight: capture.pixelHeight,
+            sensorWidth: sensorDimensions?.width,
+            sensorHeight: sensorDimensions?.height
+        ) {
+            lastCaptureError = rejection.message
+            return
+        }
+        guard let intrinsics = capture.intrinsics, let gravity else { return }
+
+        records.append(
+            CaptureRecord(
+                captureId: UUID(),
+                capturedAt: capture.timestamp,
+                deviceModel: Self.hardwareIdentifier(),
+                lens: AVCaptureDevice.DeviceType.builtInWideAngleCamera.rawValue,
+                pixelWidth: capture.pixelWidth,
+                pixelHeight: capture.pixelHeight,
+                intrinsics: intrinsics,
+                gravity: gravity
+            )
+        )
+        photosTaken += 1
+        lastThumbnail = capture.image
+        lastCaptureError = nil
+    }
+
+    static func hardwareIdentifier() -> String {
+        var info = utsname()
+        uname(&info)
+        let raw = withUnsafePointer(to: &info.machine) {
+            $0.withMemoryRebound(to: CChar.self, capacity: 1) { String(validatingUTF8: $0) }
+        }
+        return raw ?? UIDevice.current.model
+    }
+
     private func configureSession() async -> CaptureUnavailable? {
-        await withCheckedContinuation { continuation in
+        let outcome = await withCheckedContinuation { continuation in
             sessionQueue.async { [session, output] in
-                if let failure = Self.applyConfiguration(to: session, output: output) {
-                    continuation.resume(returning: failure)
+                let result = Self.applyConfiguration(to: session, output: output)
+                if case .failure(let reason) = result {
+                    continuation.resume(returning: result)
+                    _ = reason
                     return
                 }
                 // startRunning() must be outside beginConfiguration/commitConfiguration.
                 // AVFoundation raises NSGenericException otherwise, and only on a device: the
                 // simulator has no capture device, so configuration returns before this line.
                 session.startRunning()
-                continuation.resume(returning: nil)
+                continuation.resume(returning: result)
             }
+        }
+        switch outcome {
+        case .failure(let reason):
+            return reason
+        case .success(let device, let dimensions):
+            activeDevice = device
+            sensorDimensions = dimensions
+            return nil
         }
     }
 
-    /// Applies the whole configuration inside one begin/commit pair. Returns the reason it could
-    /// not be applied, or nil. Every exit path commits, via `defer`.
+    enum ConfigurationOutcome {
+        case success(device: AVCaptureDevice, dimensions: (width: Int, height: Int)?)
+        case failure(CaptureUnavailable)
+    }
+
+    /// Applies the whole configuration inside one begin/commit pair, then pins zoom and enables
+    /// calibration delivery in a second transaction — those reads are only meaningful once the
+    /// first is committed.
     private static func applyConfiguration(
         to session: AVCaptureSession,
         output: AVCapturePhotoOutput
-    ) -> CaptureUnavailable? {
+    ) -> ConfigurationOutcome {
         guard let device = AVCaptureDevice.default(lens, for: .video, position: .back) else {
-            return .noCaptureDevice
+            return .failure(.noCaptureDevice)
         }
-        session.beginConfiguration()
-        defer { session.commitConfiguration() }
-        session.sessionPreset = .photo
 
-        guard session.inputs.isEmpty, session.outputs.isEmpty else { return nil }
-
-        do {
-            let input = try AVCaptureDeviceInput(device: device)
-            guard session.canAddInput(input), session.canAddOutput(output) else {
-                return .configurationFailed("the device rejected the photo input")
+        if session.inputs.isEmpty, session.outputs.isEmpty {
+            session.beginConfiguration()
+            session.sessionPreset = .photo
+            do {
+                let input = try AVCaptureDeviceInput(device: device)
+                guard session.canAddInput(input), session.canAddOutput(output) else {
+                    session.commitConfiguration()
+                    return .failure(.configurationFailed("the device rejected the photo input"))
+                }
+                session.addInput(input)
+                session.addOutput(output)
+            } catch {
+                session.commitConfiguration()
+                return .failure(.configurationFailed(error.localizedDescription))
             }
-            session.addInput(input)
-            session.addOutput(output)
-        } catch {
-            return .configurationFailed(error.localizedDescription)
+            session.commitConfiguration()
         }
-        return nil
+
+        // D-014 fixes capture geometry: 1x main lens, no digital zoom, no crop. Pinned here so a
+        // zoomed frame cannot be produced at all, rather than only rejected afterwards.
+        do {
+            try device.lockForConfiguration()
+            device.videoZoomFactor = 1.0
+            device.unlockForConfiguration()
+        } catch {
+            return .failure(.configurationFailed("could not pin zoom to 1x: \(error.localizedDescription)"))
+        }
+
+        let sensorMax = device.activeFormat.supportedMaxPhotoDimensions.last
+        session.beginConfiguration()
+        if let sensorMax { output.maxPhotoDimensions = sensorMax }
+        session.commitConfiguration()
+
+        return .success(
+            device: device,
+            dimensions: sensorMax.map { (width: Int($0.width), height: Int($0.height)) }
+        )
     }
+}
+
+/// One accepted frame plus everything the method is allowed to consume from it (D-015).
+struct CapturedFrame {
+    var image: UIImage
+    var timestamp: Date
+    var pixelWidth: Int
+    var pixelHeight: Int
+    var intrinsics: Intrinsics?
 }
 
 /// AVCapturePhotoOutput holds its delegate weakly, so one is kept alive per in-flight capture.
 private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     enum Result {
-        case success(UIImage)
+        case success(CapturedFrame)
         case failure(String)
     }
 
@@ -299,6 +415,27 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
             onFinish(token, .failure("the camera returned no image data"))
             return
         }
-        onFinish(token, .success(image))
+        let calibration = photo.cameraCalibrationData
+        let intrinsics = calibration.map { data -> Intrinsics in
+            let m = data.intrinsicMatrix
+            return Intrinsics(
+                fx: Double(m.columns.0.x),
+                fy: Double(m.columns.1.y),
+                cx: Double(m.columns.2.x),
+                cy: Double(m.columns.2.y),
+                referenceWidth: Int(data.intrinsicMatrixReferenceDimensions.width),
+                referenceHeight: Int(data.intrinsicMatrixReferenceDimensions.height),
+                distortionTableEntries: data.lensDistortionLookupTable
+                    .map { $0.count / MemoryLayout<Float>.size } ?? 0
+            )
+        }
+        let dims = photo.resolvedSettings.photoDimensions
+        onFinish(token, .success(CapturedFrame(
+            image: image,
+            timestamp: Date(),
+            pixelWidth: Int(dims.width),
+            pixelHeight: Int(dims.height),
+            intrinsics: intrinsics
+        )))
     }
 }
