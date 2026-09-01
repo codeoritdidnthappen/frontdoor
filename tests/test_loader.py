@@ -379,3 +379,43 @@ def test_an_unknown_split_is_a_typo_not_an_empty_result(tmp_path):
     )
     with pytest.raises(LoaderError, match="unknown split"):
         loader.list_captures(split="nonsense")
+
+
+def test_the_dev_filter_uses_the_derived_split_not_the_csv_cell(tmp_path):
+    """A calib entrance whose cell reads `dev` must not enter the dev evaluation set.
+
+    `is_sealed` re-derives because the column is a cache rather than an authority. Every other
+    partition has to use the same source, or the argument is only half made — this is a D-007 leak
+    of a different kind from unsealing (review finding 2).
+    """
+    calib_entrance = next(
+        f"E-{n:03d}" for n in range(1000) if assign_split(f"E-{n:03d}") == "calib"
+    )
+    manifest, sidecar_dir, _ = _write_capture(
+        tmp_path, capture_id="cap-c", entrance_id=calib_entrance, image=b"calib"
+    )
+    rows = manifest.read_text(encoding="utf-8").splitlines()
+    header = rows[0].split(",")
+    cells = rows[1].split(",")
+    cells[header.index("split")] = "dev"          # the manifest lies
+    manifest.write_text("\n".join([rows[0], ",".join(cells)]) + "\n", encoding="utf-8")
+
+    loader = DatasetLoader(
+        manifest_path=manifest, sidecar_dir=sidecar_dir, get_image=lambda cid: b"calib"
+    )
+    assert loader.list_captures(split="dev") == [], "calib data entered the dev set"
+    assert loader.list_captures(split="calib") == ["cap-c"]
+    # And a loaded capture reports the derived split, not what the row claimed.
+    assert loader.load("cap-c").split == "calib"
+
+
+def test_the_entrance_filter_is_canonicalised(tmp_path):
+    """`e-001` and ` E-001` returning [] is the same shape as a working seal (review finding 3)."""
+    manifest, sidecar_dir, _ = _write_capture(
+        tmp_path, capture_id="cap-e", entrance_id="E-001", image=b"dev"
+    )
+    loader = DatasetLoader(
+        manifest_path=manifest, sidecar_dir=sidecar_dir, get_image=lambda cid: b"dev"
+    )
+    for spelling in ("E-001", "e-001", " E-001", "E-001 "):
+        assert loader.list_captures(entrance_id=spelling) == ["cap-e"], spelling

@@ -32,6 +32,7 @@ def test_include_sealed_appends_one_well_formed_line(tmp_path, monkeypatch):
         manifest_path=manifest,
         audit_path=audit,
         repo=tmp_path,
+            config={"images_bucket": "frontdoor-image", "endpoint": "default"},
     )
     lines = audit.read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
@@ -61,6 +62,7 @@ def test_second_unsealing_appends_without_rewriting(tmp_path, monkeypatch):
         manifest_path=manifest,
         audit_path=audit,
         repo=tmp_path,
+            config={"images_bucket": "frontdoor-image", "endpoint": "default"},
     )
     first = audit.read_text(encoding="utf-8")
     record_unsealing(
@@ -68,6 +70,7 @@ def test_second_unsealing_appends_without_rewriting(tmp_path, monkeypatch):
         manifest_path=manifest,
         audit_path=audit,
         repo=tmp_path,
+            config={"images_bucket": "frontdoor-image", "endpoint": "default"},
     )
     text = audit.read_text(encoding="utf-8")
     assert text.startswith(first)
@@ -85,6 +88,7 @@ def test_dirty_tree_aborts_before_append(tmp_path, monkeypatch):
             manifest_path=manifest,
             audit_path=audit,
             repo=tmp_path,
+            config={"images_bucket": "frontdoor-image", "endpoint": "default"},
         )
     assert not audit.exists()
 
@@ -102,6 +106,7 @@ def test_an_unwritable_audit_log_refuses_instead_of_raising_a_traceback(tmp_path
             record_unsealing(
                 argv=["python", "-m", "frontdoor.eval", "--include-sealed"],
                 manifest_path=manifest, audit_path=audit, repo=tmp_path,
+            config={"images_bucket": "frontdoor-image", "endpoint": "default"},
             )
     finally:
         audit.chmod(0o644)
@@ -116,6 +121,7 @@ def test_a_non_git_tree_refuses_instead_of_raising_a_traceback(tmp_path):
         record_unsealing(
             argv=["python", "-m", "frontdoor.eval", "--include-sealed"],
             manifest_path=manifest, audit_path=plain / "SEAL_AUDIT.log", repo=plain,
+            config={"images_bucket": "frontdoor-image", "endpoint": "default"},
         )
 
 
@@ -128,6 +134,22 @@ def test_the_command_line_is_reconstructable(tmp_path, monkeypatch):
     record_unsealing(
         argv=["/abs/path/to/src/frontdoor/eval.py", "--include-sealed"],
         manifest_path=manifest, audit_path=audit, repo=tmp_path,
+            config={"images_bucket": "frontdoor-image", "endpoint": "default"},
     )
     fields = dict(zip(AUDIT_FIELDS, audit.read_text(encoding="utf-8").splitlines()[0].split("\t")))
     assert json.loads(fields["command_line"])[0] == "python -m frontdoor.eval"
+
+
+def test_a_missing_repo_directory_is_named_rather_than_blamed_on_git(tmp_path):
+    """cwd= raises FileNotFoundError for a missing dir, same as a missing git binary (review 7)."""
+    manifest, _, _ = _three_captures(tmp_path)
+    with pytest.raises(SealAuditError, match="is not a directory"):
+        record_unsealing(
+            argv=["python", "-m", "frontdoor.eval", "--include-sealed"],
+            manifest_path=manifest,
+            audit_path=tmp_path / "SEAL_AUDIT.log",
+            repo=tmp_path / "no-such-dir",
+            config={"images_bucket": "frontdoor-image", "endpoint": "default"},
+        )
+
+

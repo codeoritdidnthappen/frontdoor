@@ -22,7 +22,7 @@ from pathlib import Path
 from jsonschema import ValidationError
 
 from frontdoor.manifest import read_manifest, sha256_file
-from frontdoor.split import InvalidEntranceId, assign_split
+from frontdoor.split import InvalidEntranceId, assign_split, canonical_entrance_id
 from frontdoor.sidecar import validate_sidecar
 
 
@@ -39,11 +39,41 @@ class Capture:
     sidecar: dict
 
 
+def _same_entrance(left, right):
+    """Compare entrance IDs in canonical form.
+
+    A raw string comparison returns [] for `e-001` or ` E-001`, which is the same shape as "no such
+    entrance" and as a working seal — the ambiguity this module argues against elsewhere.
+    """
+    try:
+        return canonical_entrance_id(left) == canonical_entrance_id(right)
+    except InvalidEntranceId:
+        return str(left).strip() == str(right).strip()
+
+
 class DatasetLoader:
     def __init__(self, manifest_path, sidecar_dir, get_image=None):
         self.manifest_path = Path(manifest_path)
         self.sidecar_dir = Path(sidecar_dir)
         self._get_image = get_image
+
+    @staticmethod
+    def derived_split(row):
+        """The split this capture actually has, from the seed rather than the CSV cell.
+
+        `is_sealed` re-derives because the column is a cache rather than an authority. Every other
+        partition has to use the same source or the argument is only half made: a `calib` entrance
+        whose cell reads `dev` would otherwise be handed to the dev evaluation set, which is a
+        D-007 leak of a different kind.
+        """
+        entrance_id = (row.get("entrance_id") or "").strip()
+        try:
+            return assign_split(entrance_id)
+        except InvalidEntranceId as exc:
+            raise LoaderError(
+                f"capture_id {row.get('capture_id')!r} has entrance_id {entrance_id!r}, "
+                f"which the split seed cannot classify: {exc}. Refusing to treat it as unsealed."
+            ) from exc
 
     @staticmethod
     def is_sealed(row):
@@ -57,15 +87,7 @@ class DatasetLoader:
         row; this is the same check on the way back in, so the column is a cache rather than an
         authority.
         """
-        entrance_id = (row.get("entrance_id") or "").strip()
-        try:
-            return assign_split(entrance_id) == "sealed"
-        except InvalidEntranceId as exc:
-            # An ID the seed cannot classify is not evidence that the capture is unsealed.
-            raise LoaderError(
-                f"capture_id {row.get('capture_id')!r} has entrance_id {entrance_id!r}, "
-                f"which the split seed cannot classify: {exc}. Refusing to treat it as unsealed."
-            ) from exc
+        return DatasetLoader.derived_split(row) == "sealed"
 
     def _row(self, capture_id):
         found = None
@@ -143,7 +165,7 @@ class DatasetLoader:
         return Capture(
             capture_id=row["capture_id"],
             entrance_id=row["entrance_id"],
-            split=row["split"],
+            split=self.derived_split(row),
             image=image,
             sidecar=record,
         )
@@ -168,9 +190,9 @@ class DatasetLoader:
         for row in read_manifest(self.manifest_path):
             if self.is_sealed(row):
                 continue
-            if entrance_id is not None and row["entrance_id"] != entrance_id:
+            if entrance_id is not None and not _same_entrance(row["entrance_id"], entrance_id):
                 continue
-            if split is not None and row["split"] != split:
+            if split is not None and self.derived_split(row) != split:
                 continue
             ids.append(row["capture_id"])
         return sorted(ids)

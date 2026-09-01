@@ -27,6 +27,11 @@ def _git(repo, *args, failure):
     A traceback is a bad way to refuse an unsealing run: the operator has one chance at this on
     2026-09-07 and needs to know what to fix, not where the exception came from.
     """
+    if not Path(repo).is_dir():
+        # cwd= raises FileNotFoundError for a missing directory, indistinguishable from a missing
+        # git binary. On the single 2026-09-07 run, telling the operator to install git when the
+        # real problem is a typo'd path costs time nobody has.
+        raise SealAuditError(f"{failure}: {repo} is not a directory")
     try:
         result = subprocess.run(
             ["git", *args], cwd=repo, check=True, capture_output=True, text=True
@@ -52,26 +57,10 @@ def _working_tree_dirty(repo):
     --porcelain already reports untracked files, so the remaining hole is deliberately ignored
     ones. Those are not listed here because calling every .env edit "dirty" would make the tool
     unusable -- the operator always has one. Instead the resolved configuration that ignored files
-    actually control is recorded in the audit line, so a reader can tell which bucket and endpoint
-    the run used. See _resolved_config.
+    actually control is recorded in the audit line by the caller, which is what knows how images
+    are fetched. See `record_unsealing`'s `config` argument.
     """
     return bool(_git(repo, "status", "--porcelain", failure="cannot inspect the working tree").strip())
-
-
-def _resolved_config():
-    """The storage configuration this run will actually use.
-
-    .gitignore hides .env, which selects the image bucket and endpoint, so a clean tree does not
-    mean two runs read the same bytes. Recording the resolution closes that gap without pretending
-    an ignored file is a tracked change. Credentials are never recorded -- only what was addressed.
-    """
-    try:
-        from frontdoor.storage import load_image_creds
-
-        creds = load_image_creds()
-        return {"images_bucket": creds.bucket, "endpoint": creds.endpoint or "default"}
-    except Exception as exc:  # storage is optional for a dev-split run
-        return {"images_bucket": f"unresolved ({type(exc).__name__})", "endpoint": "unresolved"}
 
 
 def _operator():
@@ -94,12 +83,17 @@ AUDIT_FIELDS = (
 )
 
 
-def record_unsealing(argv, manifest_path, *, audit_path, repo):
+def record_unsealing(argv, manifest_path, *, audit_path, repo, config):
     """Append one audit line, or raise without writing.
 
     Fields are AUDIT_FIELDS, tab-separated. The command line is reconstructable: argv[0] is
     normalised to the module invocation actually supported, because an absolute path to eval.py is
     not a command anyone can re-run.
+
+    `config` is what the run will actually read from -- bucket and endpoint, never credentials.
+    The caller resolves it, because the caller is what knows how images are fetched; this module
+    only records it. .env is gitignored and selects those values, so a clean working tree alone
+    does not mean two runs read the same bytes.
     """
     if _working_tree_dirty(repo):
         raise SealAuditError(
@@ -116,7 +110,7 @@ def record_unsealing(argv, manifest_path, *, audit_path, repo):
             manifest_sha256(manifest_path),
             json.dumps(command),
             _operator(),
-            json.dumps(_resolved_config(), sort_keys=True),
+            json.dumps(config, sort_keys=True),
         ]
     )
     path = Path(audit_path)

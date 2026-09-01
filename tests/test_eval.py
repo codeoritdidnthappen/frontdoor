@@ -10,14 +10,14 @@ from frontdoor.eval import main
 
 
 def _run_cli(monkeypatch, *args):
-    """Invoke main the way a terminal does.
+    """Invoke main exactly as the `__main__` block does.
 
-    --include-sealed is refused when argv is passed explicitly (TICK-070 AC4: the unsealing run is
-    a deliberate act at a terminal, not something a notebook or an import can perform), so the
-    tests drive it through sys.argv rather than around the guard they exist to protect.
+    `from_cli=True` is the permission only that block passes. Setting `sys.argv` and calling
+    `main()` — which is what a notebook would do, and what this helper used to do — is refused;
+    `test_a_notebook_cannot_unseal_however_it_shapes_the_call` is the test for that.
     """
     monkeypatch.setattr(sys, "argv", ["frontdoor.eval", *args])
-    return main()
+    return main(from_cli=True)
 from frontdoor.loader import LoaderError
 from tests.test_loader import _write_capture
 
@@ -46,6 +46,12 @@ def _point_harness(monkeypatch, tmp_path, manifest, sidecar_dir, get_image):
     monkeypatch.setattr(eval_mod, "_image_getter", lambda: get_image)
     monkeypatch.setattr(seal_audit, "_working_tree_dirty", lambda repo: False)
     monkeypatch.setattr(seal_audit, "_git_commit", lambda repo: "a" * 40)
+    # The audit line records which bucket the run read; there is no storage in a temp repo,
+    # and eval refuses rather than recording "unresolved" (review finding 8).
+    monkeypatch.setattr(
+        eval_mod, "_storage_config",
+        lambda: {"images_bucket": "frontdoor-image", "endpoint": "default"},
+    )
 
 
 def test_eval_without_flag_reads_zero_sealed_bytes(monkeypatch, tmp_path):
@@ -121,3 +127,15 @@ def test_crash_mid_unseal_leaves_the_audit_line(monkeypatch, tmp_path):
     assert len(lines) == 1
     assert "--include-sealed" in lines[0]
 
+
+
+def test_a_notebook_cannot_unseal_however_it_shapes_the_call(monkeypatch, tmp_path):
+    """TICK-070 AC4, enforced rather than asserted.
+
+    An earlier guard keyed on `argv is not None`, which any in-process caller walks past by setting
+    sys.argv and calling main() — the exact shape a notebook uses, and the shape this file's own
+    helper used. Both call shapes must be refused without the __main__ permission.
+    """
+    monkeypatch.setattr(sys, "argv", ["frontdoor.eval", "--include-sealed"])
+    assert main() == 2, "setting sys.argv must not grant an unsealing run"
+    assert main(["--include-sealed"]) == 2, "passing argv must not grant one either"
