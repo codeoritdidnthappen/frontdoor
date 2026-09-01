@@ -17,6 +17,8 @@ depth bucket.
 from __future__ import annotations
 
 import os
+
+from dotenv import find_dotenv, load_dotenv
 import sys
 from dataclasses import dataclass
 
@@ -40,14 +42,43 @@ class BucketCreds:
     endpoint: str | None
 
 
+_dotenv_loaded = False
+
+
+def _load_dotenv_once():
+    """Load repo-root .env if present, without overriding a real environment variable.
+
+    data/STORAGE.md tells the operator to put credentials in .env. Nothing read it, so following
+    the runbook verbatim produced `missing FRONTDOOR_IMAGES_BUCKET`, which looks like a credential
+    mistake rather than a missing loader (#158). Real environment variables still win, so CI and a
+    shell export are unaffected.
+    """
+    global _dotenv_loaded
+    if _dotenv_loaded:
+        return
+    _dotenv_loaded = True
+    # Search upward from the working directory rather than deriving the repo root from __file__.
+    # parents[2] is the repo root only for a source checkout or editable install; installed
+    # normally it is site-packages' parent, so the runbook's promise would silently not hold --
+    # and could pick up an unrelated .env.
+    env_path = find_dotenv(usecwd=True)
+    if env_path:
+        load_dotenv(env_path, override=False)
+
+
 def _env(name):
+    _load_dotenv_once()
     value = os.environ.get(name, "").strip()
     if not value:
-        raise StorageError(f"missing {name}")
+        raise StorageError(
+            f"missing {name}. Copy .env.example to .env and fill it in, or export it; "
+            "see data/STORAGE.md."
+        )
     return value
 
 
 def _optional_env(name):
+    _load_dotenv_once()
     value = os.environ.get(name, "").strip()
     return value or None
 
@@ -110,14 +141,15 @@ def _raise_from_client(exc, action, bucket, key):
     if not isinstance(exc, ClientError):
         raise StorageError(f"{action} s3://{bucket}/{key} failed: {exc}") from exc
     code = exc.response.get("Error", {}).get("Code", "")
-    if code in {
-        "AccessDenied",
-        "403",
-        "AllAccessDisabled",
-        "AccessDeniedException",
-        "InvalidAccessKeyId",
-        "SignatureDoesNotMatch",
-    }:
+    # Authentication failures are NOT the D-020 denial. A wrong or expired key also cannot read
+    # depth, but for a reason that says nothing about the quarantine — treating it as proof would
+    # let a broken credential masquerade as a working policy.
+    if code in {"InvalidAccessKeyId", "SignatureDoesNotMatch", "ExpiredToken", "InvalidToken"}:
+        raise StorageError(
+            f"{action} s3://{bucket}/{key} failed to authenticate ({code}). "
+            "This is a credential problem, not proof of the depth quarantine."
+        ) from exc
+    if code in {"AccessDenied", "403", "AllAccessDisabled", "AccessDeniedException"}:
         raise StorageDenied(
             f"{action} s3://{bucket}/{key} denied ({code})"
         ) from exc

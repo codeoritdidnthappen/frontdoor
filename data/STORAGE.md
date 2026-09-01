@@ -45,7 +45,9 @@ Two tokens, never one:
    plus `FRONTDOOR_DEPTH_*`.
 
 The core metrology library gets neither. Copy `.env.example` to `.env`
-and fill in the values; `.env` is gitignored.
+and fill in the values; `.env` is gitignored and is read automatically by
+`frontdoor.storage` (real environment variables take precedence, so CI and `export` still
+work). Nothing else needs doing.
 
 ## Create the buckets
 

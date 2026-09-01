@@ -19,14 +19,19 @@ final class CaptureValidationTests: XCTestCase {
     private func result(
         width: Int = 4032, height: Int = 3024,
         intrinsics: CameraIntrinsics?? = nil, hadCalibration: Bool = true,
-        gravity: GravitySample?? = nil, zoom: Double = 1.0
+        gravity: GravitySample?? = nil, zoom: Double = 1.0,
+        capturedAt: String = "2026-09-01T14:22:31Z",
+        sensorWidth: Int?? = nil, sensorHeight: Int?? = nil
     ) -> Result<CaptureRecord, CaptureRejected> {
         CaptureValidation.record(
             pixelWidth: width, pixelHeight: height,
             intrinsics: intrinsics ?? self.intrinsics,
             hadCalibrationData: hadCalibration,
             gravity: gravity ?? self.gravity,
-            deviceModel: "iPhone17,3", lens: CaptureController.lensName, zoomFactor: zoom
+            deviceModel: "iPhone17,3", lens: CaptureController.lensName, zoomFactor: zoom,
+            capturedAt: capturedAt,
+            // Default to the frame's own size, so cases not about resolution stay unaffected.
+            sensorWidth: sensorWidth ?? width, sensorHeight: sensorHeight ?? height
         )
     }
 
@@ -168,5 +173,76 @@ final class CaptureValidationTests: XCTestCase {
                 "\(rejection) does not tell the operator the capture was discarded"
             )
         }
+    }
+    // MARK: - The session can go away between the press and the capture (#134)
+
+    func testSessionNotReadyCarriesAnActionableMessage() {
+        // capturePhoto() re-checks the video connection on the session queue and reports this,
+        // rather than calling AVFoundation with no active connection — which raises an uncatchable
+        // NSInvalidArgumentException and kills the app on an operator's phone.
+        let message = CaptureRejected.sessionNotReady.message
+        XCTAssertFalse(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        XCTAssertTrue(
+            message.contains("nothing was recorded"),
+            "a refused shutter press must tell the operator nothing was saved"
+        )
+    }
+
+    func testSessionNotReadyIsDistinctFromEveryOtherRejection() {
+        let others: [CaptureRejected] = [
+            .noImageData, .noCalibrationData, .unusableCalibrationData,
+            .zoomNotUnity(2.0), .noGravitySample, .gravityImplausible(0.4)
+        ]
+        for other in others {
+            XCTAssertNotEqual(CaptureRejected.sessionNotReady, other)
+            XCTAssertNotEqual(CaptureRejected.sessionNotReady.message, other.message)
+        }
+    }
+    // MARK: - The frame must be the sensor's full resolution (TICK-022 AC3, #163)
+
+    func testADownscaledFrameIsRejected() {
+        // maxPhotoDimensions can be set below the sensor maximum, or a format can deliver a smaller
+        // frame. Either yields an uncropped-looking still whose intrinsics describe a grid it does
+        // not have — which zoom being pinned to 1.0 does not catch.
+        let r = rejection(result(width: 2016, height: 1512, sensorWidth: 4032, sensorHeight: 3024))
+        XCTAssertEqual(r, .notFullResolution(delivered: "2016x1512", sensor: "4032x3024"))
+    }
+
+    func testAnUnknownSensorResolutionIsNotAPass() {
+        // An unknown maximum cannot confirm anything; accepting it silently is how the check would
+        // stop meaning something.
+        XCTAssertEqual(rejection(result(sensorWidth: .some(nil))), .sensorResolutionUnknown)
+        XCTAssertEqual(rejection(result(sensorHeight: .some(nil))), .sensorResolutionUnknown)
+    }
+
+    func testAFullResolutionFrameIsAccepted() {
+        XCTAssertNil(rejection(result(width: 4032, height: 3024,
+                                      sensorWidth: 4032, sensorHeight: 3024)))
+    }
+
+    // MARK: - captured_at, sampled at the shutter (#163)
+
+    func testTheRecordCarriesTheCaptureTime() throws {
+        let record = try result(capturedAt: "2026-09-01T14:22:31Z").get()
+        XCTAssertEqual(record.capturedAt, "2026-09-01T14:22:31Z")
+    }
+
+    func testNonUTCAndMalformedTimestampsAreRejected() {
+        // The schema requires a literal Z. A formatter carrying the device's locale or time zone
+        // produces a plausible string the schema refuses — after the entrance has been shot.
+        for bad in ["2026-09-01T14:22:31+01:00", "2026-09-01 14:22:31Z", "banana", "",
+                    "2026-09-01T14:22:31Z\n"] {
+            XCTAssertEqual(rejection(result(capturedAt: bad)), .captureTimeUnusable(bad),
+                           "\(bad) must not be accepted as a capture time")
+        }
+    }
+
+    func testFractionalSecondsAreAccepted() {
+        XCTAssertNil(rejection(result(capturedAt: "2026-09-01T14:22:31.482Z")))
+    }
+
+    func testTheGeneratedTimestampSatisfiesTheSchemaRule() {
+        // The producer and the checker must agree, or every capture fails in the field.
+        XCTAssertTrue(CaptureValidation.isUTCRFC3339(CaptureValidation.timestamp(for: Date())))
     }
 }
