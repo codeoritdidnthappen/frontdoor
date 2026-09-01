@@ -1,5 +1,6 @@
 """Tests for the capture sidecar schema and validator (TICK-010, #18)."""
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -135,3 +136,27 @@ def test_unknown_field_rejected(record):
     record["measured_rise_in"] = 0.5
     with pytest.raises(ValidationError):
         validate_sidecar(record)
+
+
+@pytest.mark.parametrize("field", ["image", "depth"])
+@pytest.mark.parametrize(
+    "digest",
+    [
+        "",
+        "not-a-hash",
+        "deadbeef",
+        "a" * 65,
+        "g" * 64,
+        "A" * 64,
+    ],
+)
+def test_invalid_sha256_rejected(record, field, digest):
+    record[field]["sha256"] = digest
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+@pytest.mark.parametrize("field", ["image", "depth"])
+def test_real_sha256_digest_accepted(record, field):
+    record[field]["sha256"] = hashlib.sha256(b"sidecar-hash-fixture").hexdigest()
+    validate_sidecar(record)
