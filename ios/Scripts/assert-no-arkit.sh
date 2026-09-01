@@ -6,14 +6,15 @@
 #
 # Matches code, not prose. An earlier version matched the bare word, which failed the build on
 # comments explaining why ARKit is excluded — the guard has to let the codebase describe its own
-# boundary. So: imports and AR* symbol use, plus a linked framework in project.yml, since
-# importing is not the only way to link one.
+# boundary. So: imports (including attribute-prefixed ones like @testable / @_exported) and AR*
+# symbol use, plus a linked framework in project.yml, since importing is not the only way to link
+# one.
 #
 # Runs as an Xcode pre-build phase. The same rule is asserted from CI by
 # tests/test_ios_no_arkit.py, so it holds on a Linux runner with no Xcode.
 set -eu
 ROOT="${1:?usage: assert-no-arkit.sh <ios-dir>}"
-IMPORTS='^[[:space:]]*(@_exported[[:space:]]+)?import[[:space:]]+(ARKit|RealityKit)\b'
+IMPORTS='^[[:space:]]*(@[_A-Za-z][_A-Za-z0-9]*[[:space:]]+)*import[[:space:]]+(ARKit|RealityKit)\b'
 SYMBOLS='\b(ARSession|ARConfiguration|ARWorldTrackingConfiguration|ARFrame|ARAnchor|ARSCNView|ARView)\b'
 status=0
 

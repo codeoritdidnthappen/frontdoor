@@ -22,7 +22,7 @@ GUARD = REPO_ROOT / "ios" / "Scripts" / "assert-no-arkit.sh"
 # Matches code, not prose. The codebase has to be able to name ARKit in comments explaining why
 # it is excluded; what must never appear is an import or an AR* symbol.
 FORBIDDEN = re.compile(
-    r"^\s*(@_exported\s+)?import\s+(ARKit|RealityKit)\b"
+    r"^\s*(@[_A-Za-z][_A-Za-z0-9]*\s+)*import\s+(ARKit|RealityKit)\b"
     r"|\b(ARSession|ARConfiguration|ARWorldTrackingConfiguration|ARFrame|ARAnchor|ARSCNView|ARView)\b"
 )
 
@@ -127,3 +127,44 @@ def test_the_guard_allows_prose_that_names_arkit(tmp_path):
     )
     result = subprocess.run([str(GUARD), str(scratch)], capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "import ARKit",
+        "    import ARKit",
+        "@_exported import ARKit",
+        "@testable import ARKit",
+        "@_implementationOnly import ARKit",
+        "@testable import RealityKit",
+        "@testable @_exported import ARKit",
+    ],
+)
+def test_forbidden_regex_catches_attributed_imports(line):
+    """Any real import of ARKit/RealityKit is forbidden, attributes included.
+
+    The guard used to allowlist only @_exported before import, so @testable import ARKit
+    and @_implementationOnly import ARKit slipped through. D-015 is the import, not the
+    spelling of the attribute in front of it.
+    """
+    assert FORBIDDEN.search(line), f"guard missed a real import: {line!r}"
+
+
+def test_forbidden_regex_still_allows_prose_that_names_arkit():
+    assert FORBIDDEN.search(
+        "// D-014 rejects ARKit precisely for frame size; no AR session is ever started."
+    ) is None
+
+
+def test_the_xcode_guard_catches_testable_import(tmp_path):
+    """The shell guard must fail the same @testable case the CI regex does."""
+    if not GUARD.exists():
+        pytest.skip("guard script not present")
+
+    dirty = tmp_path / "testable"
+    dirty.mkdir()
+    (dirty / "Sneaky.swift").write_text("@testable import ARKit\n", encoding="utf-8")
+    result = subprocess.run([str(GUARD), str(dirty)], capture_output=True, text=True)
+    assert result.returncode != 0
+    assert "ARKit" in result.stderr
