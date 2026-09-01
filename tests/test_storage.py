@@ -180,3 +180,67 @@ def test_live_loader_credential_is_denied_on_depth():
             depth.delete(PROBE_KEY)
         except StorageError:
             pass
+
+
+# --- TICK-242 (#157): the D-020 denial classifier, exercised offline -----------------------------
+#
+# StorageDenied is what carries D-020: it is raised when the loader credential is refused on the
+# depth bucket, and verify() fails unless that happens. Before these tests it was raised zero times
+# by the running suite, so a change widening it would have shipped green.
+
+import pytest
+from botocore.exceptions import ClientError, EndpointConnectionError
+
+from frontdoor.storage import StorageDenied, StorageError, _raise_from_client
+
+
+def _client_error(code, status=403):
+    return ClientError(
+        {"Error": {"Code": code, "Message": code}, "ResponseMetadata": {"HTTPStatusCode": status}},
+        "GetObject",
+    )
+
+
+@pytest.mark.parametrize("code", ["AccessDenied", "403", "AllAccessDisabled", "AccessDeniedException"])
+def test_authorization_refusal_is_the_d020_denial(code):
+    """These, and only these, mean the storage policy refused a permitted-looking request."""
+    with pytest.raises(StorageDenied):
+        _raise_from_client(_client_error(code), "get", "frontdoor-depth", "k")
+
+
+@pytest.mark.parametrize(
+    "code", ["InvalidAccessKeyId", "SignatureDoesNotMatch", "ExpiredToken", "InvalidToken"]
+)
+def test_authentication_failure_is_not_the_denial(code):
+    """A wrong or expired key also cannot read depth — for a reason that proves nothing.
+
+    Counting these as the denial would let a broken credential masquerade as a working quarantine,
+    which is the one thing this check exists to rule out.
+    """
+    with pytest.raises(StorageError) as caught:
+        _raise_from_client(_client_error(code, status=403), "get", "frontdoor-depth", "k")
+    assert not isinstance(caught.value, StorageDenied), (
+        f"{code} is an authentication failure, not proof of the D-020 quarantine"
+    )
+    assert "credential problem" in str(caught.value)
+
+
+@pytest.mark.parametrize("code", ["NoSuchBucket", "NoSuchKey", "InternalError", "SlowDown", ""])
+def test_other_client_errors_are_not_the_denial(code):
+    """A missing bucket or object is the commonest way a quarantine check passes vacuously."""
+    with pytest.raises(StorageError) as caught:
+        _raise_from_client(_client_error(code, status=404), "get", "frontdoor-depth", "k")
+    assert not isinstance(caught.value, StorageDenied)
+
+
+def test_a_network_failure_is_not_the_denial():
+    """An unreachable endpoint must not read as a refusal."""
+    exc = EndpointConnectionError(endpoint_url="https://example.invalid")
+    with pytest.raises(StorageError) as caught:
+        _raise_from_client(exc, "get", "frontdoor-depth", "k")
+    assert not isinstance(caught.value, StorageDenied)
+
+
+def test_storage_denied_is_a_storage_error():
+    """Callers that catch StorageError must still see a denial; verify() depends on the ordering."""
+    assert issubclass(StorageDenied, StorageError)
