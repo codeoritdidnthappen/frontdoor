@@ -59,22 +59,23 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## 5. Git Workflow
 
-**Every change starts with a ticket and ends at a pull request. A human takes it from there.**
+**Every change starts with a ticket and lands on `main` directly. Fix forward.**
+*(Amended 2026-09-01 by team decision: the PR-per-change workflow is retired — no new PRs
+for review; fixes are made directly and pushed. The previous rule text is in git history.)*
 
-1. **Branch.** Work begins from an up-to-date `main`. Create one branch per ticket, named so
-   the ticket is identifiable from the branch name. Never commit directly to `main`.
+1. **Trace.** Work begins from an up-to-date `main` and traces to a ticket. Short-lived
+   branches are fine as a working convenience, but the destination is `main`, same day.
 2. **Code.** Keep commits small and scoped to the ticket. Each commit message says what
    changed and why, and references the ticket. Attribute every commit to the human author
    alone — no `Co-Authored-By` trailers, no "generated with" notes, and no other credit for
-   Claude, Codex, or any other AI assistant, in the commit message or the PR description.
-3. **Test.** Before pushing, run the project's tests and checks locally. New behavior gets new
-   tests. Never push a branch you haven't seen pass.
-4. **Sync.** Bring the branch up to date with `main` before opening the PR, and resolve
-   conflicts on the branch — not in the review.
-5. **Pull request.** Push the branch and open a PR that links the ticket and states what
-   changed, why, and how it was verified.
-6. **Stop.** Review, approval, and merge are human decisions. Do not self-approve, merge, or
-   delete branches. Report the PR link and wait.
+   Claude, Codex, or any other AI assistant, in the commit message or anywhere else.
+3. **Test.** Before pushing to `main`, run the project's tests and checks locally. New
+   behavior gets new tests. Never push a state you haven't seen pass (the Windows-only
+   shell-exec cases in test_ios_no_arkit.py are a known local exception; CI runs them).
+4. **Fix forward.** Review findings — your own or a teammate's — are fixed directly and
+   pushed, not filed as new tickets or new PRs. Comment threads on old PRs/issues remain
+   fine for discussion.
+5. **Sync.** Pull before pushing; resolve conflicts locally, rerun the suite, then push.
 
 If a change can't be traced to a ticket, ask before starting.
 

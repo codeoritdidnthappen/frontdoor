@@ -9,10 +9,12 @@ unchanged against it.
 import json
 from importlib import resources
 
-from flask import Flask, request
+from flask import Flask, jsonify, request
 from jsonschema import Draft202012Validator, ValidationError
+from werkzeug.exceptions import HTTPException
 
 from frontdoor.sidecar import validate_sidecar
+from frontdoor_server.map_view import map_page
 
 RESPONSE_SCHEMA = json.loads(
     resources.files("frontdoor_server")
@@ -46,6 +48,21 @@ def _bounded_detail(detail):
     if len(text) <= DETAIL_MAX_LENGTH:
         return text
     return text[: DETAIL_MAX_LENGTH - len(_DETAIL_ELLIPSIS)] + _DETAIL_ELLIPSIS
+
+
+#: Messages for statuses raised before any view runs. Werkzeug's own text is fine for a browser
+#: and useless to a client that needs to tell an operator what to do next.
+#: Ceiling for a whole request. A full-resolution still plus its depth map and sidecar is a few
+#: tens of megabytes; 64 MB leaves room without letting a runaway upload exhaust a free-tier host.
+MAX_REQUEST_BYTES = 64 * 1024 * 1024
+
+_HTTP_ERROR_MESSAGES = {
+    404: "no such endpoint",
+    405: "wrong method for this endpoint",
+    413: "request body too large",
+    415: "unsupported content type",
+    500: "internal error",
+}
 
 
 def _error(message, detail, field=None, status=400):
@@ -138,6 +155,12 @@ def validate_measure_response(body):
 
 def create_app():
     app = Flask(__name__)
+    # An explicit ceiling, so 413 is a decision rather than a side effect of Flask's default
+    # MAX_FORM_MEMORY_SIZE — which only covers non-file form fields, leaving the realistic oversized
+    # body (the image part) uncapped, and which differs across the flask>=3 range this pins.
+    app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
+    # Public stamp map: GET /map and GET /map/data (TICK-247).
+    app.register_blueprint(map_page)
 
     @app.get("/health")
     def health():
@@ -178,5 +201,47 @@ def create_app():
             "capture_id": sidecar["capture_id"],
             "arms": STUB_ARMS,
         }, 200
+
+    # Every response this service produces carries the committed error contract, including the
+    # statuses Werkzeug raises before any view runs — 404 for a typo'd path, 405 for a wrong method,
+    # 413 for an oversized body (#113). The consumer is an iOS client parsing JSON over a venue
+    # network, and those are exactly the conditions the TICK-064 fallback chain exists for: meeting
+    # HTML where it expects JSON turns a clear message into a parse failure on stage.
+    #
+    # Registered as one general handler rather than per-status cases, so a status nobody anticipated
+    # cannot slip back to HTML.
+    @app.errorhandler(HTTPException)
+    def _http_error_as_json(exc):
+        # Unmapped statuses fall back to a token that IS in the committed enum. Inventing one --
+        # 408, 429, 431, or a Werkzeug 400 for a malformed multipart boundary -- would satisfy the
+        # "always JSON" rule while violating the schema the client branches on, which is a subtler
+        # version of the same failure.
+        body, status = _error(
+            _HTTP_ERROR_MESSAGES.get(exc.code, "internal error"),
+            exc.description or exc.name,
+            status=exc.code or 500,
+        )
+        # Werkzeug's own headers carry things the status is meaningless without: Allow on a 405 is
+        # required by RFC 9110, and Retry-After/WWW-Authenticate would matter if those arise.
+        response = jsonify(body)
+        response.status_code = status
+        for header, value in exc.get_headers():
+            if header.lower() != "content-type":
+                response.headers.setdefault(header, value)
+        return response
+
+    # An unhandled exception must not return a traceback or an HTML 500 page either. QA saw zero
+    # 500s across 84 requests, so this is a guard rather than a fix.
+    @app.errorhandler(Exception)
+    def _unexpected_error_as_json(exc):
+        if isinstance(exc, HTTPException):
+            return _http_error_as_json(exc)
+        app.logger.exception("unhandled error in %s", request.path)
+        body, status = _error(
+            "internal error",
+            "The server failed to handle the request. Nothing was measured.",
+            status=500,
+        )
+        return jsonify(body), status
 
     return app

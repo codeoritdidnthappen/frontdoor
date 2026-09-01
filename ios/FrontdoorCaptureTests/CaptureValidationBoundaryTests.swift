@@ -27,6 +27,9 @@ final class CaptureValidationBoundaryTests: XCTestCase {
         hadCalibration: Bool = true,
         gravity: GravitySample?? = nil,
         zoom: Double = 1.0,
+        capturedAt: String = "2026-09-01T14:22:31Z",
+        sensorWidth: Int?? = nil,
+        sensorHeight: Int?? = nil,
         depth: DepthRecord? = nil
     ) -> Result<CaptureRecord, CaptureRejected> {
         CaptureValidation.record(
@@ -35,7 +38,11 @@ final class CaptureValidationBoundaryTests: XCTestCase {
             hadCalibrationData: hadCalibration,
             gravity: gravity ?? goodGravity,
             deviceModel: "iPhone17,1", lens: "builtInWideAngleCamera",
-            zoomFactor: zoom, depth: depth
+            zoomFactor: zoom,
+            capturedAt: capturedAt,
+            sensorWidth: sensorWidth ?? width,
+            sensorHeight: sensorHeight ?? height,
+            depth: depth
         )
     }
 
@@ -68,6 +75,7 @@ final class CaptureValidationBoundaryTests: XCTestCase {
         XCTAssertEqual(record.intrinsics, goodIntrinsics)  // kills M02 (incl. distortion table)
         XCTAssertEqual(record.gravity, goodGravity)        // kills M03
         XCTAssertEqual(record.zoomFactor, 1.0000001)       // kills M04
+        XCTAssertEqual(record.capturedAt, "2026-09-01T14:22:31Z")
         XCTAssertEqual(record.deviceModel, "iPhone17,1")
         XCTAssertEqual(record.lens, "builtInWideAngleCamera")
     }
