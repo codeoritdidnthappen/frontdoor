@@ -106,9 +106,9 @@
   "additionalProperties": false,
   "$defs": {
     "sha256": {
-      "description": "Lowercase SHA-256 hex digest (hashlib.sha256().hexdigest()). Uppercase is rejected so a hash has one spelling in the manifest.",
+      "description": "Lowercase SHA-256 hex digest (hashlib.sha256().hexdigest()). Uppercase is rejected so a hash has one spelling in the manifest. Anchored with (?![\\s\\S]) rather than $ so a trailing newline is rejected under both Python re and ECMA-262.",
       "type": "string",
-      "pattern": "^[0-9a-f]{64}$"
+      "pattern": "^[0-9a-f]{64}(?![\\s\\S])"
     },
     "point": {
       "description": "Pixel coordinates [x, y] in the full-resolution image.",
