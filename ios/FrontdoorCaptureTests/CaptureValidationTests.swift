@@ -11,7 +11,8 @@ final class CaptureValidationTests: XCTestCase {
 
     private let goodIntrinsics = Intrinsics(
         fx: 2934.1, fy: 2934.1, cx: 2016.4, cy: 1512.7,
-        referenceWidth: 4032, referenceHeight: 3024, distortionTableEntries: 42
+        referenceWidth: 4032, referenceHeight: 3024,
+        distortionLookupTable: [0.01, -0.02, 0.03]
     )
     private let goodGravity = SIMD3<Double>(0.02, -0.98, -0.19)
 
@@ -113,6 +114,31 @@ final class CaptureValidationTests: XCTestCase {
         // Refusing every capture on a device we cannot interrogate helps nobody; the dimensions
         // are still recorded, so the gap is visible in the data rather than fatal in the field.
         XCTAssertNil(rejection(delivered: (1920, 1440), sensor: nil))
+    }
+
+    // MARK: - Distortion table is retained, not merely counted (TICK-022 AC2)
+
+    func testDistortionLookupTableValuesAreRetainedNotJustCounted() {
+        let packed = packedFloats([0.125, -0.25, 0.5])
+        let table = Intrinsics.lookupTable(fromPacked: packed)
+        XCTAssertEqual(table, [0.125, -0.25, 0.5])
+        let intrinsics = Intrinsics(
+            fx: 1, fy: 1, cx: 0, cy: 0,
+            referenceWidth: 1, referenceHeight: 1,
+            distortionLookupTable: table
+        )
+        XCTAssertEqual(intrinsics.distortionLookupTable, [0.125, -0.25, 0.5])
+        XCTAssertEqual(intrinsics.distortionTableEntries, 3)
+    }
+
+    func testAMissingDistortionLookupTableIsAnEmptyTableNotASentinelCount() {
+        XCTAssertEqual(Intrinsics.lookupTable(fromPacked: nil), [])
+        XCTAssertEqual(Intrinsics.lookupTable(fromPacked: Data()), [])
+    }
+
+    private func packedFloats(_ values: [Float]) -> Data {
+        var values = values
+        return values.withUnsafeBytes { Data($0) }
     }
 
     // MARK: - The messages are what an operator acts on

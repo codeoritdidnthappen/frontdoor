@@ -12,9 +12,21 @@ struct Intrinsics: Equatable {
     /// reference is silently wrong rather than obviously wrong, which is why it is carried.
     var referenceWidth: Int
     var referenceHeight: Int
-    /// Entry count of the lens distortion lookup table. The table itself is recorded for the
-    /// sidecar; the app never applies it — undistortion is TICK-042, in the metrology library.
-    var distortionTableEntries: Int
+    /// Packed `Float` coefficients from `AVCameraCalibrationData.lensDistortionLookupTable`.
+    /// Recorded here for the sidecar; the app never applies them — undistortion is TICK-042.
+    var distortionLookupTable: [Float]
+    /// Entry count of the table. Derived, so a log line cannot drift from the retained values.
+    var distortionTableEntries: Int { distortionLookupTable.count }
+
+    /// Unpack AVFoundation's packed lookup table. Remainder bytes shorter than one `Float` are
+    /// dropped — the same truncation the previous count-only path used.
+    static func lookupTable(fromPacked data: Data?) -> [Float] {
+        guard let data, data.count >= MemoryLayout<Float>.size else { return [] }
+        let count = data.count / MemoryLayout<Float>.size
+        return data.withUnsafeBytes { raw in
+            Array(raw.bindMemory(to: Float.self).prefix(count))
+        }
+    }
 }
 
 /// Everything one shutter press must produce for the record. The sidecar file is TICK-028; this

@@ -425,8 +425,9 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
                 cy: Double(m.columns.2.y),
                 referenceWidth: Int(data.intrinsicMatrixReferenceDimensions.width),
                 referenceHeight: Int(data.intrinsicMatrixReferenceDimensions.height),
-                distortionTableEntries: data.lensDistortionLookupTable
-                    .map { $0.count / MemoryLayout<Float>.size } ?? 0
+                distortionLookupTable: Intrinsics.lookupTable(
+                    fromPacked: data.lensDistortionLookupTable
+                )
             )
         }
         let dims = photo.resolvedSettings.photoDimensions
