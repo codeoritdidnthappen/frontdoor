@@ -66,6 +66,10 @@ final class CaptureController: ObservableObject {
 
     /// Fixed capture geometry: 1x main lens, no digital zoom, no crop (ARCHITECTURE.md section 4).
     private static let lens: AVCaptureDevice.DeviceType = .builtInWideAngleCamera
+    /// Spelled to match the sidecar example in ARCHITECTURE.md section 4. Derived from the raw
+    /// value it would be "BuiltInWideAngleCamera", and anything filtering on the documented
+    /// spelling would silently match nothing.
+    static let lensName = "builtInWideAngleCamera"
 
     init() {
         refreshReadiness()
@@ -131,6 +135,7 @@ final class CaptureController: ObservableObject {
         }
 
         let failure = await configureSession()
+        if failure != nil { motion.stopDeviceMotionUpdates() }
         // stop(), or another start(), ran while we were configuring. Committing .running here
         // would claim a live session over a stopped one, and the guard above would then refuse
         // every future start.
@@ -219,10 +224,14 @@ final class CaptureController: ObservableObject {
     /// than saved: an unusable still that looks saved is worse than a visible failure.
     func capturePhoto() {
         guard state == .running else { return }
-        let zoomFactor = Double(device?.videoZoomFactor ?? 0)
-        let lens = Self.lens.rawValue.replacingOccurrences(
-            of: "AVCaptureDeviceType", with: ""
-        )
+        // nil would mean the controller lost its device, which is not a zoom problem — reporting
+        // it as "zoom was 0.00x" would send the operator after the wrong thing.
+        guard let device else {
+            lastCaptureError = CaptureUnavailable.noCaptureDevice.message
+            return
+        }
+        let zoomFactor = Double(device.videoZoomFactor)
+        let lens = Self.lensName
         // Sampled here, on the main actor, at the moment of the press — not inside the delegate
         // callback, which runs after the exposure and would describe a different instant.
         let gravity = motion.deviceMotion.map {
@@ -248,8 +257,17 @@ final class CaptureController: ObservableObject {
 
         let settings = AVCapturePhotoSettings()
         settings.maxPhotoDimensions = output.maxPhotoDimensions
-        // Throws unless the output has it enabled, which applyConfiguration guaranteed.
+        // Depth is the intrinsics carrier on a single lens; mirror the output's own state,
+        // because enabling it here when the output has not is a hard error.
         settings.isDepthDataDeliveryEnabled = output.isDepthDataDeliveryEnabled
+        // Where a device does offer calibration directly, take it as a second route. Setting this
+        // when the output does not support it raises an uncatchable NSException, so it is gated at
+        // the point of use rather than on a precondition proved elsewhere. Where neither route is
+        // available the frame simply arrives without intrinsics, and validation refuses it with a
+        // message naming that as the reason.
+        if output.isCameraCalibrationDataDeliverySupported {
+            settings.isCameraCalibrationDataDeliveryEnabled = true
+        }
         sessionQueue.async { [output] in
             output.capturePhoto(with: settings, delegate: delegate)
         }
@@ -361,15 +379,21 @@ final class CaptureController: ObservableObject {
         // AVDepthData carries cameraCalibrationData with no such precondition, so enabling depth
         // delivery is what makes the frame measurable at all (D-015).
         //
-        // Depth is captured on every entrance regardless (D-020). That it is also the intrinsics
-        // carrier means the quarantine matters more, not less: the map is still written and
-        // forgotten, and nothing in the app reads a depth value.
+        // Requested, not required. A device without a depth sensor still opens the camera: TICK-023
+        // made the sidecar accept "depth": null precisely so that absence does not cost an
+        // entrance, and refusing to start the session here would contradict that on the one phone
+        // it was written for — Emily's iPhone 16 has no depth sensor, and a hard refusal leaves the
+        // team with a single capture device.
+        //
+        // The guarantee worth keeping survives one layer down: CaptureValidation refuses any frame
+        // that arrives without usable intrinsics, so an unmeasurable still is never recorded.
+        // Refusing the whole session instead conflates "this frame is unusable" with "this device
+        // is unusable", and only the first is knowable here.
         //
         // Enabling this reconfigures the render pipeline, so it must happen before startRunning.
-        guard output.isDepthDataDeliverySupported else {
-            return .failure(.calibrationUnavailable)
+        if output.isDepthDataDeliverySupported {
+            output.isDepthDataDeliveryEnabled = true
         }
-        output.isDepthDataDeliveryEnabled = true
 
         // 1x, no digital zoom, no crop (D-014). Pinned rather than assumed: the system can restore
         // a previous zoom, and a cropped frame silently invalidates the intrinsics beside it.
