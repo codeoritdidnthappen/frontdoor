@@ -275,30 +275,36 @@ protocol can be checked against it. The empirical curve is TICK-075 on the seale
          therefore depends on the DIRECTION of obliquity, not only its magnitude, and D-019's scalar
          angle cannot separate the two. Expect unexplained scatter in TICK-075 from this.
 
-Independent check: TICK-234 (#138). Second derivation in docs/rise-error-vs-angle-independent.md.
-F-001 through F-005 all survived; predicted errors at 0, 15, 30 and 45 degrees agree with the
-table above to <1%. #135 and #136 do not move. See the 2026-09-01 TICK-234 entry.
+Independent check: TICK-234 (#138) recorded survival using the same tap/scale decomposition as
+this entry. TICK-244 (#159) replaced that write-up with a 3D-projection path. F-001 through
+F-005 still survived; see the TICK-244 entry.
 
 ## 2026-09-01 — Independent re-derivation of Arm A rise-error budget (TICK-234, issue #138)
 
-Second derivation from D-012 and ARCHITECTURE §4–§5, written without using the algebra in
-docs/rise-error-vs-angle.md as a starting point. Compared against that table after.
+Second write-up in docs/rise-error-vs-angle-independent.md. It reused this entry's tap/scale
+quadrature and the closed form K = 1.430 — a review of the algebra, not a second path.
+TICK-244 (#159) replaces that document. The numeric table was already within 1%; the defect
+was independence of the argument, not the inches.
 
-- F-001  SURVIVED. Independent path: two-tap rise error sqrt(2)*delta pixels, card-scale term in
-         proportion to R/W, combined in quadrature, then 1/cos(theta) for pitch that foreshortens
-         the rise. That is sigma = 1.430 * delta * (d/f) / cos(theta), with R/W = 12.7/85.60 = 0.148.
-         At delta = 5 px the predicted errors at 0, 15, 30 and 45 degrees, 2 m and 3 m, agree with
-         the published table to <1%.
-- F-002  SURVIVED. Scale is well conditioned (the 15% term). Obliquity is not the dominant term:
-         1/cos(theta) is +15% at 30 degrees and +41% at 45, while delta and d enter linearly.
-- F-003  SURVIVED. Hitting 0.25" needs delta <= 6.5 px at 2 m and <= 4.3 px at 3 m. #135's
-         magnification requirement holds; the ticket is not updated.
-- F-004  SURVIVED. At delta = 5 px, 3 m is 0.288" head-on (over the bar) and 2.5 m is 0.240" (under).
-         The protocol cap in #136 holds; the ticket is not updated.
-- F-005  SURVIVED. 1/cos(theta) is the pitch that foreshortens a vertical rise. Yaw to the side does
-         not compress that rise. Applying 1/cos(theta) to the scale term as well as the tap term
-         changes the 45-degree numbers by <1%, so the published combined form is a harmless
-         simplification.
+## 2026-09-01 — Rise-error budget re-derived from 3D projection (TICK-244, issue #159)
+
+docs/rise-error-vs-angle-independent.md and docs/rise-error-vs-angle-independent.py. Riser
+projected as a 3D plane about a fixed pivot; millimetre error from the image-span Jacobian;
+four-corner homography Monte Carlo (4000 draws, seed 244) as the Arm A instrument check.
+Not started from the tap/scale algebra in docs/rise-error-vs-angle.md.
+
+- F-001  SURVIVED. Pixel occupancy of an on-axis vertical rise under pitch tracks
+         f*R*cos(theta)/d; the Jacobian sigma = sqrt(2)*delta*R/n(theta) at delta = 5 px
+         agrees with the published table to ~1%. Four-corner H adds ~2% on the total, not
+         a 15% scale term. H-MC vs published: max 3.0% (under the 10% halt).
+- F-002  SURVIVED. Pitch at 45 degrees is +41% on occupancy. delta and d still enter
+         linearly and dominate.
+- F-003  SURVIVED. Jacobian delta to hit 0.25" at 2 m head-on is 6.59 px; H-MC inverts to
+         6.44 px. #135's 6.5 px stands.
+- F-004  SURVIVED. H-MC at delta = 5 px, 0 degrees: 2.5 m is 0.241" (under), 3 m is 0.289"
+         (over). Jacobian max d is 2.63 m. #136's 2.5 m cap stands.
+- F-005  SURVIVED. Yaw about camera Y leaves the on-axis rise at f*R/d at every angle in
+         the script. Pitch about camera X is the rotation that shortens it.
 
 No disagreement larger than 10%. Nothing in #135 or #136 moves.
 
