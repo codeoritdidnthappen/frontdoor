@@ -10,7 +10,7 @@ from jsonschema import ValidationError
 from frontdoor.loader import Capture, LoaderError, DatasetLoader
 from frontdoor.manifest import COLUMNS, append_capture
 from frontdoor.split import assign_split
-from tests.test_sidecar_schema import architecture_example
+from test_sidecar_schema import architecture_example
 
 HEADER = ",".join(COLUMNS) + "\n"
 REPO = Path(__file__).resolve().parents[1]

@@ -1,7 +1,14 @@
 name: tests
 
 on:
+  # Every pull request, not only those based on main. A stacked PR targets its parent branch, so
+  # `branches: [main]` skipped it entirely — and when the parent merged, GitHub retargeted the
+  # child to main and it merged with no check ever having run. That is how TICK-014 reached main
+  # with a test module that cannot be imported.
   pull_request:
+  # Also on push to main, so a broken merge is visible on main itself rather than only on the next
+  # pull request that happens to inherit it.
+  push:
     branches: [main]
 
 jobs:
