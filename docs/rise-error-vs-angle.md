@@ -5,6 +5,9 @@ sanity-checked before forty entrances are collected under it. The empirical curv
 the sealed split; a large disagreement between the two means one of them is wrong and must be
 resolved before the sealed run.
 
+Independently re-derived in TICK-234 (#138) — `docs/rise-error-vs-angle-independent.md`. The two
+tables agree to <1%; F-001 through F-005 survived.
+
 ## 1. Setup
 
 Arm A places the reference card **vertically against the riser face**, so scale and measurement
