@@ -174,9 +174,19 @@ budget, and it is the component that enforces D-007 mechanically rather than by 
 **Refusal.** The dataset loader filters on `split`. Sealed rows are unreadable without an explicit
 `--include-sealed` flag; there is no code path that reaches a sealed image incidentally.
 
-**Audit.** Any run passing `--include-sealed` appends one line to `SEAL_AUDIT.log`, committed:
-timestamp, git commit SHA, manifest SHA-256, full command line, operator. The audit log is the
-evidence that the sealed set was opened once, on 2026-09-07, against a known state of the code.
+**Audit.** Any run passing `--include-sealed` appends one line to `SEAL_AUDIT.log`, committed.
+Tab-separated fields, in this order — the same order `seal_audit.AUDIT_FIELDS` writes, so the log
+and this document cannot disagree about which column is which:
+
+`utc_timestamp`, `commit_sha`, `manifest_sha256`, `command_line`, `operator`, `resolved_config`.
+
+`resolved_config` records the image bucket and endpoint the run actually addressed, never
+credentials. `.env` is gitignored and selects them, so a clean working tree alone does not mean two
+runs read the same bytes; recording the resolution closes that gap without pretending an ignored
+file is a tracked change.
+
+The audit log is the evidence that the sealed set was opened once, on 2026-09-07, against a known
+state of the code.
 
 **Dry run before the real one.** The full evaluation runs end to end on dev first (R-5). The
 unsealing run executes a script already exercised, not one written that morning.

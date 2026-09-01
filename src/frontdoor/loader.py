@@ -148,7 +148,22 @@ class DatasetLoader:
             sidecar=record,
         )
 
+    #: The three splits D-007 defines. Anything else is a typo, not an empty result.
+    SPLITS = ("dev", "calib", "sealed")
+
     def list_captures(self, *, entrance_id=None, split=None):
+        # Asking for the sealed split must refuse, not return []. An empty list is the same shape
+        # as "no such split" and as "no captures yet", so a caller cannot tell a working seal from
+        # a misspelled filter — and reading [] as "nothing is sealed" is the wrong lesson to learn.
+        if split == "sealed":
+            raise LoaderError(
+                "the sealed split cannot be listed; it is opened once, by an audited "
+                "`python -m frontdoor.eval --include-sealed` run (D-007, D-017)"
+            )
+        if split is not None and split not in self.SPLITS:
+            raise LoaderError(
+                f"unknown split {split!r}; expected one of {', '.join(self.SPLITS)}"
+            )
         ids = []
         for row in read_manifest(self.manifest_path):
             if self.is_sealed(row):

@@ -192,7 +192,12 @@ def test_list_omits_sealed_rows_even_when_asked_for_that_split(tmp_path):
     assert loader.list_captures() == ["cap-calib", "cap-dev"]
     assert loader.list_captures(split="dev") == ["cap-dev"]
     assert loader.list_captures(split="calib") == ["cap-calib"]
-    assert loader.list_captures(split="sealed") == []
+    # Asking for the sealed split refuses rather than returning [] (QA B08): an empty list is the
+    # same shape as "no such split" and "no captures yet", so a caller cannot tell a working seal
+    # from a misspelled filter — and reading [] as "nothing is sealed" is the wrong lesson.
+    with pytest.raises(LoaderError, match="sealed split cannot be listed"):
+        loader.list_captures(split="sealed")
+    # Filtering by a sealed entrance still yields nothing, without naming it as sealed.
     assert loader.list_captures(entrance_id="E-002") == []
     assert list(loader) == ["cap-calib", "cap-dev"]
     assert len(loader) == 2
@@ -351,3 +356,26 @@ def test_an_entrance_the_seed_cannot_classify_is_not_treated_as_unsealed(tmp_pat
     )
     with pytest.raises(LoaderError, match="cannot classify"):
         loader.load("cap-w")
+
+
+def test_listing_the_sealed_split_refuses_rather_than_returning_empty(tmp_path):
+    """[] is the same shape as 'no such split' and 'no captures yet' (QA B08)."""
+    manifest, sidecar_dir, _ = _write_capture(
+        tmp_path, capture_id="cap-s", entrance_id=_SEALED_ENTRANCE, image=b"secret"
+    )
+    loader = DatasetLoader(
+        manifest_path=manifest, sidecar_dir=sidecar_dir, get_image=lambda cid: b"secret"
+    )
+    with pytest.raises(LoaderError, match="sealed split cannot be listed"):
+        loader.list_captures(split="sealed")
+
+
+def test_an_unknown_split_is_a_typo_not_an_empty_result(tmp_path):
+    manifest, sidecar_dir, _ = _write_capture(
+        tmp_path, capture_id="cap-t", entrance_id="E-001", image=b"x"
+    )
+    loader = DatasetLoader(
+        manifest_path=manifest, sidecar_dir=sidecar_dir, get_image=lambda cid: b"x"
+    )
+    with pytest.raises(LoaderError, match="unknown split"):
+        loader.list_captures(split="nonsense")
