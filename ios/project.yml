@@ -43,3 +43,17 @@ targets:
       - name: "Assert no ARKit (D-015)"
         script: '"$SRCROOT/Scripts/assert-no-arkit.sh" "$SRCROOT"'
         basedOnDependencyAnalysis: false
+
+  FrontdoorCaptureTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: FrontdoorCaptureTests
+    dependencies:
+      - target: FrontdoorCapture
+    settings:
+      base:
+        # The validation layer is pure and needs no camera, so these run on a simulator with
+        # `xcodebuild test`. CI has no Xcode (TICK-005 put macOS runners out of scope), so the
+        # Python suite still carries the ARKit boundary on every pull request.
+        GENERATE_INFOPLIST_FILE: YES
