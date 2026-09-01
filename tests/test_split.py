@@ -8,7 +8,14 @@ from collections import Counter
 
 import pytest
 
-from frontdoor.split import SEED, InvalidEntranceId, assign_split, canonical_entrance_id, main
+from frontdoor.split import (
+    SEED,
+    InvalidEntranceId,
+    _assign_split_with_seed,
+    assign_split,
+    canonical_entrance_id,
+    main,
+)
 
 IDS = [f"E-{n:03d}" for n in range(1000)]
 
@@ -38,7 +45,16 @@ def test_roughly_thirty_percent_sealed():
 
 def test_changed_seed_changes_assignments():
     other_seed = "0" * 64
-    assert [assign_split(i, seed=other_seed) for i in IDS] != [assign_split(i) for i in IDS]
+    assert [_assign_split_with_seed(i, other_seed) for i in IDS] != [
+        assign_split(i) for i in IDS
+    ]
+
+
+def test_public_assign_split_cannot_override_seed():
+    with pytest.raises(TypeError):
+        assign_split("E-014", seed=SEED)
+    assert assign_split("E-014") == "sealed"
+    assert _assign_split_with_seed("E-014", SEED) == "sealed"
 
 
 def test_known_answers_with_committed_seed():

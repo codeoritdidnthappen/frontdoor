@@ -60,7 +60,12 @@ def canonical_entrance_id(entrance_id):
     return canonical
 
 
-def assign_split(entrance_id, seed=SEED):
+def _assign_split_with_seed(entrance_id, seed):
+    """Test-only: assign a split with an arbitrary seed.
+
+    Not a supported public API. Production and CLI callers use assign_split,
+    which can only hash against the committed seed.
+    """
     entrance_id = canonical_entrance_id(entrance_id)
     digest = hashlib.sha256((entrance_id + seed).encode("utf-8")).digest()
     bucket = int.from_bytes(digest[:8], "big") % 100
@@ -69,6 +74,10 @@ def assign_split(entrance_id, seed=SEED):
     if bucket < SEALED_PERCENT + CALIB_PERCENT:
         return "calib"
     return "dev"
+
+
+def assign_split(entrance_id):
+    return _assign_split_with_seed(entrance_id, SEED)
 
 
 def main(argv=None):
