@@ -4,167 +4,129 @@ ARKit's visual-inertial odometry recovers metric scale from motion. The method u
 consume one RGB still, intrinsics and gravity — nothing motion-derived — so if no AR session is
 ever started, motion-derived scale is not merely forbidden, it is unavailable.
 
-Xcode enforces this at build time via ios/Scripts/assert-no-arkit.sh. That guard only runs on a
-Mac. This test asserts the same rule from CI, which runs on Linux with no Xcode, so the boundary
-holds on every pull request rather than only when someone happens to build the app.
+**These tests invoke `ios/Scripts/assert-no-arkit.sh` rather than reimplementing its rule.** An
+earlier version kept a Python copy of the regex; mutation testing showed the shell guard could be
+broken while the suite stayed green, because the tests were asserting against the copy (#154). The
+script is POSIX sh and plain grep, so it runs on a Linux CI runner with no Xcode — there is no
+reason to have two implementations, and #151 is the record of what having two cost.
 """
 
-import re
 import subprocess
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-IOS_SOURCES = REPO_ROOT / "ios" / "FrontdoorCapture"
+IOS_TREE = REPO_ROOT / "ios"
 GUARD = REPO_ROOT / "ios" / "Scripts" / "assert-no-arkit.sh"
 
-# Matches code, not prose. The codebase has to be able to name ARKit in comments explaining why
-# it is excluded; what must never appear is an import or an AR* symbol.
-FORBIDDEN = re.compile(
-    r"^\s*(@[_A-Za-z][_A-Za-z0-9]*\s+)*import\s+(ARKit|RealityKit)\b"
-    r"|\b(ARSession|ARConfiguration|ARWorldTrackingConfiguration|ARFrame|ARAnchor|ARSCNView|ARView)\b"
-)
+
+def guard(target: Path) -> subprocess.CompletedProcess:
+    return subprocess.run([str(GUARD), str(target)], capture_output=True, text=True)
 
 
-def swift_sources():
-    return sorted(IOS_SOURCES.rglob("*.swift"))
+def swift_tree(tmp_path: Path, source: str) -> Path:
+    """A scratch tree holding one Swift file, so the guard is exercised the way Xcode runs it."""
+    (tmp_path / "Sources").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "Sources" / "Subject.swift").write_text(source, encoding="utf-8")
+    return tmp_path
 
 
-def test_the_capture_app_has_sources_to_check():
-    """Guards the guard: an empty glob would make every assertion below vacuously true."""
-    assert swift_sources(), f"no Swift sources under {IOS_SOURCES}"
+def test_the_guard_exists_and_is_executable():
+    """Guards the guard: every assertion below is vacuous if the script cannot run."""
+    assert GUARD.is_file(), f"{GUARD} is missing"
+    result = guard(IOS_TREE)
+    assert result.returncode in (0, 1), f"guard did not run: {result.stderr}"
 
 
-@pytest.mark.parametrize("source", swift_sources(), ids=lambda p: p.name)
-def test_no_arkit_reference_in_capture_app(source):
-    offending = [
-        f"{source.relative_to(REPO_ROOT)}:{n}: {line.strip()}"
-        for n, line in enumerate(source.read_text(encoding="utf-8").splitlines(), 1)
-        if FORBIDDEN.search(line)
-    ]
-    assert not offending, "ARKit reached the capture app (D-015):\n" + "\n".join(offending)
+def test_the_real_tree_passes():
+    """The shipped app must satisfy its own boundary, or nothing below means anything."""
+    result = guard(IOS_TREE)
+    assert result.returncode == 0, f"ios/ tree fails its own ARKit guard:\n{result.stderr}"
 
 
-def test_the_app_links_avfoundation_and_coremotion():
-    """D-014 names the stack positively, not just by what it excludes.
+#: Every way ARKit has actually reached, or could reach, a Swift file. Each of the attribute forms
+#: was a live bypass at some point: bare imports, then @_exported only (#148), then attributes
+#: without arguments (#153).
+FORBIDDEN_SOURCES = [
+    "import ARKit",
+    "    import ARKit",
+    "import RealityKit",
+    "@testable import ARKit",
+    "@_exported import ARKit",
+    "@preconcurrency import ARKit",
+    "@_implementationOnly import ARKit",
+    "@_spi(Internal) import ARKit",
+    "@_documentation(visibility: internal) import ARKit",
+    "@testable @_exported import ARKit",
+    "let session = ARSession()",
+    "let config = ARWorldTrackingConfiguration()",
+    "let anchor: ARAnchor? = nil",
+    "let camera: ARCamera? = nil",
+    "let view = ARSCNView()",
+    "let mesh: ARMeshAnchor? = nil",
+    "let geo: ARGeoTrackingConfiguration.Type? = nil",
+    "let frame: ARFrame? = nil",
+]
 
-    Checks linked frameworks rather than the whole file: project.yml mentions ARKit by name in the
-    guard build phase, which is the opposite of a violation.
-    """
-    spec = (REPO_ROOT / "ios" / "project.yml").read_text(encoding="utf-8")
-    linked = set(re.findall(r"- sdk:\s*(\S+)", spec))
-    assert "AVFoundation.framework" in linked
-    assert "CoreMotion.framework" in linked
-    forbidden_frameworks = re.compile(r"\b(ARKit|RealityKit)\b")
-    assert not {f for f in linked if forbidden_frameworks.search(f)}, (
-        f"forbidden framework linked: {linked}"
+
+@pytest.mark.parametrize("source", FORBIDDEN_SOURCES, ids=lambda s: s.strip()[:44])
+def test_forbidden_forms_fail_the_guard(source, tmp_path):
+    result = guard(swift_tree(tmp_path, source + "\n"))
+    assert result.returncode == 1, (
+        f"the guard accepted a forbidden form, so D-015 is not enforced:\n  {source}"
     )
 
 
-def test_the_xcode_guard_script_agrees_with_this_test(tmp_path):
-    """The build-time guard and the CI guard must not drift apart.
-
-    Runs the shell script against a scratch directory containing a forbidden symbol and asserts it
-    fails, then against a clean one and asserts it passes. Without this, the two could disagree and
-    only the weaker one would be enforced.
-    """
-    if not GUARD.exists():
-        pytest.skip("guard script not present")
-
-    clean = tmp_path / "clean"
-    clean.mkdir()
-    (clean / "Fine.swift").write_text("import AVFoundation\n", encoding="utf-8")
-    assert subprocess.run([str(GUARD), str(clean)], capture_output=True).returncode == 0
-
-    dirty = tmp_path / "dirty"
-    dirty.mkdir()
-    (dirty / "Bad.swift").write_text("import ARKit\n", encoding="utf-8")
-    result = subprocess.run([str(GUARD), str(dirty)], capture_output=True, text=True)
-    assert result.returncode != 0
-    assert "ARKit" in result.stderr
+#: The guard must let the codebase describe its own boundary. It failed the build on a comment
+#: once (#152), and a rule that punishes documenting the rule is a rule someone deletes.
+ALLOWED_SOURCES = [
+    "// D-015 forbids ARKit; see ARCHITECTURE.md section 2.\nimport AVFoundation\n",
+    "/*\n D-015 excludes ARKit. Forms such as\n@testable import ARKit\n are forbidden.\n*/\nimport AVFoundation\n",
+    "// Not allowed: import ARKit, ARSession, ARGeoTrackingConfiguration.\nimport CoreMotion\n",
+    'let note = "see ARCHITECTURE.md"\n',
+    "import AVFoundation\nimport CoreMotion\n",
+]
 
 
-def test_the_xcode_guard_also_catches_a_linked_framework(tmp_path):
-    """Importing ARKit is not the only way to link it.
-
-    A `- sdk: ARKit.framework` dependency links the framework with no import anywhere, so a guard
-    that only greps Swift would pass while ARKit is in the target.
-    """
-    if not GUARD.exists():
-        pytest.skip("guard script not present")
-
-    scratch = tmp_path / "yml"
-    scratch.mkdir()
-    (scratch / "Fine.swift").write_text("import AVFoundation\n", encoding="utf-8")
-    (scratch / "project.yml").write_text(
-        "targets:\n  X:\n    dependencies:\n      - sdk: ARKit.framework\n", encoding="utf-8"
+@pytest.mark.parametrize("source", ALLOWED_SOURCES, ids=lambda s: s.strip().splitlines()[0][:44])
+def test_prose_and_ordinary_imports_pass_the_guard(source, tmp_path):
+    result = guard(swift_tree(tmp_path, source))
+    assert result.returncode == 0, (
+        f"the guard rejected legitimate code or prose:\n{source}\n{result.stderr}"
     )
-    result = subprocess.run([str(GUARD), str(scratch)], capture_output=True, text=True)
-    assert result.returncode != 0
-    assert "project.yml" in result.stderr
 
 
-def test_the_guard_allows_prose_that_names_arkit(tmp_path):
-    """The codebase must be able to explain its own boundary.
-
-    An earlier guard matched the bare word and failed the build on a comment saying why ARKit is
-    excluded. A rule that punishes documenting the rule gets deleted, so it has to match code.
-
-    The residual limitation is deliberate: symbol tokens still match anywhere, so prose writes
-    "AR session" rather than "ARSession". That is the convention the sources already follow, and
-    it keeps one rule instead of a comment-stripping parser that the shell guard could not share.
-    """
-    if not GUARD.exists():
-        pytest.skip("guard script not present")
-
-    scratch = tmp_path / "prose"
-    scratch.mkdir()
-    (scratch / "Doc.swift").write_text(
-        "// D-014 rejects ARKit precisely for frame size; no AR session is ever started.\n"
-        "import AVFoundation\n",
-        encoding="utf-8",
+def test_a_linked_framework_in_project_yml_fails(tmp_path):
+    """Importing is not the only way to link a framework."""
+    (tmp_path / "Sources").mkdir()
+    (tmp_path / "Sources" / "Subject.swift").write_text("import AVFoundation\n")
+    (tmp_path / "project.yml").write_text(
+        "targets:\n  App:\n    dependencies:\n      - sdk: ARKit.framework\n"
     )
-    result = subprocess.run([str(GUARD), str(scratch)], capture_output=True, text=True)
-    assert result.returncode == 0, result.stderr
+    assert guard(tmp_path).returncode == 1
 
 
-@pytest.mark.parametrize(
-    "line",
-    [
-        "import ARKit",
-        "    import ARKit",
-        "@_exported import ARKit",
-        "@testable import ARKit",
-        "@_implementationOnly import ARKit",
-        "@testable import RealityKit",
-        "@testable @_exported import ARKit",
-    ],
-)
-def test_forbidden_regex_catches_attributed_imports(line):
-    """Any real import of ARKit/RealityKit is forbidden, attributes included.
+def test_an_empty_tree_does_not_pass_vacuously(tmp_path):
+    """A guard reporting success over nothing would hide a renamed or moved source tree.
 
-    The guard used to allowlist only @_exported before import, so @testable import ARKit
-    and @_implementationOnly import ARKit slipped through. D-015 is the import, not the
-    spelling of the attribute in front of it.
+    Without this, `test_the_real_tree_passes` goes green over zero files if ios/FrontdoorCapture
+    is ever moved, and D-015 is unenforced with a green check.
     """
-    assert FORBIDDEN.search(line), f"guard missed a real import: {line!r}"
+    assert guard(tmp_path / "does-not-exist").returncode == 1
+    assert guard(tmp_path).returncode == 1
 
 
-def test_forbidden_regex_still_allows_prose_that_names_arkit():
-    assert FORBIDDEN.search(
-        "// D-014 rejects ARKit precisely for frame size; no AR session is ever started."
-    ) is None
+def test_the_guard_reports_how_many_files_it_scanned(tmp_path):
+    """The count is what makes a vacuous pass visible to a human reading CI output."""
+    result = guard(IOS_TREE)
+    assert result.returncode == 0
+    assert "swift files scanned" in result.stdout, result.stdout
 
 
-def test_the_xcode_guard_catches_testable_import(tmp_path):
-    """The shell guard must fail the same @testable case the CI regex does."""
-    if not GUARD.exists():
-        pytest.skip("guard script not present")
-
-    dirty = tmp_path / "testable"
-    dirty.mkdir()
-    (dirty / "Sneaky.swift").write_text("@testable import ARKit\n", encoding="utf-8")
-    result = subprocess.run([str(GUARD), str(dirty)], capture_output=True, text=True)
-    assert result.returncode != 0
-    assert "ARKit" in result.stderr
+def test_a_source_in_a_path_with_spaces_is_still_scanned(tmp_path):
+    """Word-splitting find(1) skipped these silently, which is a bypass of the only D-015 rule."""
+    spaced = tmp_path / "My Sources"
+    spaced.mkdir(parents=True)
+    (spaced / "Leak.swift").write_text("import ARKit\n", encoding="utf-8")
+    assert guard(tmp_path).returncode == 1

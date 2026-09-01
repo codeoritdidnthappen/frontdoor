@@ -19,6 +19,9 @@ struct CaptureRecord: Equatable {
     /// e.g. `builtInWideAngleCamera`. Fixed by D-014, recorded so the record proves it.
     var lens: String
     var zoomFactor: Double
+    /// UTC RFC 3339, sampled at the shutter press. The schema requires `Z`; offsets are rejected so
+    /// capture time has one spelling.
+    var capturedAt: String
     /// Metadata for the quarantined depth map, or nil when the device or the frame produced none.
     /// Never nil-checked to decide anything about the measurement (D-020).
     var depth: DepthRecord?
@@ -82,6 +85,11 @@ struct GravitySample: Equatable {
 /// Why a shutter press produced nothing. Distinct from `CaptureUnavailable`, which is about the
 /// session; these are frames that were taken and then refused.
 enum CaptureRejected: Error, Equatable {
+    /// The session stopped or was reconfigured between the shutter press and the capture itself.
+    case sessionNotReady
+    case sensorResolutionUnknown
+    case notFullResolution(delivered: String, sensor: String)
+    case captureTimeUnusable(String)
     case noImageData
     case noCalibrationData
     case unusableCalibrationData
@@ -92,6 +100,26 @@ enum CaptureRejected: Error, Equatable {
     /// Shown verbatim to an operator standing at an entrance.
     var message: String {
         switch self {
+        case .sessionNotReady:
+            return """
+            The camera stopped being available between the shutter press and the capture, so \
+            nothing was recorded. Reopen the viewfinder and take the shot again.
+            """
+        case .sensorResolutionUnknown:
+            return """
+            The camera did not report its full resolution, so this frame cannot be confirmed \
+            uncropped. Nothing was recorded; reopen the viewfinder and try again.
+            """
+        case .notFullResolution(let delivered, let sensor):
+            return """
+            The frame came back at \(delivered) rather than the sensor's \(sensor), so it is \
+            cropped or downscaled and its intrinsics would not describe it. Nothing was recorded.
+            """
+        case .captureTimeUnusable(let value):
+            return """
+            The capture time \(value) is not a UTC timestamp, so this frame could not be placed \
+            in sequence. Nothing was recorded.
+            """
         case .noImageData:
             return "The camera returned no image data. Nothing was recorded; take the shot again."
         case .noCalibrationData:
@@ -134,6 +162,9 @@ enum CaptureValidation {
         deviceModel: String,
         lens: String,
         zoomFactor: Double,
+        capturedAt: String,
+        sensorWidth: Int?,
+        sensorHeight: Int?,
         depth: DepthRecord? = nil
     ) -> Result<CaptureRecord, CaptureRejected> {
         guard pixelWidth > 0, pixelHeight > 0 else { return .failure(.noImageData) }
@@ -144,6 +175,25 @@ enum CaptureValidation {
         guard abs(zoomFactor - 1.0) < 0.001 else { return .failure(.zoomNotUnity(zoomFactor)) }
         guard let gravity else { return .failure(.noGravitySample) }
         guard gravity.isPlausible else { return .failure(.gravityImplausible(gravity.magnitude)) }
+        // TICK-022 AC3: the frame must be the sensor's full resolution, confirming no crop and no
+        // digital zoom. Zoom pinned to 1.0 is not a substitute — maxPhotoDimensions can be set
+        // below the sensor maximum, or a format can deliver a smaller frame, and either yields an
+        // uncropped-looking still whose intrinsics describe a grid it does not have.
+        //
+        // An unknown maximum is not a pass: it cannot confirm anything, and accepting it silently
+        // is how this check would stop meaning something.
+        guard let sensorWidth, let sensorHeight, sensorWidth > 0, sensorHeight > 0 else {
+            return .failure(.sensorResolutionUnknown)
+        }
+        guard pixelWidth == sensorWidth, pixelHeight == sensorHeight else {
+            return .failure(.notFullResolution(
+                delivered: "\(pixelWidth)x\(pixelHeight)",
+                sensor: "\(sensorWidth)x\(sensorHeight)"
+            ))
+        }
+        guard CaptureValidation.isUTCRFC3339(capturedAt) else {
+            return .failure(.captureTimeUnusable(capturedAt))
+        }
 
         return .success(CaptureRecord(
             pixelWidth: pixelWidth,
@@ -153,8 +203,26 @@ enum CaptureValidation {
             deviceModel: deviceModel,
             lens: lens,
             zoomFactor: zoomFactor,
+            capturedAt: capturedAt,
             depth: depth
         ))
+    }
+
+    /// The schema requires UTC RFC 3339 with a literal `Z`; offsets are rejected so capture time
+    /// has one spelling. Checked rather than trusted, because a formatter carrying the device's
+    /// locale or time zone produces a plausible string the schema refuses after the entrance has
+    /// already been shot.
+    static func isUTCRFC3339(_ value: String) -> Bool {
+        let pattern = #"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$"#
+        return value.range(of: pattern, options: .regularExpression) != nil
+    }
+
+    /// UTC RFC 3339 for an instant, in the one spelling the schema accepts.
+    static func timestamp(for date: Date) -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return formatter.string(from: date)
     }
 
     /// Hardware identifier such as `iPhone17,1`. `UIDevice.model` returns "iPhone" for every
