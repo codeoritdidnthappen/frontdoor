@@ -80,7 +80,8 @@ A single-purpose iOS app, built before dataset capture begins. It is not the dem
 **Stack:** AVFoundation photo capture with calibration-data delivery, depth-data delivery, and
 CoreMotion device motion. No ARKit (D-014, §2).
 
-**Per capture it writes one image, one depth map, and one JSON sidecar:**
+**Per capture it writes one image, one depth map (or `"depth": null` when the
+device has no depth sensor), and one JSON sidecar:**
 
 ```json
 {
@@ -167,6 +168,8 @@ budget, and it is the component that enforces D-007 mechanically rather than by 
 
 **Manifest.** `data/manifest.csv`, committed to git, one row per capture: `capture_id`,
 `entrance_id`, `image_sha256`, `depth_sha256`, `split`. Written at capture time, never edited.
+`depth_sha256` is the SHA-256 of the depth file, or empty when that capture has no depth map
+(TICK-023 AC5).
 
 **Refusal.** The dataset loader filters on `split`. Sealed rows are unreadable without an explicit
 `--include-sealed` flag; there is no code path that reaches a sealed image incidentally.
@@ -206,7 +209,9 @@ is published as a release artifact, satisfying deliverable #1.
 ## 9. LiDAR quarantine (D-020)
 
 Every capture records a LiDAR depth map, on every entrance rather than a matched subset — with the
-capture app in place this is free, and it strengthens deliverable #5.
+capture app in place this is free, and it strengthens deliverable #5. A device without a depth
+sensor still captures: the sidecar writes `"depth": null` and the manifest leaves `depth_sha256`
+empty (TICK-023).
 
 Depth maps are stored in a **separate bucket** (D-026) that the image-only loader
 credential cannot read. A prefix inside one bucket is not enough where the provider

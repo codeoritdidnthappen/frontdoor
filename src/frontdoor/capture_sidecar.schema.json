@@ -31,7 +31,8 @@
       "additionalProperties": false
     },
     "depth": {
-      "type": "object",
+      "description": "LiDAR depth map for this capture, or null when depth was unavailable (TICK-023 AC5). Absence must not cost an entrance.",
+      "type": ["object", "null"],
       "properties": {
         "path": { "type": "string", "minLength": 1 },
         "sha256": { "$ref": "#/$defs/sha256" }
