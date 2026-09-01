@@ -9,6 +9,10 @@ import Foundation
 /// AVFoundation objects in it, so the rules that decide whether a capture is usable are ordinary
 /// functions that can be tested without a camera.
 struct CaptureRecord: Equatable {
+    /// The instant of the shutter press, not of encoding. Serialised as the sidecar's required
+    /// `captured_at`. Sampled next to gravity for the same reason gravity is: the delegate
+    /// callback runs after the exposure and describes a different moment.
+    var capturedAt: Date
     var pixelWidth: Int
     var pixelHeight: Int
     var intrinsics: CameraIntrinsics
@@ -81,8 +85,30 @@ struct GravitySample: Equatable {
 
 /// Why a shutter press produced nothing. Distinct from `CaptureUnavailable`, which is about the
 /// session; these are frames that were taken and then refused.
+/// The largest still the device's sensor can produce, across every format it offers -- not the
+/// active format's maximum, which is only as large as whatever format the session happens to have
+/// selected. A frame smaller than this is cropped or downscaled (TICK-022 AC3).
+struct SensorResolution: Equatable {
+    var width: Int
+    var height: Int
+}
+
+/// RFC 3339 in UTC, which is the only spelling `capture_sidecar.schema.json` accepts: offsets are
+/// rejected so capture time has one representation (#102).
+enum CapturedAtFormat {
+    static let formatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        return formatter
+    }()
+
+    static func string(from date: Date) -> String { formatter.string(from: date) }
+}
+
 enum CaptureRejected: Error, Equatable {
     case noImageData
+    case belowSensorResolution(delivered: SensorResolution, sensor: SensorResolution)
     case noCalibrationData
     case unusableCalibrationData
     case zoomNotUnity(Double)
@@ -94,6 +120,12 @@ enum CaptureRejected: Error, Equatable {
         switch self {
         case .noImageData:
             return "The camera returned no image data. Nothing was recorded; take the shot again."
+        case .belowSensorResolution(let delivered, let sensor):
+            return """
+            The camera delivered \(delivered.width)x\(delivered.height), smaller than the sensor's \
+            \(sensor.width)x\(sensor.height). The still is cropped or downscaled, so the intrinsics \
+            would describe a grid it does not have. Nothing was recorded.
+            """
         case .noCalibrationData:
             return """
             The camera returned no calibration data for that frame, so the still has no intrinsics \
@@ -126,8 +158,12 @@ enum CaptureRejected: Error, Equatable {
 /// Decides whether a frame is usable. Pure, so the rules are testable without a camera.
 enum CaptureValidation {
     static func record(
+        capturedAt: Date,
         pixelWidth: Int,
         pixelHeight: Int,
+        /// nil when the device's formats reported no maximum. An unknown sensor size is a gap in
+        /// what can be checked, not evidence the frame is bad, so the comparison is skipped.
+        sensor: SensorResolution? = nil,
         intrinsics: CameraIntrinsics?,
         hadCalibrationData: Bool,
         gravity: GravitySample?,
@@ -137,6 +173,15 @@ enum CaptureValidation {
         depth: DepthRecord? = nil
     ) -> Result<CaptureRecord, CaptureRejected> {
         guard pixelWidth > 0, pixelHeight > 0 else { return .failure(.noImageData) }
+        // Distinct from noImageData: a frame arrived, it is just not the whole sensor. Zoom being
+        // pinned at 1x does not cover this -- maxPhotoDimensions can be set below the sensor
+        // maximum, and the resulting still looks uncropped while its intrinsics do not fit it.
+        if let sensor, pixelWidth < sensor.width || pixelHeight < sensor.height {
+            return .failure(.belowSensorResolution(
+                delivered: SensorResolution(width: pixelWidth, height: pixelHeight),
+                sensor: sensor
+            ))
+        }
         guard hadCalibrationData else { return .failure(.noCalibrationData) }
         guard let intrinsics else { return .failure(.unusableCalibrationData) }
         // Compared against a tolerance rather than !=: videoZoomFactor is a float the system may
@@ -146,6 +191,7 @@ enum CaptureValidation {
         guard gravity.isPlausible else { return .failure(.gravityImplausible(gravity.magnitude)) }
 
         return .success(CaptureRecord(
+            capturedAt: capturedAt,
             pixelWidth: pixelWidth,
             pixelHeight: pixelHeight,
             intrinsics: intrinsics,

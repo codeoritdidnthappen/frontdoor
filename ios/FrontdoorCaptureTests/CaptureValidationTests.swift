@@ -15,14 +15,20 @@ final class CaptureValidationTests: XCTestCase {
         lensDistortionCenterX: 2016.4, lensDistortionCenterY: 1512.7
     )
     private let gravity = GravitySample(x: 0.02, y: -0.98, z: -0.19)
+    /// Fixed rather than Date() so an assertion on it cannot pass by accident.
+    private let shutter = Date(timeIntervalSince1970: 1_756_684_800)
+    private let sensor = SensorResolution(width: 4032, height: 3024)
 
     private func result(
         width: Int = 4032, height: Int = 3024,
         intrinsics: CameraIntrinsics?? = nil, hadCalibration: Bool = true,
-        gravity: GravitySample?? = nil, zoom: Double = 1.0
+        gravity: GravitySample?? = nil, zoom: Double = 1.0,
+        sensor: SensorResolution?? = nil
     ) -> Result<CaptureRecord, CaptureRejected> {
         CaptureValidation.record(
+            capturedAt: shutter,
             pixelWidth: width, pixelHeight: height,
+            sensor: sensor ?? self.sensor,
             intrinsics: intrinsics ?? self.intrinsics,
             hadCalibrationData: hadCalibration,
             gravity: gravity ?? self.gravity,
@@ -44,6 +50,52 @@ final class CaptureValidationTests: XCTestCase {
     /// The recorded lens must match the sidecar example in ARCHITECTURE section 4. Derived from
     /// the AVFoundation raw value it comes out capitalised, and anything filtering on the
     /// documented spelling then matches nothing.
+    // MARK: captured_at
+
+    /// captured_at is a required property of the sidecar schema, so a record without it cannot be
+    /// serialised at all. The value must be the one handed in at the shutter, not re-sampled.
+    func testTheRecordCarriesTheShutterTimestamp() throws {
+        XCTAssertEqual(try result().get().capturedAt, shutter)
+    }
+
+    /// The schema accepts one spelling: RFC 3339, UTC, `Z` rather than an offset (#102). A local
+    /// timezone here would produce +05:00 and the sidecar would be rejected on write.
+    func testTheTimestampIsFormattedAsRFC3339InUTC() {
+        XCTAssertEqual(CapturedAtFormat.string(from: shutter), "2025-09-01T00:00:00Z")
+    }
+
+    // MARK: full sensor resolution (AC3)
+
+    /// A downscaled still looks uncropped. Its intrinsics describe a grid it does not have, and
+    /// nothing downstream can detect that from the file.
+    func testAFrameSmallerThanTheSensorIsRejected() {
+        let r = rejection(result(width: 2016, height: 1512))
+        XCTAssertEqual(r, .belowSensorResolution(
+            delivered: SensorResolution(width: 2016, height: 1512),
+            sensor: sensor
+        ))
+    }
+
+    /// AC3 asks the operator to be told which two numbers disagreed.
+    func testTheRejectionNamesBothResolutions() throws {
+        let message = try XCTUnwrap(rejection(result(width: 2016, height: 1512))?.message)
+        XCTAssertTrue(message.contains("2016x1512"), message)
+        XCTAssertTrue(message.contains("4032x3024"), message)
+    }
+
+    /// "Smaller than the sensor" and "no frame at all" are different failures and must not
+    /// collapse into one message.
+    func testASmallFrameIsDistinguishableFromNoFrame() {
+        XCTAssertEqual(rejection(result(width: 0, height: 0)), .noImageData)
+        XCTAssertNotEqual(rejection(result(width: 2016, height: 1512)), .noImageData)
+    }
+
+    /// An unknown sensor maximum is a gap in what can be checked, not evidence the frame is bad.
+    /// Rejecting here would refuse every capture on a device whose formats report nothing.
+    func testAnUnknownSensorResolutionDoesNotCostTheCapture() throws {
+        XCTAssertEqual(try result(width: 2016, height: 1512, sensor: .some(nil)).get().pixelWidth, 2016)
+    }
+
     func testLensNameMatchesTheDocumentedSidecarValue() {
         XCTAssertEqual(CaptureController.lensName, "builtInWideAngleCamera")
     }

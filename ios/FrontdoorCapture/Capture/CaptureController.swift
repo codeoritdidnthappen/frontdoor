@@ -237,6 +237,8 @@ final class CaptureController: ObservableObject {
         let gravity = motion.deviceMotion.map {
             GravitySample(x: $0.gravity.x, y: $0.gravity.y, z: $0.gravity.z)
         }
+        let capturedAtShutter = Date()
+        let sensor = Self.sensorResolution(of: device)
 
         let token = UUID()
         let delegate = PhotoCaptureDelegate(token: token) { [weak self] finished, result in
@@ -244,7 +246,14 @@ final class CaptureController: ObservableObject {
                 guard let self else { return }
                 switch result {
                 case .success(let captured):
-                    self.accept(captured, gravity: gravity, zoomFactor: zoomFactor, lens: lens)
+                    self.accept(
+                        captured,
+                        capturedAt: capturedAtShutter,
+                        sensor: sensor,
+                        gravity: gravity,
+                        zoomFactor: zoomFactor,
+                        lens: lens
+                    )
                 case .failure(let message):
                     // Deliberately does not increment. A count that rises on failure is worse
                     // than no count: it tells the operator a still exists when none does.
@@ -274,8 +283,21 @@ final class CaptureController: ObservableObject {
     }
 
     /// Applies the rules that decide whether a frame is usable, then publishes or refuses.
+    /// The largest still the sensor can produce, taken across every format the device offers.
+    /// `activeFormat.supportedMaxPhotoDimensions` is only the selected format's ceiling, so a
+    /// session that settled on a smaller format would compare the frame against its own limit and
+    /// call a downscaled still full-resolution -- the exact case AC3 exists to catch.
+    static func sensorResolution(of device: AVCaptureDevice) -> SensorResolution? {
+        let largest = device.formats
+            .flatMap(\.supportedMaxPhotoDimensions)
+            .max { Int($0.width) * Int($0.height) < Int($1.width) * Int($1.height) }
+        return largest.map { SensorResolution(width: Int($0.width), height: Int($0.height)) }
+    }
+
     private func accept(
         _ captured: CapturedPhoto,
+        capturedAt: Date,
+        sensor: SensorResolution?,
         gravity: GravitySample?,
         zoomFactor: Double,
         lens: String
@@ -295,8 +317,10 @@ final class CaptureController: ObservableObject {
         }
 
         switch CaptureValidation.record(
+            capturedAt: capturedAt,
             pixelWidth: captured.pixelWidth,
             pixelHeight: captured.pixelHeight,
+            sensor: sensor,
             intrinsics: intrinsics,
             hadCalibrationData: calibration != nil,
             gravity: gravity,
