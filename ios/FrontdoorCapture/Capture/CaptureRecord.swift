@@ -83,11 +83,9 @@ struct GravitySample: Equatable {
     var isPlausible: Bool { abs(magnitude - 1.0) <= Self.magnitudeTolerance }
 }
 
-/// Why a shutter press produced nothing. Distinct from `CaptureUnavailable`, which is about the
-/// session; these are frames that were taken and then refused.
-/// The largest still the device's sensor can produce, across every format it offers -- not the
-/// active format's maximum, which is only as large as whatever format the session happens to have
-/// selected. A frame smaller than this is cropped or downscaled (TICK-022 AC3).
+/// The largest still the configured camera can deliver, read from the active format by
+/// `CaptureController.fullResolution(of:)`. A frame smaller than this was cropped or downscaled
+/// (TICK-022 AC3).
 struct SensorResolution: Equatable {
     var width: Int
     var height: Int
@@ -106,6 +104,8 @@ enum CapturedAtFormat {
     static func string(from date: Date) -> String { formatter.string(from: date) }
 }
 
+/// Why a shutter press produced nothing. Distinct from `CaptureUnavailable`, which is about the
+/// session; these are frames that were taken and then refused.
 enum CaptureRejected: Error, Equatable {
     case noImageData
     case belowSensorResolution(delivered: SensorResolution, sensor: SensorResolution)
@@ -161,9 +161,11 @@ enum CaptureValidation {
         capturedAt: Date,
         pixelWidth: Int,
         pixelHeight: Int,
-        /// nil when the device's formats reported no maximum. An unknown sensor size is a gap in
-        /// what can be checked, not evidence the frame is bad, so the comparison is skipped.
-        sensor: SensorResolution? = nil,
+        /// nil when the active format reported no maximum. An unknown full resolution is a gap
+        /// in what can be checked, not evidence the frame is bad, so the comparison is skipped.
+        /// No default: skipping AC3 has to be written down, not achieved by forgetting an
+        /// argument. Every other input this function needs to do its job is required too.
+        sensor: SensorResolution?,
         intrinsics: CameraIntrinsics?,
         hadCalibrationData: Bool,
         gravity: GravitySample?,

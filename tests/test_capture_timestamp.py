@@ -26,7 +26,11 @@ def test_timestamp_is_sampled_at_shutter_not_in_photo_output():
     capture_photo = source.split("func capturePhoto()", 1)[1].split(
         "private func accept(", 1
     )[0]
-    photo_output = source.split("func photoOutput(", 1)[1]
+    # Bounded at the enclosing type's closing brace -- a brace in column 0 -- rather than run to
+    # the end of the file. photoOutput is currently the last method in CaptureController.swift, so
+    # an unbounded slice would scan anything appended below it and blame photoOutput for a Date()
+    # that is nowhere near it.
+    photo_output = source.split("func photoOutput(", 1)[1].split("\n}", 1)[0]
 
     assert "let capturedAtShutter = Date()" in capture_photo, (
         "capturePhoto() must sample Date() at the shutter, next to gravity and zoom"

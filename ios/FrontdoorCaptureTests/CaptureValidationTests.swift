@@ -47,9 +47,6 @@ final class CaptureValidationTests: XCTestCase {
         XCTAssertEqual(record.lens, "builtInWideAngleCamera")
     }
 
-    /// The recorded lens must match the sidecar example in ARCHITECTURE section 4. Derived from
-    /// the AVFoundation raw value it comes out capitalised, and anything filtering on the
-    /// documented spelling then matches nothing.
     // MARK: captured_at
 
     /// captured_at is a required property of the sidecar schema, so a record without it cannot be
@@ -96,6 +93,9 @@ final class CaptureValidationTests: XCTestCase {
         XCTAssertEqual(try result(width: 2016, height: 1512, sensor: .some(nil)).get().pixelWidth, 2016)
     }
 
+    /// The recorded lens must match the sidecar example in ARCHITECTURE section 4. Derived from
+    /// the AVFoundation raw value it comes out capitalised, and anything filtering on the
+    /// documented spelling then matches nothing.
     func testLensNameMatchesTheDocumentedSidecarValue() {
         XCTAssertEqual(CaptureController.lensName, "builtInWideAngleCamera")
     }

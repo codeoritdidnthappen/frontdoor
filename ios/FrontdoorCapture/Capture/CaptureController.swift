@@ -238,7 +238,7 @@ final class CaptureController: ObservableObject {
             GravitySample(x: $0.gravity.x, y: $0.gravity.y, z: $0.gravity.z)
         }
         let capturedAtShutter = Date()
-        let sensor = Self.sensorResolution(of: device)
+        let sensor = Self.fullResolution(of: device)
 
         let token = UUID()
         let delegate = PhotoCaptureDelegate(token: token) { [weak self] finished, result in
@@ -282,18 +282,34 @@ final class CaptureController: ObservableObject {
         }
     }
 
-    /// Applies the rules that decide whether a frame is usable, then publishes or refuses.
-    /// The largest still the sensor can produce, taken across every format the device offers.
-    /// `activeFormat.supportedMaxPhotoDimensions` is only the selected format's ceiling, so a
-    /// session that settled on a smaller format would compare the frame against its own limit and
-    /// call a downscaled still full-resolution -- the exact case AC3 exists to catch.
-    static func sensorResolution(of device: AVCaptureDevice) -> SensorResolution? {
-        let largest = device.formats
-            .flatMap(\.supportedMaxPhotoDimensions)
+    /// The largest still the configured camera can deliver. Read from the active format, and it
+    /// is the same call `applyConfiguration` uses to request the size -- deliberately so. A
+    /// request bound to one ceiling and a check bound to another reject every capture the moment
+    /// they disagree, which is what happens if this reads `device.formats` instead: on a 48MP
+    /// iPhone the device-wide maximum is a format the `.photo` session never selects, so every
+    /// frame would be refused for being smaller than a size the camera was never asked for.
+    ///
+    /// max(by:) rather than `.last`: the array's ordering is not documented, and taking the wrong
+    /// element here would cap the still below what the format can produce.
+    static func maxPhotoDimensions(of device: AVCaptureDevice) -> CMVideoDimensions? {
+        device.activeFormat.supportedMaxPhotoDimensions
             .max { Int($0.width) * Int($0.height) < Int($1.width) * Int($1.height) }
-        return largest.map { SensorResolution(width: Int($0.width), height: Int($0.height)) }
     }
 
+    /// What TICK-022 AC3 compares the delivered frame against: proof the still was not cropped or
+    /// downscaled relative to what the camera was configured to produce.
+    ///
+    /// It does not prove the active format is the device's best. A session that selected a
+    /// lower-resolution format would pass this check. Choosing the format explicitly is not free
+    /// -- depth delivery is what carries intrinsics to a single lens (D-015) and not every format
+    /// supports it -- so which format `.photo` settles on is a question for #24's device work
+    /// rather than something to guess at here.
+    static func fullResolution(of device: AVCaptureDevice) -> SensorResolution? {
+        maxPhotoDimensions(of: device)
+            .map { SensorResolution(width: Int($0.width), height: Int($0.height)) }
+    }
+
+    /// Applies the rules that decide whether a frame is usable, then publishes or refuses.
     private func accept(
         _ captured: CapturedPhoto,
         capturedAt: Date,
@@ -392,7 +408,7 @@ final class CaptureController: ObservableObject {
 
         // Full sensor resolution. Without this the output silently caps at a smaller size, and the
         // intrinsics would then describe a grid the still does not have.
-        if let maxDimensions = device.activeFormat.supportedMaxPhotoDimensions.last {
+        if let maxDimensions = Self.maxPhotoDimensions(of: device) {
             output.maxPhotoDimensions = maxDimensions
         }
 
