@@ -1,12 +1,15 @@
-"""Tests for two-bucket object storage (TICK-012, #20)."""
+"""Tests for two-bucket object storage (TICK-012, #20, TICK-242)."""
 
 import os
+from io import BytesIO
 from pathlib import Path
 
 import boto3
 import pytest
+from botocore.exceptions import ClientError
 from moto import mock_aws
 
+import frontdoor.storage as storage
 from frontdoor.storage import (
     PROBE_KEY,
     StorageDenied,
@@ -50,6 +53,77 @@ def _create_buckets():
     client.create_bucket(Bucket=IMAGES)
     client.create_bucket(Bucket=DEPTH)
     return client
+
+
+def _client_error(code, http=403, operation="GetObject"):
+    return ClientError(
+        {
+            "Error": {"Code": code, "Message": code},
+            "ResponseMetadata": {"HTTPStatusCode": http},
+        },
+        operation,
+    )
+
+
+class _StubS3:
+    """S3 stand-in that can refuse by credential, unlike moto."""
+
+    def __init__(self):
+        self.buckets = set()
+        self.objects = {}
+        self.acl = {}
+        self.get_error = {}
+
+    def client(self, creds):
+        return _StubClient(self, creds)
+
+
+class _StubClient:
+    def __init__(self, account, creds):
+        self._account = account
+        self._creds = creds
+
+    def put_object(self, Bucket, Key, Body):
+        self._authorize(Bucket)
+        body = Body if isinstance(Body, (bytes, bytearray)) else bytes(Body)
+        self._account.objects[(Bucket, Key)] = bytes(body)
+
+    def get_object(self, Bucket, Key):
+        forced = self._account.get_error.get((self._creds.access_key, Bucket))
+        if forced is not None:
+            raise forced
+        self._authorize(Bucket)
+        if Bucket not in self._account.buckets:
+            raise _client_error("NoSuchBucket", 404)
+        data = self._account.objects.get((Bucket, Key))
+        if data is None:
+            raise _client_error("NoSuchKey", 404)
+        return {"Body": BytesIO(data)}
+
+    def delete_object(self, Bucket, Key):
+        self._account.objects.pop((Bucket, Key), None)
+
+    def _authorize(self, bucket):
+        allowed = self._account.acl.get(self._creds.access_key)
+        if allowed is None or bucket not in allowed:
+            raise _client_error("AccessDenied", 403)
+
+
+def _scoped_stub(monkeypatch):
+    _both_env(monkeypatch)
+    account = _StubS3()
+    account.buckets = {IMAGES, DEPTH}
+    account.acl = {"img-key": {IMAGES}, "dep-key": {DEPTH}}
+    monkeypatch.setattr(storage, "_client", account.client)
+    return account
+
+
+def _assert_verify_fails_without_denial(monkeypatch, error):
+    account = _scoped_stub(monkeypatch)
+    account.get_error[("img-key", DEPTH)] = error
+    with pytest.raises(StorageError) as exc:
+        verify()
+    assert exc.type is StorageError
 
 
 def test_env_example_lists_both_credential_sets_and_no_secrets():
@@ -180,3 +254,69 @@ def test_live_loader_credential_is_denied_on_depth():
             depth.delete(PROBE_KEY)
         except StorageError:
             pass
+
+
+def test_verify_passes_when_loader_gets_access_denied(monkeypatch, capsys):
+    _scoped_stub(monkeypatch)
+    verify()
+    assert "loader-denied-on-depth" in capsys.readouterr().out
+
+
+def test_access_denied_is_storage_denied(monkeypatch):
+    _scoped_stub(monkeypatch)
+    with pytest.raises(StorageDenied, match="AccessDenied"):
+        probe_loader_denied_depth(load_image_creds(), DEPTH)
+
+
+def test_http_403_code_is_storage_denied(monkeypatch):
+    account = _scoped_stub(monkeypatch)
+    account.get_error[("img-key", DEPTH)] = _client_error("403", 403)
+    with pytest.raises(StorageDenied, match="403"):
+        probe_loader_denied_depth(load_image_creds(), DEPTH)
+
+
+def test_verify_fails_on_missing_bucket(monkeypatch):
+    _assert_verify_fails_without_denial(monkeypatch, _client_error("NoSuchBucket", 404))
+
+
+def test_verify_fails_on_missing_object(monkeypatch):
+    _assert_verify_fails_without_denial(monkeypatch, _client_error("NoSuchKey", 404))
+
+
+def test_verify_fails_on_network_error(monkeypatch):
+    _assert_verify_fails_without_denial(monkeypatch, ConnectionError("timed out"))
+
+
+def test_verify_fails_on_invalid_access_key(monkeypatch):
+    _assert_verify_fails_without_denial(
+        monkeypatch, _client_error("InvalidAccessKeyId", 403)
+    )
+
+
+def test_verify_fails_on_signature_mismatch(monkeypatch):
+    _assert_verify_fails_without_denial(
+        monkeypatch, _client_error("SignatureDoesNotMatch", 403)
+    )
+
+
+def test_verify_fails_when_both_buckets_are_the_same_bucket(monkeypatch):
+    _both_env(monkeypatch)
+    monkeypatch.setenv("FRONTDOOR_DEPTH_BUCKET", IMAGES)
+    account = _StubS3()
+    account.buckets = {IMAGES}
+    account.acl = {"img-key": {IMAGES}, "dep-key": {IMAGES}}
+    monkeypatch.setattr(storage, "_client", account.client)
+    with pytest.raises(StorageError, match="not denied on the depth bucket"):
+        verify()
+
+
+def test_verify_fails_when_one_token_is_pasted_into_both_credential_sets(monkeypatch):
+    _both_env(monkeypatch)
+    monkeypatch.setenv("FRONTDOOR_DEPTH_ACCESS_KEY", "img-key")
+    monkeypatch.setenv("FRONTDOOR_DEPTH_SECRET_KEY", "img-secret")
+    account = _StubS3()
+    account.buckets = {IMAGES, DEPTH}
+    account.acl = {"img-key": {IMAGES, DEPTH}}
+    monkeypatch.setattr(storage, "_client", account.client)
+    with pytest.raises(StorageError, match="not denied on the depth bucket"):
+        verify()

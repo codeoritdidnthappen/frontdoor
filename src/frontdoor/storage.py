@@ -110,13 +110,14 @@ def _raise_from_client(exc, action, bucket, key):
     if not isinstance(exc, ClientError):
         raise StorageError(f"{action} s3://{bucket}/{key} failed: {exc}") from exc
     code = exc.response.get("Error", {}).get("Code", "")
+    # Authorization refusal only. InvalidAccessKeyId and SignatureDoesNotMatch
+    # are credential errors, not D-020 proof — treating them as denial lets
+    # verify() pass with a dead token.
     if code in {
         "AccessDenied",
         "403",
         "AllAccessDisabled",
         "AccessDeniedException",
-        "InvalidAccessKeyId",
-        "SignatureDoesNotMatch",
     }:
         raise StorageDenied(
             f"{action} s3://{bucket}/{key} denied ({code})"
