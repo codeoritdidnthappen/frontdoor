@@ -248,3 +248,33 @@ something rather than dangling; they are not claimed to be the original wording.
          original wording are not recoverable from the tickets and must be supplied by whoever
          took the decision. Until then this entry establishes that A-2 exists and what it does,
          not when it was agreed. See TICK-231.
+
+## 2026-09-01 — Predicted rise-error budget for Arm A (TICK-041, issue #35)
+
+Source: derivation in docs/rise-error-vs-angle.md, made before the dataset exists so the capture
+protocol can be checked against it. The empirical curve is TICK-075 on the sealed split.
+
+- F-001  Arm A's predicted rise error is  sigma = 1.430 * delta * (d/f) / cos(theta), where delta is
+         per-tap localisation error in pixels, d the camera distance and theta the obliquity that
+         foreshortens the rise. The card-derived scale term is a fixed 15% of the tap term
+         (ratio = rise/card-width = 12.7/85.60), independent of angle and distance.
+- F-002  R-3 IS REFUTED IN PART. Its claim that scale is well conditioned at 2-3 m holds -- the model
+         reproduces R-3's own "roughly 100 px" card span at 2.5 m. Its claim that OBLIQUITY DOMINATES
+         THE BUDGET does not: obliquity contributes only 1/cos(theta) (+15% at 30 degrees, +41% at
+         45), while tap precision and distance enter linearly and dominate. R-3's mitigation text
+         should be restated.
+- F-003  TAP PRECISION IS THE BINDING CONSTRAINT, not angle and not card pixel span. Hitting 0.25"
+         needs delta <= 6.5 px at 2 m and <= 4.3 px at 3 m. An unaided fingertip on an iPhone 16 is
+         worth about 124 image pixels; a 4x loupe about 31. Without pixel-level magnification in the
+         ROI tap UI, Arm A cannot reach the success bar at any distance. Filed as TICK-232 (#135).
+- F-004  THE 3 m DISTANCE CAP DOES NOT SURVIVE. At a realistic delta = 5 px, 3 m exceeds the bar
+         head-on; the cap consistent with the bar is 2.5 m. Distance should be recorded per capture
+         as a first-class condition variable. Filed as TICK-233 (#136) against the capture protocol.
+- F-005  Obliquity that foreshortens the rise (camera above the threshold, looking down) is not the
+         same as obliquity to the side, which does not foreshorten a vertical rise at all. Error
+         therefore depends on the DIRECTION of obliquity, not only its magnitude, and D-019's scalar
+         angle cannot separate the two. Expect unexplained scatter in TICK-075 from this.
+
+Not yet done: TICK-041 requires a second team member to reproduce the algebra independently and
+arrive at the same predicted errors at 0, 15, 30 and 45 degrees. That review has not happened.
+
