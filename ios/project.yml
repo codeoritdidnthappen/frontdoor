@@ -1,0 +1,45 @@
+# XcodeGen spec. The .xcodeproj is generated, not committed: a .pbxproj is a merge-conflict
+# generator and four people are working in this repo. Regenerate with `xcodegen generate`
+# from the ios/ directory.
+name: FrontdoorCapture
+options:
+  bundleIdPrefix: com.frontdoor
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+
+targets:
+  FrontdoorCapture:
+    type: application
+    platform: iOS
+    sources:
+      - path: FrontdoorCapture
+    info:
+      path: FrontdoorCapture/Resources/Info.plist
+      properties:
+        CFBundleDisplayName: Frontdoor
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # D-014: capture geometry is fixed, so the instrument does not rotate.
+        NSCameraUsageDescription: >-
+          Frontdoor photographs storefront entrances to measure threshold rise.
+          The camera is the measuring instrument; without it the app cannot capture.
+        NSMotionUsageDescription: >-
+          Frontdoor records the gravity vector at the instant of capture, which is what
+          makes capture angle a measured quantity rather than an operator's estimate.
+    settings:
+      base:
+        # Free provisioning (D-025, TICK-001). Set DEVELOPMENT_TEAM locally; it is
+        # deliberately not committed, because it differs per team member's Apple ID.
+        CODE_SIGN_STYLE: Automatic
+        PRODUCT_BUNDLE_IDENTIFIER: com.frontdoor.capture
+        TARGETED_DEVICE_FAMILY: "1"
+        SWIFT_VERSION: "5.0"
+    dependencies:
+      - sdk: AVFoundation.framework
+      - sdk: CoreMotion.framework
+    preBuildScripts:
+      - name: "Assert no ARKit (D-015)"
+        script: '"$SRCROOT/Scripts/assert-no-arkit.sh" "$SRCROOT"'
+        basedOnDependencyAnalysis: false

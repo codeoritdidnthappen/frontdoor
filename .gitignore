@@ -11,6 +11,14 @@ __pycache__/
 # Mac
 .DS_Store
 
+# iOS — the .xcodeproj is generated from ios/project.yml by XcodeGen. A .pbxproj is a
+# merge-conflict generator and four people work in this repo, so the spec is the source
+# of truth and the project is not committed.
+ios/*.xcodeproj/
+ios/FrontdoorCapture/Resources/Info.plist
+ios/build/
+ios/DerivedData/
+
 # Logs — transient runner output lives under logs/. Root-level .log files
 # are committed artefacts (CHANGES.log, SEAL_AUDIT.log) and must stay trackable.
 logs/
