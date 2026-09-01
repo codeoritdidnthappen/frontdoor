@@ -106,3 +106,25 @@ def test_manifest_sha256_stable_for_unchanged_content(tmp_path):
     _append(manifest, tmp_path)
     assert manifest_sha256(manifest) == manifest_sha256(manifest)
     assert manifest_sha256(manifest) == hashlib.sha256(manifest.read_bytes()).hexdigest()
+
+
+def test_append_refuses_a_manifest_with_an_unterminated_last_line(tmp_path):
+    """Appending onto a partial row merges two capture records silently (TICK-230, #130)."""
+    manifest = tmp_path / "manifest.csv"
+    manifest.write_text(
+        ",".join(COLUMNS) + "\n" + f"c1,E-001,{'0' * 64},{'1' * 64},{'2' * 64},dev",
+        encoding="utf-8",
+    )
+    for name in ("img", "dep", "car"):
+        (tmp_path / name).write_bytes(name.encode())
+
+    with pytest.raises(ManifestError, match="does not end with a newline"):
+        append_capture(
+            manifest,
+            capture_id="c2",
+            entrance_id="E-002",
+            image_path=tmp_path / "img",
+            depth_path=tmp_path / "dep",
+            sidecar_path=tmp_path / "car",
+        )
+    assert len(manifest.read_text().rstrip("\n").split("\n")) == 2

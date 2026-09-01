@@ -49,6 +49,24 @@ def _row(capture_id, entrance_id, image_sha256, depth_sha256, sidecar_sha256, sp
     }
 
 
+def _require_newline_terminated(path):
+    """Refuse to append to a manifest whose last line was never finished.
+
+    open(path, "a") writes from wherever the file ends, so appending to an
+    unterminated last line concatenates two capture records into one. csv then
+    parses the merged line as a single row with extra fields rather than
+    failing, so the corruption is silent - in the one file D-017 relies on to
+    prove the seal. A truncated last line means an earlier write was
+    interrupted, so this raises rather than repairing: the operator needs to
+    know.
+    """
+    if path.stat().st_size and path.read_bytes()[-1:] != b"\n":
+        raise ManifestError(
+            f"{path} does not end with a newline; a previous append was "
+            "interrupted. Refusing to append onto a partial row."
+        )
+
+
 def _read_rows(path):
     with open(path, encoding="utf-8", newline="") as handle:
         reader = csv.DictReader(handle)
@@ -84,6 +102,7 @@ def append_capture(
         sha256_file(sidecar_path),
         expected_split,
     )
+    _require_newline_terminated(manifest_path)
     existing = _read_rows(manifest_path)
     for row in existing:
         if row["capture_id"] != capture_id:
