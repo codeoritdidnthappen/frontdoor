@@ -162,6 +162,28 @@ def test_real_sha256_digest_accepted(record, field):
     validate_sidecar(record)
 
 
+@pytest.mark.parametrize(
+    "timestamp",
+    [
+        "banana",
+        "",
+        "2026-13-45T99:99:99Z",
+        "2026-08-30",
+        "2026-08-30T14:22:31+00:00",
+    ],
+)
+def test_invalid_captured_at_rejected(record, timestamp):
+    record["captured_at"] = timestamp
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+def test_date_time_format_checker_is_registered():
+    from jsonschema import Draft202012Validator
+
+    assert "date-time" in Draft202012Validator.FORMAT_CHECKER.checkers
+
+
 @pytest.mark.parametrize("field", ["image", "depth"])
 @pytest.mark.parametrize("suffix", ["\n", " ", "\r"])
 def test_sha256_rejects_trailing_whitespace(record, field, suffix):
@@ -183,5 +205,13 @@ def test_sha256_rejects_leading_newline(record, field):
 def test_sha256_rejects_internal_whitespace(record, field):
     digest = hashlib.sha256(b"sidecar-hash-fixture").hexdigest()
     record[field]["sha256"] = digest[:32] + " " + digest[32:]
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+@pytest.mark.parametrize("suffix", ["\n", " ", "\r"])
+def test_captured_at_rejects_trailing_whitespace(record, suffix):
+    """A bare $ matches before a trailing newline under Python re; the anchor must not (TICK-229)."""
+    record["captured_at"] = "2026-08-30T14:22:31Z" + suffix
     with pytest.raises(ValidationError):
         validate_sidecar(record)
