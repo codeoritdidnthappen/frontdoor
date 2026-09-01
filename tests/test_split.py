@@ -1,6 +1,8 @@
 """Tests for deterministic split assignment (TICK-011, #19)."""
 
+import io
 import random
+import sys
 import unicodedata
 from collections import Counter
 
@@ -85,3 +87,40 @@ def test_noncanonical_entrance_id_rejected(entrance_id):
 
 def test_canonical_entrance_id_returns_the_canonical_form():
     assert canonical_entrance_id(" e-014 ") == "E-014"
+
+
+def _cli_argv(capsys, ids):
+    main(ids)
+    return capsys.readouterr().out
+
+
+def _cli_stdin(capsys, monkeypatch, text):
+    monkeypatch.setattr(sys, "stdin", io.StringIO(text))
+    main([])
+    return capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("argv_ids", "stdin_text"),
+    [
+        (["E-002 "], "E-002 \n"),
+        ([" E-002"], " E-002\n"),
+        (["E-002\t"], "E-002\t\n"),
+        (
+            ["E-001\r", "E-002\r", "E-014\r"],
+            "E-001\r\nE-002\r\nE-014\r\n",
+        ),
+    ],
+)
+def test_cli_argv_and_stdin_agree(capsys, monkeypatch, argv_ids, stdin_text):
+    argv_out = _cli_argv(capsys, argv_ids)
+    stdin_out = _cli_stdin(capsys, monkeypatch, stdin_text)
+    assert argv_out == stdin_out
+
+
+def test_crlf_list_through_argv_matches_stdin(capsys, monkeypatch):
+    expected = "E-001,dev\nE-002,sealed\nE-014,sealed\n"
+    stdin_out = _cli_stdin(capsys, monkeypatch, "E-001\r\nE-002\r\nE-014\r\n")
+    argv_out = _cli_argv(capsys, ["E-001\r", "E-002\r", "E-014\r"])
+    assert stdin_out == expected
+    assert argv_out == expected
