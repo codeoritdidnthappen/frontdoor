@@ -1,10 +1,23 @@
 """Tests for the evaluation harness seal (TICK-070, TICK-071)."""
 
+import sys
+
 import pytest
 
 import frontdoor.eval as eval_mod
 import frontdoor.seal_audit as seal_audit
 from frontdoor.eval import main
+
+
+def _run_cli(monkeypatch, *args):
+    """Invoke main the way a terminal does.
+
+    --include-sealed is refused when argv is passed explicitly (TICK-070 AC4: the unsealing run is
+    a deliberate act at a terminal, not something a notebook or an import can perform), so the
+    tests drive it through sys.argv rather than around the guard they exist to protect.
+    """
+    monkeypatch.setattr(sys, "argv", ["frontdoor.eval", *args])
+    return main()
 from frontdoor.loader import LoaderError
 from tests.test_loader import _write_capture
 
@@ -61,7 +74,7 @@ def test_eval_include_sealed_loads_sealed_after_audit(monkeypatch, tmp_path):
         return images[capture_id]
 
     _point_harness(monkeypatch, tmp_path, manifest, sidecar_dir, get_image)
-    assert main(["--include-sealed"]) == 0
+    assert _run_cli(monkeypatch, "--include-sealed") == 0
     assert reads == ["cap-calib", "cap-dev", "cap-sealed"]
     line = audit.read_text(encoding="utf-8").splitlines()
     assert len(line) == 1
@@ -78,7 +91,7 @@ def test_eval_refuses_dirty_tree_before_any_read(monkeypatch, tmp_path):
 
     _point_harness(monkeypatch, tmp_path, manifest, sidecar_dir, get_image)
     monkeypatch.setattr(seal_audit, "_working_tree_dirty", lambda repo: True)
-    assert main(["--include-sealed"]) == 1
+    assert _run_cli(monkeypatch, "--include-sealed") == 1
     assert reads == []
     audit = tmp_path / "SEAL_AUDIT.log"
     assert not audit.exists() or audit.read_text(encoding="utf-8") == ""
@@ -103,7 +116,7 @@ def test_crash_mid_unseal_leaves_the_audit_line(monkeypatch, tmp_path):
 
     _point_harness(monkeypatch, tmp_path, manifest, sidecar_dir, get_image)
     with pytest.raises(LoaderError, match="boom"):
-        main(["--include-sealed"])
+        _run_cli(monkeypatch, "--include-sealed")
     lines = (tmp_path / "SEAL_AUDIT.log").read_text(encoding="utf-8").splitlines()
     assert len(lines) == 1
     assert "--include-sealed" in lines[0]

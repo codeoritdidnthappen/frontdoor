@@ -22,6 +22,7 @@ from pathlib import Path
 from jsonschema import ValidationError
 
 from frontdoor.manifest import read_manifest, sha256_file
+from frontdoor.split import InvalidEntranceId, assign_split
 from frontdoor.sidecar import validate_sidecar
 
 
@@ -44,14 +45,46 @@ class DatasetLoader:
         self.sidecar_dir = Path(sidecar_dir)
         self._get_image = get_image
 
+    @staticmethod
+    def is_sealed(row):
+        """Whether this capture is sealed, derived from the seed rather than read from the CSV.
+
+        D-007 defines the split as a pure function of the entrance ID and the committed seed, and
+        `assign_split` is that function. Comparing the manifest's `split` cell to the literal
+        "sealed" instead makes the seal depend on a CSV string: a cell reading `dev`, `DEV`,
+        `Sealed`, ` sealed` or empty would then read sealed bytes on a default run, with no flag,
+        no error and no audit line. `manifest.py` already re-derives the split when it writes a
+        row; this is the same check on the way back in, so the column is a cache rather than an
+        authority.
+        """
+        entrance_id = (row.get("entrance_id") or "").strip()
+        try:
+            return assign_split(entrance_id) == "sealed"
+        except InvalidEntranceId as exc:
+            # An ID the seed cannot classify is not evidence that the capture is unsealed.
+            raise LoaderError(
+                f"capture_id {row.get('capture_id')!r} has entrance_id {entrance_id!r}, "
+                f"which the split seed cannot classify: {exc}. Refusing to treat it as unsealed."
+            ) from exc
+
     def _row(self, capture_id):
+        found = None
         for row in read_manifest(self.manifest_path):
-            if row["capture_id"] == capture_id:
-                return row
-        raise LoaderError(
-            f"capture_id {capture_id!r} is not in the manifest; "
-            "refusing to load unverified bytes"
-        )
+            if row["capture_id"] != capture_id:
+                continue
+            # A duplicate id would let whichever row comes first decide the seal.
+            if found is not None:
+                raise LoaderError(
+                    f"capture_id {capture_id!r} appears more than once in the manifest; "
+                    "refusing to guess which row governs the seal"
+                )
+            found = row
+        if found is None:
+            raise LoaderError(
+                f"capture_id {capture_id!r} is not in the manifest; "
+                "refusing to load unverified bytes"
+            )
+        return found
 
     def _image_bytes(self, capture_id):
         getter = self._get_image
@@ -69,15 +102,21 @@ class DatasetLoader:
             ) from exc
 
     def load(self, capture_id):
-        row = self._row(capture_id)
-        if row["split"] == "sealed":
-            raise LoaderError(
-                f"capture_id {capture_id!r} is sealed (split={row['split']}); "
-                "refusing to load without --include-sealed"
-            )
-        return self._load_row(row)
+        return self._load_row(self._row(capture_id))
 
-    def _load_row(self, row):
+    def _load_row(self, row, *, allow_sealed=False):
+        """Reads one capture. The seal is checked HERE, not in `load`.
+
+        `eval.py` calls this method directly on the unsealing path, so a check living only in
+        `load` was a check the production caller walked past. The only caller permitted to pass
+        `allow_sealed=True` is the audited `--include-sealed` run.
+        """
+        if self.is_sealed(row) and not allow_sealed:
+            raise LoaderError(
+                f"capture_id {row['capture_id']!r} is sealed (split=sealed, derived from "
+                f"entrance {row.get('entrance_id')!r} and the committed seed); "
+                "refusing to load without an audited --include-sealed run"
+            )
         capture_id = row["capture_id"]
         sidecar_path = self.sidecar_dir / f"{capture_id}.json"
         if not sidecar_path.is_file():
@@ -112,7 +151,7 @@ class DatasetLoader:
     def list_captures(self, *, entrance_id=None, split=None):
         ids = []
         for row in read_manifest(self.manifest_path):
-            if row["split"] == "sealed":
+            if self.is_sealed(row):
                 continue
             if entrance_id is not None and row["entrance_id"] != entrance_id:
                 continue

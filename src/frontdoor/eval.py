@@ -8,6 +8,7 @@ flag, environment variable, or default argument that turns that on.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -15,7 +16,27 @@ from frontdoor.loader import DatasetLoader
 from frontdoor.manifest import read_manifest
 from frontdoor.seal_audit import SealAuditError, record_unsealing
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+def _repo_root():
+    """The checkout this run was launched from, not wherever the package happens to live.
+
+    `Path(__file__).parents[2]` is the repo root only for a source checkout or editable install.
+    Installed normally, or run from a different clone, it silently binds the manifest, the audit log
+    and the dirty-tree check to another tree — so an unsealing run can read one checkout's sealed
+    data and write the audit line into a different repository. The audit trail is the evidence the
+    seal was opened once against a known state of the code; it has to describe the tree that was
+    actually opened.
+    """
+    root = Path(
+        subprocess.run(
+            ["git", "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, check=False,
+        ).stdout.strip()
+        or Path.cwd()
+    )
+    return root.resolve()
+
+
+REPO_ROOT = _repo_root()
 MANIFEST = REPO_ROOT / "data" / "manifest.csv"
 SIDECARS = REPO_ROOT / "data" / "sidecars"
 AUDIT_LOG = REPO_ROOT / "SEAL_AUDIT.log"
@@ -30,6 +51,17 @@ def _image_getter():
 def main(argv=None):
     args = sys.argv[1:] if argv is None else list(argv)
     include_sealed = "--include-sealed" in args
+    # TICK-070 AC4: the unsealing run is a deliberate act at a terminal, not something a notebook or
+    # an import can perform. Passing argv explicitly is how a library caller would reach it, so that
+    # route is refused rather than audited.
+    if include_sealed and argv is not None:
+        print(
+            "--include-sealed is only accepted from the command line. "
+            "Run `python -m frontdoor.eval --include-sealed` in a terminal; the unsealing run is "
+            "audited and happens once (D-017).",
+            file=sys.stderr,
+        )
+        return 2
     leftover = [item for item in args if item != "--include-sealed"]
     if leftover:
         print(
@@ -51,7 +83,7 @@ def main(argv=None):
             print(exc, file=sys.stderr)
             return 1
         for row in sorted(read_manifest(MANIFEST), key=lambda r: r["capture_id"]):
-            loader._load_row(row)
+            loader._load_row(row, allow_sealed=True)
         return 0
     for capture_id in loader.list_captures():
         loader.load(capture_id)
