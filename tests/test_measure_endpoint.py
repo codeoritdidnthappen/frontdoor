@@ -13,7 +13,12 @@ from pathlib import Path
 import pytest
 from jsonschema import Draft202012Validator, ValidationError
 
-from frontdoor_server.app import RESPONSE_SCHEMA, create_app, validate_measure_response
+from frontdoor_server.app import (
+    ERROR_SCHEMA,
+    RESPONSE_SCHEMA,
+    create_app,
+    validate_measure_response,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -327,3 +332,53 @@ def test_a_malformed_arm_names_the_field_that_is_wrong(client, sidecar):
     with pytest.raises(ValidationError) as exc:
         validate_measure_response(body)
     assert "interval_in" in exc.value.message
+
+
+def _error_schema():
+    return ERROR_SCHEMA
+
+
+def _error_validator():
+    return Draft202012Validator(ERROR_SCHEMA)
+
+
+# --- TICK-225 (#113): every response carries the error contract, not just /measure's own ---------
+#
+# The consumer is an iOS client parsing JSON over a venue network. A typo'd path, a stale endpoint
+# after redeployment, or an oversized upload on a slow link are exactly the conditions the TICK-064
+# fallback chain exists for — and meeting HTML where it expects JSON turns a clear message into a
+# parse failure in front of an audience.
+
+FRAMEWORK_ERROR_CASES = [
+    ("unknown path", "get", "/no-such-endpoint", 404),
+    ("path with trailing slash", "get", "/health/", 404),
+    ("wrong method on /measure", "get", "/measure", 405),
+    ("wrong method on /health", "post", "/health", 405),
+]
+
+
+@pytest.mark.parametrize(
+    "name,method,path,expected", FRAMEWORK_ERROR_CASES, ids=[c[0] for c in FRAMEWORK_ERROR_CASES]
+)
+def test_framework_errors_carry_the_json_contract(client, name, method, path, expected):
+    response = getattr(client, method)(path)
+    assert response.status_code == expected
+    assert response.headers["Content-Type"].startswith("application/json"), (
+        f"{name} returned {response.headers.get('Content-Type')}; a JSON client cannot read HTML"
+    )
+    _error_validator().validate(response.get_json())
+
+
+def test_an_oversized_body_is_json_not_html(client):
+    response = client.post("/measure", data={"sidecar": "x" * (20 * 1024 * 1024)})
+    assert response.status_code == 413
+    assert response.headers["Content-Type"].startswith("application/json")
+    _error_validator().validate(response.get_json())
+
+
+def test_every_framework_error_token_is_in_the_committed_enum(client):
+    """The schema is the contract. A message the enum does not know about is not in it."""
+    allowed = set(_error_schema()["properties"]["error"]["enum"])
+    for _, method, path, _status in FRAMEWORK_ERROR_CASES:
+        token = getattr(client, method)(path).get_json()["error"]
+        assert token in allowed, f"{token!r} is returned but absent from the error enum"
