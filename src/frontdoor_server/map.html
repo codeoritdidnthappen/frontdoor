@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>frontdoor — screened entrances</title>
+<style>
+  html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
+  #map { height: 100%; }
+
+  #banner {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    z-index: 5; background: #fff; border: 1px solid #d1d5db; border-radius: 8px;
+    padding: 10px 16px; font-size: 14px; color: #374151;
+    box-shadow: 0 2px 8px rgba(0,0,0,.15); max-width: 80%;
+  }
+  #banner:empty { display: none; }
+
+  /* Exactly two stamp states. Green-or-Gray is enforced server-side by
+     frontdoor.map_states.state_for_row; stampClass() below mirrors it as a
+     total, default-neutral guard. There is deliberately no third class. */
+  .stamp {
+    display: flex; align-items: center; gap: 6px;
+    padding: 5px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0,0,0,.25);
+    cursor: pointer;
+  }
+  .stamp::before { content: ""; width: 8px; height: 8px; border-radius: 50%; }
+  .stamp-verified { background: #15803d; color: #fff; }
+  .stamp-verified::before { background: #bbf7d0; }
+  .stamp-neutral { background: #f3f4f6; color: #4b5563; border: 1px solid #d1d5db; }
+  .stamp-neutral::before { background: #9ca3af; }
+
+  @keyframes stamp-drop {
+    0%   { transform: translateY(-60px); opacity: 0; }
+    70%  { transform: translateY(4px); opacity: 1; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+  .stamp-dropping { animation: stamp-drop .45s ease-out backwards; }
+
+  .card { font-size: 13px; color: #1f2937; max-width: 280px; }
+  .card h3 { margin: 0 0 2px; font-size: 14px; }
+  .card .state { font-weight: 600; margin: 0 0 8px; }
+  .card table { border-collapse: collapse; width: 100%; }
+  .card td { padding: 2px 0; vertical-align: top; }
+  .card td:last-child { text-align: right; color: #4b5563; white-space: nowrap; padding-left: 10px; }
+  .card .meta { margin: 8px 0 0; color: #6b7280; }
+  .card .note { margin: 8px 0 0; color: #6b7280; font-style: italic; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div id="banner"></div>
+<script>
+"use strict";
+
+var VERIFIED_STATE = "verified_accessible";
+
+// Mirror of frontdoor.map_states.state_for_row's output contract: total and
+// default-neutral. Only the exact server-computed verified state renders the
+// green stamp; every other value — including anything unexpected — renders
+// neutral. No input can select a third look.
+function stampClass(state) {
+  return state === VERIFIED_STATE ? "stamp-verified" : "stamp-neutral";
+}
+
+function banner(text) {
+  document.getElementById("banner").textContent = text || "";
+}
+
+function el(tag, className, text) {
+  var node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+}
+
+function stampElement(pin, index) {
+  var stamp = el("div", "stamp " + stampClass(pin.state) + " stamp-dropping",
+                 pin.label || "Not Yet Checked");
+  stamp.style.animationDelay = (index * 60) + "ms";
+  stamp.addEventListener("animationend", function () {
+    stamp.classList.remove("stamp-dropping");
+  });
+  return stamp;
+}
+
+function checklistCard(pin, note) {
+  var card = el("div", "card");
+  card.appendChild(el("h3", null, pin.name || "Unnamed business"));
+  card.appendChild(el("p", "state", pin.label || "Not Yet Checked"));
+
+  var table = el("table");
+  var hasData = false;
+  (pin.checklist || []).forEach(function (item) {
+    var row = el("tr");
+    row.appendChild(el("td", null, item.label));
+    var value = item.observation_label || "Not assessed";
+    if (typeof item.confidence === "number" && item.confidence >= 0 && item.confidence <= 1) {
+      value += " (" + Math.round(item.confidence * 100) + "% confidence)";
+      hasData = true;
+    }
+    if (item.observation && item.observation !== "not_assessed") hasData = true;
+    row.appendChild(el("td", null, value));
+    table.appendChild(row);
+  });
+  card.appendChild(table);
+
+  if (!hasData) {
+    card.appendChild(el("p", "meta", "No screening data yet for this location."));
+  }
+  var freshness = pin.imagery_date
+    ? "Imagery date: " + pin.imagery_date
+    : "Imagery date unknown";
+  if (pin.ai_estimated) freshness += " · AI-estimated";
+  card.appendChild(el("p", "meta", freshness));
+  card.appendChild(el("p", "note", note));
+  return card;
+}
+
+async function loadMapsApi(key) {
+  await new Promise(function (resolve, reject) {
+    var script = document.createElement("script");
+    script.src = "https://maps.googleapis.com/maps/api/js?key=" +
+      encodeURIComponent(key) + "&v=weekly&libraries=marker&loading=async&callback=__mapsReady";
+    window.__mapsReady = resolve;
+    script.onerror = function () { reject(new Error("Google Maps failed to load")); };
+    document.head.appendChild(script);
+  });
+}
+
+async function init() {
+  var params = new URLSearchParams(location.search);
+  var key = params.get("key");
+  if (!key) {
+    banner("Add your Google Maps API key to the URL: ?key=YOUR_KEY");
+    return;
+  }
+
+  var payload = { note: "", pins: [], dataset_error: "map data request failed" };
+  try {
+    var response = await fetch("map/data");
+    if (response.ok) payload = await response.json();
+  } catch (err) { /* degrade to the empty payload */ }
+
+  await loadMapsApi(key);
+  var { Map, InfoWindow } = await google.maps.importLibrary("maps");
+  var { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
+
+  var map = new Map(document.getElementById("map"), {
+    center: { lat: 0, lng: 0 },
+    zoom: 2,
+    mapId: params.get("mapId") || "DEMO_MAP_ID",
+  });
+
+  var pins = payload.pins || [];
+  if (!pins.length) {
+    banner(payload.dataset_error
+      ? "No map data loaded (" + payload.dataset_error + ")"
+      : "No screened entrances in the dataset yet.");
+    return;
+  }
+
+  var infoWindow = new InfoWindow();
+  var bounds = new google.maps.LatLngBounds();
+  pins.forEach(function (pin, index) {
+    bounds.extend(pin.location);
+    var marker = new AdvancedMarkerElement({
+      map: map,
+      position: pin.location,
+      content: stampElement(pin, index),
+      title: pin.name || "",
+    });
+    marker.addListener("gmp-click", function () {
+      infoWindow.setContent(checklistCard(pin, payload.note));
+      infoWindow.open({ anchor: marker, map: map });
+    });
+  });
+  map.fitBounds(bounds, 80);
+}
+
+init().catch(function (err) { banner(String(err)); });
+</script>
+</body>
+</html>

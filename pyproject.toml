@@ -19,4 +19,4 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 frontdoor = ["*.json"]
-frontdoor_server = ["*.json"]
+frontdoor_server = ["*.json", "*.html"]

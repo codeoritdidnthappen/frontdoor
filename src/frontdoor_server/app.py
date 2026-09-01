@@ -13,6 +13,7 @@ from flask import Flask, request
 from jsonschema import Draft202012Validator, ValidationError
 
 from frontdoor.sidecar import validate_sidecar
+from frontdoor_server.map_view import map_page
 
 RESPONSE_SCHEMA = json.loads(
     resources.files("frontdoor_server")
@@ -138,6 +139,8 @@ def validate_measure_response(body):
 
 def create_app():
     app = Flask(__name__)
+    # Public stamp map: GET /map and GET /map/data (TICK-247).
+    app.register_blueprint(map_page)
 
     @app.get("/health")
     def health():
