@@ -160,3 +160,28 @@ def test_invalid_sha256_rejected(record, field, digest):
 def test_real_sha256_digest_accepted(record, field):
     record[field]["sha256"] = hashlib.sha256(b"sidecar-hash-fixture").hexdigest()
     validate_sidecar(record)
+
+
+@pytest.mark.parametrize("field", ["image", "depth"])
+@pytest.mark.parametrize("suffix", ["\n", " ", "\r"])
+def test_sha256_rejects_trailing_whitespace(record, field, suffix):
+    digest = hashlib.sha256(b"sidecar-hash-fixture").hexdigest()
+    record[field]["sha256"] = digest + suffix
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+@pytest.mark.parametrize("field", ["image", "depth"])
+def test_sha256_rejects_leading_newline(record, field):
+    digest = hashlib.sha256(b"sidecar-hash-fixture").hexdigest()
+    record[field]["sha256"] = "\n" + digest
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+@pytest.mark.parametrize("field", ["image", "depth"])
+def test_sha256_rejects_internal_whitespace(record, field):
+    digest = hashlib.sha256(b"sidecar-hash-fixture").hexdigest()
+    record[field]["sha256"] = digest[:32] + " " + digest[32:]
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
