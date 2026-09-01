@@ -1,5 +1,6 @@
 """Tests for the capture sidecar schema and validator (TICK-010, #18)."""
 
+import hashlib
 import json
 import re
 from pathlib import Path
@@ -133,5 +134,104 @@ def test_roi_wrong_corner_count_rejected(record, count):
 
 def test_unknown_field_rejected(record):
     record["measured_rise_in"] = 0.5
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+@pytest.mark.parametrize("field", ["image", "depth"])
+@pytest.mark.parametrize(
+    "digest",
+    [
+        "",
+        "not-a-hash",
+        "deadbeef",
+        "a" * 65,
+        "g" * 64,
+        "A" * 64,
+    ],
+)
+def test_invalid_sha256_rejected(record, field, digest):
+    record[field]["sha256"] = digest
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+@pytest.mark.parametrize("field", ["image", "depth"])
+def test_real_sha256_digest_accepted(record, field):
+    record[field]["sha256"] = hashlib.sha256(b"sidecar-hash-fixture").hexdigest()
+    validate_sidecar(record)
+
+
+@pytest.mark.parametrize(
+    "timestamp",
+    [
+        "banana",
+        "",
+        "2026-13-45T99:99:99Z",
+        "2026-08-30",
+        "2026-08-30T14:22:31+00:00",
+    ],
+)
+def test_invalid_captured_at_rejected(record, timestamp):
+    record["captured_at"] = timestamp
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+def test_date_time_format_checker_is_registered():
+    from jsonschema import Draft202012Validator
+
+    assert "date-time" in Draft202012Validator.FORMAT_CHECKER.checkers
+
+
+@pytest.mark.parametrize(
+    "entrance_id",
+    ["e-014", "E-014 ", " E-014", "E-14", "E-0014", ""],
+)
+def test_noncanonical_entrance_id_rejected_by_schema(record, entrance_id):
+    record["entrance_id"] = entrance_id
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+@pytest.mark.parametrize("field", ["image", "depth"])
+@pytest.mark.parametrize("suffix", ["\n", " ", "\r"])
+def test_sha256_rejects_trailing_whitespace(record, field, suffix):
+    digest = hashlib.sha256(b"sidecar-hash-fixture").hexdigest()
+    record[field]["sha256"] = digest + suffix
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+@pytest.mark.parametrize("field", ["image", "depth"])
+def test_sha256_rejects_leading_newline(record, field):
+    digest = hashlib.sha256(b"sidecar-hash-fixture").hexdigest()
+    record[field]["sha256"] = "\n" + digest
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+@pytest.mark.parametrize("field", ["image", "depth"])
+def test_sha256_rejects_internal_whitespace(record, field):
+    digest = hashlib.sha256(b"sidecar-hash-fixture").hexdigest()
+    record[field]["sha256"] = digest[:32] + " " + digest[32:]
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+@pytest.mark.parametrize("suffix", ["\n", " ", "\r"])
+def test_captured_at_rejects_trailing_whitespace(record, suffix):
+    """A bare $ matches before a trailing newline under Python re; the anchor must not (TICK-229)."""
+    record["captured_at"] = "2026-08-30T14:22:31Z" + suffix
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+@pytest.mark.parametrize("suffix", ["\n", " ", "\r"])
+def test_entrance_id_rejects_trailing_whitespace(record, suffix):
+    """One spelling per entrance: "E-014\\n" must not validate alongside "E-014" (TICK-229)."""
+    record["entrance_id"] = "E-014" + suffix
     with pytest.raises(ValidationError):
         validate_sidecar(record)

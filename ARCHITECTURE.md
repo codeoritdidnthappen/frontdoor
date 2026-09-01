@@ -89,8 +89,8 @@ CoreMotion device motion. No ARKit (D-014, §2).
   "captured_at":    "2026-08-30T14:22:31Z",
   "device_model":   "iPhone15,3",
   "lens":           "builtInWideAngleCamera",
-  "image":          {"path": "...", "sha256": "...", "width": 4032, "height": 3024},
-  "depth":          {"path": "...", "sha256": "..."},
+  "image":          {"path": "...", "sha256": "6105d6cc76af400325e94d588ce511be5bfdbb73b437dc51eca43917d7a43e3d", "width": 4032, "height": 3024},
+  "depth":          {"path": "...", "sha256": "ded32129b05bfc16ce501e654a169960583352cbc974824ed16ce94855904386"},
   "intrinsics":     {"fx": 2934.1, "fy": 2934.1, "cx": 2016.4, "cy": 1512.7},
   "gravity":        [0.02, -0.98, -0.19],
   "card_placement": "vertical",
@@ -219,13 +219,18 @@ reference (D-003). Whether LiDAR clears your own bar is an open empirical questi
 
 ## 10. Assumptions
 
-- **A-1. Capture devices are LiDAR-capable iPhones.** Evidence therefore comes from Pro-class
-  cameras; generalisation to other phones is stated as a limitation, not shown as a result.
+- **A-1. FALSIFIED — one LiDAR-capable iPhone, not a fleet.** The team holds an iPhone 16 Pro
+  (LiDAR), an iPhone 16 (no depth sensor) and two Android devices, which cannot run an
+  AVFoundation capture app at all. Evidence comes from **two devices of one generation across two
+  camera tiers**, not from Pro-class cameras uniformly; `device_model` is recorded per capture so
+  device remains visible to the error analysis. See TEAM.md §2.
 - **A-2. Calibration-data delivery works on the team's actual devices.** Verified day one (R-9).
   ARKit is the fallback if it does not, at the resolution cost described in §2.
-- **A-3. At least three capture devices are available.** The team roster is unassigned (O-1), so
-  device count is unknown. Fewer than three serialises field capture and the 40–60 entrance target
-  needs revisiting — a schedule change, not an architecture change.
+- **A-3. FALSIFIED — two capture-capable devices, one with LiDAR.** R-8 has fired; its response
+  rule is recorded in TEAM.md §4 (cut the entrance target, floor of 30, drop Arm A′ captures before
+  entrances). Note that cutting the target does not clear the binding constraint: D-020 requires
+  LiDAR on every entrance and only one device produces it, so capture serialises onto a single
+  operator regardless of target. Relaxing D-020 to a matched subset is an open protocol decision.
 - **A-4. The threshold rise presents a usable planar riser face.** Heavily bevelled or rounded
   thresholds are a documented failure class, as glass doors already are.
 

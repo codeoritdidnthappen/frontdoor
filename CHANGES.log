@@ -192,7 +192,26 @@ Source: TEAM.md device audit (TICK-003, #15) and a cost decision taken by the te
          Supersedes: D-010's "ownership assigned by role, names pending", O-1's self-assign
          convention, and the "Unassigned by design" footer previously carried by 90 tickets.
 
-## Decision-log gap — D-021 to D-024 reconstructed, NOT original text
+## 2026-08-31 — Canonical entrance ID form (TICK-217, issue #105)
+
+Source: GitHub issue #105. Settled before first capture so a mistyped ID cannot silently
+land an entrance in a different split (D-007, D-017).
+
+- Form: ASCII `E-` followed by exactly three digits (`E-014`). Character set is ASCII
+  as constrained by that pattern; length is 5 characters.
+- Case: the prefix is uppercase `E`. Lowercase `e-014` is canonicalised to `E-014`.
+- Surrounding whitespace (spaces, tabs, CR, LF) is stripped. Internal whitespace is rejected.
+- Unicode: NFC normalisation is applied before the pattern check. NFD/NFC pairs of the same
+  string therefore agree; IDs that are not `E-NNN` after NFC+strip+upper are rejected, not
+  coerced (accented letters, fullwidth letters, extra digits).
+- Canonicalise case and surrounding whitespace, because those are the operator errors that
+  would otherwise split one entrance in two. Reject everything else, so a sidecar cannot
+  store an ID the split tool would refuse.
+- Enforced in `frontdoor.split.canonical_entrance_id`, used by `assign_split` and the CLI,
+  and by the sidecar schema `entrance_id` pattern. The capture app (TICK-024, #28) must
+  create IDs in this form; it does not yet specify one.
+
+## Decision-log gap — D-021 to D-024 and Amendment A-2 reconstructed, NOT original text
 
 These four decision IDs are referenced throughout the ticket backlog but were never written into
 this log. The statements below are RECONSTRUCTED from how each ID is used in tickets, and need
@@ -214,3 +233,18 @@ something rather than dangling; they are not claimed to be the original wording.
 - D-024  (reconstructed) One capture writes one image, one depth map and one JSON sidecar, hashed
          at the shutter press, with entrance ID, caliper ground truth and condition tags bound in
          at capture time rather than reconciled afterwards. Referenced by: #32, #83, #85.
+
+- A-2    (reconstructed) AMENDMENT TO THE PRE-REGISTRATION. The pre-registered success criterion
+         -- MAE <= 0.25" on threshold rise, on the sealed test split (PRD section 2, D-008) -- is
+         judged against ARM A ONLY. Arms A-prime, B and C are reported without any pass/fail bar.
+         Reason, as stated in the tickets that cite it: leaving the arm unnamed would let the
+         hypothesis be scored against whichever arm looked best once results were seen, which is
+         the exact failure D-007 exists to prevent. Referenced by: #7, #10, #37, #56, #63, #71,
+         #73, #90, #93.
+         RECONSTRUCTED FROM TICKET USAGE, and more urgently in need of confirmation than the four
+         above: PRD section 2 states that nothing in it changes after 2026-08-28 and that
+         amendments are logged here with a reason AND REPORTED AS SUCH AT DEMO DAY. Recorded here
+         so the amendment is not silently absent from the log, but the DATE it was taken and its
+         original wording are not recoverable from the tickets and must be supplied by whoever
+         took the decision. Until then this entry establishes that A-2 exists and what it does,
+         not when it was agreed. See TICK-231.

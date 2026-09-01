@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/codeoritdidnthappen/frontdoor/blob/main/src/frontdoor_server/measure_response.schema.json",
+  "title": "Measure response",
+  "description": "Response from POST /measure. One entry per scale-recovery arm (ARCHITECTURE.md section 5). Frozen by TICK-060 before any metrology exists, so client rendering (TICK-063) and the library (TICK-043 onward) proceed in parallel; TICK-061 fills real values in behind this identical shape. Two cross-field constraints on arm_result cannot be expressed in JSON Schema and are enforced by validate_measure_response() in frontdoor_server/app.py: the interval must not be inverted, and rise_in must lie inside it. Validating against this schema alone is therefore not sufficient (TICK-223).",
+  "type": "object",
+  "properties": {
+    "stub": {
+      "type": "boolean",
+      "description": "True while the endpoint returns fixed placeholder values instead of measurements. TICK-061 sets it false. Clients must surface it, so stub output is never mistaken for a measurement."
+    },
+    "capture_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Echoed from the request sidecar, so a response is always tied back to the capture it came from."
+    },
+    "arms": {
+      "type": "object",
+      "description": "Keyed by arm name from the metrology registry (TICK-040). All four keys are required, and each is either a result or an explicit absence — so a client is never left to guess whether a missing arm was cut, failed, or is unavailable here (TICK-222).",
+      "properties": {
+        "A": { "$ref": "#/$defs/arm" },
+        "A_prime": { "$ref": "#/$defs/arm" },
+        "B": { "$ref": "#/$defs/arm" },
+        "C": { "$ref": "#/$defs/arm" }
+      },
+      "required": ["A", "A_prime", "B", "C"],
+      "additionalProperties": false
+    }
+  },
+  "required": ["stub", "capture_id", "arms"],
+  "additionalProperties": false,
+  "$defs": {
+    "arm": {
+      "description": "One arm is either a measurement or a stated absence, never nothing at all. Discriminated on absent_reason rather than expressed as a bare oneOf, so a malformed arm reports the field that is actually wrong instead of 'not valid under any of the given schemas'.",
+      "if": { "type": "object", "required": ["absent_reason"] },
+      "then": { "$ref": "#/$defs/arm_absent" },
+      "else": { "$ref": "#/$defs/arm_result" }
+    },
+    "arm_result": {
+      "type": "object",
+      "description": "One arm's answer for one capture: a measurement, its interval, and a decision per ADA line.",
+      "properties": {
+        "rise_in": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Threshold rise in inches. Always present, including when a decision is abstain. Cannot be negative — a threshold does not rise by less than nothing. Deliberately has no upper bound: an implausibly large rise is a measurement error for TICK-207 to surface, and capping it here would turn a visible bad number into a contract failure. Must lie within interval_in; that is enforced in code, not here."
+        },
+        "interval_in": { "$ref": "#/$defs/interval" },
+        "decisions": { "$ref": "#/$defs/decisions" }
+      },
+      "required": ["rise_in", "interval_in", "decisions"],
+      "additionalProperties": false
+    },
+    "arm_absent": {
+      "type": "object",
+      "description": "This arm produced no measurement, and says why. TICK-063 renders the three reasons differently: a cut arm is expected, a failed arm is about this capture, an unavailable arm is about this deployment.",
+      "properties": {
+        "absent_reason": {
+          "enum": ["cut", "failed", "unavailable"],
+          "description": "cut — dropped by a project decision, e.g. Arm C on 2026-09-02 per D-013. failed — this arm could not measure this capture. unavailable — this arm is not served by this deployment, e.g. a free-tier host with no room for the depth model (TICK-062)."
+        },
+        "detail": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "Optional human-readable specifics. Must contain a non-whitespace character, for the same reason explanation must. The reason is what a client branches on; this is what it shows."
+        }
+      },
+      "required": ["absent_reason"],
+      "additionalProperties": false
+    },
+    "interval": {
+      "type": "object",
+      "description": "Confidence interval on rise_in, in inches. Method settled by TICK-050; the shape does not depend on which method wins. low must not exceed high — enforced in code, since JSON Schema cannot compare two sibling values.",
+      "properties": {
+        "low": { "type": "number" },
+        "high": { "type": "number" }
+      },
+      "required": ["low", "high"],
+      "additionalProperties": false
+    },
+    "decisions": {
+      "type": "object",
+      "description": "One decision per ADA line. The 1/2 inch line is the pre-registered primary and the 1/4 inch line the secondary (PRD.md section 2); they are computed independently, so one may abstain while the other does not.",
+      "properties": {
+        "half_inch": { "$ref": "#/$defs/decision" },
+        "quarter_inch": { "$ref": "#/$defs/decision" }
+      },
+      "required": ["half_inch", "quarter_inch"],
+      "additionalProperties": false
+    },
+    "decision": {
+      "type": "object",
+      "description": "The verdict at one line, plus the reason when there is no verdict to give. abstain is a first-class outcome (D-009), emitted when the interval straddles the line — never a missing or null measurement, and never a blank on screen.",
+      "properties": {
+        "verdict": {
+          "enum": ["pass", "fail", "abstain"],
+          "description": "pass — the rise clears this line. fail — it exceeds it. abstain — the interval straddles it and no honest verdict exists."
+        },
+        "explanation": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "Why this verdict, in a sentence a client can render as-is. REQUIRED when verdict is abstain, so an abstention can never render blank (TICK-211 AC4); optional otherwise, since pass and fail are self-explanatory beside the number. Constrained by pattern rather than minLength because a whitespace-only string satisfies minLength and still renders as a blank, which is the failure this field exists to prevent."
+        }
+      },
+      "required": ["verdict"],
+      "additionalProperties": false,
+      "if": {
+        "properties": { "verdict": { "const": "abstain" } },
+        "required": ["verdict"]
+      },
+      "then": { "required": ["explanation"] }
+    }
+  }
+}

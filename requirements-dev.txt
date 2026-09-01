@@ -1,0 +1,3 @@
+# Install set for CI. `[dev]` is defined in pyproject.toml; this file exists so
+# a missing extra or a broken install fails the workflow rather than a laptop.
+-e ".[dev]"
