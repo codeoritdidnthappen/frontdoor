@@ -1,8 +1,12 @@
-"""Dataset loader: bytes in, hashes checked, or nothing out (TICK-014, D-017, D-018).
+"""Dataset loader: bytes in, hashes checked, or nothing out (TICK-014, TICK-070, D-017, D-018).
 
 The metrology library and the evaluation harness both go through here. A
 truncated or substituted file must raise, naming the capture, rather than
 quietly changing a number in the error budget.
+
+Sealed rows are absent from listings and refused on direct load. The only
+way to read them is `python -m frontdoor.eval --include-sealed`, which
+appends SEAL_AUDIT.log first (TICK-071).
 
 Sidecars live in git at data/sidecars/<capture_id>.json. Images are fetched
 by capture_id from the image bucket (TICK-012). Depth is not loaded.
@@ -66,6 +70,15 @@ class DatasetLoader:
 
     def load(self, capture_id):
         row = self._row(capture_id)
+        if row["split"] == "sealed":
+            raise LoaderError(
+                f"capture_id {capture_id!r} is sealed (split={row['split']}); "
+                "refusing to load without --include-sealed"
+            )
+        return self._load_row(row)
+
+    def _load_row(self, row):
+        capture_id = row["capture_id"]
         sidecar_path = self.sidecar_dir / f"{capture_id}.json"
         if not sidecar_path.is_file():
             raise LoaderError(
@@ -99,9 +112,17 @@ class DatasetLoader:
     def list_captures(self, *, entrance_id=None, split=None):
         ids = []
         for row in read_manifest(self.manifest_path):
+            if row["split"] == "sealed":
+                continue
             if entrance_id is not None and row["entrance_id"] != entrance_id:
                 continue
             if split is not None and row["split"] != split:
                 continue
             ids.append(row["capture_id"])
         return sorted(ids)
+
+    def __iter__(self):
+        return iter(self.list_captures())
+
+    def __len__(self):
+        return len(self.list_captures())

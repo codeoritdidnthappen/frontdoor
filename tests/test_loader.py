@@ -170,6 +170,81 @@ def test_corrupt_image_still_raises_when_skip_env_is_set(tmp_path, monkeypatch):
         loader.load("cap-1")
 
 
+def test_list_omits_sealed_rows_even_when_asked_for_that_split(tmp_path):
+    images = {}
+    written = None
+    for capture_id, entrance_id, blob in (
+        ("cap-dev", "E-001", b"dev"),
+        ("cap-calib", "E-042", b"calib"),
+        ("cap-sealed", "E-002", b"secret"),
+    ):
+        manifest, sidecar_dir, image = _write_capture(
+            tmp_path, capture_id=capture_id, entrance_id=entrance_id, image=blob
+        )
+        images[capture_id] = image
+        written = (manifest, sidecar_dir)
+    loader = DatasetLoader(
+        manifest_path=written[0],
+        sidecar_dir=written[1],
+        get_image=images.__getitem__,
+    )
+    assert loader.list_captures() == ["cap-calib", "cap-dev"]
+    assert loader.list_captures(split="dev") == ["cap-dev"]
+    assert loader.list_captures(split="calib") == ["cap-calib"]
+    assert loader.list_captures(split="sealed") == []
+    assert loader.list_captures(entrance_id="E-002") == []
+    assert list(loader) == ["cap-calib", "cap-dev"]
+    assert len(loader) == 2
+
+
+def test_load_of_a_sealed_id_raises_naming_the_split_and_reads_nothing(tmp_path):
+    reads = []
+
+    def get_image(capture_id):
+        reads.append(capture_id)
+        return b"secret"
+
+    manifest, sidecar_dir, _ = _write_capture(
+        tmp_path, capture_id="cap-sealed", entrance_id="E-002", image=b"secret"
+    )
+    loader = DatasetLoader(
+        manifest_path=manifest,
+        sidecar_dir=sidecar_dir,
+        get_image=get_image,
+    )
+    with pytest.raises(LoaderError, match=r"sealed.*split=sealed"):
+        loader.load("cap-sealed")
+    assert reads == []
+
+
+def test_loader_has_no_include_sealed_switch():
+    import inspect
+
+    for target in (
+        DatasetLoader.__init__,
+        DatasetLoader.load,
+        DatasetLoader.list_captures,
+    ):
+        assert "include_sealed" not in inspect.signature(target).parameters
+
+
+def test_env_var_cannot_unseal_a_row(tmp_path, monkeypatch):
+    monkeypatch.setenv("FRONTDOOR_INCLUDE_SEALED", "1")
+    monkeypatch.setenv("INCLUDE_SEALED", "1")
+    manifest, sidecar_dir, image = _write_capture(
+        tmp_path, capture_id="cap-sealed", entrance_id="E-002", image=b"secret"
+    )
+    loader = DatasetLoader(
+        manifest_path=manifest,
+        sidecar_dir=sidecar_dir,
+        get_image={"cap-sealed": image}.__getitem__,
+    )
+    with pytest.raises(LoaderError, match="sealed"):
+        loader.load("cap-sealed")
+    assert loader.list_captures() == []
+
+
+
 @pytest.mark.skipif(
     not os.environ.get("FRONTDOOR_STORAGE_LIVE"),
     reason="live storage not configured",
