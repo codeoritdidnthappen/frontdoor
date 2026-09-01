@@ -152,3 +152,22 @@ promise. Committed before the first capture.
   ever changed.
 - Over 1000 synthetic IDs the seed yields 30.3% sealed / 18.4% calib / 51.3% dev. The actual
   proportions over the real entrance IDs are to be recorded here once capture completes.
+
+## 2026-08-31 — Canonical entrance ID form (TICK-217, issue #105)
+
+Source: GitHub issue #105. Settled before first capture so a mistyped ID cannot silently
+land an entrance in a different split (D-007, D-017).
+
+- Form: ASCII `E-` followed by exactly three digits (`E-014`). Character set is ASCII
+  as constrained by that pattern; length is 5 characters.
+- Case: the prefix is uppercase `E`. Lowercase `e-014` is canonicalised to `E-014`.
+- Surrounding whitespace (spaces, tabs, CR, LF) is stripped. Internal whitespace is rejected.
+- Unicode: NFC normalisation is applied before the pattern check. NFD/NFC pairs of the same
+  string therefore agree; IDs that are not `E-NNN` after NFC+strip+upper are rejected, not
+  coerced (accented letters, fullwidth letters, extra digits).
+- Canonicalise case and surrounding whitespace, because those are the operator errors that
+  would otherwise split one entrance in two. Reject everything else, so a sidecar cannot
+  store an ID the split tool would refuse.
+- Enforced in `frontdoor.split.canonical_entrance_id`, used by `assign_split` and the CLI,
+  and by the sidecar schema `entrance_id` pattern. The capture app (TICK-024, #28) must
+  create IDs in this form; it does not yet specify one.

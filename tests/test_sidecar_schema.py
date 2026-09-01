@@ -184,6 +184,16 @@ def test_date_time_format_checker_is_registered():
     assert "date-time" in Draft202012Validator.FORMAT_CHECKER.checkers
 
 
+@pytest.mark.parametrize(
+    "entrance_id",
+    ["e-014", "E-014 ", " E-014", "E-14", "E-0014", ""],
+)
+def test_noncanonical_entrance_id_rejected_by_schema(record, entrance_id):
+    record["entrance_id"] = entrance_id
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
 @pytest.mark.parametrize("field", ["image", "depth"])
 @pytest.mark.parametrize("suffix", ["\n", " ", "\r"])
 def test_sha256_rejects_trailing_whitespace(record, field, suffix):
@@ -213,5 +223,15 @@ def test_sha256_rejects_internal_whitespace(record, field):
 def test_captured_at_rejects_trailing_whitespace(record, suffix):
     """A bare $ matches before a trailing newline under Python re; the anchor must not (TICK-229)."""
     record["captured_at"] = "2026-08-30T14:22:31Z" + suffix
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+@pytest.mark.parametrize("suffix", ["\n", " ", "\r"])
+def test_entrance_id_rejects_trailing_whitespace(record, suffix):
+    """One spelling per entrance: "E-014\\n" must not validate alongside "E-014" (TICK-229)."""
+    record["entrance_id"] = "E-014" + suffix
     with pytest.raises(ValidationError):
         validate_sidecar(record)

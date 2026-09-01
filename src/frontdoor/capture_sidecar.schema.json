@@ -6,7 +6,11 @@
   "type": "object",
   "properties": {
     "capture_id": { "type": "string", "minLength": 1 },
-    "entrance_id": { "type": "string", "minLength": 1 },
+    "entrance_id": {
+      "type": "string",
+      "pattern": "^E-[0-9]{3}(?![\\s\\S])",
+      "description": "Canonical entrance ID: E- followed by exactly three digits (NFC, no surrounding whitespace). Same rule as frontdoor.split.canonical_entrance_id. Anchored with (?![\\s\\S]) rather than $ so a trailing newline is rejected under both Python re and ECMA-262 (TICK-229)."
+    },
     "captured_at": {
       "type": "string",
       "format": "date-time",
