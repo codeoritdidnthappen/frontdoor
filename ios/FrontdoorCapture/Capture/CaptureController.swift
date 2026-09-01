@@ -237,8 +237,16 @@ final class CaptureController: ObservableObject {
         let gravity = motion.deviceMotion.map {
             GravitySample(x: $0.gravity.x, y: $0.gravity.y, z: $0.gravity.z)
         }
-        let capturedAtShutter = Date()
-        let sensor = Self.fullResolution(of: device)
+        // Sampled here for the same reason gravity is: the delegate callback arrives after the
+        // exposure, and a timestamp taken there describes when processing finished rather than when
+        // the shutter fired (#163).
+        let capturedAt = CaptureValidation.timestamp(for: Date())
+        // The SENSOR's maximum, read from the active format — not output.maxPhotoDimensions, which
+        // is the value we requested. Comparing the delivered frame against our own request is
+        // tautological: it passes whenever the request was honoured, including when the request
+        // itself was below the sensor maximum because applyConfiguration could not read it or a
+        // reconfiguration lowered it. That is precisely the case the check exists to catch.
+        let sensorMax = device.activeFormat.supportedMaxPhotoDimensions.last
 
         let token = UUID()
         let delegate = PhotoCaptureDelegate(token: token) { [weak self] finished, result in
@@ -247,12 +255,8 @@ final class CaptureController: ObservableObject {
                 switch result {
                 case .success(let captured):
                     self.accept(
-                        captured,
-                        capturedAt: capturedAtShutter,
-                        sensor: sensor,
-                        gravity: gravity,
-                        zoomFactor: zoomFactor,
-                        lens: lens
+                        captured, gravity: gravity, zoomFactor: zoomFactor, lens: lens,
+                        capturedAt: capturedAt, sensorMax: sensorMax
                     )
                 case .failure(let message):
                     // Deliberately does not increment. A count that rises on failure is worse
@@ -277,46 +281,38 @@ final class CaptureController: ObservableObject {
         if output.isCameraCalibrationDataDeliverySupported {
             settings.isCameraCalibrationDataDeliveryEnabled = true
         }
-        sessionQueue.async { [output] in
+        // The readiness decision above was made on the main actor; the capture happens here, later,
+        // on the session queue. In that window the session can stop or be reconfigured — an
+        // incoming call, another app taking the camera, stop() racing the shutter — and calling
+        // capturePhoto with no active video connection raises NSInvalidArgumentException, which is
+        // uncatchable from Swift and kills the app (#134).
+        //
+        // So the decision is remade on the queue that performs the capture, immediately before it,
+        // against the connection actually being used.
+        sessionQueue.async { [weak self, output, session] in
+            let connection = output.connection(with: .video)
+            guard session.isRunning, let connection, connection.isActive, connection.isEnabled else {
+                Task { @MainActor in
+                    guard let self else { return }
+                    // Not a silent no-op: a shutter press that produces nothing and says nothing is
+                    // indistinguishable from a broken app to an operator at an entrance.
+                    self.lastCaptureError = CaptureRejected.sessionNotReady.message
+                    self.delegates.removeAll { $0.token == token }
+                }
+                return
+            }
             output.capturePhoto(with: settings, delegate: delegate)
         }
-    }
-
-    /// The largest still the configured camera can deliver. Read from the active format, and it
-    /// is the same call `applyConfiguration` uses to request the size -- deliberately so. A
-    /// request bound to one ceiling and a check bound to another reject every capture the moment
-    /// they disagree, which is what happens if this reads `device.formats` instead: on a 48MP
-    /// iPhone the device-wide maximum is a format the `.photo` session never selects, so every
-    /// frame would be refused for being smaller than a size the camera was never asked for.
-    ///
-    /// max(by:) rather than `.last`: the array's ordering is not documented, and taking the wrong
-    /// element here would cap the still below what the format can produce.
-    static func maxPhotoDimensions(of device: AVCaptureDevice) -> CMVideoDimensions? {
-        device.activeFormat.supportedMaxPhotoDimensions
-            .max { Int($0.width) * Int($0.height) < Int($1.width) * Int($1.height) }
-    }
-
-    /// What TICK-022 AC3 compares the delivered frame against: proof the still was not cropped or
-    /// downscaled relative to what the camera was configured to produce.
-    ///
-    /// It does not prove the active format is the device's best. A session that selected a
-    /// lower-resolution format would pass this check. Choosing the format explicitly is not free
-    /// -- depth delivery is what carries intrinsics to a single lens (D-015) and not every format
-    /// supports it -- so which format `.photo` settles on is a question for #24's device work
-    /// rather than something to guess at here.
-    static func fullResolution(of device: AVCaptureDevice) -> SensorResolution? {
-        maxPhotoDimensions(of: device)
-            .map { SensorResolution(width: Int($0.width), height: Int($0.height)) }
     }
 
     /// Applies the rules that decide whether a frame is usable, then publishes or refuses.
     private func accept(
         _ captured: CapturedPhoto,
-        capturedAt: Date,
-        sensor: SensorResolution?,
         gravity: GravitySample?,
         zoomFactor: Double,
-        lens: String
+        lens: String,
+        capturedAt: String,
+        sensorMax: CMVideoDimensions?
     ) {
         // Intrinsics ride in on the depth data (see applyConfiguration), with the photo's own
         // calibration kept as a fallback in case a future configuration can supply it directly.
@@ -333,16 +329,17 @@ final class CaptureController: ObservableObject {
         }
 
         switch CaptureValidation.record(
-            capturedAt: capturedAt,
             pixelWidth: captured.pixelWidth,
             pixelHeight: captured.pixelHeight,
-            sensor: sensor,
             intrinsics: intrinsics,
             hadCalibrationData: calibration != nil,
             gravity: gravity,
             deviceModel: CaptureValidation.hardwareIdentifier(),
             lens: lens,
             zoomFactor: zoomFactor,
+            capturedAt: capturedAt,
+            sensorWidth: sensorMax.map { Int($0.width) },
+            sensorHeight: sensorMax.map { Int($0.height) },
             // Absence is recorded, never punished: depth is a comparison, so a frame without it
             // must still cost nothing (D-020, TICK-023).
             depth: DepthCapture.record(from: captured.depthData)
@@ -408,7 +405,7 @@ final class CaptureController: ObservableObject {
 
         // Full sensor resolution. Without this the output silently caps at a smaller size, and the
         // intrinsics would then describe a grid the still does not have.
-        if let maxDimensions = Self.maxPhotoDimensions(of: device) {
+        if let maxDimensions = device.activeFormat.supportedMaxPhotoDimensions.last {
             output.maxPhotoDimensions = maxDimensions
         }
 

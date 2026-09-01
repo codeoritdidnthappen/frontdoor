@@ -37,6 +37,8 @@ enum CapabilityProbe {
         var isFullResolution: Bool
         var calibrationRequested: Bool
         var calibrationDelivered: Bool
+        /// Which channel answered. The distinction decides whether the ARKit fallback is warranted.
+        var calibrationSource: String
         var intrinsics: String
         var referenceDimensions: String
         var distortionTableEntries: Int?
@@ -74,6 +76,7 @@ enum CapabilityProbe {
                     "  requested: \(c.requestedDimensions)",
                     "  delivered: \(c.pixelDimensions)  full-resolution=\(c.isFullResolution)",
                     "  calibration requested=\(c.calibrationRequested) delivered=\(c.calibrationDelivered)",
+                    "  calibration source=\(c.calibrationSource)",
                     "  intrinsics: \(c.intrinsics)",
                     "  reference dimensions: \(c.referenceDimensions)",
                     "  distortion table entries: \(c.distortionTableEntries.map(String.init) ?? "none")",
@@ -226,7 +229,20 @@ enum CapabilityProbe {
 
         let photo = try await capture(with: settings, from: output)
 
-        let calibration = photo.cameraCalibrationData
+        // Read the channel the SHIPPED capture path reads, not the one that is easiest to ask for
+        // (#149). CaptureController takes intrinsics from depthData.cameraCalibrationData, because
+        // isCameraCalibrationDataDeliveryEnabled additionally needs two or more constituent devices
+        // for virtual-device delivery (AVCapturePhotoOutput.h:1496) and D-014's fixed 1x lens rules
+        // that out. Reporting only photo.cameraCalibrationData would print "not delivered" on a
+        // device where the app is successfully extracting fx/fy/cx/cy — and this note's own
+        // instructions make that reading the trigger for the ARKit fallback.
+        //
+        // Both channels are reported separately, because "no calibration anywhere" and "none via
+        // the direct API, present via depth" are different answers with different consequences, and
+        // only the first justifies abandoning D-015.
+        let directCalibration = photo.cameraCalibrationData
+        let depthCalibration = photo.depthData?.cameraCalibrationData
+        let calibration = depthCalibration ?? directCalibration
         let matrix = calibration?.intrinsicMatrix
         let delivered = photo.resolvedSettings.photoDimensions
         return CaptureReport(
@@ -238,6 +254,11 @@ enum CapabilityProbe {
             } ?? false,
             calibrationRequested: calibrationRequested,
             calibrationDelivered: calibration != nil,
+            calibrationSource: depthCalibration != nil
+                ? "depthData.cameraCalibrationData (the channel the app uses)"
+                : directCalibration != nil
+                    ? "photo.cameraCalibrationData (direct; the app does not use this route)"
+                    : "neither channel delivered calibration",
             intrinsics: matrix.map {
                 String(
                     format: "fx=%.1f fy=%.1f cx=%.1f cy=%.1f",
@@ -264,29 +285,89 @@ enum CapabilityProbe {
         with settings: AVCapturePhotoSettings,
         from output: AVCapturePhotoOutput
     ) async throws -> AVCapturePhoto {
-        let box = DelegateBox()
-        return try await withThrowingTaskGroup(of: AVCapturePhoto.self) { group in
-            group.addTask {
-                try await withCheckedThrowingContinuation { continuation in
-                    let delegate = ProbeDelegate(continuation: continuation)
-                    box.delegate = delegate
-                    output.capturePhoto(with: settings, delegate: delegate)
+        // Three things race to finish this capture: the photo delegate, the 15-second timeout, and
+        // cancellation when the operator taps Done. A continuation may be resumed exactly once, and
+        // resuming it twice is a crash, so the box settles the winner under a lock.
+        //
+        // It also holds the continuation itself rather than the delegate. onCancel can run before —
+        // or during — the operation body, so a box keyed on the delegate has a window where
+        // cancellation consumes the right to resume and then finds nothing to resume, leaving the
+        // continuation permanently stranded. Recording the outcome and replaying it on attach
+        // closes that window.
+        //
+        // The earlier shape raced the capture inside withThrowingTaskGroup. A task group does not
+        // return until every child finishes, and cancelling a child suspended on a continuation
+        // does not resume it, so the timeout fired on schedule and could never propagate (#150).
+        let box = CaptureBox()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                box.attach(continuation)
+                let delegate = ProbeDelegate(box: box)
+                box.retain(delegate)
+                box.deadline = Task {
+                    try? await Task.sleep(for: captureTimeout)
+                    box.finish(.failure(ProbeError.timedOut))
                 }
+                output.capturePhoto(with: settings, delegate: delegate)
             }
-            group.addTask {
-                try await Task.sleep(for: captureTimeout)
-                throw ProbeError.timedOut
-            }
-            defer { group.cancelAll() }
-            guard let first = try await group.next() else { throw ProbeError.timedOut }
-            return first
+        } onCancel: {
+            box.finish(.failure(CancellationError()))
         }
     }
 
     /// AVCapturePhotoOutput holds its delegate weakly, so it has to be retained for the duration
     /// of one capture — but per call, never in a shared static.
-    private final class DelegateBox: @unchecked Sendable {
-        var delegate: ProbeDelegate?
+    /// Owns the continuation, the delegate's lifetime and the timeout, and guarantees exactly one
+    /// resume. AVCapturePhotoOutput holds its delegate weakly, so the box keeps it alive.
+    final class CaptureBox: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuation: CheckedContinuation<AVCapturePhoto, Error>?
+        private var pending: Result<AVCapturePhoto, Error>?
+        private var finished = false
+        private var delegate: AnyObject?
+        private var _deadline: Task<Void, Never>?
+
+        var deadline: Task<Void, Never>? {
+            get { lock.lock(); defer { lock.unlock() }; return _deadline }
+            set { lock.lock(); _deadline = newValue; lock.unlock() }
+        }
+
+        func retain(_ object: AnyObject) { lock.lock(); delegate = object; lock.unlock() }
+
+        /// Attaches the continuation, replaying an outcome that arrived before it existed.
+        func attach(_ continuation: CheckedContinuation<AVCapturePhoto, Error>) {
+            lock.lock()
+            if let pending, !finished {
+                finished = true
+                lock.unlock()
+                continuation.resume(with: pending)
+                return
+            }
+            self.continuation = continuation
+            lock.unlock()
+        }
+
+        /// Finishes once. Later callers, and callers arriving before attach, are absorbed.
+        func finish(_ result: Result<AVCapturePhoto, Error>) {
+            lock.lock()
+            if finished { lock.unlock(); return }
+            // The deadline is cancelled on the first outcome either way. Returning early without
+            // cancelling — the path taken when cancellation beats attach — leaves a live timer
+            // holding the box for its full duration.
+            let deadline = _deadline
+            _deadline = nil
+            guard let continuation else {
+                if pending == nil { pending = result }
+                lock.unlock()
+                deadline?.cancel()
+                return
+            }
+            finished = true
+            self.continuation = nil
+            lock.unlock()
+            deadline?.cancel()
+            continuation.resume(with: result)
+        }
     }
 
     enum ProbeError: LocalizedError {
@@ -305,18 +386,17 @@ enum CapabilityProbe {
 }
 
 private final class ProbeDelegate: NSObject, AVCapturePhotoCaptureDelegate {
-    private let continuation: CheckedContinuation<AVCapturePhoto, Error>
+    private let box: CapabilityProbe.CaptureBox
 
-    init(continuation: CheckedContinuation<AVCapturePhoto, Error>) {
-        self.continuation = continuation
-    }
+    init(box: CapabilityProbe.CaptureBox) { self.box = box }
 
     func photoOutput(
         _ output: AVCapturePhotoOutput,
         didFinishProcessingPhoto photo: AVCapturePhoto,
         error: Error?
     ) {
-        if let error { continuation.resume(throwing: error) } else { continuation.resume(returning: photo) }
+        // The timeout or a cancellation may already have finished this; the box absorbs the loser.
+        box.finish(error.map { .failure($0) } ?? .success(photo))
     }
 }
 

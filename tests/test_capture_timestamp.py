@@ -3,13 +3,17 @@
 ARCHITECTURE.md §4 binds ground truth at the shutter press. Gravity is already sampled
 there because the completion fires after the phone can move. The capture timestamp is
 the same class of value: sampling Date() inside photoOutput would record the encoder
-finishing, not the shutter.
+finishing, not the shutter -- every reading consistently late by an amount that varies
+with lighting. It would compile, pass every Swift test, and look correct in review,
+because CaptureValidation only ever sees the value it is handed and cannot tell where
+it came from.
 
-Written by rubanikov for #145. Reapplied here because #142/#143 replaced CapturedPhoto
-with a shape that carries no timestamp, so the assertions had to follow the value to
-where it now travels -- through accept() rather than through the delegate.
+Written by rubanikov for #145, dropped when #144 closed, and required back by #163's
+last acceptance criterion. Reapplied against the implementation that landed in #174,
+which samples through CaptureValidation.timestamp(for:) rather than a bare Date().
 """
 
+import re
 from pathlib import Path
 
 CONTROLLER = (
@@ -27,17 +31,16 @@ def test_timestamp_is_sampled_at_shutter_not_in_photo_output():
         "private func accept(", 1
     )[0]
     # Bounded at the enclosing type's closing brace -- a brace in column 0 -- rather than run to
-    # the end of the file. photoOutput is currently the last method in CaptureController.swift, so
-    # an unbounded slice would scan anything appended below it and blame photoOutput for a Date()
-    # that is nowhere near it.
+    # end of file. photoOutput is the last method in this file, so an unbounded slice would scan
+    # anything appended below it and blame photoOutput for a Date() nowhere near it.
     photo_output = source.split("func photoOutput(", 1)[1].split("\n}", 1)[0]
 
-    assert "let capturedAtShutter = Date()" in capture_photo, (
-        "capturePhoto() must sample Date() at the shutter, next to gravity and zoom"
+    assert re.search(r"let capturedAt = CaptureValidation\.timestamp\(for: Date\(\)\)", capture_photo), (
+        "capturePhoto() must sample the clock at the shutter, next to gravity and zoom"
     )
-    # Broader than rubanikov's "timestamp: Date()": the completion handler has no
-    # legitimate reason to read the clock at all, so any Date() in it is the bug.
     assert "Date()" not in photo_output, (
-        "photoOutput must not sample Date(); that clock is the encoder, not the shutter"
+        "photoOutput must not read the clock; that instant is the encoder, not the shutter"
     )
-    assert "capturedAt: capturedAtShutter" in capture_photo
+    assert "capturedAt: capturedAt" in capture_photo, (
+        "the shutter sample must be the value that reaches the record"
+    )

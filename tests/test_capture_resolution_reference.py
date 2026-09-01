@@ -1,15 +1,18 @@
-"""The requested photo size and the size AC3 checks against must be one value (TICK-022 AC3).
+"""The requested photo size and the size AC3 checks against must not drift (TICK-022 AC3).
 
-applyConfiguration asks the camera for a maximum, and CaptureValidation then rejects any frame
-smaller than a maximum. If those two read different quantities, they disagree silently until a
-device makes them disagree loudly: reading every format's ceiling for the check while requesting
-only the active format's rejects *every* capture on a 48MP iPhone, because the device-wide maximum
-belongs to a format the `.photo` session never selects. The app would be unable to record anything,
-and the operator would be told the camera is delivering less than the sensor.
+applyConfiguration asks the camera for a maximum; capturePhoto reads a maximum to compare the
+delivered frame against. #174 deliberately makes both `device.activeFormat.supportedMaxPhotoDim
+ensions.last` -- the active format's ceiling -- rather than comparing against
+`output.maxPhotoDimensions`, which would be tautological.
 
-Nothing in the Swift suite can catch that: CaptureValidation is pure and the tests hand it both
-numbers directly, so the two sources of truth never meet. Asserted here instead, where CI runs
-without Xcode.
+They are two separate reads of the same expression, so nothing but this test stops one from being
+edited without the other. Widening only the check to `device.formats` is the dangerous direction:
+on a 48MP iPhone the device-wide maximum belongs to a format the `.photo` session never selects,
+so every capture would be refused for being smaller than a size the camera was never asked for,
+and the app could record nothing at all.
+
+The Swift suite cannot catch this. CaptureValidation is pure and its tests hand it both numbers
+directly, so the two sources of truth never meet there.
 """
 
 import re
@@ -23,38 +26,33 @@ CONTROLLER = (
     / "CaptureController.swift"
 )
 
+READ = "device.activeFormat.supportedMaxPhotoDimensions.last"
+
 
 def code() -> str:
     """Source with line comments removed.
 
     The guard has to be able to name the wrong construct in the prose explaining why it is wrong.
-    An earlier ARKit guard matched a bare word and failed the build on the comment describing the
-    rule (#152); this strips comments rather than repeat that.
+    An earlier ARKit guard matched a bare word and failed the build on the comment describing its
+    own rule (#152); this strips comments rather than repeat that.
     """
     source = CONTROLLER.read_text(encoding="utf-8")
     return "\n".join(re.sub(r"//.*", "", line) for line in source.splitlines())
 
 
-def test_the_active_format_is_read_in_exactly_one_place():
-    assert code().count("supportedMaxPhotoDimensions") == 1, (
-        "a second reader is a second source of truth, free to drift from the first"
-    )
-
-
-def test_the_request_and_the_check_share_that_reader():
+def test_both_sides_read_the_active_format_the_same_way():
     source = code()
-    assert "static func maxPhotoDimensions(of device: AVCaptureDevice)" in source
-    assert "output.maxPhotoDimensions = maxDimensions" in source
-    assert "Self.maxPhotoDimensions(of: device)" in source, (
-        "applyConfiguration must request through the shared reader"
+    assert source.count("supportedMaxPhotoDimensions") == 2, (
+        "expected exactly two reads: the request in applyConfiguration and the check in "
+        "capturePhoto. A third is a third source of truth; a first means one side stopped reading"
     )
-    assert "maxPhotoDimensions(of: device)\n            .map { SensorResolution" in source, (
-        "fullResolution -- what AC3 compares against -- must come from the same reader"
+    assert source.count(READ) == 2, (
+        f"both reads must be spelled `{READ}`, or the request and the check can diverge"
     )
 
 
-def test_the_check_does_not_reach_past_the_active_format():
+def test_the_check_does_not_widen_to_every_format():
     assert "device.formats" not in code(), (
         "comparing against every format's ceiling rejects every capture whenever the active "
-        "format is not the device's largest, which is the normal case on a 48MP iPhone"
+        "format is not the device's largest -- the normal case on a 48MP iPhone"
     )
