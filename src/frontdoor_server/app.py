@@ -14,6 +14,7 @@ from jsonschema import Draft202012Validator, ValidationError
 from werkzeug.exceptions import HTTPException
 
 from frontdoor.sidecar import validate_sidecar
+from frontdoor_server.map_view import map_page
 
 RESPONSE_SCHEMA = json.loads(
     resources.files("frontdoor_server")
@@ -158,6 +159,8 @@ def create_app():
     # MAX_FORM_MEMORY_SIZE — which only covers non-file form fields, leaving the realistic oversized
     # body (the image part) uncapped, and which differs across the flask>=3 range this pins.
     app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
+    # Public stamp map: GET /map and GET /map/data (TICK-247).
+    app.register_blueprint(map_page)
 
     @app.get("/health")
     def health():
