@@ -1,0 +1,11 @@
+{
+  "name": "south-congress-demo-blocks",
+  "bounding_box": {
+    "south": 30.2465,
+    "west": -97.7513,
+    "north": 30.2521,
+    "east": -97.7478
+  },
+  "headings_per_business": 3,
+  "max_maps_calls": 1200
+}
