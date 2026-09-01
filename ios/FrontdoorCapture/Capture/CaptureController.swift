@@ -220,9 +220,14 @@ final class CaptureController: ObservableObject {
             SIMD3<Double>($0.gravity.x, $0.gravity.y, $0.gravity.z)
         }
         let zoomAtShutter = activeDevice.map { Double($0.videoZoomFactor) } ?? .nan
+        // Same instant as gravity: the completion fires after encoding and is the wrong clock
+        // for captured_at (ground truth binds at the shutter press).
+        let capturedAtShutter = Date()
 
         let token = UUID()
-        let delegate = PhotoCaptureDelegate(token: token) { [weak self] finished, result in
+        let delegate = PhotoCaptureDelegate(
+            token: token, capturedAt: capturedAtShutter
+        ) { [weak self] finished, result in
             Task { @MainActor in
                 guard let self else { return }
                 switch result {
@@ -395,10 +400,12 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
     }
 
     let token: UUID
+    private let capturedAt: Date
     private let onFinish: (UUID, Result) -> Void
 
-    init(token: UUID, onFinish: @escaping (UUID, Result) -> Void) {
+    init(token: UUID, capturedAt: Date, onFinish: @escaping (UUID, Result) -> Void) {
         self.token = token
+        self.capturedAt = capturedAt
         self.onFinish = onFinish
     }
 
@@ -433,7 +440,7 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
         let dims = photo.resolvedSettings.photoDimensions
         onFinish(token, .success(CapturedFrame(
             image: image,
-            timestamp: Date(),
+            timestamp: capturedAt,
             pixelWidth: Int(dims.width),
             pixelHeight: Int(dims.height),
             intrinsics: intrinsics
