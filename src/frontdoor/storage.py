@@ -40,10 +40,20 @@ class BucketCreds:
     endpoint: str | None
 
 
+def _load_dotenv():
+    from dotenv import load_dotenv
+
+    path = os.path.join(os.getcwd(), ".env")
+    if os.path.isfile(path):
+        load_dotenv(dotenv_path=path, override=False)
+
+
 def _env(name):
     value = os.environ.get(name, "").strip()
     if not value:
-        raise StorageError(f"missing {name}")
+        raise StorageError(
+            f"missing {name}; set it in .env (see data/STORAGE.md)"
+        )
     return value
 
 
@@ -61,6 +71,7 @@ def _shared_location():
 
 def load_image_creds():
     """Credentials that can read images and must not read depth (D-020)."""
+    _load_dotenv()
     loc = _shared_location()
     return BucketCreds(
         bucket=_env("FRONTDOOR_IMAGES_BUCKET"),
@@ -73,6 +84,7 @@ def load_image_creds():
 
 def load_depth_creds():
     """Credentials that can read depth. Only the evaluation harness holds these."""
+    _load_dotenv()
     loc = _shared_location()
     return BucketCreds(
         bucket=_env("FRONTDOOR_DEPTH_BUCKET"),

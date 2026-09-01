@@ -28,7 +28,7 @@ DEPTH = "frontdoor-depth"
 
 def _image_env(monkeypatch):
     monkeypatch.setenv("FRONTDOOR_S3_REGION", "us-east-1")
-    monkeypatch.delenv("FRONTDOOR_S3_ENDPOINT", raising=False)
+    monkeypatch.setenv("FRONTDOOR_S3_ENDPOINT", "")
     monkeypatch.setenv("FRONTDOOR_IMAGES_BUCKET", IMAGES)
     monkeypatch.setenv("FRONTDOOR_IMAGES_ACCESS_KEY", "img-key")
     monkeypatch.setenv("FRONTDOOR_IMAGES_SECRET_KEY", "img-secret")
@@ -79,6 +79,13 @@ def test_storage_layout_doc_names_two_buckets():
     assert "frontdoor-depth" in text
     assert "10 GB" in text
     assert "python -m frontdoor.storage verify" in text
+    assert "loads `.env`" in text
+
+
+def test_env_example_tells_you_the_file_is_loaded():
+    text = (REPO / ".env.example").read_text(encoding="utf-8")
+    assert "loads" in text.lower()
+    assert ".env" in text
 
 
 def test_changes_log_records_the_provider():
@@ -89,7 +96,8 @@ def test_changes_log_records_the_provider():
     assert "frontdoor-depth" in text
 
 
-def test_loader_config_does_not_require_depth_credentials(monkeypatch):
+def test_loader_config_does_not_require_depth_credentials(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
     _image_env(monkeypatch)
     monkeypatch.delenv("FRONTDOOR_DEPTH_BUCKET", raising=False)
     monkeypatch.delenv("FRONTDOOR_DEPTH_ACCESS_KEY", raising=False)
@@ -100,7 +108,8 @@ def test_loader_config_does_not_require_depth_credentials(monkeypatch):
         load_depth_creds()
 
 
-def test_missing_image_credential_is_an_error(monkeypatch):
+def test_missing_image_credential_is_an_error(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
     monkeypatch.delenv("FRONTDOOR_IMAGES_BUCKET", raising=False)
     with pytest.raises(StorageError, match="FRONTDOOR_IMAGES_BUCKET"):
         load_image_creds()
@@ -150,12 +159,42 @@ def test_cli_usage(capsys):
     assert "verify" in capsys.readouterr().err
 
 
-def test_cli_reports_missing_env(monkeypatch, capsys):
+def test_cli_reports_missing_env(monkeypatch, tmp_path, capsys):
+    monkeypatch.chdir(tmp_path)
     for name in list(os.environ):
         if name.startswith("FRONTDOOR_"):
             monkeypatch.delenv(name, raising=False)
     assert main(["verify"]) == 1
-    assert "missing" in capsys.readouterr().err
+    err = capsys.readouterr().err
+    assert "missing" in err
+    assert "FRONTDOOR_IMAGES_BUCKET" in err
+    assert "data/STORAGE.md" in err
+
+
+def test_dotenv_file_supplies_credentials_when_process_env_is_empty(
+    monkeypatch, tmp_path
+):
+    monkeypatch.chdir(tmp_path)
+    for name in list(os.environ):
+        if name.startswith("FRONTDOOR_"):
+            monkeypatch.delenv(name, raising=False)
+    (tmp_path / ".env").write_text(
+        "FRONTDOOR_IMAGES_BUCKET=from-env-file\n"
+        "FRONTDOOR_IMAGES_ACCESS_KEY=file-key\n"
+        "FRONTDOOR_IMAGES_SECRET_KEY=file-secret\n",
+        encoding="utf-8",
+    )
+    creds = load_image_creds()
+    assert creds.bucket == "from-env-file"
+    assert creds.access_key == "file-key"
+    assert creds.secret_key == "file-secret"
+
+
+def test_missing_variable_points_at_the_storage_runbook(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.delenv("FRONTDOOR_IMAGES_BUCKET", raising=False)
+    with pytest.raises(StorageError, match=r"FRONTDOOR_IMAGES_BUCKET.*data/STORAGE.md"):
+        load_image_creds()
 
 
 @pytest.mark.skipif(

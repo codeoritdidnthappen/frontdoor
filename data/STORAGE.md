@@ -45,7 +45,8 @@ Two tokens, never one:
    plus `FRONTDOOR_DEPTH_*`.
 
 The core metrology library gets neither. Copy `.env.example` to `.env`
-and fill in the values; `.env` is gitignored.
+and fill in the values; `.env` is gitignored. `python -m frontdoor.storage
+verify` loads `.env` from the current directory.
 
 ## Create the buckets
 
