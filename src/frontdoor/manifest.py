@@ -98,7 +98,7 @@ def append_capture(
         capture_id,
         entrance_id,
         sha256_file(image_path),
-        sha256_file(depth_path),
+        "" if depth_path is None else sha256_file(depth_path),
         sha256_file(sidecar_path),
         expected_split,
     )

@@ -57,6 +57,25 @@ def test_column_order_is_exact(tmp_path):
     assert manifest.read_text(encoding="utf-8").splitlines()[0] == ",".join(COLUMNS)
 
 
+def test_append_with_no_depth_writes_empty_depth_sha256(tmp_path):
+    """TICK-023 AC5: a capture with no depth file is still recorded."""
+    manifest = _empty_manifest(tmp_path)
+    image = _blob(tmp_path, "img.bin", b"IMG")
+    sidecar = _blob(tmp_path, "side.json", b"{}")
+    append_capture(
+        manifest,
+        capture_id="cap-1",
+        entrance_id="E-001",
+        image_path=image,
+        depth_path=None,
+        sidecar_path=sidecar,
+    )
+    row = manifest.read_text(encoding="utf-8").splitlines()[1].split(",")
+    assert row[2] == hashlib.sha256(b"IMG").hexdigest()
+    assert row[3] == ""
+    assert row[4] == hashlib.sha256(b"{}").hexdigest()
+
+
 def test_hashes_match_independently_computed_digests(tmp_path):
     manifest = _empty_manifest(tmp_path)
     image, depth, sidecar = _append(manifest, tmp_path, image=b"IMG", depth=b"DEP", sidecar=b"SID")
