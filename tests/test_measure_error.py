@@ -110,3 +110,17 @@ def test_schema_rejects_an_unknown_error_token():
     body = {"error": "something went wrong", "detail": "nope"}
     with pytest.raises(ValidationError):
         Draft202012Validator(ERROR_SCHEMA).validate(body)
+
+
+@pytest.mark.parametrize("blank", ["   ", "\n", "\t"])
+def test_error_schema_rejects_a_whitespace_only_detail(blank):
+    """minLength alone accepts "   ", which renders as a blank — same hole as TICK-228/229."""
+    with pytest.raises(ValidationError):
+        Draft202012Validator(ERROR_SCHEMA).validate({"error": "missing image", "detail": blank})
+
+
+def test_error_schema_rejects_a_whitespace_only_field():
+    with pytest.raises(ValidationError):
+        Draft202012Validator(ERROR_SCHEMA).validate(
+            {"error": "sidecar failed validation", "detail": "bad", "field": " "}
+        )

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/codeoritdidnthappen/frontdoor/blob/main/src/frontdoor_server/measure_error.schema.json",
   "title": "Measure error",
-  "description": "Error body from POST /measure (and, once TICK-225 lands, every other path on this service). Frozen by TICK-224 so TICK-063 can code against failure as well as success. HTTP status is not a field in the body; it is paired with this shape as follows: 400 — the request is missing a required part or the sidecar is not JSON; 422 — the sidecar is JSON but fails capture_sidecar.schema.json. TICK-225 (#113) will emit this same body for 404 (unknown path), 405 (wrong method), 413 (body too large) and 500 (unhandled exception), extending the error enum when those paths exist.",
+  "description": "Error body from POST /measure (and, once TICK-225 lands, every other path on this service). Frozen by TICK-224 so TICK-063 can code against failure as well as success. HTTP status is not a field in the body; it is paired with this shape as follows: 400 — the request is missing a required part or the sidecar is not JSON; 422 — the sidecar is JSON but fails capture_sidecar.schema.json. This SUPERSEDES TICK-060 AC4, which specified 400 for a schema-invalid sidecar; 422 distinguishes a well-formed request carrying bad content from a malformed request, which TICK-063 needs in order to tell the operator whether to re-capture or re-send. Free to change now because no client consumes it yet. TICK-225 (#113) will emit this same body for 404 (unknown path), 405 (wrong method), 413 (body too large) and 500 (unhandled exception), extending the error enum when those paths exist.",
   "type": "object",
   "properties": {
     "error": {
@@ -16,13 +16,13 @@
     },
     "detail": {
       "type": "string",
-      "minLength": 1,
+      "pattern": "\\S",
       "maxLength": 256,
-      "description": "Human-readable specifics, truncated to 256 characters so a rejected sidecar cannot inflate the response. Never the raw rejected input."
+      "description": "Human-readable specifics, truncated to 256 characters so a rejected sidecar cannot inflate the response. Never the raw rejected input. Constrained by pattern rather than minLength because a whitespace-only string satisfies minLength and still renders as a blank, which is the same hole that was closed on the sidecar patterns in TICK-228 and TICK-229."
     },
     "field": {
       "type": "string",
-      "minLength": 1,
+      "pattern": "\\S",
       "description": "JSONPath of the offending sidecar field when validation failed. Absent when the failure is not a field error."
     }
   },
