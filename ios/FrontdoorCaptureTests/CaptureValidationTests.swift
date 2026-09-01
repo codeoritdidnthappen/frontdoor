@@ -15,6 +15,8 @@ final class CaptureValidationTests: XCTestCase {
         lensDistortionCenterX: 2016.4, lensDistortionCenterY: 1512.7
     )
     private let gravity = GravitySample(x: 0.02, y: -0.98, z: -0.19)
+    /// Fixed rather than `Date()` so an assertion on it cannot pass by accident.
+    private let shutter = Date(timeIntervalSince1970: 1_756_684_800)
 
     private func result(
         width: Int = 4032, height: Int = 3024,
@@ -22,6 +24,7 @@ final class CaptureValidationTests: XCTestCase {
         gravity: GravitySample?? = nil, zoom: Double = 1.0
     ) -> Result<CaptureRecord, CaptureRejected> {
         CaptureValidation.record(
+            capturedAt: shutter,
             pixelWidth: width, pixelHeight: height,
             intrinsics: intrinsics ?? self.intrinsics,
             hadCalibrationData: hadCalibration,
@@ -44,6 +47,12 @@ final class CaptureValidationTests: XCTestCase {
     /// The recorded lens must match the sidecar example in ARCHITECTURE section 4. Derived from
     /// the AVFoundation raw value it comes out capitalised, and anything filtering on the
     /// documented spelling then matches nothing.
+    /// `captured_at` is a required property of the sidecar schema, so a record without it cannot
+    /// be serialised at all. The value must be the one handed in at the shutter, not re-sampled.
+    func testTheRecordCarriesTheShutterTimestamp() throws {
+        XCTAssertEqual(try result().get().capturedAt, shutter)
+    }
+
     func testLensNameMatchesTheDocumentedSidecarValue() {
         XCTAssertEqual(CaptureController.lensName, "builtInWideAngleCamera")
     }

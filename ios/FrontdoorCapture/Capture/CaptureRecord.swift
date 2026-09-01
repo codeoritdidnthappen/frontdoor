@@ -9,6 +9,10 @@ import Foundation
 /// AVFoundation objects in it, so the rules that decide whether a capture is usable are ordinary
 /// functions that can be tested without a camera.
 struct CaptureRecord: Equatable {
+    /// The instant of the shutter press, not of encoding. Serialised as the sidecar's required
+    /// `captured_at` (RFC 3339, UTC). Sampled next to gravity for the same reason gravity is:
+    /// the delegate callback runs after the exposure and describes a different moment.
+    var capturedAt: Date
     var pixelWidth: Int
     var pixelHeight: Int
     var intrinsics: CameraIntrinsics
@@ -126,6 +130,7 @@ enum CaptureRejected: Error, Equatable {
 /// Decides whether a frame is usable. Pure, so the rules are testable without a camera.
 enum CaptureValidation {
     static func record(
+        capturedAt: Date,
         pixelWidth: Int,
         pixelHeight: Int,
         intrinsics: CameraIntrinsics?,
@@ -146,6 +151,7 @@ enum CaptureValidation {
         guard gravity.isPlausible else { return .failure(.gravityImplausible(gravity.magnitude)) }
 
         return .success(CaptureRecord(
+            capturedAt: capturedAt,
             pixelWidth: pixelWidth,
             pixelHeight: pixelHeight,
             intrinsics: intrinsics,

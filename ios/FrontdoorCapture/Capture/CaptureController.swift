@@ -237,6 +237,7 @@ final class CaptureController: ObservableObject {
         let gravity = motion.deviceMotion.map {
             GravitySample(x: $0.gravity.x, y: $0.gravity.y, z: $0.gravity.z)
         }
+        let capturedAtShutter = Date()
 
         let token = UUID()
         let delegate = PhotoCaptureDelegate(token: token) { [weak self] finished, result in
@@ -244,7 +245,13 @@ final class CaptureController: ObservableObject {
                 guard let self else { return }
                 switch result {
                 case .success(let captured):
-                    self.accept(captured, gravity: gravity, zoomFactor: zoomFactor, lens: lens)
+                    self.accept(
+                        captured,
+                        capturedAt: capturedAtShutter,
+                        gravity: gravity,
+                        zoomFactor: zoomFactor,
+                        lens: lens
+                    )
                 case .failure(let message):
                     // Deliberately does not increment. A count that rises on failure is worse
                     // than no count: it tells the operator a still exists when none does.
@@ -276,6 +283,7 @@ final class CaptureController: ObservableObject {
     /// Applies the rules that decide whether a frame is usable, then publishes or refuses.
     private func accept(
         _ captured: CapturedPhoto,
+        capturedAt: Date,
         gravity: GravitySample?,
         zoomFactor: Double,
         lens: String
@@ -295,6 +303,7 @@ final class CaptureController: ObservableObject {
         }
 
         switch CaptureValidation.record(
+            capturedAt: capturedAt,
             pixelWidth: captured.pixelWidth,
             pixelHeight: captured.pixelHeight,
             intrinsics: intrinsics,
