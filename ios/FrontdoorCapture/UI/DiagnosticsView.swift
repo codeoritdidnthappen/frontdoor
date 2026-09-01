@@ -1,0 +1,86 @@
+import SwiftUI
+
+/// TICK-020 spike surface. Runs the capability probe and shows the result as text that can be
+/// copied straight into the committed note the ticket asks for.
+///
+/// Deliberately plain. This is a measurement instrument for one question, and it comes out again
+/// once the answer is recorded and the decision taken.
+struct DiagnosticsView: View {
+    let onClose: () -> Void
+
+    @State private var report: CapabilityProbe.Report?
+    @State private var probe: Task<Void, Never>?
+
+    private var running: Bool { probe != nil }
+
+    var body: some View {
+        NavigationStack {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text(
+                        "Answers whether AVFoundation delivers camera calibration data and depth "
+                            + "alongside a full-resolution still from the 1x lens (ASM-2, R-9). "
+                            + "Run this on a real device; a simulator has no camera and proves nothing."
+                    )
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                    if let report {
+                        Text(report.plainText)
+                            .font(.system(.footnote, design: .monospaced))
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(12)
+                            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+
+                        Button {
+                            UIPasteboard.general.string = report.plainText
+                        } label: {
+                            Label("Copy result", systemImage: "doc.on.doc")
+                        }
+                        .buttonStyle(.bordered)
+                    }
+
+                    Button {
+                        probe = Task {
+                            let result = await CapabilityProbe.run()
+                            // A cancelled probe was abandoned by dismissing the sheet; its result
+                            // is not wanted and the session it opened is already being torn down.
+                            guard !Task.isCancelled else { return }
+                            report = result
+                            probe = nil
+                        }
+                    } label: {
+                        if running {
+                            ProgressView().frame(maxWidth: .infinity)
+                        } else {
+                            Text(report == nil ? "Run probe" : "Run again")
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(running)
+                }
+                .padding(20)
+            }
+            .navigationTitle("Capability probe")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("Done") {
+                        // Cancelling matters: an in-flight probe holds an AVCaptureSession, and
+                        // leaving it running would light the camera indicator over a screen that
+                        // shows nothing capturing.
+                        cancelProbe()
+                        onClose()
+                    }
+                }
+            }
+        }
+    }
+
+    private func cancelProbe() {
+        probe?.cancel()
+        probe = nil
+    }
+}

@@ -257,10 +257,14 @@ final class CaptureController: ObservableObject {
 
         let settings = AVCapturePhotoSettings()
         settings.maxPhotoDimensions = output.maxPhotoDimensions
-        // Setting this when the output does not support it raises an uncatchable NSException, so
-        // it is gated at the point of use rather than on a precondition proved elsewhere. When it
-        // cannot be requested the frame simply arrives without calibration, and validation refuses
-        // it with a message naming that as the reason.
+        // Depth is the intrinsics carrier on a single lens; mirror the output's own state,
+        // because enabling it here when the output has not is a hard error.
+        settings.isDepthDataDeliveryEnabled = output.isDepthDataDeliveryEnabled
+        // Where a device does offer calibration directly, take it as a second route. Setting this
+        // when the output does not support it raises an uncatchable NSException, so it is gated at
+        // the point of use rather than on a precondition proved elsewhere. Where neither route is
+        // available the frame simply arrives without intrinsics, and validation refuses it with a
+        // message naming that as the reason.
         if output.isCameraCalibrationDataDeliverySupported {
             settings.isCameraCalibrationDataDeliveryEnabled = true
         }
@@ -276,7 +280,10 @@ final class CaptureController: ObservableObject {
         zoomFactor: Double,
         lens: String
     ) {
-        let intrinsics = captured.calibration.flatMap {
+        // Intrinsics ride in on the depth data (see applyConfiguration), with the photo's own
+        // calibration kept as a fallback in case a future configuration can supply it directly.
+        let calibration = captured.depthData?.cameraCalibrationData ?? captured.calibration
+        let intrinsics = calibration.flatMap {
             CameraIntrinsics.from(
                 matrix: $0.intrinsicMatrix,
                 referenceDimensions: $0.intrinsicMatrixReferenceDimensions,
@@ -291,11 +298,14 @@ final class CaptureController: ObservableObject {
             pixelWidth: captured.pixelWidth,
             pixelHeight: captured.pixelHeight,
             intrinsics: intrinsics,
-            hadCalibrationData: captured.calibration != nil,
+            hadCalibrationData: calibration != nil,
             gravity: gravity,
             deviceModel: CaptureValidation.hardwareIdentifier(),
             lens: lens,
-            zoomFactor: zoomFactor
+            zoomFactor: zoomFactor,
+            // Absence is recorded, never punished: depth is a comparison, so a frame without it
+            // must still cost nothing (D-020, TICK-023).
+            depth: DepthCapture.record(from: captured.depthData)
         ) {
         case .success(let record):
             photosTaken += 1
@@ -362,22 +372,28 @@ final class CaptureController: ObservableObject {
             output.maxPhotoDimensions = maxDimensions
         }
 
-        // Calibration delivery is requested per capture, not demanded here.
+        // Depth delivery is how intrinsics reach a single-lens capture. Camera calibration data
+        // cannot be requested directly here: AVCapturePhotoSettings.isCameraCalibrationDataDelivery
+        // Enabled additionally requires two or more constituent devices selected for virtual-device
+        // photo delivery (AVCapturePhotoOutput.h:1496), which D-014's fixed 1x wide lens rules out.
+        // AVDepthData carries cameraCalibrationData with no such precondition, so enabling depth
+        // delivery is what makes the frame measurable at all (D-015).
         //
-        // The previous form refused to start the session unless the device had two or more
-        // constituent devices. builtInWideAngleCamera is a physical camera, and
-        // AVCaptureDevice.h:773 states that constituentDevices "returns an empty array" when
-        // virtualDevice == NO — so that condition was unsatisfiable and no capture could ever
-        // start, on any device.
+        // Requested, not required. A device without a depth sensor still opens the camera: TICK-023
+        // made the sidecar accept "depth": null precisely so that absence does not cost an
+        // entrance, and refusing to start the session here would contradict that on the one phone
+        // it was written for — Emily's iPhone 16 has no depth sensor, and a hard refusal leaves the
+        // team with a single capture device.
         //
-        // The protection it was reaching for is real and is already provided, one layer down:
-        // CaptureValidation refuses any frame that arrives without usable intrinsics, so an
-        // unmeasurable still is never recorded. Refusing the whole session instead conflates "this
-        // frame is unusable" with "this device is unusable", and only the first is knowable here.
+        // The guarantee worth keeping survives one layer down: CaptureValidation refuses any frame
+        // that arrives without usable intrinsics, so an unmeasurable still is never recorded.
+        // Refusing the whole session instead conflates "this frame is unusable" with "this device
+        // is unusable", and only the first is knowable here.
         //
-        // It also settles TICK-020 (#24) by construction rather than by reading a header: if the
-        // 1x path does not deliver calibration, every capture is refused with a message saying so,
-        // which is the measurement that spike is waiting for.
+        // Enabling this reconfigures the render pipeline, so it must happen before startRunning.
+        if output.isDepthDataDeliverySupported {
+            output.isDepthDataDeliveryEnabled = true
+        }
 
         // 1x, no digital zoom, no crop (D-014). Pinned rather than assumed: the system can restore
         // a previous zoom, and a cropped frame silently invalidates the intrinsics beside it.
@@ -399,6 +415,7 @@ private struct CapturedPhoto {
     var pixelWidth: Int
     var pixelHeight: Int
     var calibration: AVCameraCalibrationData?
+    var depthData: AVDepthData?
 }
 
 /// AVCapturePhotoOutput holds its delegate weakly, so one is kept alive per in-flight capture.
@@ -434,7 +451,8 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
             image: image,
             pixelWidth: Int(dimensions.width),
             pixelHeight: Int(dimensions.height),
-            calibration: photo.cameraCalibrationData
+            calibration: photo.cameraCalibrationData,
+            depthData: photo.depthData
         )))
     }
 }

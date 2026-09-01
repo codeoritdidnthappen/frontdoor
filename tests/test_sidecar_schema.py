@@ -62,6 +62,24 @@ def test_architecture_example_validates(record):
     validate_sidecar(record)
 
 
+def test_null_depth_is_accepted(record):
+    """TICK-023 AC5: absence of a depth map must not cost an entrance."""
+    record["depth"] = None
+    validate_sidecar(record)
+
+
+def test_malformed_depth_object_is_still_rejected(record):
+    record["depth"] = {"path": "depth.bin"}
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+def test_non_object_non_null_depth_is_rejected(record):
+    record["depth"] = "depth.bin"
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
 @pytest.mark.parametrize("field", REQUIRED_FIELDS)
 def test_missing_required_field_rejected(record, field):
     del record[field]

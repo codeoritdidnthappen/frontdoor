@@ -77,6 +77,11 @@ def _read_rows(path):
         return list(reader)
 
 
+def read_manifest(path):
+    """Return every row. The loader is the doorway that then verifies hashes."""
+    return _read_rows(Path(path))
+
+
 def append_capture(
     manifest_path,
     *,
@@ -98,7 +103,7 @@ def append_capture(
         capture_id,
         entrance_id,
         sha256_file(image_path),
-        sha256_file(depth_path),
+        "" if depth_path is None else sha256_file(depth_path),
         sha256_file(sidecar_path),
         expected_split,
     )
