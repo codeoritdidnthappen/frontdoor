@@ -31,7 +31,9 @@ therefore the D-020 layout, not a prefix inside one bucket.
 Both buckets are private. Do not enable public access.
 
 Object key is the `capture_id` (no prefix). Sidecars are not stored here —
-they are committed next to the manifest, hashed in `sidecar_sha256`.
+they are committed at `data/sidecars/<capture_id>.json`, next to the
+manifest, and hashed in `sidecar_sha256`. The dataset loader (TICK-014)
+verifies image and sidecar hashes on every read.
 
 ## Credentials
 
