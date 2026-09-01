@@ -14,6 +14,11 @@ import UIKit
 /// constituent delivery, which is why this probes several lens configurations rather than assuming
 /// the one D-014 fixes will offer it. If the 1x wide-angle path cannot deliver calibration, that
 /// is the finding, and it forces a decision rather than a workaround.
+///
+/// Every capability read here happens **after** `commitConfiguration()`. These properties reflect
+/// committed session state, and reading them mid-transaction returns false on hardware that does
+/// support them — which would make this spike confidently report the answer that triggers the
+/// expensive ARKit fallback.
 enum CapabilityProbe {
 
     struct LensReport: Identifiable {
@@ -27,11 +32,15 @@ enum CapabilityProbe {
 
     struct CaptureReport {
         var lens: String
+        var requestedDimensions: String
         var pixelDimensions: String
+        var isFullResolution: Bool
+        var calibrationRequested: Bool
         var calibrationDelivered: Bool
         var intrinsics: String
         var referenceDimensions: String
         var distortionTableEntries: Int?
+        var depthRequested: Bool
         var depthDelivered: Bool
         var depthDetail: String
     }
@@ -62,12 +71,13 @@ enum CapabilityProbe {
                 lines += [
                     "",
                     "Capture on \(c.lens):",
-                    "  pixels: \(c.pixelDimensions)",
-                    "  calibration delivered: \(c.calibrationDelivered)",
+                    "  requested: \(c.requestedDimensions)",
+                    "  delivered: \(c.pixelDimensions)  full-resolution=\(c.isFullResolution)",
+                    "  calibration requested=\(c.calibrationRequested) delivered=\(c.calibrationDelivered)",
                     "  intrinsics: \(c.intrinsics)",
                     "  reference dimensions: \(c.referenceDimensions)",
                     "  distortion table entries: \(c.distortionTableEntries.map(String.init) ?? "none")",
-                    "  depth delivered: \(c.depthDelivered) \(c.depthDetail)",
+                    "  depth requested=\(c.depthRequested) delivered=\(c.depthDelivered) \(c.depthDetail)",
                 ]
             }
             if let failure { lines += ["", "FAILED: \(failure)"] }
@@ -84,6 +94,9 @@ enum CapabilityProbe {
         ("builtInLiDARDepthCamera", .builtInLiDARDepthCamera),
     ]
 
+    /// Bounds the capture so a denied or wedged camera reports rather than spinning forever.
+    private static let captureTimeout = Duration.seconds(15)
+
     static func run() async -> Report {
         var report = Report(
             deviceModel: hardwareIdentifier(),
@@ -95,6 +108,24 @@ enum CapabilityProbe {
 
         for (label, type) in candidates {
             report.lenses.append(inspect(label: label, type: type))
+        }
+
+        // Authorisation is a probe result, not a reason to hang. Without this an unauthorised
+        // session starts, delivers no frames, and the capture callback never arrives.
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            break
+        case .notDetermined:
+            guard await AVCaptureDevice.requestAccess(for: .video) else {
+                report.failure = "camera access denied, so no capture was attempted"
+                return report
+            }
+        case .denied, .restricted:
+            report.failure = "camera access denied or restricted, so no capture was attempted"
+            return report
+        @unknown default:
+            report.failure = "camera authorisation is in an unknown state"
+            return report
         }
 
         do {
@@ -116,14 +147,14 @@ enum CapabilityProbe {
         }
         let session = AVCaptureSession()
         let output = AVCapturePhotoOutput()
+
         session.beginConfiguration()
         session.sessionPreset = .photo
-        defer { session.commitConfiguration() }
-
         guard
             let input = try? AVCaptureDeviceInput(device: device),
             session.canAddInput(input), session.canAddOutput(output)
         else {
+            session.commitConfiguration()
             return LensReport(
                 lens: label, available: true, calibrationSupported: false,
                 depthSupported: false, maxPhotoDimensions: "could not configure"
@@ -131,18 +162,25 @@ enum CapabilityProbe {
         }
         session.addInput(input)
         session.addOutput(output)
+        session.commitConfiguration()
 
         // Depth must be enabled before calibration support is meaningful: Apple gates calibration
-        // delivery behind depth or constituent-photo delivery.
-        if output.isDepthDataDeliverySupported { output.isDepthDataDeliveryEnabled = true }
+        // delivery behind depth or constituent-photo delivery. Both reads are post-commit.
+        if output.isDepthDataDeliverySupported {
+            session.beginConfiguration()
+            output.isDepthDataDeliveryEnabled = true
+            session.commitConfiguration()
+        }
 
-        let dims = output.maxPhotoDimensions
+        // The format is the authority on what the sensor can produce; the output's current value
+        // is only what has been asked for so far.
+        let best = device.activeFormat.supportedMaxPhotoDimensions.last
         return LensReport(
             lens: label,
             available: true,
             calibrationSupported: output.isCameraCalibrationDataDeliverySupported,
             depthSupported: output.isDepthDataDeliverySupported,
-            maxPhotoDimensions: "\(dims.width)x\(dims.height)"
+            maxPhotoDimensions: best.map { "\($0.width)x\($0.height)" } ?? "unknown"
         )
     }
 
@@ -154,6 +192,7 @@ enum CapabilityProbe {
 
         let session = AVCaptureSession()
         let output = AVCapturePhotoOutput()
+
         session.beginConfiguration()
         session.sessionPreset = .photo
         let input = try AVCaptureDeviceInput(device: device)
@@ -163,35 +202,41 @@ enum CapabilityProbe {
         }
         session.addInput(input)
         session.addOutput(output)
+        session.commitConfiguration()
+
+        // Everything below reads or writes committed state. Enabling depth needs its own
+        // transaction, and calibration support is only meaningful once depth has been enabled.
+        let sensorMax = device.activeFormat.supportedMaxPhotoDimensions.last
+        session.beginConfiguration()
         if output.isDepthDataDeliverySupported { output.isDepthDataDeliveryEnabled = true }
-        // Ask for the largest still the format offers, so "full resolution" is a measured claim
-        // rather than an assumption (D-014 rejects ARKit precisely for frame size).
-        output.maxPhotoDimensions = output.maxPhotoDimensions
+        // Ask for the largest still the active format offers, so "full resolution" is a measured
+        // claim rather than a default (D-014 rejects ARKit precisely for frame size).
+        if let sensorMax { output.maxPhotoDimensions = sensorMax }
         session.commitConfiguration()
 
         session.startRunning()
         defer { session.stopRunning() }
 
         let settings = AVCapturePhotoSettings()
-        settings.maxPhotoDimensions = output.maxPhotoDimensions
-        if output.isDepthDataDeliverySupported { settings.isDepthDataDeliveryEnabled = true }
-        if output.isCameraCalibrationDataDeliverySupported {
-            settings.isCameraCalibrationDataDeliveryEnabled = true
-        }
+        if let sensorMax { settings.maxPhotoDimensions = sensorMax }
+        let depthRequested = output.isDepthDataDeliverySupported
+        if depthRequested { settings.isDepthDataDeliveryEnabled = true }
+        let calibrationRequested = output.isCameraCalibrationDataDeliverySupported
+        if calibrationRequested { settings.isCameraCalibrationDataDeliveryEnabled = true }
 
-        let photo = try await withCheckedThrowingContinuation { continuation in
-            let delegate = ProbeDelegate(continuation: continuation)
-            Self.retained = delegate
-            output.capturePhoto(with: settings, delegate: delegate)
-        }
-        Self.retained = nil
+        let photo = try await capture(with: settings, from: output)
 
         let calibration = photo.cameraCalibrationData
         let matrix = calibration?.intrinsicMatrix
+        let delivered = photo.resolvedSettings.photoDimensions
         return CaptureReport(
             lens: "builtInWideAngleCamera",
-            pixelDimensions: "\(photo.resolvedSettings.photoDimensions.width)x"
-                + "\(photo.resolvedSettings.photoDimensions.height)",
+            requestedDimensions: sensorMax.map { "\($0.width)x\($0.height)" } ?? "device default",
+            pixelDimensions: "\(delivered.width)x\(delivered.height)",
+            isFullResolution: sensorMax.map {
+                $0.width == delivered.width && $0.height == delivered.height
+            } ?? false,
+            calibrationRequested: calibrationRequested,
             calibrationDelivered: calibration != nil,
             intrinsics: matrix.map {
                 String(
@@ -205,6 +250,7 @@ enum CapabilityProbe {
             } ?? "-",
             distortionTableEntries: calibration?.lensDistortionLookupTable
                 .map { $0.count / MemoryLayout<Float>.size },
+            depthRequested: depthRequested,
             depthDelivered: photo.depthData != nil,
             depthDetail: photo.depthData.map {
                 "type=\($0.depthDataType) accuracy=\($0.depthDataAccuracy.rawValue)"
@@ -212,16 +258,47 @@ enum CapabilityProbe {
         )
     }
 
-    private nonisolated(unsafe) static var retained: ProbeDelegate?
+    /// One capture, bounded. The delegate is owned by this call rather than a shared slot, so two
+    /// probes cannot deallocate each other's delegate and strand each other's continuation.
+    private static func capture(
+        with settings: AVCapturePhotoSettings,
+        from output: AVCapturePhotoOutput
+    ) async throws -> AVCapturePhoto {
+        let box = DelegateBox()
+        return try await withThrowingTaskGroup(of: AVCapturePhoto.self) { group in
+            group.addTask {
+                try await withCheckedThrowingContinuation { continuation in
+                    let delegate = ProbeDelegate(continuation: continuation)
+                    box.delegate = delegate
+                    output.capturePhoto(with: settings, delegate: delegate)
+                }
+            }
+            group.addTask {
+                try await Task.sleep(for: captureTimeout)
+                throw ProbeError.timedOut
+            }
+            defer { group.cancelAll() }
+            guard let first = try await group.next() else { throw ProbeError.timedOut }
+            return first
+        }
+    }
+
+    /// AVCapturePhotoOutput holds its delegate weakly, so it has to be retained for the duration
+    /// of one capture — but per call, never in a shared static.
+    private final class DelegateBox: @unchecked Sendable {
+        var delegate: ProbeDelegate?
+    }
 
     enum ProbeError: LocalizedError {
         case noDevice
         case cannotConfigure
+        case timedOut
 
         var errorDescription: String? {
             switch self {
             case .noDevice: return "no rear wide-angle camera (expected on a simulator)"
             case .cannotConfigure: return "the device rejected the probe configuration"
+            case .timedOut: return "the camera did not return a photo within 15 seconds"
             }
         }
     }

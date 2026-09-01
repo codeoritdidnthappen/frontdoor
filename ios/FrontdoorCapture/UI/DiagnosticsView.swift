@@ -9,7 +9,9 @@ struct DiagnosticsView: View {
     let onClose: () -> Void
 
     @State private var report: CapabilityProbe.Report?
-    @State private var running = false
+    @State private var probe: Task<Void, Never>?
+
+    private var running: Bool { probe != nil }
 
     var body: some View {
         NavigationStack {
@@ -40,10 +42,13 @@ struct DiagnosticsView: View {
                     }
 
                     Button {
-                        Task {
-                            running = true
-                            report = await CapabilityProbe.run()
-                            running = false
+                        probe = Task {
+                            let result = await CapabilityProbe.run()
+                            // A cancelled probe was abandoned by dismissing the sheet; its result
+                            // is not wanted and the session it opened is already being torn down.
+                            guard !Task.isCancelled else { return }
+                            report = result
+                            probe = nil
                         }
                     } label: {
                         if running {
@@ -62,9 +67,20 @@ struct DiagnosticsView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done", action: onClose)
+                    Button("Done") {
+                        // Cancelling matters: an in-flight probe holds an AVCaptureSession, and
+                        // leaving it running would light the camera indicator over a screen that
+                        // shows nothing capturing.
+                        cancelProbe()
+                        onClose()
+                    }
                 }
             }
         }
+    }
+
+    private func cancelProbe() {
+        probe?.cancel()
+        probe = nil
     }
 }

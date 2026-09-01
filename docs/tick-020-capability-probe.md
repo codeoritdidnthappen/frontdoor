@@ -28,10 +28,10 @@ model alongside every row.
 
 ## Results
 
-| Device | Model ID | iOS | 1× calibration | 1× depth | Still dimensions | Distortion table |
-|--------|----------|-----|----------------|----------|------------------|------------------|
-| Emily — iPhone 16 | `iPhone17,3` | 26.6.1 | _pending_ | _pending_ | _pending_ | _pending_ |
-| James — iPhone 16 Pro | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ |
+| Device | Model ID | iOS | 1× calibration | 1× depth | Requested / delivered pixels | Full res? | Distortion table |
+|--------|----------|-----|----------------|----------|------------------------------|-----------|------------------|
+| Emily — iPhone 16 | `iPhone17,3` | 26.6.1 | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ |
+| James — iPhone 16 Pro | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ |
 
 Simulator, for contrast — every lens unavailable, capture fails with "no rear wide-angle camera":
 
@@ -64,6 +64,14 @@ a conflict between D-014 and ASM-2, and it would need a decision about capture g
 than about frameworks.
 
 Timebox is 4 hours. At the limit, the best available answer is recorded and the decision taken.
+
+## Reading the output
+
+The report separates **requested** from **delivered** deliberately. `calibration requested=false`
+means this device could not offer it in that configuration; `requested=true delivered=false` means
+it offered and then did not produce it, which is a different and more alarming finding. The same
+split applies to depth, and `full-resolution=false` means the delivered still was smaller than the
+active format's maximum — which is the comparison AC-3 exists to make.
 
 ## Known limitation of this probe
 
