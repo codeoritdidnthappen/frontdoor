@@ -208,10 +208,12 @@ is published as a release artifact, satisfying deliverable #1.
 Every capture records a LiDAR depth map, on every entrance rather than a matched subset — with the
 capture app in place this is free, and it strengthens deliverable #5.
 
-Depth maps are stored under a separate prefix that **the core metrology library cannot read**. They
-are loaded only by the evaluation harness, only for the monocular-versus-LiDAR comparison. If depth
-sits where the method can reach it, it is eventually used to tune, and the comparison stops meaning
-anything — the same reasoning as the sealed split.
+Depth maps are stored in a **separate bucket** (D-026) that the image-only loader
+credential cannot read. A prefix inside one bucket is not enough where the provider
+scopes credentials per bucket. They are loaded only by the evaluation harness, only
+for the monocular-versus-LiDAR comparison. If depth sits where the method can reach
+it, it is eventually used to tune, and the comparison stops meaning anything — the
+same reasoning as the sealed split. Layout: `data/STORAGE.md`.
 
 LiDAR is a comparison, not ground truth. Commonly reported depth error is around ±1cm, coarser than
 the 0.25" target and comparable to the 1/2" decision line itself. The caliper (±0.01") remains the

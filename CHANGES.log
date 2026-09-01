@@ -278,3 +278,21 @@ protocol can be checked against it. The empirical curve is TICK-075 on the seale
 Not yet done: TICK-041 requires a second team member to reproduce the algebra independently and
 arrive at the same predicted errors at 0, 15, 30 and 45 degrees. That review has not happened.
 
+## 2026-09-01 — Object storage on Cloudflare R2 (TICK-012, issue #20)
+
+Source: GitHub issue #20, naming the provider D-016 and D-018 left open, and
+shipping the two-bucket client the loader and harness will use.
+
+- Provider: Cloudflare R2, S3-compatible, WNAM. Free tier 10 GB / month, free egress.
+  Projected volume is 2-5 GB, so 10 GB is comfortable (D-026: 5 GB is marginal).
+- Billing cannot start silently: R2's free-tier ceiling holds only if no payment
+  method is attached to the account. Do not add one. 10 GB then hard-stops.
+- Two buckets, because R2 API tokens scope per bucket not per prefix (D-026):
+  `frontdoor-image` (loader, server, harness) and `frontdoor-depth` (harness only).
+  The core metrology library gets no credential. Object key is the capture_id.
+- Credentials via environment variables, documented in `.env.example` and
+  `data/STORAGE.md`. Nothing in this commit is a secret.
+- `python -m frontdoor.storage verify` uploads a probe, reads the image back with
+  the loader credential, and fails unless that same credential is denied on the
+  depth bucket. That check is the DoD for the quarantine; TICK-072 (library-level
+  refusal) is a later defence, not a substitute.
