@@ -295,7 +295,7 @@ fix later applied to `captured_at` and `entrance_id`.
 
 ## #20 / TICK-012 — Object storage with a quarantined depth prefix
 
-PR: branch `feat/tick-012-object-storage` (TICK-012, #20)
+PR: [#140](https://github.com/codeoritdidnthappen/frontdoor/pull/140)
 
 Named Cloudflare R2 as the free-tier provider (10 GB, two buckets because
 tokens scope per bucket) and shipped the S3 client the loader and harness
