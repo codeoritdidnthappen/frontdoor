@@ -82,6 +82,8 @@ struct GravitySample: Equatable {
 /// Why a shutter press produced nothing. Distinct from `CaptureUnavailable`, which is about the
 /// session; these are frames that were taken and then refused.
 enum CaptureRejected: Error, Equatable {
+    /// The session stopped or was reconfigured between the shutter press and the capture itself.
+    case sessionNotReady
     case noImageData
     case noCalibrationData
     case unusableCalibrationData
@@ -92,6 +94,11 @@ enum CaptureRejected: Error, Equatable {
     /// Shown verbatim to an operator standing at an entrance.
     var message: String {
         switch self {
+        case .sessionNotReady:
+            return """
+            The camera stopped being available between the shutter press and the capture, so \
+            nothing was recorded. Reopen the viewfinder and take the shot again.
+            """
         case .noImageData:
             return "The camera returned no image data. Nothing was recorded; take the shot again."
         case .noCalibrationData:

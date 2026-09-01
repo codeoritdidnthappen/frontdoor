@@ -169,4 +169,28 @@ final class CaptureValidationTests: XCTestCase {
             )
         }
     }
+    // MARK: - The session can go away between the press and the capture (#134)
+
+    func testSessionNotReadyCarriesAnActionableMessage() {
+        // capturePhoto() re-checks the video connection on the session queue and reports this,
+        // rather than calling AVFoundation with no active connection — which raises an uncatchable
+        // NSInvalidArgumentException and kills the app on an operator's phone.
+        let message = CaptureRejected.sessionNotReady.message
+        XCTAssertFalse(message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        XCTAssertTrue(
+            message.contains("nothing was recorded"),
+            "a refused shutter press must tell the operator nothing was saved"
+        )
+    }
+
+    func testSessionNotReadyIsDistinctFromEveryOtherRejection() {
+        let others: [CaptureRejected] = [
+            .noImageData, .noCalibrationData, .unusableCalibrationData,
+            .zoomNotUnity(2.0), .noGravitySample, .gravityImplausible(0.4)
+        ]
+        for other in others {
+            XCTAssertNotEqual(CaptureRejected.sessionNotReady, other)
+            XCTAssertNotEqual(CaptureRejected.sessionNotReady.message, other.message)
+        }
+    }
 }

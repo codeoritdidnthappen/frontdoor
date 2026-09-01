@@ -268,7 +268,26 @@ final class CaptureController: ObservableObject {
         if output.isCameraCalibrationDataDeliverySupported {
             settings.isCameraCalibrationDataDeliveryEnabled = true
         }
-        sessionQueue.async { [output] in
+        // The readiness decision above was made on the main actor; the capture happens here, later,
+        // on the session queue. In that window the session can stop or be reconfigured — an
+        // incoming call, another app taking the camera, stop() racing the shutter — and calling
+        // capturePhoto with no active video connection raises NSInvalidArgumentException, which is
+        // uncatchable from Swift and kills the app (#134).
+        //
+        // So the decision is remade on the queue that performs the capture, immediately before it,
+        // against the connection actually being used.
+        sessionQueue.async { [weak self, output, session] in
+            let connection = output.connection(with: .video)
+            guard session.isRunning, let connection, connection.isActive, connection.isEnabled else {
+                Task { @MainActor in
+                    guard let self else { return }
+                    // Not a silent no-op: a shutter press that produces nothing and says nothing is
+                    // indistinguishable from a broken app to an operator at an entrance.
+                    self.lastCaptureError = CaptureRejected.sessionNotReady.message
+                    self.delegates.removeAll { $0.token == token }
+                }
+                return
+            }
             output.capturePhoto(with: settings, delegate: delegate)
         }
     }
