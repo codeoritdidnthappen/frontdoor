@@ -20,6 +20,38 @@ RESPONSE_SCHEMA = json.loads(
     .read_text(encoding="utf-8")
 )
 
+ERROR_SCHEMA = json.loads(
+    resources.files("frontdoor_server")
+    .joinpath("measure_error.schema.json")
+    .read_text(encoding="utf-8")
+)
+
+# HTTP statuses /measure uses today, each tied to a class of failure (TICK-224).
+# 404 / 405 / 413 / 500 are specified in measure_error.schema.json for TICK-225.
+ERROR_STATUSES = {
+    400: "malformed request: missing image, missing sidecar, or sidecar is not JSON",
+    422: "sidecar is JSON but fails the capture sidecar schema",
+}
+
+DETAIL_MAX_LENGTH = 256
+_DETAIL_ELLIPSIS = "..."
+
+
+def _bounded_detail(detail):
+    """Clip detail so a rejected sidecar cannot produce an unbounded response."""
+    text = detail if isinstance(detail, str) else str(detail)
+    if len(text) <= DETAIL_MAX_LENGTH:
+        return text
+    return text[: DETAIL_MAX_LENGTH - len(_DETAIL_ELLIPSIS)] + _DETAIL_ELLIPSIS
+
+
+def _error(message, detail, field=None, status=400):
+    body = {"error": message, "detail": _bounded_detail(detail)}
+    if field is not None:
+        body["field"] = field
+    return body, status
+
+
 # Fixed placeholder values. The repdigit rises are deliberately synthetic so nobody reads stub
 # output as a measurement, and the four arms between them exercise every decision value, giving
 # TICK-063 all three render states to build against. Intervals are consistent with the decisions:
@@ -46,13 +78,6 @@ STUB_ARMS = {
         "decisions": {"half_inch": "fail", "quarter_inch": "fail"},
     },
 }
-
-
-def _error(message, detail, field=None):
-    body = {"error": message, "detail": detail}
-    if field is not None:
-        body["field"] = field
-    return body, 400
 
 
 def create_app():
@@ -85,7 +110,12 @@ def create_app():
         try:
             validate_sidecar(sidecar)
         except ValidationError as exc:
-            return _error("sidecar failed validation", exc.message, field=exc.json_path)
+            return _error(
+                "sidecar failed validation",
+                exc.message,
+                field=exc.json_path,
+                status=422,
+            )
 
         return {
             "stub": True,

@@ -108,19 +108,19 @@ def test_response_round_trips_through_json(client, sidecar):
 
 
 @pytest.mark.parametrize("field", ["capture_id", "ground_truth", "split", "intrinsics"])
-def test_invalid_sidecar_returns_400_naming_the_field(client, sidecar, field):
+def test_invalid_sidecar_returns_422_naming_the_field(client, sidecar, field):
     sidecar.pop(field)
     response = post_measure(client, sidecar)
-    assert response.status_code == 400
+    assert response.status_code == 422
     body = response.get_json()
     assert body["error"] == "sidecar failed validation"
     assert field in body["detail"]
 
 
-def test_sidecar_enum_violation_returns_400(client, sidecar):
+def test_sidecar_enum_violation_returns_422(client, sidecar):
     sidecar["split"] = "test"
     response = post_measure(client, sidecar)
-    assert response.status_code == 400
+    assert response.status_code == 422
     assert response.get_json()["field"] == "$.split"
 
 
