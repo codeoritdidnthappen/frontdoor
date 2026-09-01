@@ -11,10 +11,9 @@ __pycache__/
 # Mac
 .DS_Store
 
-# Logs
-logs
-*.log
-!CHANGES.log
+# Logs — transient runner output lives under logs/. Root-level .log files
+# are committed artefacts (CHANGES.log, SEAL_AUDIT.log) and must stay trackable.
+logs/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
