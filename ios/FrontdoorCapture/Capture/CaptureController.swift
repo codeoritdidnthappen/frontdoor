@@ -66,6 +66,10 @@ final class CaptureController: ObservableObject {
 
     /// Fixed capture geometry: 1x main lens, no digital zoom, no crop (ARCHITECTURE.md section 4).
     private static let lens: AVCaptureDevice.DeviceType = .builtInWideAngleCamera
+    /// Spelled to match the sidecar example in ARCHITECTURE.md section 4. Derived from the raw
+    /// value it would be "BuiltInWideAngleCamera", and anything filtering on the documented
+    /// spelling would silently match nothing.
+    static let lensName = "builtInWideAngleCamera"
 
     init() {
         refreshReadiness()
@@ -131,6 +135,7 @@ final class CaptureController: ObservableObject {
         }
 
         let failure = await configureSession()
+        if failure != nil { motion.stopDeviceMotionUpdates() }
         // stop(), or another start(), ran while we were configuring. Committing .running here
         // would claim a live session over a stopped one, and the guard above would then refuse
         // every future start.
@@ -219,10 +224,14 @@ final class CaptureController: ObservableObject {
     /// than saved: an unusable still that looks saved is worse than a visible failure.
     func capturePhoto() {
         guard state == .running else { return }
-        let zoomFactor = Double(device?.videoZoomFactor ?? 0)
-        let lens = Self.lens.rawValue.replacingOccurrences(
-            of: "AVCaptureDeviceType", with: ""
-        )
+        // nil would mean the controller lost its device, which is not a zoom problem — reporting
+        // it as "zoom was 0.00x" would send the operator after the wrong thing.
+        guard let device else {
+            lastCaptureError = CaptureUnavailable.noCaptureDevice.message
+            return
+        }
+        let zoomFactor = Double(device.videoZoomFactor)
+        let lens = Self.lensName
         // Sampled here, on the main actor, at the moment of the press — not inside the delegate
         // callback, which runs after the exposure and would describe a different instant.
         let gravity = motion.deviceMotion.map {
@@ -248,8 +257,13 @@ final class CaptureController: ObservableObject {
 
         let settings = AVCapturePhotoSettings()
         settings.maxPhotoDimensions = output.maxPhotoDimensions
-        // Only ever set when configuration proved the precondition; see applyConfiguration.
-        settings.isCameraCalibrationDataDeliveryEnabled = true
+        // Setting this when the output does not support it raises an uncatchable NSException, so
+        // it is gated at the point of use rather than on a precondition proved elsewhere. When it
+        // cannot be requested the frame simply arrives without calibration, and validation refuses
+        // it with a message naming that as the reason.
+        if output.isCameraCalibrationDataDeliverySupported {
+            settings.isCameraCalibrationDataDeliveryEnabled = true
+        }
         sessionQueue.async { [output] in
             output.capturePhoto(with: settings, delegate: delegate)
         }
@@ -348,21 +362,22 @@ final class CaptureController: ObservableObject {
             output.maxPhotoDimensions = maxDimensions
         }
 
-        // Intrinsics are the blocking problem, and the constraint is the API, not the hardware.
-        // AVCapturePhotoSettings.isCameraCalibrationDataDeliveryEnabled may only be set when the
-        // output supports it AND two or more devices are selected for virtual-device constituent
-        // photo delivery (AVCapturePhotoOutput.h:1496). D-014 pins capture to the single 1x
-        // builtInWideAngleCamera, so that precondition can never hold here, and setting the flag
-        // anyway raises an uncatchable exception.
+        // Calibration delivery is requested per capture, not demanded here.
         //
-        // Detected rather than attempted: a still without intrinsics is unusable by every arm
-        // (D-015), so the session refuses to start rather than letting an operator collect frames
-        // that cannot be measured. This is R-9, and it is resolved in TICK-023 (#27), where depth
-        // delivery carries AVDepthData.cameraCalibrationData on the same single lens.
-        let constituents = device.constituentDevices.count
-        guard output.isCameraCalibrationDataDeliverySupported, constituents >= 2 else {
-            return .failure(.calibrationUnavailable)
-        }
+        // The previous form refused to start the session unless the device had two or more
+        // constituent devices. builtInWideAngleCamera is a physical camera, and
+        // AVCaptureDevice.h:773 states that constituentDevices "returns an empty array" when
+        // virtualDevice == NO — so that condition was unsatisfiable and no capture could ever
+        // start, on any device.
+        //
+        // The protection it was reaching for is real and is already provided, one layer down:
+        // CaptureValidation refuses any frame that arrives without usable intrinsics, so an
+        // unmeasurable still is never recorded. Refusing the whole session instead conflates "this
+        // frame is unusable" with "this device is unusable", and only the first is knowable here.
+        //
+        // It also settles TICK-020 (#24) by construction rather than by reading a header: if the
+        // 1x path does not deliver calibration, every capture is refused with a message saying so,
+        // which is the measurement that spike is waiting for.
 
         // 1x, no digital zoom, no crop (D-014). Pinned rather than assumed: the system can restore
         // a previous zoom, and a cropped frame silently invalidates the intrinsics beside it.
