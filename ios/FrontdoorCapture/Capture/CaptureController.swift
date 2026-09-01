@@ -248,8 +248,8 @@ final class CaptureController: ObservableObject {
 
         let settings = AVCapturePhotoSettings()
         settings.maxPhotoDimensions = output.maxPhotoDimensions
-        // Only ever set when configuration proved the precondition; see applyConfiguration.
-        settings.isCameraCalibrationDataDeliveryEnabled = true
+        // Throws unless the output has it enabled, which applyConfiguration guaranteed.
+        settings.isDepthDataDeliveryEnabled = output.isDepthDataDeliveryEnabled
         sessionQueue.async { [output] in
             output.capturePhoto(with: settings, delegate: delegate)
         }
@@ -262,7 +262,10 @@ final class CaptureController: ObservableObject {
         zoomFactor: Double,
         lens: String
     ) {
-        let intrinsics = captured.calibration.flatMap {
+        // Intrinsics ride in on the depth data (see applyConfiguration), with the photo's own
+        // calibration kept as a fallback in case a future configuration can supply it directly.
+        let calibration = captured.depthData?.cameraCalibrationData ?? captured.calibration
+        let intrinsics = calibration.flatMap {
             CameraIntrinsics.from(
                 matrix: $0.intrinsicMatrix,
                 referenceDimensions: $0.intrinsicMatrixReferenceDimensions,
@@ -277,11 +280,14 @@ final class CaptureController: ObservableObject {
             pixelWidth: captured.pixelWidth,
             pixelHeight: captured.pixelHeight,
             intrinsics: intrinsics,
-            hadCalibrationData: captured.calibration != nil,
+            hadCalibrationData: calibration != nil,
             gravity: gravity,
             deviceModel: CaptureValidation.hardwareIdentifier(),
             lens: lens,
-            zoomFactor: zoomFactor
+            zoomFactor: zoomFactor,
+            // Absence is recorded, never punished: depth is a comparison, so a frame without it
+            // must still cost nothing (D-020, TICK-023).
+            depth: DepthCapture.record(from: captured.depthData)
         ) {
         case .success(let record):
             photosTaken += 1
@@ -348,21 +354,22 @@ final class CaptureController: ObservableObject {
             output.maxPhotoDimensions = maxDimensions
         }
 
-        // Intrinsics are the blocking problem, and the constraint is the API, not the hardware.
-        // AVCapturePhotoSettings.isCameraCalibrationDataDeliveryEnabled may only be set when the
-        // output supports it AND two or more devices are selected for virtual-device constituent
-        // photo delivery (AVCapturePhotoOutput.h:1496). D-014 pins capture to the single 1x
-        // builtInWideAngleCamera, so that precondition can never hold here, and setting the flag
-        // anyway raises an uncatchable exception.
+        // Depth delivery is how intrinsics reach a single-lens capture. Camera calibration data
+        // cannot be requested directly here: AVCapturePhotoSettings.isCameraCalibrationDataDelivery
+        // Enabled additionally requires two or more constituent devices selected for virtual-device
+        // photo delivery (AVCapturePhotoOutput.h:1496), which D-014's fixed 1x wide lens rules out.
+        // AVDepthData carries cameraCalibrationData with no such precondition, so enabling depth
+        // delivery is what makes the frame measurable at all (D-015).
         //
-        // Detected rather than attempted: a still without intrinsics is unusable by every arm
-        // (D-015), so the session refuses to start rather than letting an operator collect frames
-        // that cannot be measured. This is R-9, and it is resolved in TICK-023 (#27), where depth
-        // delivery carries AVDepthData.cameraCalibrationData on the same single lens.
-        let constituents = device.constituentDevices.count
-        guard output.isCameraCalibrationDataDeliverySupported, constituents >= 2 else {
+        // Depth is captured on every entrance regardless (D-020). That it is also the intrinsics
+        // carrier means the quarantine matters more, not less: the map is still written and
+        // forgotten, and nothing in the app reads a depth value.
+        //
+        // Enabling this reconfigures the render pipeline, so it must happen before startRunning.
+        guard output.isDepthDataDeliverySupported else {
             return .failure(.calibrationUnavailable)
         }
+        output.isDepthDataDeliveryEnabled = true
 
         // 1x, no digital zoom, no crop (D-014). Pinned rather than assumed: the system can restore
         // a previous zoom, and a cropped frame silently invalidates the intrinsics beside it.
@@ -384,6 +391,7 @@ private struct CapturedPhoto {
     var pixelWidth: Int
     var pixelHeight: Int
     var calibration: AVCameraCalibrationData?
+    var depthData: AVDepthData?
 }
 
 /// AVCapturePhotoOutput holds its delegate weakly, so one is kept alive per in-flight capture.
@@ -419,7 +427,8 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
             image: image,
             pixelWidth: Int(dimensions.width),
             pixelHeight: Int(dimensions.height),
-            calibration: photo.cameraCalibrationData
+            calibration: photo.cameraCalibrationData,
+            depthData: photo.depthData
         )))
     }
 }

@@ -19,6 +19,9 @@ struct CaptureRecord: Equatable {
     /// e.g. `builtInWideAngleCamera`. Fixed by D-014, recorded so the record proves it.
     var lens: String
     var zoomFactor: Double
+    /// Metadata for the quarantined depth map, or nil when the device or the frame produced none.
+    /// Never nil-checked to decide anything about the measurement (D-020).
+    var depth: DepthRecord?
 }
 
 /// Intrinsics as delivered for one frame, already expressed in the pixel grid of the still that
@@ -130,7 +133,8 @@ enum CaptureValidation {
         gravity: GravitySample?,
         deviceModel: String,
         lens: String,
-        zoomFactor: Double
+        zoomFactor: Double,
+        depth: DepthRecord? = nil
     ) -> Result<CaptureRecord, CaptureRejected> {
         guard pixelWidth > 0, pixelHeight > 0 else { return .failure(.noImageData) }
         guard hadCalibrationData else { return .failure(.noCalibrationData) }
@@ -148,7 +152,8 @@ enum CaptureValidation {
             gravity: gravity,
             deviceModel: deviceModel,
             lens: lens,
-            zoomFactor: zoomFactor
+            zoomFactor: zoomFactor,
+            depth: depth
         ))
     }
 
