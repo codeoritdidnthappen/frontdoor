@@ -7,7 +7,7 @@ import SwiftUI
 struct FrontdoorCaptureApp: App {
     var body: some Scene {
         WindowGroup {
-            CaptureView(controller: CaptureController())
+            RootView()
         }
     }
 }

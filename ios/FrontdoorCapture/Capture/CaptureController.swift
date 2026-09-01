@@ -1,26 +1,30 @@
 import AVFoundation
 import CoreMotion
-import Foundation
+import SwiftUI
+import UIKit
 
 /// Owns the AVFoundation session and the CoreMotion manager.
 ///
 /// AVFoundation and CoreMotion only — no AR session is ever started (D-014, D-015). That is what
 /// makes motion-derived scale unavailable rather than merely forbidden, and it is asserted by
-/// Scripts/assert-no-arkit.sh at build time and by tests/test_ios_no_arkit.py in CI.
+/// Scripts/assert-no-arkit.sh at build time and tests/test_ios_no_arkit.py in CI.
 ///
 /// This type is the whole capture surface. Rendering (EPIC-03) observes it and adds views; it does
 /// not reach into the session, so the capture path stays single.
 @MainActor
 final class CaptureController: ObservableObject {
     enum State: Equatable {
-        case idle
-        case ready
+        case stopped
+        case starting
+        case running
         case unavailable(CaptureUnavailable)
     }
 
-    @Published private(set) var state: State = .idle
-    /// Count of stills taken this launch. TICK-022 replaces this with a real capture record.
+    @Published private(set) var state: State = .stopped
     @Published private(set) var photosTaken = 0
+    /// Most recent still, held in memory only so the operator can see that capture worked.
+    /// Nothing is written to disk here — the capture record is TICK-028.
+    @Published private(set) var lastThumbnail: UIImage?
 
     let session = AVCaptureSession()
 
@@ -30,15 +34,38 @@ final class CaptureController: ObservableObject {
     private var delegates: [PhotoCaptureDelegate] = []
 
     /// Fixed capture geometry: 1x main lens, no digital zoom, no crop (ARCHITECTURE.md section 4).
-    /// The error budget is counted in pixels across the threshold rise, so the lens is not a choice.
     private static let lens: AVCaptureDevice.DeviceType = .builtInWideAngleCamera
 
+    // MARK: - Readiness, checkable before the camera is switched on
+
+    var motionAvailable: Bool { motion.isDeviceMotionAvailable }
+
+    var cameraAuthorization: AVAuthorizationStatus {
+        AVCaptureDevice.authorizationStatus(for: .video)
+    }
+
+    /// Why capture could not start, checkable without starting it. Lets the home screen say what
+    /// is wrong before the operator taps anything.
+    var blockingReason: CaptureUnavailable? {
+        if !motionAvailable { return .motionUnavailable }
+        switch cameraAuthorization {
+        case .denied: return .cameraDenied
+        case .restricted: return .cameraRestricted
+        default: return nil
+        }
+    }
+
+    // MARK: - Lifecycle
+
     func start() async {
-        guard motion.isDeviceMotionAvailable else {
+        guard state != .running else { return }
+        state = .starting
+
+        guard motionAvailable else {
             state = .unavailable(.motionUnavailable)
             return
         }
-        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        switch cameraAuthorization {
         case .authorized:
             break
         case .notDetermined:
@@ -62,31 +89,42 @@ final class CaptureController: ObservableObject {
             return
         }
         motion.startDeviceMotionUpdates()
-        state = .ready
+        state = .running
     }
 
+    /// Stops the camera and releases it. The operator can leave the viewfinder without killing
+    /// the app, and the camera indicator goes out when they do.
     func stop() {
         motion.stopDeviceMotionUpdates()
         sessionQueue.async { [session] in
             if session.isRunning { session.stopRunning() }
         }
+        state = .stopped
     }
 
+    func openSystemSettings() {
+        guard let url = URL(string: UIApplication.openSettingsURLString) else { return }
+        UIApplication.shared.open(url)
+    }
+
+    // MARK: - Capture
+
     /// Takes one photo. TICK-022 onward attach intrinsics, gravity, depth and the sidecar; this
-    /// stage claims nothing beyond "a still was produced".
+    /// stage claims nothing beyond "a still was produced", and shows it so that is checkable.
     func capturePhoto() {
-        guard case .ready = state else { return }
-        let settings = AVCapturePhotoSettings()
+        guard state == .running else { return }
         let token = UUID()
-        let delegate = PhotoCaptureDelegate(token: token) { [weak self] finished in
+        let delegate = PhotoCaptureDelegate(token: token) { [weak self] finished, image in
             Task { @MainActor in
-                self?.photosTaken += 1
-                self?.delegates.removeAll { $0.token == finished }
+                guard let self else { return }
+                self.photosTaken += 1
+                if let image { self.lastThumbnail = image }
+                self.delegates.removeAll { $0.token == finished }
             }
         }
         delegates.append(delegate)
         sessionQueue.async { [output] in
-            output.capturePhoto(with: settings, delegate: delegate)
+            output.capturePhoto(with: AVCapturePhotoSettings(), delegate: delegate)
         }
     }
 
@@ -119,6 +157,8 @@ final class CaptureController: ObservableObject {
         defer { session.commitConfiguration() }
         session.sessionPreset = .photo
 
+        guard session.inputs.isEmpty, session.outputs.isEmpty else { return nil }
+
         do {
             let input = try AVCaptureDeviceInput(device: device)
             guard session.canAddInput(input), session.canAddOutput(output) else {
@@ -136,9 +176,9 @@ final class CaptureController: ObservableObject {
 /// AVCapturePhotoOutput holds its delegate weakly, so one is kept alive per in-flight capture.
 private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegate {
     let token: UUID
-    private let onFinish: (UUID) -> Void
+    private let onFinish: (UUID, UIImage?) -> Void
 
-    init(token: UUID, onFinish: @escaping (UUID) -> Void) {
+    init(token: UUID, onFinish: @escaping (UUID, UIImage?) -> Void) {
         self.token = token
         self.onFinish = onFinish
     }
@@ -148,6 +188,7 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
         didFinishProcessingPhoto photo: AVCapturePhoto,
         error: Error?
     ) {
-        onFinish(token)
+        let image = photo.fileDataRepresentation().flatMap(UIImage.init(data:))
+        onFinish(token, image)
     }
 }
