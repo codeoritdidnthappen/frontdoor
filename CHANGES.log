@@ -266,10 +266,10 @@ protocol can be checked against it. The empirical curve is TICK-075 on the seale
 - F-003  TAP PRECISION IS THE BINDING CONSTRAINT, not angle and not card pixel span. Hitting 0.25"
          needs delta <= 6.5 px at 2 m and <= 4.3 px at 3 m. An unaided fingertip on an iPhone 16 is
          worth about 124 image pixels; a 4x loupe about 31. Without pixel-level magnification in the
-         ROI tap UI, Arm A cannot reach the success bar at any distance. Filed as TICK-232.
+         ROI tap UI, Arm A cannot reach the success bar at any distance. Filed as TICK-232 (#135).
 - F-004  THE 3 m DISTANCE CAP DOES NOT SURVIVE. At a realistic delta = 5 px, 3 m exceeds the bar
          head-on; the cap consistent with the bar is 2.5 m. Distance should be recorded per capture
-         as a first-class condition variable. Filed as TICK-233 against the capture protocol.
+         as a first-class condition variable. Filed as TICK-233 (#136) against the capture protocol.
 - F-005  Obliquity that foreshortens the rise (camera above the threshold, looking down) is not the
          same as obliquity to the side, which does not foreshorten a vertical rise at all. Error
          therefore depends on the DIRECTION of obliquity, not only its magnitude, and D-019's scalar

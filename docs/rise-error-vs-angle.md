@@ -144,8 +144,8 @@ Stated so the disagreement with TICK-075, if any, has somewhere to land.
 
 1. **The ROI tap UI must provide pixel-level magnification.** At an unaided ~124 px, Arm A misses
    the bar by a factor of twenty at any distance. This is a UI requirement, not an operator-skill
-   requirement, and it lands on TICK-026 (#30), which has not started.
-2. **Revise the distance cap from 3 m to 2.5 m** in the capture protocol (TICK-090, #64), and
+   requirement, and it lands on TICK-026 (#30), which has not started. Filed as TICK-232 (#135).
+2. **Revise the distance cap from 3 m to 2.5 m** in the capture protocol (TICK-090, #64) — filed as TICK-233 (#136) — and
    record distance per capture as a first-class condition variable — it matters more than angle.
 3. **Angle guidance can be looser than assumed.** With δ and `d` controlled, the bar is not crossed
    until 40-63°. Deliberately varying angle across entrances remains right for the curve; treating
