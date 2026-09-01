@@ -4,18 +4,20 @@
 # research question uninteresting. The boundary is enforced by construction: if no AR session is
 # ever started, motion-derived scale is not merely forbidden, it is unavailable.
 #
-# Scans two things, because importing ARKit is not the only way to link it:
-#   - Swift sources, for imports and symbol use
-#   - project.yml, for an ARKit framework dependency with no corresponding import
+# Matches code, not prose. An earlier version matched the bare word, which failed the build on
+# comments explaining why ARKit is excluded — the guard has to let the codebase describe its own
+# boundary. So: imports and AR* symbol use, plus a linked framework in project.yml, since
+# importing is not the only way to link one.
 #
 # Runs as an Xcode pre-build phase. The same rule is asserted from CI by
 # tests/test_ios_no_arkit.py, so it holds on a Linux runner with no Xcode.
 set -eu
 ROOT="${1:?usage: assert-no-arkit.sh <ios-dir>}"
-PATTERN='\b(ARKit|ARSession|ARConfiguration|RealityKit)\b'
+IMPORTS='^[[:space:]]*(@_exported[[:space:]]+)?import[[:space:]]+(ARKit|RealityKit)\b'
+SYMBOLS='\b(ARSession|ARConfiguration|ARWorldTrackingConfiguration|ARFrame|ARAnchor|ARSCNView|ARView)\b'
 status=0
 
-if hits=$(grep -rnE "$PATTERN" "$ROOT" --include='*.swift' 2>/dev/null); then
+if hits=$(grep -rnE "$IMPORTS|$SYMBOLS" "$ROOT" --include='*.swift' 2>/dev/null); then
     echo "error: ARKit reached the capture app sources. D-015 forbids it; see ARCHITECTURE.md section 2." >&2
     echo "$hits" | sed 's/^/error: /' >&2
     status=1
@@ -23,7 +25,7 @@ fi
 
 # A dependency line links the framework even with no import anywhere.
 if [ -f "$ROOT/project.yml" ]; then
-    if deps=$(grep -nE "^[[:space:]]*-[[:space:]]*sdk:.*$PATTERN" "$ROOT/project.yml" 2>/dev/null); then
+    if deps=$(grep -nE '^[[:space:]]*-[[:space:]]*sdk:.*\b(ARKit|RealityKit)\b' "$ROOT/project.yml" 2>/dev/null); then
         echo "error: an ARKit framework is linked in project.yml. D-015 forbids it." >&2
         echo "$deps" | sed 's/^/error: /' >&2
         status=1

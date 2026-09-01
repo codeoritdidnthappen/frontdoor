@@ -10,6 +10,7 @@ import SwiftUI
 struct HomeView: View {
     @ObservedObject var controller: CaptureController
     let onStart: () -> Void
+    let onDiagnostics: () -> Void
 
     var body: some View {
         VStack(spacing: 28) {
@@ -67,6 +68,9 @@ struct HomeView: View {
             .buttonStyle(.borderedProminent)
             .disabled(controller.readiness.blockingReason != nil)
             .padding(.horizontal, 24)
+
+            Button("Run capability probe") { onDiagnostics() }
+                .font(.footnote)
 
             Text("\(controller.photosTaken) captured this session")
                 .font(.footnote.monospacedDigit())

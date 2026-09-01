@@ -19,7 +19,12 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 IOS_SOURCES = REPO_ROOT / "ios" / "FrontdoorCapture"
 GUARD = REPO_ROOT / "ios" / "Scripts" / "assert-no-arkit.sh"
 
-FORBIDDEN = re.compile(r"\b(ARKit|ARSession|ARConfiguration|RealityKit)\b")
+# Matches code, not prose. The codebase has to be able to name ARKit in comments explaining why
+# it is excluded; what must never appear is an import or an AR* symbol.
+FORBIDDEN = re.compile(
+    r"^\s*(@_exported\s+)?import\s+(ARKit|RealityKit)\b"
+    r"|\b(ARSession|ARConfiguration|ARWorldTrackingConfiguration|ARFrame|ARAnchor|ARSCNView|ARView)\b"
+)
 
 
 def swift_sources():
@@ -51,7 +56,10 @@ def test_the_app_links_avfoundation_and_coremotion():
     linked = set(re.findall(r"- sdk:\s*(\S+)", spec))
     assert "AVFoundation.framework" in linked
     assert "CoreMotion.framework" in linked
-    assert not {f for f in linked if FORBIDDEN.search(f)}, f"forbidden framework linked: {linked}"
+    forbidden_frameworks = re.compile(r"\b(ARKit|RealityKit)\b")
+    assert not {f for f in linked if forbidden_frameworks.search(f)}, (
+        f"forbidden framework linked: {linked}"
+    )
 
 
 def test_the_xcode_guard_script_agrees_with_this_test(tmp_path):
@@ -95,3 +103,27 @@ def test_the_xcode_guard_also_catches_a_linked_framework(tmp_path):
     result = subprocess.run([str(GUARD), str(scratch)], capture_output=True, text=True)
     assert result.returncode != 0
     assert "project.yml" in result.stderr
+
+
+def test_the_guard_allows_prose_that_names_arkit(tmp_path):
+    """The codebase must be able to explain its own boundary.
+
+    An earlier guard matched the bare word and failed the build on a comment saying why ARKit is
+    excluded. A rule that punishes documenting the rule gets deleted, so it has to match code.
+
+    The residual limitation is deliberate: symbol tokens still match anywhere, so prose writes
+    "AR session" rather than "ARSession". That is the convention the sources already follow, and
+    it keeps one rule instead of a comment-stripping parser that the shell guard could not share.
+    """
+    if not GUARD.exists():
+        pytest.skip("guard script not present")
+
+    scratch = tmp_path / "prose"
+    scratch.mkdir()
+    (scratch / "Doc.swift").write_text(
+        "// D-014 rejects ARKit precisely for frame size; no AR session is ever started.\n"
+        "import AVFoundation\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run([str(GUARD), str(scratch)], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
