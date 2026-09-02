@@ -175,6 +175,12 @@ calls the core library, returns per-arm measurement, interval, and decision.
 
 It holds no state and owns no metrology. Its only job is to be reachable from a phone on stage.
 
+**Deployed at https://frontdoor-measure.fly.dev** (2026-09-02): Fly.io `shared-cpu-1x`, 256 MB, one
+machine held always-on in `sjc` near the WNAM buckets. `GET /health` and `POST /measure` are live and
+the response validates against the frozen contract. Plain HTTP redirects to TLS, which iOS App
+Transport Security requires of the phone. Deploy steps, secrets, spend cap and the pre-Demo-Day
+checks: [docs/server-deploy.md](docs/server-deploy.md).
+
 **Live arms (TICK-062).** The image serves Arms A and A′ only, and carries no depth model or
 weights — which is why it runs in 69 MiB and why the laptop fallback needs no download.
 
