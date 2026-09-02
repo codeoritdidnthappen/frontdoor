@@ -24,11 +24,13 @@ final class CaptureValidationTests: XCTestCase {
         sensorWidth: Int?? = nil, sensorHeight: Int?? = nil
     ) -> Result<CaptureRecord, CaptureRejected> {
         CaptureValidation.record(
+            captureId: "test-capture",
             pixelWidth: width, pixelHeight: height,
             intrinsics: intrinsics ?? self.intrinsics,
             hadCalibrationData: hadCalibration,
             gravity: gravity ?? self.gravity,
-            deviceModel: "iPhone17,3", lens: CaptureController.lensName, zoomFactor: zoom, mainLensZoomFactor: mainLensZoom,
+            deviceModel: "iPhone17,3", lens: CaptureController.lensName,
+            captureDevice: "builtInDualWideCamera", zoomFactor: zoom, mainLensZoomFactor: mainLensZoom,
             capturedAt: capturedAt,
             // Default to the frame's own size, so cases not about resolution stay unaffected.
             sensorWidth: sensorWidth ?? width, sensorHeight: sensorHeight ?? height,
@@ -81,6 +83,16 @@ final class CaptureValidationTests: XCTestCase {
         let message = CaptureRejected.zoomNotMainLens(factor: 1.0, expected: 2.0).message
         XCTAssertTrue(message.contains("1.00"), message)
         XCTAssertTrue(message.contains("2.00"), message)
+    }
+
+    /// The optics and the device opened are different claims, and the record has to carry both.
+    /// A sidecar naming only builtInWideAngleCamera describes a capture that could not have
+    /// happened: that device delivers no calibration data on either team phone (TICK-020).
+    func testTheRecordNamesBothTheOpticsAndTheDeviceOpened() throws {
+        let record = try result().get()
+        XCTAssertEqual(record.lens, "builtInWideAngleCamera")
+        XCTAssertEqual(record.captureDevice, "builtInDualWideCamera")
+        XCTAssertNotEqual(record.lens, record.captureDevice)
     }
 
     func testLensNameMatchesTheDocumentedSidecarValue() {
