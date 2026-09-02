@@ -64,7 +64,8 @@ struct Sidecar: Encodable, Equatable {
     struct Conditions: Encodable, Equatable {
         var distanceM: Double
         var lighting: String
-        var surface: String
+        /// Optional since D-034: the screening protocol never asks for it.
+        var surface: String?
         var occlusion: String
 
         enum CodingKeys: String, CodingKey {
@@ -89,19 +90,33 @@ struct Sidecar: Encodable, Equatable {
     var entranceId: String
     var capturedAt: String
     var deviceModel: String
-    var lens: String
-    var captureDevice: String
-    var zoomFactor: Double
+    /// Present when this app's camera took the photo; absent for an imported one.
+    var lens: String?
+    var captureDevice: String?
+    var zoomFactor: Double?
+    /// Which kind of record this is, and therefore which fields it carries (D-034).
+    ///
+    /// Written for every capture, including metrology ones. The schema treats an ABSENT mode as
+    /// metrology so that sidecars from before D-034 stay valid, but a record this app writes
+    /// today should say what it is rather than lean on that fallback.
+    var captureMode: CaptureMode
     var image: FileRef
     /// Null when the device or the frame produced no depth. Absence must never cost an entrance
     /// (D-020, TICK-023), so this is a value the schema accepts rather than a reason to refuse.
     var depth: DepthRef?
-    var intrinsics: Intrinsics
-    var gravity: [Double]
-    var cardPlacement: String
-    var groundTruth: GroundTruth
+    /// Present for metrology and screening captures; absent for an imported photo, which was
+    /// taken outside this app and has none of our camera's numbers.
+    var intrinsics: Intrinsics?
+    var gravity: [Double]?
+    /// Metrology only. A screening capture places no card, and the schema forbids the field
+    /// rather than merely allowing it to be missing: a placement recorded for a capture that had
+    /// no card would describe something nobody did.
+    var cardPlacement: String?
+    /// Metrology only. No caliper is carried under the plain-photo protocol.
+    var groundTruth: GroundTruth?
     var conditions: Conditions
-    var roi: ROI
+    /// Metrology only. The taps are inputs to a measurement, and a screening capture makes none.
+    var roi: ROI?
     var split: String
 
     /// Written by hand for one reason: `depth` must be PRESENT AND NULL when there is none.
@@ -116,17 +131,20 @@ struct Sidecar: Encodable, Equatable {
         try c.encode(entranceId, forKey: .entranceId)
         try c.encode(capturedAt, forKey: .capturedAt)
         try c.encode(deviceModel, forKey: .deviceModel)
-        try c.encode(lens, forKey: .lens)
-        try c.encode(captureDevice, forKey: .captureDevice)
-        try c.encode(zoomFactor, forKey: .zoomFactor)
+        // Omitted entirely rather than written as null for an imported photo: the schema forbids
+        // these in that mode, and a null would still be a claim that the field applies.
+        try c.encodeIfPresent(lens, forKey: .lens)
+        try c.encodeIfPresent(captureDevice, forKey: .captureDevice)
+        try c.encodeIfPresent(zoomFactor, forKey: .zoomFactor)
+        try c.encode(captureMode, forKey: .captureMode)
         try c.encode(image, forKey: .image)
         if let depth { try c.encode(depth, forKey: .depth) } else { try c.encodeNil(forKey: .depth) }
-        try c.encode(intrinsics, forKey: .intrinsics)
-        try c.encode(gravity, forKey: .gravity)
-        try c.encode(cardPlacement, forKey: .cardPlacement)
-        try c.encode(groundTruth, forKey: .groundTruth)
+        try c.encodeIfPresent(intrinsics, forKey: .intrinsics)
+        try c.encodeIfPresent(gravity, forKey: .gravity)
+        try c.encodeIfPresent(cardPlacement, forKey: .cardPlacement)
+        try c.encodeIfPresent(groundTruth, forKey: .groundTruth)
         try c.encode(conditions, forKey: .conditions)
-        try c.encode(roi, forKey: .roi)
+        try c.encodeIfPresent(roi, forKey: .roi)
         try c.encode(split, forKey: .split)
     }
 
@@ -138,6 +156,7 @@ struct Sidecar: Encodable, Equatable {
         case lens
         case captureDevice = "capture_device"
         case zoomFactor = "zoom_factor"
+        case captureMode = "capture_mode"
         case image, depth, intrinsics, gravity
         case cardPlacement = "card_placement"
         case groundTruth = "ground_truth"

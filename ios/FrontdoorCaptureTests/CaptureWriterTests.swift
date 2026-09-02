@@ -138,6 +138,27 @@ final class CaptureWriterTests: XCTestCase {
     /// the fixture silently became whatever Swift last emitted, so the Python suite was
     /// only ever shown output Swift already agreed with (QA B04). Set
     /// FRONTDOOR_UPDATE_FIXTURES=1 to rewrite deliberately.
+    /// One record per mode, so the fixtures cover every shape the writer can emit (D-034).
+    private func modeRecord(_ mode: CaptureMode) -> CaptureRecord {
+        var r = record()
+        r.captureMode = mode
+        if !mode.carriesMetrologyTruth {
+            r.roi = nil
+            r.entrance = Entrance(id: "E-014", riseInches: nil, instrument: nil, split: .dev)
+            r.conditions = ConditionTags(
+                distanceM: 3.5, lighting: .lowLight, surface: nil,
+                occlusion: Occlusion.partial, cardPlacement: nil)
+        }
+        if !mode.isOurCamera {
+            r.intrinsics = nil
+            r.gravity = nil
+            r.lens = nil
+            r.captureDevice = nil
+            r.zoomFactor = nil
+        }
+        return r
+    }
+
     func testGoldenSidecarsMatchTheCommittedFixtures() throws {
         let cases: [(String, DepthRecord?)] = [
             ("written_sidecar.json", nil),
@@ -150,27 +171,41 @@ final class CaptureWriterTests: XCTestCase {
                 width: 320, height: 240, sha256: String(repeating: "a", count: 64),
                 byteCount: 320 * 240 * 4, isAbsolutelyAccurate: true, isFiltered: false)),
         ]
+        let modeCases: [(String, CaptureRecord)] = [
+            ("written_sidecar_screening.json", modeRecord(.screening)),
+            ("written_sidecar_imported.json", modeRecord(.imported)),
+        ]
+        for (name, made) in modeCases {
+            let written = try CaptureWriter.write(
+                made, imageData: Data("jpeg".utf8), depthData: nil,
+                into: directory.appendingPathComponent(name)).get()
+            try compareOrBootstrap(written.sidecarBytes, named: name)
+        }
+
         for (name, depth) in cases {
             let written = try CaptureWriter.write(
                 record(depth: depth),
                 imageData: Data("jpeg".utf8),
                 depthData: depth == nil ? nil : Data("depth".utf8),
                 into: directory.appendingPathComponent(name)).get()
-            let golden = Self.fixtures.appendingPathComponent(name)
-            // Bootstrap a fixture that does not exist yet, and rewrite on request; otherwise
-            // COMPARE. test_written_sidecar.py asserts both files exist, so a fixture that
-            // never got committed fails CI rather than quietly regenerating itself here.
-            let missing = !FileManager.default.fileExists(atPath: golden.path)
-            if missing || ProcessInfo.processInfo.environment["FRONTDOOR_UPDATE_FIXTURES"] == "1" {
-                try written.sidecarBytes.write(to: golden, options: .atomic)
-                continue
-            }
-            let committed = try Data(contentsOf: golden)
-            XCTAssertEqual(
-                String(decoding: written.sidecarBytes, as: UTF8.self),
-                String(decoding: committed, as: UTF8.self),
-                "\(name) drifted. Re-run with FRONTDOOR_UPDATE_FIXTURES=1 if the change is intended.")
+            try compareOrBootstrap(written.sidecarBytes, named: name)
         }
+    }
+
+    /// Bootstrap a fixture that does not exist yet, and rewrite on request; otherwise COMPARE.
+    /// test_written_sidecar.py asserts every fixture exists, so one that never got committed
+    /// fails CI rather than quietly regenerating itself here.
+    private func compareOrBootstrap(_ bytes: Data, named name: String) throws {
+        let golden = Self.fixtures.appendingPathComponent(name)
+        let missing = !FileManager.default.fileExists(atPath: golden.path)
+        if missing || ProcessInfo.processInfo.environment["FRONTDOOR_UPDATE_FIXTURES"] == "1" {
+            try bytes.write(to: golden, options: .atomic)
+            return
+        }
+        XCTAssertEqual(
+            String(decoding: bytes, as: UTF8.self),
+            String(decoding: try Data(contentsOf: golden), as: UTF8.self),
+            "\(name) drifted. Re-run with FRONTDOOR_UPDATE_FIXTURES=1 if the change is intended.")
     }
 
     private static var fixtures: URL {

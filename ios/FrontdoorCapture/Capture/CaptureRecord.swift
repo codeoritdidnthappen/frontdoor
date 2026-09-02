@@ -13,23 +13,30 @@ struct CaptureRecord: Equatable {
     /// fails validation still has an identity in the log of what was attempted, and two presses a
     /// second apart are never confusable.
     var captureId: String
+    /// Which contract this record is written against (D-034). Defaults to the pre-registered
+    /// study so that every existing construction site keeps its old meaning; the camera path
+    /// sets it explicitly.
+    var captureMode: CaptureMode = .metrology
     var pixelWidth: Int
     var pixelHeight: Int
-    var intrinsics: CameraIntrinsics
-    var gravity: GravitySample
+    /// Absent only for an imported photo, which this app's camera did not take. Every capture
+    /// the camera produces has all of these, and `CaptureValidation.record` still refuses one
+    /// that does not (D-034).
+    var intrinsics: CameraIntrinsics?
+    var gravity: GravitySample?
     /// Hardware identifier, e.g. `iPhone17,1` — not the marketing name, which collapses variants
     /// that have different cameras. Per-device effects are analysable later (ASM-1).
     var deviceModel: String
     /// e.g. `builtInWideAngleCamera`. Fixed by D-014, recorded so the record proves it.
     /// The OPTICS that took the picture. Always the 1x main lens, because a frame taken on any
     /// other is refused -- the zoom check compares against the device's main-lens factor.
-    var lens: String
+    var lens: String?
     /// The AVFoundation device type actually opened. Not the same as `lens`: on both team phones
     /// the main lens is reached through builtInDualWideCamera, since the bare wide camera delivers
     /// no calibration data and cannot produce a measurable frame at all (TICK-020). Recording only
     /// the lens name would describe a capture that could not have happened.
-    var captureDevice: String
-    var zoomFactor: Double
+    var captureDevice: String?
+    var zoomFactor: Double?
     /// UTC RFC 3339, sampled at the shutter press. The schema requires `Z`; offsets are rejected so
     /// capture time has one spelling.
     var capturedAt: String

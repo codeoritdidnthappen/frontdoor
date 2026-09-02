@@ -17,6 +17,22 @@ final class EntranceStore: ObservableObject {
         TruthValidation.canonicalEntranceId(id).flatMap { entrances[$0] }
     }
 
+    /// The entrance for a screening capture: the one already recorded, or a new one with no
+    /// reading (D-034).
+    ///
+    /// An ID already known still wins outright, exactly as below. That matters more here than it
+    /// looks: if a doorway was captured in metrology mode earlier in the day, a screening capture
+    /// of the same entrance attaches to it and keeps its caliper reading, rather than creating a
+    /// second, reading-less entrance for the same door.
+    func resolveScreening(id: String) -> Result<Entrance, TruthRejected> {
+        if let known = existing(id: id) { return .success(known) }
+        let created = TruthValidation.screeningEntrance(id: id)
+        if case .success(let entrance) = created {
+            entrances[entrance.id] = entrance
+        }
+        return created
+    }
+
     /// The entrance for this ID: the one already recorded, or a new one from what was entered.
     ///
     /// An ID already known wins outright, and what was typed into the reading field is not even

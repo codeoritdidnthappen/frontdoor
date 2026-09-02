@@ -81,11 +81,20 @@ Two things get written down at the entrance, at the moment of capture, never rec
 afterward:
 
 - **Entrance ID** (`E-NNN`)
-- **Condition tags** — lighting (e.g. direct sun, overcast, shade, dusk/low light) and occlusion
-  (e.g. parked vehicle, scaffolding, planters, none)
+- **Distance** to the entrance, in metres — roughly is fine, per shot
+- **Lighting** — exactly one of: **direct sun**, **overcast**, **shade**, **low light**,
+  **artificial**
+- **Occlusion** — *how much* of the entrance is blocked, exactly one of: **none**, **partial**,
+  **heavy**. A parked van across the doorway is heavy; a planter clipping one edge is partial.
 
-If you're not sure which tag applies, write down what you actually see rather than picking the
-closest label — the point is an honest record of the capture condition, not a clean taxonomy.
+These are the tags the app offers, and this list and the app's pickers are the same list on
+purpose: a tag written here that the app cannot accept is a tag that gets silently changed at the
+door. If what you see genuinely does not fit — a doorway lit by a shop window at dusk, say — pick
+the closest and say what you actually saw in the entrance notes. The stratification needs one
+vocabulary; the notes are where the honest detail goes.
+
+**Surface** is not asked for on a screening capture. It is a metrology-mode field, and guessing at
+it here would put a value in the record that nobody looked at.
 
 ## You don't need permission — but don't make it a fight
 

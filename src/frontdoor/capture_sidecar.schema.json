@@ -200,7 +200,8 @@
         },
         "surface": {
           "type": "string",
-          "minLength": 1
+          "minLength": 1,
+          "description": "Optional since D-034: the plain-photo protocol never asks an operator to record it, so a screening capture that omits it is a record with a gap rather than a guess in it."
         },
         "occlusion": {
           "type": "string",
@@ -210,7 +211,6 @@
       "required": [
         "distance_m",
         "lighting",
-        "surface",
         "occlusion"
       ],
       "additionalProperties": false
@@ -231,6 +231,14 @@
       "description": "videoZoomFactor at the shutter. Required to make the D-014 claim checkable rather than asserted: on builtInDualWideCamera the scale is relative to the ultra-wide, so 2.00 IS the 1x main lens and 1.00 would be ~120 degrees of ultra-wide. Without this number the two are indistinguishable in the record.",
       "type": "number",
       "exclusiveMinimum": 0
+    },
+    "capture_mode": {
+      "description": "Which kind of record this is, and therefore which fields it must carry (D-034).\nmetrology: the pre-registered study -- caliper truth, ROI taps, card placement, intrinsics.\nscreening: the 2026-09-01 plain-photo protocol -- entrance and condition tags only.\nimported: a photo taken outside this app, so none of our capture metadata exists for it.\nAbsent means metrology, so every sidecar written before this field existed stays valid.",
+      "enum": [
+        "metrology",
+        "screening",
+        "imported"
+      ]
     }
   },
   "required": [
@@ -238,15 +246,8 @@
     "entrance_id",
     "captured_at",
     "device_model",
-    "lens",
-    "capture_device",
-    "zoom_factor",
     "image",
     "depth",
-    "intrinsics",
-    "gravity",
-    "card_placement",
-    "ground_truth",
     "conditions",
     "split"
   ],
@@ -266,5 +267,142 @@
       "minItems": 2,
       "maxItems": 2
     }
-  }
+  },
+  "allOf": [
+    {
+      "description": "A metrology capture carries everything the pre-registered study needs. Absent capture_mode means metrology, so this also holds every pre-D-034 sidecar to its original contract.",
+      "if": {
+        "anyOf": [
+          {
+            "properties": {
+              "capture_mode": {
+                "const": "metrology"
+              }
+            },
+            "required": [
+              "capture_mode"
+            ]
+          },
+          {
+            "not": {
+              "required": [
+                "capture_mode"
+              ]
+            }
+          }
+        ]
+      },
+      "then": {
+        "required": [
+          "lens",
+          "capture_device",
+          "zoom_factor",
+          "intrinsics",
+          "gravity",
+          "card_placement",
+          "ground_truth"
+        ]
+      }
+    },
+    {
+      "description": "A screening capture comes through our camera, so it still carries what the camera knows; it does not carry a caliper reading, a card placement or ROI taps, because the 2026-09-01 protocol places none of them.",
+      "if": {
+        "properties": {
+          "capture_mode": {
+            "const": "screening"
+          }
+        },
+        "required": [
+          "capture_mode"
+        ]
+      },
+      "then": {
+        "required": [
+          "lens",
+          "capture_device",
+          "zoom_factor",
+          "intrinsics",
+          "gravity"
+        ],
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "ground_truth"
+              ]
+            },
+            {
+              "required": [
+                "card_placement"
+              ]
+            },
+            {
+              "required": [
+                "roi"
+              ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "description": "An imported photo was taken outside this app. None of our capture metadata exists for it, and inventing any of it would put a measured-looking value on a record that never measured anything.",
+      "if": {
+        "properties": {
+          "capture_mode": {
+            "const": "imported"
+          }
+        },
+        "required": [
+          "capture_mode"
+        ]
+      },
+      "then": {
+        "not": {
+          "anyOf": [
+            {
+              "required": [
+                "lens"
+              ]
+            },
+            {
+              "required": [
+                "capture_device"
+              ]
+            },
+            {
+              "required": [
+                "zoom_factor"
+              ]
+            },
+            {
+              "required": [
+                "intrinsics"
+              ]
+            },
+            {
+              "required": [
+                "gravity"
+              ]
+            },
+            {
+              "required": [
+                "card_placement"
+              ]
+            },
+            {
+              "required": [
+                "ground_truth"
+              ]
+            },
+            {
+              "required": [
+                "roi"
+              ]
+            }
+          ]
+        }
+      }
+    }
+  ]
 }

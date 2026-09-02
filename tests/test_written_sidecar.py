@@ -25,7 +25,8 @@ WRITTEN = FIXTURES / "written_sidecar.json"
 #: `depth: nil`, so this suite only ever saw `"depth": null`, and the writer emitted
 #: `width`/`height` into an object the schema declares additionalProperties: false
 #: without either language noticing (QA B01).
-GOLDEN = ("written_sidecar.json", "written_sidecar_with_depth.json")
+GOLDEN = ("written_sidecar.json", "written_sidecar_with_depth.json",
+          "written_sidecar_screening.json", "written_sidecar_imported.json")
 
 
 @pytest.fixture
@@ -112,3 +113,50 @@ def test_the_depth_fixture_really_has_depth():
     """Otherwise this file could pass while testing the null case twice."""
     doc = json.loads((FIXTURES / "written_sidecar_with_depth.json").read_text(encoding="utf-8"))
     assert doc["depth"] is not None
+
+
+# --- the modes D-034 added (TICK-027 / #31) ------------------------------------------------
+
+def _fixture(name):
+    return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+
+
+def test_the_screening_sidecar_swift_writes_validates_here():
+    """Written by Swift, validated by Python. Neither side gets to define the shape alone.
+
+    This is the check that was missing when the depth object drifted (QA B01): both
+    implementations agreed on a shape neither of them exercised.
+    """
+    validate_sidecar(_fixture("written_sidecar_screening.json"))
+
+
+def test_the_imported_sidecar_swift_writes_validates_here():
+    validate_sidecar(_fixture("written_sidecar_imported.json"))
+
+
+def test_the_screening_sidecar_carries_no_metrology_claim():
+    doc = _fixture("written_sidecar_screening.json")
+    assert doc["capture_mode"] == "screening"
+    for forbidden in ("ground_truth", "card_placement", "roi"):
+        assert forbidden not in doc, f"{forbidden} must be absent, not null"
+    assert "surface" not in doc["conditions"], (
+        "the protocol never asks an operator for a surface, so a value here is a guess"
+    )
+    # Our camera took it, so what the camera measured is still recorded.
+    assert doc["intrinsics"] and doc["gravity"]
+
+
+def test_the_imported_sidecar_claims_nothing_the_file_did_not_say():
+    doc = _fixture("written_sidecar_imported.json")
+    assert doc["capture_mode"] == "imported"
+    for forbidden in ("intrinsics", "gravity", "lens", "capture_device", "zoom_factor",
+                      "ground_truth", "card_placement", "roi"):
+        assert forbidden not in doc, (
+            f"{forbidden} would put a measured-looking value on a photo this app never took"
+        )
+    assert doc["entrance_id"] and doc["captured_at"] and doc["split"]
+
+
+def test_a_screening_capture_may_sit_beyond_the_metrology_distance_cap():
+    """docs/capture-protocol.md asks for a far, ~3-4 m shot; R-3's 3 m cap is metrology-only."""
+    assert _fixture("written_sidecar_screening.json")["conditions"]["distance_m"] > 3.0

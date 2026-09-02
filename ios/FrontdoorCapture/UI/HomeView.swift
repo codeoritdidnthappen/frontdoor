@@ -10,6 +10,7 @@ import SwiftUI
 struct HomeView: View {
     @ObservedObject var controller: CaptureController
     let onStart: () -> Void
+    let onImport: () -> Void
     let onDiagnostics: () -> Void
 
     /// What is still only on this phone, and a way to send it.
@@ -94,6 +95,24 @@ struct HomeView: View {
 
             Spacer()
 
+            // Which contract this session records against (D-034). Screening is the protocol the
+            // field is running; metrology is still reachable because whether it is alive is an
+            // open team question (A-3, #67), not one this screen should settle by omission.
+            Picker("Mode", selection: $controller.captureMode) {
+                Text("Screening").tag(CaptureMode.screening)
+                Text("Metrology").tag(CaptureMode.metrology)
+            }
+            .pickerStyle(.segmented)
+            .padding(.horizontal, 24)
+
+            Text(controller.captureMode == .screening
+                 ? "Plain photos: entrance ID and condition tags. No caliper, no card, no taps."
+                 : "Caliper reading, reference card and ROI taps are required for every capture.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 32)
+
             Button(action: onStart) {
                 Text("Start capture")
                     .font(.headline)
@@ -103,6 +122,9 @@ struct HomeView: View {
             .buttonStyle(.borderedProminent)
             .disabled(controller.readiness.blockingReason != nil)
             .padding(.horizontal, 24)
+
+            Button("Import photos already on this phone") { onImport() }
+                .font(.footnote)
 
             Button("Run capability probe") { onDiagnostics() }
                 .font(.footnote)

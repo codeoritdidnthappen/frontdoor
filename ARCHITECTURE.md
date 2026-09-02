@@ -295,6 +295,13 @@ capture app in place this is free, and it strengthens deliverable #5. A device w
 sensor still captures: the sidecar writes `"depth": null` and the manifest leaves `depth_sha256`
 empty (TICK-023).
 
+> **Amended 2026-09-02 by D-034.** The sidecar carries a `capture_mode` — `metrology`,
+> `screening` or `imported` — and each mode's required fields differ. A screening capture is
+> forbidden from carrying a caliper reading, and an imported photo from carrying intrinsics,
+> rather than merely permitted to omit them. An absent mode means metrology, so every sidecar
+> written before that entry keeps its original contract. R-3's 3 m distance cap is metrology-only:
+> the plain-photo protocol asks for a far, ~3-4 m shot.
+
 > **Amended 2026-09-02.** **D-032** puts depth capture on James's iPhone 17 Pro (`iPhone18,1`) — one LiDAR
 > device shooting every entrance satisfies "every entrance", and that phone has not yet run a
 > build, so probing it is a prerequisite. **D-033** lets depth reach its bucket without crossing

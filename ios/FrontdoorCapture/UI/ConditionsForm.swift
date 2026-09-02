@@ -7,6 +7,9 @@ struct ConditionsForm: View {
     @Binding var lighting: Lighting
     @Binding var surface: Surface
     @Binding var occlusion: Occlusion
+    /// Screening captures never show a surface picker: `docs/capture-protocol.md` does not ask an
+    /// operator to record it, and a picker with a default is a value nobody looked at (D-034).
+    var showsSurface: Bool = true
 
     var body: some View {
         Group {
@@ -18,8 +21,10 @@ struct ConditionsForm: View {
             Picker("Lighting", selection: $lighting) {
                 ForEach(Lighting.allCases, id: \.self) { Text($0.label).tag($0) }
             }
-            Picker("Surface", selection: $surface) {
-                ForEach(Surface.allCases, id: \.self) { Text($0.label).tag($0) }
+            if showsSurface {
+                Picker("Surface", selection: $surface) {
+                    ForEach(Surface.allCases, id: \.self) { Text($0.label).tag($0) }
+                }
             }
             Picker("Occlusion", selection: $occlusion) {
                 ForEach(Occlusion.allCases, id: \.self) { Text($0.label).tag($0) }
@@ -53,7 +58,7 @@ struct ConditionsSheet: View {
         self.onCancel = onCancel
         _distance = State(initialValue: ConditionsSheet.text(for: current.distanceM))
         _lighting = State(initialValue: current.lighting)
-        _surface = State(initialValue: current.surface)
+        _surface = State(initialValue: current.surface ?? .concrete)
         _occlusion = State(initialValue: current.occlusion)
     }
 
