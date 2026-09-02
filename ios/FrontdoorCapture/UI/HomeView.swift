@@ -12,6 +12,35 @@ struct HomeView: View {
     let onStart: () -> Void
     let onDiagnostics: () -> Void
 
+    /// What is still only on this phone, and a way to send it.
+    ///
+    /// AC6: nobody should leave a field session unsure whether the day's work is safe. "Captured
+    /// this session" answers a different question -- it resets on relaunch and counts frames that
+    /// may already be uploaded. This counts what would be lost if the phone were.
+    @ViewBuilder
+    private var pendingRow: some View {
+        let pending = controller.pendingUploads
+        if pending > 0 {
+            VStack(spacing: 6) {
+                Text("^[\(pending) capture](inflect: true) on this phone only")
+                    .font(.subheadline.weight(.medium))
+                Button(controller.isDraining ? "Uploading…" : "Upload now") {
+                    Task { await controller.drainQueue() }
+                }
+                .buttonStyle(.bordered)
+                .disabled(controller.isDraining)
+                if let outcome = controller.lastDrainMessage {
+                    Text(outcome)
+                        .font(.footnote)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 24)
+                }
+            }
+            .padding(.top, 4)
+        }
+    }
+
     var body: some View {
         VStack(spacing: 28) {
             Spacer()
@@ -73,6 +102,7 @@ struct HomeView: View {
                 .font(.footnote)
 
             Text("\(controller.photosTaken) captured this session")
+            pendingRow
                 .font(.footnote.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 12)

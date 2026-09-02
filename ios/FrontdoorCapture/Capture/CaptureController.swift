@@ -458,6 +458,7 @@ final class CaptureController: ObservableObject {
         switch written {
         case .success:
             photosTaken += 1
+            refreshPendingUploads()
             lastThumbnail = pending.image
             lastRecord = record
             lastCaptureError = nil
@@ -467,6 +468,32 @@ final class CaptureController: ObservableObject {
             // what is missing, and nothing is counted for a capture that is not on disk.
             lastCaptureError = failure.message
         }
+    }
+
+    /// How many captures exist only on this phone. Read from disk rather than counted in memory:
+    /// a number kept in a variable is a number that can disagree with the folder, and the whole
+    /// point of it is to be trusted when deciding whether to leave a site.
+    @Published private(set) var pendingUploads = 0
+    @Published private(set) var isDraining = false
+    @Published private(set) var lastDrainMessage: String?
+
+    /// Swapped for a real destination when one exists. Refuses everything until then, which keeps
+    /// captures on the phone rather than reporting them safe (TICK-029).
+    var uploader: CaptureUploader = NoDestinationUploader()
+
+    var queue: CaptureQueue { CaptureQueue(directory: Self.capturesDirectory) }
+
+    func refreshPendingUploads() {
+        pendingUploads = queue.count
+    }
+
+    func drainQueue() async {
+        guard !isDraining else { return }
+        isDraining = true
+        let report = await QueueDrain(queue: queue, uploader: uploader).drain()
+        lastDrainMessage = report.message
+        isDraining = false
+        refreshPendingUploads()
     }
 
     /// Captures live beside the app's own data, so iOS backs them up and Files can reach them.
