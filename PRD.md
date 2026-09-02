@@ -46,6 +46,19 @@ Capture angle became continuously measurable when capture moved into an instrume
 Committed before first capture and before any image was processed. Reported as an amendment at
 Demo Day.
 
+**Amendment A-2 (date not established) — the success criterion names its arm.** The criterion
+above reads "MAE ≤ 0.25" on the sealed test split" without saying which of the arms it judges.
+A-2 fixes it to **Arm A only**; A′, B and C are reported without a pass/fail bar. Reason, as
+stated in the tickets that cite it: an unnamed arm would let the hypothesis be scored against
+whichever arm looked best once results were seen — the exact failure D-007 exists to prevent.
+
+**This entry is RECONSTRUCTED from ticket usage; its date and original wording are not
+recoverable.** It is recorded so the amendment is not silently absent from the pre-registration,
+not to assert when it was agreed. Whether this rule originates in A-2 or in D-022 is unresolved
+(#183, #132), and the distinction matters: an amendment must be reported as such at Demo Day,
+while a locked decision carries no such obligation. Until whoever took the decision settles it,
+treat this as reportable. See `CHANGES.log`, "Decision-log gap".
+
 ## 3. Scope
 
 **In scope**
@@ -54,7 +67,8 @@ Demo Day.
 - Single RGB frame, no depth sensor required at inference.
 - Opaque-door entrances.
 - Four scale-recovery arms compared head to head (§5), spanning an accuracy-versus-usability
-  gradient (D-013).
+  gradient (D-013). **Amended 2026-09-02: Arm C is cut (D-030), and Arm B is not served by the
+  live deployment (D-031), so the head-to-head as actually run is A against A′.**
 - Explicit abstention when the confidence interval straddles a decision line.
 
 **Out of scope (explicitly not being built)**
@@ -81,14 +95,22 @@ Demo Day.
 | D-009 | **Abstention is a first-class output.** Where the interval spans a decision line, the system declines to classify. | A confident wrong answer about passability is worse for the user than no answer. Abstention rate is a reported metric, not a hidden failure. |
 | D-010 | **Team of 4**, roles assigned in §9. | Enables field capture, metrology, evaluation, and demo/deck to run in parallel — the only way §9 fits in 12 days. |
 | D-012 | **The reference card is placed vertically against the riser face.** Arm A recovers the rise in-plane from a homography built on the card's four corners. | Scale and measurement share one surface, so the homography absorbs the projection: no intrinsics, no pose, no depth. Removes the largest unknown from the primary arm. Supersedes the ground-plane formulation in §5. |
-| D-013 | **Three-arm usability gradient.** A (vertical card) is the monocular accuracy ceiling, A′ (card on ground) the realistic-user path, C (no card) the most usable. | Arm A requires physical access to the step — the one thing a wheelchair user at the bottom of it cannot do. Calling A a ceiling rather than the shipping path keeps the claim honest, and D-006's "already in your pocket" rationale moves to Arm C, where it is true. |
+| D-013 | **Three-arm usability gradient.** A (vertical card) is the monocular accuracy ceiling, A′ (card on ground) the realistic-user path, C (no card) the most usable. | Arm A requires physical access to the step — the one thing a wheelchair user at the bottom of it cannot do. Calling A a ceiling rather than the shipping path keeps the claim honest, and D-006's "already in your pocket" rationale moves to Arm C, where it is true. **Amended 2026-09-02 by D-030: Arm C is cut.** The gradient's most-usable end is not built, so the usability claim it anchored is not evidenced by this study. |
 | D-014 **(AMENDED — see D-029)** | **Capture-only app, built before dataset capture**, on AVFoundation + CoreMotion. No ARKit. | Yields true intrinsics, gravity, LiDAR depth and full-resolution stills, and makes capture angle a measured quantity rather than an operator's estimate. ARKit's video frames are too small for an error budget counted in pixels across the rise. Supersedes stock-camera capture. **Amended 2026-09-02 by D-029: the device is `builtInDualWideCamera`, not `builtInWideAngleCamera`, which delivers no calibration data on any team hardware. The 1× optics are unchanged. This row's claim of LiDAR depth is also withdrawn — LiDAR carries no calibration.** |
 | D-015 | **Method boundary: one RGB still + intrinsics + gravity.** No depth map, no motion-derived scale. | Answers "why not just use ARKit?" — visual-inertial odometry recovers metric scale from motion, which would make the question uninteresting. Enforced by construction: no AR session is ever started. |
-| D-016 | **Metrology server runs on a free-tier host** (D-026), with fallback chain cellular → venue wifi → identical image on a laptop → pre-recorded. | Presentations happen in an interior atrium, which is exactly where cellular fails. Steps 1-3 run the same container image, so a fallback changes the network path and nothing else. Extends D-005 and R-4. |
+| D-016 | **Metrology server runs on a free-tier host** (D-026), with fallback chain cellular → venue wifi → identical image on a laptop → pre-recorded. | Presentations happen in an interior atrium, which is exactly where cellular fails. Steps 1-3 run the same container image, so a fallback changes the network path and nothing else. Extends D-005 and R-4. **Amended 2026-09-02 by D-031: the host is paid** (Fly.io, ~$2/month, under an explicit spend limit). The fallback chain is unchanged. |
 | D-017 | **The seal is enforced in code.** Manifest with image hashes committed at capture; the loader refuses sealed rows without an explicit flag; the unsealing run appends to a committed audit log. | "How do we know you didn't peek?" needs an answer that is not our word. Turns D-007 from a claim into an artifact. |
 | D-018 | **Dataset: bytes in free-tier object storage, records in git** (D-026). Entrance ID and caliper reading are entered in the app at capture and written to a per-capture sidecar. | Low single-digit gigabytes is the wrong shape for a repo. Binding truth to image at the shutter press removes the reconciliation step where datasets rot. |
 | D-019 | **Capture angle is pre-registered as a continuous error-versus-angle model on the sealed split**; the other four condition variables are reported from dev as exploratory. | A curve fitted against a continuously measured angle is affordable at 12-18 sealed entrances; a five-way contingency table is not. Amends the §2 analysis plan — see Amendment A-1. |
 | D-020 | **LiDAR captured on every entrance and quarantined** from the metrology code path; loaded only by the evaluation harness. | Free once capture is instrumented, and it strengthens deliverable #5. If depth sits where the method can reach it, it eventually gets used to tune. Supersedes the matched-subset scope in §6. |
+| D-021–D-024 | **RECONSTRUCTED — not original text, and not locked by this table.** D-021 (the per-entrance shot plan is enforced by the instrument), D-022 (the success bar applies to Arm A only), D-023 (three-way dev/calib/sealed split assigned deterministically at capture and immutable thereafter), D-024 (Stage 1 ROI taps happen in-app at capture and go inside the seal). | These four IDs are cited across the backlog but were never written into `CHANGES.log`. The statements there are reconstructed from how each ID is used in tickets and are **not claimed to be the original wording**; they are listed here so the IDs resolve rather than dangle. **D-022's attribution is unresolved** — it states the same rule as Amendment A-2, and a decision and an amendment cannot both originate one rule (#183, #132). Full text and status lines: `CHANGES.log`, "Decision-log gap". |
+| D-025 | **No paid Apple Developer Program.** The capture app is signed with **free provisioning** and installed over a cable from a team Mac. | No paid-gated capability is needed: AVFoundation capture, depth delivery and CoreMotion require only Info.plist usage descriptions. Accepted cost: builds expire after 7 days (R-7), making signing a scheduled activity rather than a one-off. A build signed 2026-08-31 expires 2026-09-07, **before Demo Day, so a re-sign no later than 2026-09-06 is mandatory.** Supersedes TICK-001's requirement to enrol and pay by 2026-08-29. |
+| D-026 | **All hosted infrastructure runs on provider free tiers.** No spend authorised for object storage or the server host. | Cost decision. Load-bearing consequences: projected dataset volume is 2-5 GB, so a 5 GB allowance is marginal and 10 GB comfortable; **billing must be incapable of starting silently**; and the D-020 depth quarantine must be satisfied by **two buckets** where a provider scopes credentials per bucket rather than per prefix — the denial is the requirement, not the layout. Supersedes the unstated assumption in D-016 and D-018 that hosting would be paid. **Amended 2026-09-02 by D-031, for the server host only; object storage stays free.** |
+| D-027 | **Tickets are assigned, not self-assigned.** Every open issue names an owner in GitHub, following the work division in TEAM.md §3. | The self-assign-and-rotate convention left the whole backlog owner-less, and the device audit showed the division is constrained by hardware rather than preference — only one person can capture entrances, and only one can build and test the capture app unaided. Work may still move between people; the rule is to **reassign rather than clear**, so no ticket is ever left without a name against it. Supersedes D-010's "names pending" and O-1's self-assign convention. |
+| D-028 | **Object keys carry their partition, and the seal is enforced in storage** — not only in the loader. | After TICK-070/TICK-071 (#166) the seal lived entirely in `loader.py` and `eval.py`; `ObjectStore.get(capture_id)` consulted neither, so anyone holding the images credential — everyone on the team — could fetch a sealed capture's bytes directly, and no `SEAL_AUDIT.log` line was written. Taken 2026-09-01, closing #182. |
+| D-029 | **AMENDMENT TO D-014 (2026-09-02) — the capture device is `builtInDualWideCamera`, not `builtInWideAngleCamera`.** | Measured on two team phones by TICK-020's on-device probe (#24): the bare wide angle delivers **no calibration data at all**. The 1× optics are unchanged. D-014's claim of LiDAR depth is also withdrawn — LiDAR carries no calibration. **Reported as an amendment at Demo Day.** |
+| D-030 | **Arm C is cut** (2026-09-02). Learned depth with intrinsics-only scaling and no reference object will not be implemented. | Frozen rather than deleted: `frontdoor.metrology` keeps `C` registered and the ablation reports it cut with this reason. **This is not the decision #43 asked for** — TICK-049 required citing Arm C's measured dev-split error, and there is none: Arm C was never implemented, the metrology library was scaffolded the same day, and no capture has been taken. The gate arrived with nothing to weigh, and that is recorded rather than papered over. Closes #43. |
+| D-031 | **AMENDMENT TO D-026 (2026-09-02) — the measure server runs on a PAID host.** Fly.io `shared-cpu-1x`/256 MB in `sjc`, about $2/month. Object storage stays free. | Measured, not estimated: the image serves `GET /health` capped at 256 MB using 69 MiB, and Fly's smallest always-on machine is 256 MB at ~$2 against Render's 512 MB at $7. **D-026's "billing must be incapable of starting silently" clause is not waived** — on a paid plan it is met by an explicit spend limit plus a billing alert rather than by the absence of a card, both prerequisites recorded in `docs/server-deploy.md`. Authorises the server host and nothing else. Live at `https://frontdoor-measure.fly.dev`. **Reported as an amendment at Demo Day.** |
 
 **Proposed, not yet locked**
 
@@ -114,7 +136,9 @@ and rationale in [`ARCHITECTURE.md`](ARCHITECTURE.md) §5.
   retained as the comparison point.
 - **Arm C:** learned monocular depth + intrinsics-only scaling, no reference object. The most usable
   and least accurate arm, and the one that carries the usability claim (D-013); cut on 2026-09-02
-  if weak.
+  if weak. **Cut 2026-09-02 by D-030** — and not because it was measured weak: it was never
+  implemented, so the gate arrived with nothing to weigh. The usability claim it carried is
+  therefore unevidenced by this study rather than disproved.
 
 **Stage 3 — Compliance reasoning.** Map the measurement and its interval to the ADA lines; emit
 pass, fail, or abstain (D-009). The abstention rule's parameters are frozen in version control

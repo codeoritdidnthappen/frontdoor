@@ -163,6 +163,11 @@ Arms A, A′ and C form a deliberate accuracy-versus-usability gradient, which i
 PRD promises as deliverable #4. Arm C carries the "works with what you already carry" usability
 claim, since it is the only arm an unaided user can actually perform (D-013).
 
+> **Amended 2026-09-02 by D-030: Arm C is cut**, and it was never implemented, so the gradient
+> above loses its most-usable end. Deliverable #4's ablation runs over A and A′ only — Arm B is
+> registered but not served by the live deployment (D-031). The "works with what you already
+> carry" claim is left unevidenced, not disproved; §6 carries the wire-level consequence.
+
 **Stage 3 — compliance reasoning.** Map measurement and interval to the ADA lines; emit pass, fail,
 or abstain. The abstention rule's parameters are frozen in version control before the sealed run
 (D-009, §7) — an unfrozen threshold is a dial fitted to the test set.
