@@ -20,6 +20,10 @@ primary_region = "sjc"          # near WNAM, where the R2 buckets live (D-026)
   # exists to prevent, so the machine stays up rather than scaling to zero.
   auto_stop_machines = false
   auto_start_machines = true
+  # min_machines_running is a NO-OP while auto_stop_machines = false (Fly only consults
+  # it when deciding how far auto-stop may scale down). It is kept as documentation of
+  # intent, but do NOT rely on it as a floor: if auto_stop_machines is ever re-enabled,
+  # re-verify that one machine actually stays up.
   min_machines_running = 1
 
   [[http_service.checks]]
