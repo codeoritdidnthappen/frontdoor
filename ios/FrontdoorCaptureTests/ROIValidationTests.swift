@@ -357,3 +357,52 @@ extension ROIValidationTests {
                        y: displayed.minY + v * displayed.height)
     }
 }
+
+extension ROIValidationTests {
+
+    /// `screenPoint(of:)` must invert `pixel(of:)` exactly, or the loupe follows the wrong mark.
+    func testScreenPointInvertsPixelOf() {
+        let displayed = CGRect(x: 12, y: 80, width: 366, height: 488)
+        let w = 4032, h = 3024
+        for orientation in [UIImage.Orientation.up, .right, .left, .down] {
+            for p in [PixelPoint(x: 0, y: 0), PixelPoint(x: 4031, y: 3023),
+                      PixelPoint(x: 2016, y: 1512), PixelPoint(x: 100, y: 2900)] {
+                guard let screen = ROIValidation.screenPoint(
+                    of: p, displayed: displayed, orientation: orientation,
+                    pixelWidth: w, pixelHeight: h) else { return XCTFail("nil for \(p)") }
+                guard let back = ROIValidation.pixel(
+                    of: screen, displayed: displayed, orientation: orientation,
+                    pixelWidth: w, pixelHeight: h) else { return XCTFail("nil back for \(p)") }
+                XCTAssertEqual(back.x, p.x, accuracy: 1, "\(orientation) \(p)")
+                XCTAssertEqual(back.y, p.y, accuracy: 1, "\(orientation) \(p)")
+            }
+        }
+    }
+
+    /// A huge delta must clamp, not trap. `Int` addition overflow is a crash in Swift (QA B08).
+    func testNudgeSurvivesAnExtremeDelta() {
+        let p = PixelPoint(x: 2000, y: 1500)
+        let hi = ROIValidation.nudge(p, dx: Int.max, dy: Int.max, pixelWidth: 4032, pixelHeight: 3024)
+        XCTAssertEqual(hi.x, 4031)
+        XCTAssertEqual(hi.y, 3023)
+        let lo = ROIValidation.nudge(p, dx: Int.min, dy: Int.min, pixelWidth: 4032, pixelHeight: 3024)
+        XCTAssertEqual(lo.x, 0)
+        XCTAssertEqual(lo.y, 0)
+    }
+
+    /// The 12x cap must not bind on any device the project actually targets (QA B09).
+    ///
+    /// The cap exists so a pathological ratio cannot zoom into one flat pixel. If it ever DID bind,
+    /// the loupe would quietly stop being 1:1 and AC1 would fail silently -- so the point is to know
+    /// it does not, on the phones that will shoot the dataset.
+    func testTheLoupeCapDoesNotBindOnTargetDevices() {
+        // iPhone 16 and 15 Pro Max: 4032-wide stills, ~393pt and ~430pt portrait widths, @3x.
+        for (ptWidth, scale) in [(393.0, 3.0), (430.0, 3.0), (375.0, 2.0)] as [(CGFloat, CGFloat)] {
+            let rect = CGRect(x: 0, y: 0, width: ptWidth, height: ptWidth * 4 / 3)
+            let z = ROIValidation.loupeZoom(
+                pixelWidth: 4032, displayed: rect, orientation: .right, displayScale: scale)
+            XCTAssertLessThan(z, 12, "cap bound at \(ptWidth)pt @\(scale)x — loupe is no longer 1:1")
+            XCTAssertGreaterThanOrEqual(z, 1, "loupe must never de-magnify")
+        }
+    }
+}

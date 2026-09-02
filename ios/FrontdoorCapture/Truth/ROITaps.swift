@@ -131,6 +131,31 @@ enum ROIValidation {
         return PixelPoint(x: x, y: y)
     }
 
+    /// Sensor pixel back to the screen point showing it -- the inverse of `pixel(of:)`.
+    ///
+    /// Needed so the loupe can follow a point that is being nudged rather than touched.
+    static func screenPoint(
+        of point: PixelPoint,
+        displayed: CGRect,
+        orientation: UIImage.Orientation = .up,
+        pixelWidth: Int,
+        pixelHeight: Int
+    ) -> CGPoint? {
+        guard pixelWidth > 0, pixelHeight > 0 else { return nil }
+        let fx = CGFloat(point.x) / CGFloat(pixelWidth)
+        let fy = CGFloat(point.y) / CGFloat(pixelHeight)
+        let u: CGFloat
+        let v: CGFloat
+        switch orientation {
+        case .right, .rightMirrored: u = 1 - fy; v = fx
+        case .left, .leftMirrored:   u = fy;     v = 1 - fx
+        case .down, .downMirrored:   u = 1 - fx; v = 1 - fy
+        default:                     u = fx;     v = fy
+        }
+        return CGPoint(x: displayed.minX + u * displayed.width,
+                       y: displayed.minY + v * displayed.height)
+    }
+
     /// Where to offset the magnified still so `at` lands under the loupe's crosshair.
     ///
     /// The caller must place this in a frame aligned `.topLeading`. SwiftUI's
@@ -269,9 +294,16 @@ enum ROIValidation {
             sx = dx
             sy = dy
         }
+        // Clamp with overflow-safe addition: `point.x + sx` on Int TRAPS in Swift, so a large
+        // delta would crash the process before the clamp could run (QA B08). The buttons only
+        // ever send +/-1, but this is a public entry point and a trap is a poor contract.
+        let nx = point.x.addingReportingOverflow(sx)
+        let ny = point.y.addingReportingOverflow(sy)
+        let px = nx.overflow ? (sx > 0 ? Int.max : Int.min) : nx.partialValue
+        let py = ny.overflow ? (sy > 0 ? Int.max : Int.min) : ny.partialValue
         return PixelPoint(
-            x: min(max(point.x + sx, 0), max(pixelWidth - 1, 0)),
-            y: min(max(point.y + sy, 0), max(pixelHeight - 1, 0)))
+            x: min(max(px, 0), max(pixelWidth - 1, 0)),
+            y: min(max(py, 0), max(pixelHeight - 1, 0)))
     }
 
     /// Assemble the six collected points, in ROITarget order, into a record.

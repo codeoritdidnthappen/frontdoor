@@ -43,9 +43,19 @@ struct ROIReviewView: View {
                         .frame(width: rect.width, height: rect.height)
                         .position(x: rect.midX, y: rect.midY)
                     marksOverlay(in: rect)
-                    if let lastTouch, next != nil {
+                    // While a finger is down, magnify under it. Once the point is placed,
+                    // KEEP magnifying it, centred on the mark being nudged.
+                    //
+                    // These used to be mutually exclusive: `lastTouch` was cleared the instant the
+                    // point landed, which is the same instant the nudge pad appeared. So every
+                    // nudge happened with no magnified view -- and one image pixel is 0.39 screen
+                    // pixels on an iPhone 16, below what the display can render. Pressing an arrow
+                    // changed nothing the operator could see except a number (QA B03), which is
+                    // exactly the "precision depends on landing it first time" that AC3 exists to
+                    // remove.
+                    if let focus = lastTouch ?? nudgeFocusPoint(in: rect) {
                         Magnifier(
-                            image: image, at: lastTouch, displayed: rect,
+                            image: image, at: focus, displayed: rect,
                             zoom: ROIValidation.loupeZoom(
                                 pixelWidth: pixelWidth, displayed: rect,
                                 orientation: image.imageOrientation,
@@ -110,6 +120,18 @@ struct ROIReviewView: View {
     ///
     /// A finger under a loupe still cannot resolve a single pixel, and the tap error lands
     /// directly in a rise being judged against a quarter-inch bar (TICK-135 AC3).
+    ///
+    /// Where the loupe should sit while the nudge pad is up: on the point being nudged, so the
+    /// operator can see the pixel move. `nil` once every point is placed and there is nothing
+    /// left to adjust.
+    private func nudgeFocusPoint(in rect: CGRect) -> CGPoint? {
+        guard let target = ROITarget.allCases.last(where: { marks[$0] != nil }),
+              let mark = marks[target] else { return nil }
+        return ROIValidation.screenPoint(
+            of: mark, displayed: rect, orientation: image.imageOrientation,
+            pixelWidth: pixelWidth, pixelHeight: pixelHeight)
+    }
+
     @ViewBuilder
     private var nudgePad: some View {
         if let target = ROITarget.allCases.last(where: { marks[$0] != nil }) {
