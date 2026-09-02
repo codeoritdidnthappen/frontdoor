@@ -54,12 +54,6 @@ SIDECARS = REPO_ROOT / "data" / "sidecars"
 AUDIT_LOG = REPO_ROOT / "SEAL_AUDIT.log"
 
 
-def _image_getter():
-    from frontdoor.storage import image_store
-
-    return image_store().get
-
-
 def _storage_config():
     """What this run will read from, for the audit line. Never credentials.
 
@@ -107,7 +101,7 @@ def main(argv=None, *, from_cli=False):
     # Resolved per call rather than eagerly: constructing the loader must not turn an unconfigured
     # .env into a traceback before the arguments have even been checked. The loader wraps read
     # failures in LoaderError naming the capture; that contract is preserved.
-    loader = DatasetLoader(MANIFEST, SIDECARS, get_image=lambda cid: _image_getter()(cid))
+    loader = DatasetLoader(MANIFEST, SIDECARS)
     if include_sealed:
         cmdline = sys.argv if argv is None else [sys.argv[0], *args]
         try:

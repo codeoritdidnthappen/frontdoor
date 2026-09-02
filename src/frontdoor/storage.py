@@ -22,7 +22,26 @@ from dotenv import find_dotenv, load_dotenv
 import sys
 from dataclasses import dataclass
 
-PROBE_KEY = "_frontdoor_probe"
+#: Capture keys carry their partition (D-007, #182). Storage can then refuse a
+#: sealed read on the key alone -- it never reads the manifest, never imports
+#: `split`, and does not depend on `loader`, which already depends on it.
+#: Chosen while zero objects existed; changing it later means migrating every
+#: object and re-verifying each against its sidecar hash.
+OPEN_PREFIX = "open/"
+SEALED_PREFIX = "sealed/"
+
+PROBE_KEY = OPEN_PREFIX + "_frontdoor_probe"
+
+
+def storage_key(capture_id, split):
+    """The object key for a capture, with its partition in the key.
+
+    The caller passes the split because the caller is the one that derived it.
+    Anything not `sealed` is open: a typo in a split name must not silently
+    produce an unprefixed key that `get` would then refuse.
+    """
+    prefix = SEALED_PREFIX if split == "sealed" else OPEN_PREFIX
+    return f"{prefix}{capture_id}"
 
 
 class StorageError(Exception):
@@ -173,13 +192,34 @@ class ObjectStore:
         except Exception as exc:
             _raise_from_client(exc, "put", self.creds.bucket, capture_id)
 
-    def get(self, capture_id):
-        try:
-            response = self._client.get_object(
-                Bucket=self.creds.bucket, Key=capture_id
+    def get(self, key, *, allow_sealed=False):
+        """Read one object. Sealed keys are refused (D-007).
+
+        Before this check the seal lived only in `loader` and `eval`, so anyone
+        holding the images credential could fetch a sealed capture's bytes
+        directly and no audit line was written (#182). The guarantee was that
+        the harness would not read sealed data by accident, not that sealed data
+        could not be read.
+
+        Only the audited `--include-sealed` run passes `allow_sealed=True`, the
+        same shape as `DatasetLoader._load_row`.
+        """
+        if key.startswith(SEALED_PREFIX) and not allow_sealed:
+            raise StorageDenied(
+                f"{key!r} is sealed; it is opened once, by an audited "
+                "`python -m frontdoor.eval --include-sealed` run (D-007, D-017)"
             )
+        if not key.startswith((OPEN_PREFIX, SEALED_PREFIX)):
+            # Fail closed. An unpartitioned key is one this module cannot classify,
+            # and guessing "probably open" is how a sealed object gets served.
+            raise StorageError(
+                f"{key!r} has no partition prefix; keys must start with "
+                f"{OPEN_PREFIX!r} or {SEALED_PREFIX!r} (D-007). Build them with storage_key()."
+            )
+        try:
+            response = self._client.get_object(Bucket=self.creds.bucket, Key=key)
         except Exception as exc:
-            _raise_from_client(exc, "get", self.creds.bucket, capture_id)
+            _raise_from_client(exc, "get", self.creds.bucket, key)
         return response["Body"].read()
 
     def delete(self, capture_id):

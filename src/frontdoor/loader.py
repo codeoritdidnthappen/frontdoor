@@ -108,14 +108,18 @@ class DatasetLoader:
             )
         return found
 
-    def _image_bytes(self, capture_id):
-        getter = self._get_image
-        if getter is None:
-            from frontdoor.storage import image_store
-
-            getter = image_store().get
+    def _image_bytes(self, row, *, allow_sealed=False):
+        capture_id = row["capture_id"]
         try:
-            return getter(capture_id)
+            if self._get_image is not None:
+                return self._get_image(capture_id)
+            # Storage keys carry the partition, so the split has to be derived here --
+            # this is the last point that still has the row. `storage.get` refuses a
+            # sealed key on its own, without the manifest (#182).
+            from frontdoor.storage import image_store, storage_key
+
+            key = storage_key(capture_id, self.derived_split(row))
+            return image_store().get(key, allow_sealed=allow_sealed)
         except LoaderError:
             raise
         except Exception as exc:
@@ -147,7 +151,7 @@ class DatasetLoader:
             )
         if sha256_file(sidecar_path) != row["sidecar_sha256"]:
             raise LoaderError(f"capture_id {capture_id!r} sidecar hash mismatch")
-        image = self._image_bytes(capture_id)
+        image = self._image_bytes(row, allow_sealed=allow_sealed)
         if hashlib.sha256(image).hexdigest() != row["image_sha256"]:
             raise LoaderError(f"capture_id {capture_id!r} image hash mismatch")
         try:
