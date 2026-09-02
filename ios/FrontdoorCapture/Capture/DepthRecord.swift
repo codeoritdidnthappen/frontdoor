@@ -36,7 +36,10 @@ enum DepthCapture {
     ///
     /// Returns nil when depth is absent or unreadable. That is not an error: D-020 makes depth a
     /// comparison, never a method input, so its absence must never cost an entrance (TICK-023).
-    static func record(from depthData: AVDepthData?) -> DepthRecord? {
+    /// Returns the record AND the bytes it describes. The bytes are what gets written to
+    /// disk, so discarding them here meant the only way to produce a depth file later was to
+    /// re-derive it -- and a re-derived buffer is not the buffer the hash was taken over.
+    static func record(from depthData: AVDepthData?) -> (record: DepthRecord, bytes: Data)? {
         guard let depthData else { return nil }
 
         let converted: AVDepthData
@@ -51,7 +54,7 @@ enum DepthCapture {
         let buffer = converted.depthDataMap
         guard let bytes = tightlyPackedBytes(of: buffer) else { return nil }
 
-        return DepthRecord(
+        let record = DepthRecord(
             width: CVPixelBufferGetWidth(buffer),
             height: CVPixelBufferGetHeight(buffer),
             sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined(),
@@ -59,6 +62,7 @@ enum DepthCapture {
             isAbsolutelyAccurate: converted.depthDataAccuracy == .absolute,
             isFiltered: converted.isDepthDataFiltered
         )
+        return (record, bytes)
     }
 
     /// Copies row by row, dropping the stride padding CoreVideo adds for alignment. Hashing the

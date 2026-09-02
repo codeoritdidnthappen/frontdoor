@@ -1,11 +1,13 @@
 """Tests for human ground-truth labels (TICK-246, #168)."""
 
 import csv
+import json
 
 import pytest
 
 from frontdoor.labels import (
     ALLOWED_TRUTHS,
+    AUDIT_KEYS,
     COLUMNS,
     CRITERIA_KEYS,
     LabelError,
@@ -16,6 +18,7 @@ from frontdoor.labels import (
     template_rows,
     write_template,
 )
+from frontdoor.seal_audit import AUDIT_FIELDS, SealAuditError
 
 # Split known answers from test_split.py (committed seed): E-001 dev,
 # E-002 sealed, E-014 sealed, E-042 calib.
@@ -202,16 +205,82 @@ def test_eval_filter_returns_dev_split_only(tmp_path):
     assert [l["entrance_id"] for l in dev] == ["E-001"]
 
 
+def _audit_context(tmp_path):
+    """A minimal audit mapping for record_unsealing, mirroring test_seal_audit."""
+    manifest = tmp_path / "manifest.csv"
+    manifest.write_text(
+        "capture_id,entrance_id,image_sha256,depth_sha256,sidecar_sha256,split\n"
+        "c1,E-002,a,b,c,sealed\n",
+        encoding="utf-8",
+    )
+    return {
+        "manifest_path": manifest,
+        "audit_path": tmp_path / "SEAL_AUDIT.log",
+        "repo": tmp_path,
+        "config": {"images_bucket": "frontdoor-image", "endpoint": "default"},
+    }
+
+
+def _clean_recordable_repo(monkeypatch):
+    """Monkeypatch the git-cleanliness bits the way test_seal_audit.py does."""
+    monkeypatch.setattr("frontdoor.seal_audit._working_tree_dirty", lambda repo: False)
+    monkeypatch.setattr("frontdoor.seal_audit._git_commit", lambda repo: "b" * 40)
+    monkeypatch.setattr("frontdoor.seal_audit._operator", lambda: "qa-operator")
+
+
 def test_eval_filter_refuses_sealed_without_audited_flag(tmp_path):
     loaded = load_labels(_write_labels(tmp_path / "labels.csv", _mixed_split_labels()))
     with pytest.raises(SealedLabelError, match="results freeze"):
         labels_for_eval(loaded.labels, split="sealed")
 
 
-def test_audited_path_hands_back_sealed_labels(tmp_path):
+def test_bare_audited_flag_without_audit_mechanism_refuses(tmp_path):
+    # audited=True alone must not unseal (fix-forward on TICK-246): the
+    # release goes through seal_audit or not at all.
     loaded = load_labels(_write_labels(tmp_path / "labels.csv", _mixed_split_labels()))
-    sealed = labels_for_eval(loaded.labels, split="sealed", audited=True)
+    with pytest.raises(SealedLabelError, match="does not unseal"):
+        labels_for_eval(loaded.labels, split="sealed", audited=True)
+
+
+def test_incomplete_audit_mapping_refuses(tmp_path):
+    loaded = load_labels(_write_labels(tmp_path / "labels.csv", _mixed_split_labels()))
+    audit = _audit_context(tmp_path)
+    del audit["config"]
+    with pytest.raises(SealedLabelError, match="missing"):
+        labels_for_eval(loaded.labels, split="sealed", audited=True, audit=audit)
+
+
+def test_audited_path_records_unsealing_then_hands_back_sealed_labels(
+    tmp_path, monkeypatch
+):
+    loaded = load_labels(_write_labels(tmp_path / "labels.csv", _mixed_split_labels()))
+    audit = _audit_context(tmp_path)
+    _clean_recordable_repo(monkeypatch)
+    sealed = labels_for_eval(loaded.labels, split="sealed", audited=True, audit=audit)
     assert [l["entrance_id"] for l in sealed] == ["E-002", "E-014"]
+    lines = audit["audit_path"].read_text(encoding="utf-8").splitlines()
+    assert len(lines) == 1
+    record = dict(zip(AUDIT_FIELDS, lines[0].split("\t")))
+    assert json.loads(record["command_line"]) == ["labels", "--split", "sealed"]
+    assert record["operator"] == "qa-operator"
+
+
+def test_dirty_tree_refuses_sealed_labels_and_writes_nothing(tmp_path, monkeypatch):
+    loaded = load_labels(_write_labels(tmp_path / "labels.csv", _mixed_split_labels()))
+    audit = _audit_context(tmp_path)
+    monkeypatch.setattr("frontdoor.seal_audit._working_tree_dirty", lambda repo: True)
+    with pytest.raises(SealAuditError, match="dirty"):
+        labels_for_eval(loaded.labels, split="sealed", audited=True, audit=audit)
+    assert not audit["audit_path"].exists()
+
+
+def test_audit_keys_match_record_unsealing_signature():
+    import inspect
+
+    from frontdoor.seal_audit import record_unsealing
+
+    params = inspect.signature(record_unsealing).parameters
+    assert all(key in params for key in AUDIT_KEYS)
 
 
 def test_eval_filter_rejects_unknown_split(tmp_path):

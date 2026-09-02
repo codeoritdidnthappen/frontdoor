@@ -9,6 +9,10 @@ import Foundation
 /// AVFoundation objects in it, so the rules that decide whether a capture is usable are ordinary
 /// functions that can be tested without a camera.
 struct CaptureRecord: Equatable {
+    /// Identifies this shutter press. Generated at the press, not at write time: a capture that
+    /// fails validation still has an identity in the log of what was attempted, and two presses a
+    /// second apart are never confusable.
+    var captureId: String
     var pixelWidth: Int
     var pixelHeight: Int
     var intrinsics: CameraIntrinsics
@@ -17,7 +21,14 @@ struct CaptureRecord: Equatable {
     /// that have different cameras. Per-device effects are analysable later (ASM-1).
     var deviceModel: String
     /// e.g. `builtInWideAngleCamera`. Fixed by D-014, recorded so the record proves it.
+    /// The OPTICS that took the picture. Always the 1x main lens, because a frame taken on any
+    /// other is refused -- the zoom check compares against the device's main-lens factor.
     var lens: String
+    /// The AVFoundation device type actually opened. Not the same as `lens`: on both team phones
+    /// the main lens is reached through builtInDualWideCamera, since the bare wide camera delivers
+    /// no calibration data and cannot produce a measurable frame at all (TICK-020). Recording only
+    /// the lens name would describe a capture that could not have happened.
+    var captureDevice: String
     var zoomFactor: Double
     /// UTC RFC 3339, sampled at the shutter press. The schema requires `Z`; offsets are rejected so
     /// capture time has one spelling.
@@ -166,6 +177,7 @@ enum CaptureRejected: Error, Equatable {
 /// Decides whether a frame is usable. Pure, so the rules are testable without a camera.
 enum CaptureValidation {
     static func record(
+        captureId: String,
         pixelWidth: Int,
         pixelHeight: Int,
         intrinsics: CameraIntrinsics?,
@@ -173,6 +185,7 @@ enum CaptureValidation {
         gravity: GravitySample?,
         deviceModel: String,
         lens: String,
+        captureDevice: String,
         zoomFactor: Double,
         /// The factor at which the 1x main lens exposes on THIS camera. 1.0 on a physical wide
         /// device; the first switch-over factor on a virtual one, which is 2.00 on both team
@@ -247,12 +260,14 @@ enum CaptureValidation {
         }
 
         return .success(CaptureRecord(
+            captureId: captureId,
             pixelWidth: pixelWidth,
             pixelHeight: pixelHeight,
             intrinsics: intrinsics,
             gravity: gravity,
             deviceModel: deviceModel,
             lens: lens,
+            captureDevice: captureDevice,
             zoomFactor: zoomFactor,
             capturedAt: capturedAt,
             depth: depth,

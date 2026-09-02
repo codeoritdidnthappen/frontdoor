@@ -253,3 +253,76 @@ def test_entrance_id_rejects_trailing_whitespace(record, suffix):
     record["entrance_id"] = "E-014" + suffix
     with pytest.raises(ValidationError):
         validate_sidecar(record)
+
+
+# --------------------------------------------------- distortion (TICK-028, #36, #37)
+
+
+@pytest.mark.parametrize("field", ["distortion_table", "distortion_center"])
+def test_intrinsics_require_the_distortion_data(record, field):
+    """Section 2 lists the distortion table as part of the method's legal input, and #36 and #37
+    both consume it. Until TICK-028 the schema had no field for it and `additionalProperties` was
+    false, so a capture could not carry one even if the camera delivered it -- and both phones do,
+    42 entries each. Arms A and A-prime had nothing to undistort with.
+
+    Required rather than optional: a frame whose taps cannot be undistorted is not measurable, and
+    this project refuses such frames rather than recording them and finding out at analysis.
+    """
+    del record["intrinsics"][field]
+    with pytest.raises(ValidationError, match=field):
+        validate_sidecar(record)
+
+
+def test_a_one_entry_distortion_table_is_rejected(record):
+    """One sample cannot be interpolated between, so it describes no correction at all."""
+    record["intrinsics"]["distortion_table"] = [0.0]
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+@pytest.mark.parametrize("missing", ["x", "y"])
+def test_the_distortion_centre_needs_both_coordinates(record, missing):
+    del record["intrinsics"]["distortion_center"][missing]
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+def test_the_distortion_centre_is_not_assumed_to_be_the_principal_point(record):
+    """They are different quantities and the schema must let them differ. The table is radial
+    about the distortion centre; using cx/cy in its place biases the frame-edge corrections the
+    table exists to make.
+    """
+    record["intrinsics"]["distortion_center"] = {"x": 2000.0, "y": 1500.0}
+    validate_sidecar(record)
+
+
+# ------------------------------------------- the D-014 claim must be checkable (TICK-020)
+
+
+@pytest.mark.parametrize("field", ["capture_device", "zoom_factor"])
+def test_the_camera_provenance_fields_are_required(record, field):
+    """`lens` alone cannot support the claim D-014 makes.
+
+    On builtInDualWideCamera the zoom scale is relative to the ultra-wide, so 2.00 is the 1x main
+    lens and 1.00 is ~120 degrees of ultra-wide. A record carrying only a lens name describes both
+    identically -- and the wrong one is a D-014 violation nothing downstream could detect.
+    """
+    del record[field]
+    with pytest.raises(ValidationError, match=field):
+        validate_sidecar(record)
+
+
+def test_lens_and_capture_device_are_allowed_to_differ(record):
+    """They are different claims: the optics used, and the device opened to reach them. Both team
+    phones reach the 1x wide lens through builtInDualWideCamera, because the bare wide camera
+    delivers no calibration data and cannot produce a measurable frame at all (TICK-020).
+    """
+    assert record["lens"] != record["capture_device"]
+    validate_sidecar(record)
+
+
+def test_a_zero_or_negative_zoom_factor_is_rejected(record):
+    for bad in (0, -1.0):
+        record["zoom_factor"] = bad
+        with pytest.raises(ValidationError):
+            validate_sidecar(record)

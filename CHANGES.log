@@ -226,6 +226,16 @@ the Arm-A-only rule. Checking cannot promote any of these to confirmed -- a reco
 matches the tickets is still a reconstruction, because the tickets are where it came from. The
 label stays until someone who was in the decision says otherwise.
 
+2026-09-02 (#183): second pass, this time against the IMPLEMENTATION rather than the tickets --
+capture_sidecar.schema.json, manifest.py, CaptureRecord.swift -- and against the 2026-09-01 pivot
+to plain-photo screening (#67, and the pivot comment in the #9 thread). Each entry below carries a
+dated status line: D-023 and the corrected D-024 match the code; D-021 has no enforcement code yet
+to check, so its ticket remains the only referent; D-022's attribution question is unchanged and
+still needs a human (#132). Where the pivot retires an entry's subject matter the status line says
+so -- the pre-pivot text stands as history of what was decided, not as current protocol. The
+(reconstructed) labels stay, for the reason in the paragraph above; A-2's date and wording remain
+with #132.
+
 - D-021  (reconstructed) Per-entrance shot plan is enforced by the instrument: the app tells the
          operator which card placement, angle bucket and distance bucket remain outstanding and
          refuses to mark the entrance complete until the plan is met. Arm A-prime ground-card
@@ -236,6 +246,11 @@ label stays until someone who was in the decision says otherwise.
          entrance in hand, and refuses to mark the entrance complete until the plan is met" -- and
          its AC "subset membership is decided by a documented rule fixed in advance". Every clause
          above appears there. Nothing invented; still not the original wording.
+         2026-09-02 (#183): text re-confirmed against TICK-027 (#31) as quoted; no shot-plan
+         enforcement code exists in ios/ yet, so the ticket is the only checkable referent.
+         AMENDED IN PRACTICE by the 2026-09-01 pivot (#67, #9 thread): capture is plain photos,
+         the A-prime ground-card subset is retired (#68 closed), and the per-entrance plan is now
+         #64's 5-6-view protocol. Pre-pivot text kept as the record of what was decided.
 - D-022  (reconstructed) Compliance verdicts are reported for Arm A ONLY. No pass/fail bar or
          threshold line is attached to Arms A-prime, B or C; those arms report measurement error
          alone. Referenced by: #91, #93, #95, #72.
@@ -251,6 +266,12 @@ label stays until someone who was in the decision says otherwise.
          said, or D-022 fixed it from the start and A-2 is not an amendment at all. That distinction
          is not recoverable from the tickets, and it matters: A-2 must be REPORTED AS AN AMENDMENT
          AT DEMO DAY (PRD section 2), and D-022 carries no such obligation. See TICK-231 and #132.
+         2026-09-02 (#183): text re-confirmed against the four citing tickets as quoted; the
+         D-022-vs-A-2 attribution stays UNRESOLVED and still needs whoever took the decision
+         (#132, TICK-231). The 2026-09-01 pivot (#67, #9 thread) moves verdicts to visible-
+         feature-presence screening, so the Arm-A pass/fail bar this rule governs belongs to the
+         pre-pivot metrology study; the formal amendment ask for the pivot itself is A-3 (#67
+         thread), separate from this attribution question.
 - D-023  (reconstructed) Three-way split -- dev, calib, sealed -- assigned deterministically from a
          committed seed at entrance creation and immutable thereafter, with calib reserved for
          interval calibration so conformal intervals are never calibrated on dev or on sealed data.
@@ -260,15 +281,21 @@ label stays until someone who was in the decision says otherwise.
          against" -- and TICK-201 (#84), "the seed embedded in the installed build matches the
          committed seed file", with splits described as immutable at analysis time. Also implemented:
          `frontdoor.split.assign_split` (split.py) and `frontdoor.labels.SPLITS` (labels.py).
-- D-024  (reconstructed, CORRECTED 2026-09-01) One capture writes one image, one JSON sidecar, and
-         one depth map WHERE THE DEVICE HAS DEPTH -- the sidecar's `depth` is nullable and its
-         absence must not cost an entrance (TICK-023 AC5, D-020), which is why #32 AC5 lists only a
-         missing caliper reading, fewer than six ROI taps and missing intrinsics as the values that
-         void a capture. Each file written is hashed over its WRITTEN FILE BYTES on device, and the
-         sidecar is written ATOMICALLY AFTER those files are fully written, so a crash mid-capture
-         never leaves a sidecar pointing at a truncated file. A capture missing any required value
-         -- no caliper reading, fewer than six ROI taps, no intrinsics -- writes NOTHING AT ALL
-         rather than a partial record. Referenced by: #32, #83, #85.
+         2026-09-02 (#183): CONFIRMED AGAINST THE IMPLEMENTATION -- assign_split (split.py),
+         SPLITS = ("dev", "calib", "sealed") (labels.py) and the sidecar schema's split enum all
+         state the same three-way split. The split discipline transfers through the 2026-09-01
+         pivot unchanged (#9 thread lists "the dev/sealed split discipline" as transferring; #67
+         keeps sealed entrances unopened before the freeze). Label stays pending a human.
+- D-024  (reconstructed, CORRECTED 2026-09-01, code-verified 2026-09-02) One capture writes one
+         image, one JSON sidecar, and one depth map WHERE THE DEVICE HAS DEPTH -- the sidecar's
+         `depth` is nullable and its absence must not cost an entrance (TICK-023 AC5, D-020),
+         which is why #32 AC5 lists only a missing caliper reading, fewer than six ROI taps and
+         missing intrinsics as the values that void a capture. Each file written is hashed over
+         its WRITTEN FILE BYTES on device, and the sidecar is written ATOMICALLY AFTER those
+         files are fully written, so a crash mid-capture never leaves a sidecar pointing at a
+         truncated file. A capture missing any required value -- no caliper reading, fewer than
+         six ROI taps, no intrinsics -- writes NOTHING AT ALL rather than a partial record.
+         Referenced by: #32, #83, #85.
          GROUNDED IN: TICK-028 (#32) acceptance criteria 2, 4 and 5, quoted almost directly.
          WHAT WAS WRONG. The previous text said captures were "hashed at the shutter press" and that
          ground truth and condition tags were "bound in at capture time rather than reconciled
@@ -279,6 +306,17 @@ label stays until someone who was in the decision says otherwise.
          about reconciliation that #32, #83 and #85 do not make. Corrected against the implementing
          ticket rather than re-guessed; the entry stays reconstructed because #32 is a ticket that
          cites D-024, not the decision itself.
+         2026-09-02 (#183): CORRECTION VERIFIED AGAINST THE IMPLEMENTATION -- the sidecar schema
+         (capture_sidecar.schema.json) makes `depth` nullable and requires a per-file sha256 of
+         written bytes; the manifest hashes files on disk and writes an empty depth_sha256 when
+         depth is absent (manifest.py, sha256_file); CaptureRecord.swift holds `depth` as optional
+         and documents ROI taps as "marked after the shutter" -- consistent only with the
+         corrected ordering, not with "hashed at the shutter press". AMENDED IN PRACTICE by the
+         2026-09-01 pivot (#67, #9 thread): capture is plain photos -- no caliper, no LiDAR depth,
+         no ROI taps -- so this record shape describes the pre-pivot instrument; the post-pivot
+         record is the foldered E-NNN photo set validated in #66. NOTE: the schema's own
+         description line still says the sidecar is "written by the capture app at the shutter
+         press" -- loose in the same way the old D-024 text was; noted here, not yet fixed.
 
 - A-2    (reconstructed) AMENDMENT TO THE PRE-REGISTRATION. The pre-registered success criterion
          -- MAE <= 0.25" on threshold rise, on the sealed test split (PRD section 2, D-008) -- is
@@ -446,3 +484,52 @@ Closes the two D-026 items that had to be logged before #50 could close.
   fallback is the same image, loaded from `docker save` / `docker load` so the
   image id (`docker image inspect -f '{{.Id}}'`) matches; record both ids when
   the host exists. Cache that tar on the laptop before Demo Day.
+
+## 2026-09-02  Object storage provisioned and the D-020 denial verified against R2 (TICK-012, #20)
+
+TICK-012 was closed on 2026-09-01 with only its code half done. The buckets did not exist,
+and every test of `frontdoor.storage` had run against moto stubs. Reopened and reassigned;
+this records the provisioning.
+
+Cloudflare R2, free tier, account `b121ca93…`. Buckets `frontdoor-image` and
+`frontdoor-depth`, two API tokens with distinct access keys.
+
+    $ python -m frontdoor.storage verify
+    ok  images=frontdoor-image  depth=frontdoor-depth  loader-denied-on-depth
+
+That is the acceptance criterion that says "verified by actually running it, not by reading
+the policy", and it now holds against the provider rather than against a stub. Probed in
+both directions:
+
+    images credential -> depth bucket : DENIED (AccessDenied)
+    depth  credential -> depth bucket : round trip OK
+    depth  credential -> image bucket : DENIED
+
+The third is stricter than D-020 requires -- the quarantine only asks that the LOADER cannot
+read depth -- but it means neither token is a superset of the other, so a leaked one cannot
+quietly become the other.
+
+The live storage tests ran for the first time: 53 passed with FRONTDOOR_STORAGE_LIVE=1.
+
+Confirmed in the Cloudflare dashboard on the same day:
+
+- No payment method attached. D-026 depends on the free tier hard-stopping rather than
+  billing quietly starting, and that only holds while no card is on the account.
+- Neither bucket is publicly readable: Public Development URL disabled, no custom domain,
+  on both. This is not a nicety. The sealed split lives in `frontdoor-image`, key names are
+  `sealed/<capture_id>`, and `data/manifest.csv` will commit every capture_id to a public
+  repo -- so a public bucket would let anyone reconstruct every sealed URL exactly. D-028
+  records that the seal is a code-level refusal and not an access control; a public bucket
+  is the hole underneath it.
+- Bucket location is WNAM, read back from the provider rather than taken on trust:
+  `get_bucket_location` returns 'WNAM' for `frontdoor-image`. Note that
+  `FRONTDOOR_S3_REGION=auto` is a different thing -- the S3 API's region parameter, which is
+  what R2 expects -- and says nothing about where the bucket lives. The two are easy to
+  confuse and both are correct here.
+
+The same call against `frontdoor-depth` with the images credential returns AccessDenied, so
+the quarantine holds for metadata and not only for object bytes.
+
+The evaluation host region remains open (#50). WNAM was chosen to match a North American
+host; if #50 lands elsewhere, the mismatch is a latency question rather than a correctness
+one, since R2 egress is free and the dataset is single-digit gigabytes.
