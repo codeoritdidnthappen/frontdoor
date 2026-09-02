@@ -225,10 +225,27 @@ def test_the_recorded_only_mode_says_it_is_not_a_live_check(monkeypatch, capsys)
 
 
 def test_the_cli_returns_one_when_the_host_has_moved_on(monkeypatch, capsys):
+    """Also guards that `_run` is resolved at call time.
+
+    Bound as a default argument it was not, so this test replaced `deployment._run`, kept the real
+    one, and shelled out to the live host -- passing on a laptop with flyctl and failing in CI.
+    A test that reaches the network to decide its verdict is not testing what it claims to.
+    """
     monkeypatch.setattr(deployment, "load", lambda *a, **k: record())
     monkeypatch.setattr(deployment, "_run", runner(host_digest=OTHER))
     assert main(["verify"]) == 1
     assert "does not record" in capsys.readouterr().err
+
+
+def test_no_test_in_this_file_reaches_the_real_tools(monkeypatch):
+    """If any path still calls the real `fly` or `docker`, this fails instead of the network."""
+    def forbidden(command):
+        raise AssertionError(f"a test shelled out to {command[0]!r}")
+
+    monkeypatch.setattr(deployment, "_run", forbidden)
+    check_live(record(), run=runner())
+    monkeypatch.setattr(deployment, "load", lambda *a, **k: record())
+    assert main(["verify", "--recorded-only"]) == 0
 
 
 def test_a_missing_record_file_is_reported(tmp_path):

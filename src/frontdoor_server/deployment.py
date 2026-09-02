@@ -75,8 +75,15 @@ def _run(command):
     return done.stdout
 
 
-def live_host(record, run=_run):
-    """What the host is running right now, from `fly image show`."""
+def live_host(record, run=None):
+    """What the host is running right now, from `fly image show`.
+
+    `run` is resolved from the module at CALL time rather than bound as a default. Bound as a
+    default, a test that replaces `deployment._run` silently keeps the real one and shells out to
+    the actual host -- which is how `test_the_cli_returns_one_when_the_host_has_moved_on` passed
+    locally, for the wrong reason, and failed in CI where `fly` does not exist.
+    """
+    run = run if run is not None else _run
     app = record.get("app")
     if not app:
         raise DeploymentError("the record does not name an app")
@@ -98,8 +105,9 @@ def live_host(record, run=_run):
     return first.get("Digest"), first.get("Tag")
 
 
-def cached_laptop(record, run=_run):
+def cached_laptop(record, run=None):
     """What this machine has in its docker cache for the recorded release."""
+    run = run if run is not None else _run
     app = record.get("app")
     release = _side(record, "host").get("release")
     if not release:
@@ -147,13 +155,14 @@ def check_recorded(record):
     return host
 
 
-def check_live(record, run=_run):
+def check_live(record, run=None):
     """Ask the host and the docker cache, and hold the record to both.
 
     Three things have to agree: what the host serves, what this machine has cached, and what the
     repository claims. A redeploy breaks the first two against the third, which is the case the
     recorded-only check cannot see.
     """
+    run = run if run is not None else _run
     recorded = check_recorded(record)
     host_digest, host_release = live_host(record, run=run)
     if not _is_digest(host_digest):
