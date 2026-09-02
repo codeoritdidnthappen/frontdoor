@@ -44,7 +44,10 @@ struct RootView: View {
         // grants it, and comes back. Re-sample on foreground so the home screen cannot keep
         // showing Denied over a permission that has since been granted.
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { controller.refreshReadiness() }
+            if phase == .active {
+                controller.refreshReadiness()
+                controller.refreshPendingUploads()
+            }
         }
     }
 }

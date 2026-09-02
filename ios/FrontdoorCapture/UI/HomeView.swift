@@ -12,6 +12,41 @@ struct HomeView: View {
     let onStart: () -> Void
     let onDiagnostics: () -> Void
 
+    /// What is still only on this phone, and a way to send it.
+    ///
+    /// AC6: nobody should leave a field session unsure whether the day's work is safe. "Captured
+    /// this session" answers a different question -- it resets on relaunch and counts frames that
+    /// may already be uploaded. This counts what would be lost if the phone were.
+    @ViewBuilder
+    private var pendingRow: some View {
+        let pending = controller.pendingUploads
+        // The result is shown whether or not anything is still queued. It used to live inside
+        // `pending > 0`, so a fully successful drain -- the one case worth confirming -- set the
+        // count to zero and took its own confirmation with it: the operator tapped Upload now and
+        // watched the row vanish with nothing said. AC6 is about not leaving a site unsure.
+        if pending > 0 || controller.lastDrainMessage != nil {
+            VStack(spacing: 6) {
+                if pending > 0 {
+                    Text("^[\(pending) capture](inflect: true) on this phone only")
+                        .font(.subheadline.weight(.medium))
+                    Button(controller.isDraining ? "Uploading…" : "Upload now") {
+                        Task { await controller.drainQueue() }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(controller.isDraining)
+                }
+                if let outcome = controller.lastDrainMessage {
+                    Text(outcome)
+                        .font(.footnote)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(pending > 0 ? .secondary : .primary)
+                        .padding(.horizontal, 24)
+                }
+            }
+            .padding(.top, 4)
+        }
+    }
+
     var body: some View {
         VStack(spacing: 28) {
             Spacer()
@@ -75,6 +110,8 @@ struct HomeView: View {
             Text("\(controller.photosTaken) captured this session")
                 .font(.footnote.monospacedDigit())
                 .foregroundStyle(.secondary)
+
+            pendingRow
                 .padding(.bottom, 12)
         }
     }
