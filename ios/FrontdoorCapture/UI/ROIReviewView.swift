@@ -14,6 +14,7 @@ struct ROIReviewView: View {
 
     @State private var marks: [ROITarget: PixelPoint] = [:]
     @State private var lastTouch: CGPoint?
+    @Environment(\.displayScale) private var displayScale
 
     private var next: ROITarget? {
         ROITarget.allCases.first { marks[$0] == nil }
@@ -43,7 +44,12 @@ struct ROIReviewView: View {
                         .position(x: rect.midX, y: rect.midY)
                     marksOverlay(in: rect)
                     if let lastTouch, next != nil {
-                        Magnifier(image: image, at: lastTouch, displayed: rect)
+                        Magnifier(
+                            image: image, at: lastTouch, displayed: rect,
+                            zoom: ROIValidation.loupeZoom(
+                                pixelWidth: pixelWidth, displayed: rect,
+                                orientation: image.imageOrientation,
+                                displayScale: displayScale))
                     }
                 }
                 .contentShape(Rectangle())
@@ -100,7 +106,53 @@ struct ROIReviewView: View {
         }
     }
 
+    /// Adjusts the most recently placed point by one image pixel.
+    ///
+    /// A finger under a loupe still cannot resolve a single pixel, and the tap error lands
+    /// directly in a rise being judged against a quarter-inch bar (TICK-135 AC3).
+    @ViewBuilder
+    private var nudgePad: some View {
+        if let target = ROITarget.allCases.last(where: { marks[$0] != nil }) {
+            HStack(spacing: 10) {
+                // The pixel coordinates, because AC4 asks for a measured standard deviation over
+                // ten placements of one edge and an operator cannot record a number the app never
+                // shows them. Monospaced so a column of ten readings is easy to compare.
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(target.shortLabel).font(.caption.weight(.semibold))
+                    Text("\(marks[target]!.x), \(marks[target]!.y)")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                .frame(minWidth: 76, alignment: .leading)
+                .accessibilityLabel(
+                    "\(target.shortLabel) at \(marks[target]!.x), \(marks[target]!.y)")
+                ForEach([("chevron.left", -1, 0), ("chevron.right", 1, 0),
+                         ("chevron.up", 0, -1), ("chevron.down", 0, 1)], id: \.0) { icon, dx, dy in
+                    Button {
+                        marks[target] = ROIValidation.nudge(
+                            marks[target]!, dx: dx, dy: dy,
+                            pixelWidth: pixelWidth, pixelHeight: pixelHeight)
+                    } label: {
+                        Image(systemName: icon).frame(width: 34, height: 30)
+                    }
+                    .buttonStyle(.bordered)
+                    .accessibilityLabel("Nudge \(target.shortLabel) \(icon)")
+                }
+            }
+            .padding(.vertical, 6)
+        }
+    }
+
     private var footer: some View {
+        VStack(spacing: 4) {
+            nudgePad
+            controls
+        }
+        .padding()
+        .background(.thinMaterial)
+    }
+
+    private var controls: some View {
         HStack {
             Button("Discard", role: .destructive, action: onDiscard)
             Spacer()
@@ -113,8 +165,6 @@ struct ROIReviewView: View {
             .buttonStyle(.borderedProminent)
             .disabled(next != nil)
         }
-        .padding()
-        .background(.thinMaterial)
     }
 
     private func place(_ point: CGPoint, in rect: CGRect) {
@@ -142,9 +192,11 @@ private struct Magnifier: View {
     let image: UIImage
     let at: CGPoint
     let displayed: CGRect
+    /// Computed from the still and the screen so 1:1 holds on any device (TICK-135 AC1), rather
+    /// than a constant that happened to clear it on the two phones to hand.
+    let zoom: CGFloat
 
     private let size: CGFloat = 120
-    private let zoom: CGFloat = 4
 
     var body: some View {
         let clamped = CGPoint(
