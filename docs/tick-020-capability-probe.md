@@ -72,6 +72,15 @@ names.**
    disparity rather than LiDAR. Arms B and C were meant to lean on metric depth. Arm A is
    unaffected: it takes scale from the reference card.
 
+   > **Correction, 2026-09-02 (TICK-020, #24).** "Arms B and C were meant to lean on metric depth"
+   > is wrong, and it points at the wrong arms. ARCHITECTURE.md §5 defines **both** B and C as
+   > *learned monocular* depth estimated from the image, and **D-015** forbids the method consuming
+   > device depth at all — so device depth being relative cannot affect them. Arm C has since been
+   > **cut** outright (D-030). What relative depth does touch is everything that treats device depth
+   > as a *measurement*: **D-020**'s monocular-versus-LiDAR comparison, **deliverable #5**, and
+   > **R-10**'s planned bench test against the caliper. None of those are resolved. The full
+   > analysis is in `TEAM.md`; this note exists so the claim is not read as current.
+
 4. **No device delivers its sensor maximum.** Both requested 8064×6048 and were handed 4032×3024 —
    a binned readout, full field of view, one binning step down. TICK-022 AC3's literal wording is
    unsatisfiable on a 48 MP iPhone; the check now compares aspect (which catches a crop) and
