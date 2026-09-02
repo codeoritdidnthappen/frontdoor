@@ -6,7 +6,7 @@ import XCTest
 let testEntrance = Entrance(
     id: "E-014", riseInches: 0.75, instrument: "digital caliper", split: .dev)
 let testConditions = ConditionTags(
-    distanceM: 2.0, lighting: .overcast, surface: .concrete, occlusion: .none)
+    distanceM: 2.0, lighting: .overcast, surface: .concrete, occlusion: .none, cardPlacement: .vertical)
 
 /// TICK-024's rules: ground truth binds at the shutter press, so everything a capture needs to be
 /// interpretable later has to be right before the viewfinder opens.

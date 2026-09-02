@@ -34,6 +34,7 @@ final class CaptureValidationBoundaryTests: XCTestCase {
         depth: DepthRecord? = nil
     ) -> Result<CaptureRecord, CaptureRejected> {
         CaptureValidation.record(
+            captureId: "test-capture",
             pixelWidth: width, pixelHeight: height,
             intrinsics: intrinsics ?? goodIntrinsics,
             hadCalibrationData: hadCalibration,

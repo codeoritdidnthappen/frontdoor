@@ -9,6 +9,10 @@ import Foundation
 /// AVFoundation objects in it, so the rules that decide whether a capture is usable are ordinary
 /// functions that can be tested without a camera.
 struct CaptureRecord: Equatable {
+    /// Identifies this shutter press. Generated at the press, not at write time: a capture that
+    /// fails validation still has an identity in the log of what was attempted, and two presses a
+    /// second apart are never confusable.
+    var captureId: String
     var pixelWidth: Int
     var pixelHeight: Int
     var intrinsics: CameraIntrinsics
@@ -173,6 +177,7 @@ enum CaptureRejected: Error, Equatable {
 /// Decides whether a frame is usable. Pure, so the rules are testable without a camera.
 enum CaptureValidation {
     static func record(
+        captureId: String,
         pixelWidth: Int,
         pixelHeight: Int,
         intrinsics: CameraIntrinsics?,
@@ -255,6 +260,7 @@ enum CaptureValidation {
         }
 
         return .success(CaptureRecord(
+            captureId: captureId,
             pixelWidth: pixelWidth,
             pixelHeight: pixelHeight,
             intrinsics: intrinsics,

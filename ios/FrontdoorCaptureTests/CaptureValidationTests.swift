@@ -24,6 +24,7 @@ final class CaptureValidationTests: XCTestCase {
         sensorWidth: Int?? = nil, sensorHeight: Int?? = nil
     ) -> Result<CaptureRecord, CaptureRejected> {
         CaptureValidation.record(
+            captureId: "test-capture",
             pixelWidth: width, pixelHeight: height,
             intrinsics: intrinsics ?? self.intrinsics,
             hadCalibrationData: hadCalibration,

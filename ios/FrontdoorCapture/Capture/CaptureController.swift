@@ -288,6 +288,7 @@ final class CaptureController: ObservableObject {
         let mainLensZoom = Self.mainLensZoomFactor(for: device)
         let lens = Self.lensName
         let captureDevice = Self.deviceName(for: device)
+        let captureId = UUID().uuidString
         // Sampled here, on the main actor, at the moment of the press — not inside the delegate
         // callback, which runs after the exposure and would describe a different instant.
         let gravity = motion.deviceMotion.map {
@@ -314,6 +315,7 @@ final class CaptureController: ObservableObject {
                         captured,
                         subject: subject, gravity: gravity, zoomFactor: zoomFactor,
                         mainLensZoom: mainLensZoom, lens: lens, captureDevice: captureDevice,
+                        captureId: captureId,
                         capturedAt: capturedAt, sensorMax: sensorMax
                     )
                 case .failure(let message):
@@ -372,6 +374,7 @@ final class CaptureController: ObservableObject {
         mainLensZoom: Double,
         lens: String,
         captureDevice: String,
+        captureId: String,
         capturedAt: String,
         sensorMax: CMVideoDimensions?
     ) {
@@ -390,6 +393,7 @@ final class CaptureController: ObservableObject {
         }
 
         switch CaptureValidation.record(
+            captureId: captureId,
             pixelWidth: captured.pixelWidth,
             pixelHeight: captured.pixelHeight,
             intrinsics: intrinsics,
