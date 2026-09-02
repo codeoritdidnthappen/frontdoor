@@ -37,12 +37,25 @@ A-1 assumes capture devices are LiDAR-capable iPhones; A-3 assumes at least thre
 CoreMotion device motion, no ARKit (D-014, ARCHITECTURE.md §4) — so an Android device cannot run
 it at all, with or without a depth sensor.
 
-| Holder | Device | Runs the capture app | LiDAR | Consequence |
-|--------|--------|----------------------|-------|-------------|
-| David | Samsung Galaxy S25 | **No** — Android | No | Cannot capture |
-| James | iPhone 16 Pro | Yes | **Yes** | Full capture incl. depth |
-| Emily | iPhone 16 (non-Pro) | Yes | No | RGB + intrinsics + gravity only |
-| Ruben | Google Pixel 9 | **No** — Android | No | Cannot capture |
+Measured 2026-09-02 with the in-app capability probe (TICK-020, #24); see
+[docs/tick-020-capability-probe.md](docs/tick-020-capability-probe.md).
+
+| Holder | Device | Runs the capture app | Delivers intrinsics | Depth | Consequence |
+|--------|--------|----------------------|---------------------|-------|-------------|
+| David | Samsung Galaxy S25 | **No** — Android | — | — | Cannot capture |
+| Emily | iPhone 16 (non-Pro) | Yes | **Yes**, verified | Relative (stereo) | **Full capture** |
+| Emily | iPhone 15 Pro Max | Yes | **Yes**, verified | Relative (stereo) | **Full capture** |
+| James | iPhone 16 Pro | Yes | Expected, **unverified** | — | Untested; treated as spare |
+| Ruben | Google Pixel 9 | **No** — Android | — | — | Cannot capture |
+
+Three things the probe changed. **Intrinsics arrive on both tested phones, including the non-Pro**,
+which the row above used to deny — but only through `builtInDualWideCamera`, never through the
+`builtInWideAngleCamera` that D-014 names. **LiDAR delivers depth with no calibration at all**, so
+it is not a route to intrinsics on any device. And **the depth that does arrive is
+`accuracy=relative`**, stereo disparity rather than metric range, on both phones.
+
+James's iPhone 16 Pro has never had a build on it. Two verified capture devices are enough for the
+dataset, so it is recorded as a spare rather than a blocker.
 
 ### Development machines
 
@@ -60,10 +73,14 @@ distribution channel (TICK-001, #13).
 **Emily is the only person with both a Mac and an iPhone**, and therefore the only one who can
 develop and test the capture app without borrowing hardware.
 
-**The LiDAR capture path (#27) can only be exercised on James's iPhone 16 Pro.** Emily's iPhone 16
-has no depth sensor, so testing that code requires James's phone and someone's Mac in the same
-place. Until #13 lands, free-provisioning builds expire every seven days (R-7), making that a
-recurring physical handoff rather than a one-off.
+**The LiDAR capture path (#27) is not what it was assumed to be.** TICK-020 found that
+`builtInLiDARDepthCamera` delivers a depth map with **no calibration data**, so a LiDAR frame
+carries no intrinsics to interpret it with. Both tested phones instead get depth through the
+dual-wide, as stereo disparity at `accuracy=relative`. Arms B and C were scoped around metric
+LiDAR depth and need re-examining against that.
+
+Free-provisioning builds still expire every seven days (R-7), which is what TICK-001 (#13)
+schedules; see [docs/signing-calendar.md](docs/signing-calendar.md).
 
 - **Capture-capable devices: 2** (James, Emily) — against A-3's assumed three.
 - **LiDAR-capable devices: 1** (James) — against A-1's assumption that all capture devices are.
@@ -81,10 +98,11 @@ sidecar records `device_model` on every capture, so device remains a variable th
 can see. A-1 should be restated to say Pro and non-Pro of the same generation, rather than
 Pro-class only.
 
-**Calibration-data delivery is unverified on both phones** (A-2, R-9), and specifically unknown on
-the non-Pro iPhone 16. That check is TICK-020 (#24), which is blocked on TICK-001 (#13). If
-delivery fails on Emily's device, the capture pool drops from two phones to one and the D-020
-conflict below becomes moot — everything funnels through James regardless.
+**Calibration-data delivery is now verified on two phones** (A-2, R-9). TICK-020 (#24) ran on
+2026-09-02: both the iPhone 16 and the iPhone 15 Pro Max deliver intrinsics, a distortion table and
+depth through `builtInDualWideCamera`, and neither delivers anything through the bare 1× wide
+camera that D-014 names. The capture pool is two devices, not one, and the risk this paragraph
+described did not materialise — R-9 fired on the *device type*, not on the phones.
 
 ## 3. Work division
 
