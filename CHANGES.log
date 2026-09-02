@@ -446,3 +446,35 @@ Closes the two D-026 items that had to be logged before #50 could close.
   fallback is the same image, loaded from `docker save` / `docker load` so the
   image id (`docker image inspect -f '{{.Id}}'`) matches; record both ids when
   the host exists. Cache that tar on the laptop before Demo Day.
+
+## 2026-09-02  Object storage provisioned and the D-020 denial verified against R2 (TICK-012, #20)
+
+TICK-012 was closed on 2026-09-01 with only its code half done. The buckets did not exist,
+and every test of `frontdoor.storage` had run against moto stubs. Reopened and reassigned;
+this records the provisioning.
+
+Cloudflare R2, free tier, account `b121ca93…`. Buckets `frontdoor-image` and
+`frontdoor-depth`, two API tokens with distinct access keys.
+
+    $ python -m frontdoor.storage verify
+    ok  images=frontdoor-image  depth=frontdoor-depth  loader-denied-on-depth
+
+That is the acceptance criterion that says "verified by actually running it, not by reading
+the policy", and it now holds against the provider rather than against a stub. Probed in
+both directions:
+
+    images credential -> depth bucket : DENIED (AccessDenied)
+    depth  credential -> depth bucket : round trip OK
+    depth  credential -> image bucket : DENIED
+
+The third is stricter than D-020 requires -- the quarantine only asks that the LOADER cannot
+read depth -- but it means neither token is a superset of the other, so a leaked one cannot
+quietly become the other.
+
+The live storage tests ran for the first time: 53 passed with FRONTDOOR_STORAGE_LIVE=1.
+
+STILL OPEN on #20, and needing the Cloudflare dashboard rather than a shell: confirm no
+payment method is attached (D-026 depends on the free tier hard-stopping), confirm neither
+bucket is publicly readable, and record the bucket region. `data/STORAGE.md` says WNAM;
+`FRONTDOOR_S3_REGION` is `auto`, which is the S3 API's region parameter for R2 and says
+nothing about where the buckets actually live. The evaluation host region is still #50.
