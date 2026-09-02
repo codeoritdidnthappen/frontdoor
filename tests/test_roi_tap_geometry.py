@@ -41,10 +41,23 @@ def test_the_still_is_framed_to_the_rect_the_taps_are_measured_against():
     )
 
 
-def test_the_still_does_not_rely_on_scaled_to_fit_for_placement():
-    assert "scaledToFit" not in code().split("private struct Magnifier", 1)[0], (
-        "scaledToFit lets the enclosing stack's alignment decide where the image lands, which is "
-        "a second opinion about a position fittedRect already computes"
+def test_the_rect_is_built_from_the_displayed_orientation():
+    """The banned thing was never scaledToFit; it was letting the stack place the image.
+
+    An earlier version of this guard forbade scaledToFit outright. That was too broad: with the
+    rect carrying the displayed shape, fitting inside it is exact, and removing scaledToFit is what
+    made resizable() stretch a portrait still into a landscape rect -- the distortion seen on
+    device. What has to hold is that the rect and the conversion both know the orientation.
+    """
+    source = code()
+    assert "orientation: image.imageOrientation, in: geo.size" in source, (
+        "the fitted rect must be built from the orientation the image will display in"
+    )
+    assert "orientation: image.imageOrientation,\n            pixelWidth:" in source, (
+        "taps must convert back to sensor space through the same orientation"
+    )
+    assert "ROIValidation.displayPoint(" in source, (
+        "markers must draw through the shared inverse, not a hand-rolled one that can drift"
     )
 
 
