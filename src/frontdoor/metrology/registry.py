@@ -11,11 +11,12 @@ from frontdoor.metrology.arm import Arm, PendingArm
 from frontdoor.metrology.result import ResultError
 
 #: The four arms ARCHITECTURE section 5 defines, in the order its table lists them.
-#: `needs_intrinsics` follows that table: Arm A alone does not need the camera model.
+#: `needs_camera_model` follows that table: Arm A alone does not need fx, fy, cx, cy.
+#: It still needs the distortion table, as every arm does -- see `Arm.needs_camera_model`.
 ARM_NAMES = ("A", "A_prime", "B", "C")
 
 _ARMS = {
-    "A": PendingArm("A", "TICK-043 (#37)", needs_intrinsics=False),
+    "A": PendingArm("A", "TICK-043 (#37)", needs_camera_model=False),
     "A_prime": PendingArm("A_prime", "TICK-045 (#39)"),
     "B": PendingArm("B", "TICK-047 (#41)"),
     "C": PendingArm("C", "TICK-048 (#42)"),
