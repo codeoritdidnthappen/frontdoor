@@ -202,11 +202,20 @@ final class CaptureValidationTests: XCTestCase {
     // MARK: - The frame must be the sensor's full resolution (TICK-022 AC3, #163)
 
     func testADownscaledFrameIsRejected() {
-        // maxPhotoDimensions can be set below the sensor maximum, or a format can deliver a smaller
-        // frame. Either yields an uncropped-looking still whose intrinsics describe a grid it does
-        // not have — which zoom being pinned to 1.0 does not catch.
-        let r = rejection(result(width: 2016, height: 1512, sensorWidth: 4032, sensorHeight: 3024))
-        XCTAssertEqual(r, .notFullResolution(delivered: "2016x1512", sensor: "4032x3024"))
+        // A quarter-size frame is not a readout mode; it is the output having been configured
+        // below what the format offers. Uncropped-looking, and every ROI tap lands on a grid four
+        // times coarser than the one the measurement assumes.
+        let r = rejection(result(width: 1008, height: 756, sensorWidth: 4032, sensorHeight: 3024))
+        XCTAssertEqual(r, .notFullResolution(delivered: "1008x756", sensor: "4032x3024"))
+    }
+
+    /// One binning step down is what a 48MP sensor actually does: TICK-020's probe requested
+    /// 8064x6048 on iPhone17,3 and was handed 4032x3024. Refusing it would refuse every capture
+    /// the team can take.
+    func testTheBinnedReadoutIsAccepted() throws {
+        let record = try result(width: 2016, height: 1512,
+                                sensorWidth: 4032, sensorHeight: 3024).get()
+        XCTAssertEqual(record.pixelWidth, 2016)
     }
 
     func testAnUnknownSensorResolutionIsNotAPass() {
