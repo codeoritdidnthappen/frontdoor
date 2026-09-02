@@ -484,3 +484,52 @@ Closes the two D-026 items that had to be logged before #50 could close.
   fallback is the same image, loaded from `docker save` / `docker load` so the
   image id (`docker image inspect -f '{{.Id}}'`) matches; record both ids when
   the host exists. Cache that tar on the laptop before Demo Day.
+
+## 2026-09-02  Object storage provisioned and the D-020 denial verified against R2 (TICK-012, #20)
+
+TICK-012 was closed on 2026-09-01 with only its code half done. The buckets did not exist,
+and every test of `frontdoor.storage` had run against moto stubs. Reopened and reassigned;
+this records the provisioning.
+
+Cloudflare R2, free tier, account `b121ca93…`. Buckets `frontdoor-image` and
+`frontdoor-depth`, two API tokens with distinct access keys.
+
+    $ python -m frontdoor.storage verify
+    ok  images=frontdoor-image  depth=frontdoor-depth  loader-denied-on-depth
+
+That is the acceptance criterion that says "verified by actually running it, not by reading
+the policy", and it now holds against the provider rather than against a stub. Probed in
+both directions:
+
+    images credential -> depth bucket : DENIED (AccessDenied)
+    depth  credential -> depth bucket : round trip OK
+    depth  credential -> image bucket : DENIED
+
+The third is stricter than D-020 requires -- the quarantine only asks that the LOADER cannot
+read depth -- but it means neither token is a superset of the other, so a leaked one cannot
+quietly become the other.
+
+The live storage tests ran for the first time: 53 passed with FRONTDOOR_STORAGE_LIVE=1.
+
+Confirmed in the Cloudflare dashboard on the same day:
+
+- No payment method attached. D-026 depends on the free tier hard-stopping rather than
+  billing quietly starting, and that only holds while no card is on the account.
+- Neither bucket is publicly readable: Public Development URL disabled, no custom domain,
+  on both. This is not a nicety. The sealed split lives in `frontdoor-image`, key names are
+  `sealed/<capture_id>`, and `data/manifest.csv` will commit every capture_id to a public
+  repo -- so a public bucket would let anyone reconstruct every sealed URL exactly. D-028
+  records that the seal is a code-level refusal and not an access control; a public bucket
+  is the hole underneath it.
+- Bucket location is WNAM, read back from the provider rather than taken on trust:
+  `get_bucket_location` returns 'WNAM' for `frontdoor-image`. Note that
+  `FRONTDOOR_S3_REGION=auto` is a different thing -- the S3 API's region parameter, which is
+  what R2 expects -- and says nothing about where the bucket lives. The two are easy to
+  confuse and both are correct here.
+
+The same call against `frontdoor-depth` with the images credential returns AccessDenied, so
+the quarantine holds for metadata and not only for object bytes.
+
+The evaluation host region remains open (#50). WNAM was chosen to match a North American
+host; if #50 lands elsewhere, the mismatch is a latency question rather than a correctness
+one, since R2 egress is free and the dataset is single-digit gigabytes.
