@@ -4,6 +4,12 @@ CI runs `pytest`, not `python -m pytest`. The `-m` form puts the working directo
 the bare form does not, so cross-test imports resolved on a laptop and failed collection on CI —
 which meant the tests guarding the seal never ran on a pull request. Adding the root here, rather
 than a `tests/__init__.py`, keeps pytest's rootdir-based discovery unchanged.
+
+`src` goes on the path for the same reason, one layer down. The editable install resolves
+`frontdoor` to whichever checkout ran `pip install -e`, so a suite run inside a git worktree
+imported the *main* checkout's modules and reported green on Python the branch had changed --
+the branch's own source was never executed. Both entries are derived from this file's location,
+so every checkout tests itself.
 """
 
 import sys
@@ -12,8 +18,9 @@ from pathlib import Path
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-if str(REPO_ROOT) not in sys.path:
-    sys.path.insert(0, str(REPO_ROOT))
+for _path in (REPO_ROOT / "src", REPO_ROOT):
+    if str(_path) not in sys.path:
+        sys.path.insert(0, str(_path))
 
 
 @pytest.fixture(scope="session", autouse=True)
