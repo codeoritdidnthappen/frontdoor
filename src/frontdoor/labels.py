@@ -9,7 +9,9 @@ by, or reconciled against model output.
 
 Sealed-subset entrances are labeled at capture like every other entrance, but
 their labels leave this module only through the deliberate results-freeze path
-(D-007): labels_for_eval refuses split="sealed" unless audited=True.
+(D-007): labels_for_eval refuses split="sealed" unless audited=True AND the
+unsealing is recorded in SEAL_AUDIT.log via seal_audit.record_unsealing
+(D-017) — the flag alone never unseals.
 """
 
 import csv
@@ -18,6 +20,7 @@ from datetime import date
 from pathlib import Path
 
 from frontdoor.manifest import read_manifest
+from frontdoor.seal_audit import record_unsealing
 from frontdoor.split import InvalidEntranceId, assign_split, canonical_entrance_id
 
 # Must match the criterion keys in the screening engine's CRITERIA
@@ -174,20 +177,52 @@ def load_labels(path):
     return LoadedLabels(labels=tuple(labels), blank_skipped=blank_skipped)
 
 
-def labels_for_eval(labels, *, split="dev", audited=False):
-    """Filter labels to one split for eval use; sealed needs the audited flag.
+#: What labels_for_eval needs to record a sealed unsealing, keyed exactly as
+#: record_unsealing's keyword arguments (seal_audit, D-017).
+AUDIT_KEYS = ("manifest_path", "audit_path", "repo", "config")
+
+
+def labels_for_eval(labels, *, split="dev", audited=False, audit=None):
+    """Filter labels to one split for eval use; sealed is audited, not flagged.
 
     Mirrors the screening engine's split discipline: the split is resolved
     here from each entrance ID, and sealed-split labels are handed back only
-    through the deliberate, human-run results-freeze path that passes
-    audited=True. Day-to-day eval calls get the dev split by default.
+    through the deliberate, human-run results-freeze path. That path passes
+    audited=True AND `audit`, a mapping with AUDIT_KEYS, and the labels are
+    released only after seal_audit.record_unsealing has appended one line to
+    the audit log (D-017) — same discipline as `python -m frontdoor.eval
+    --include-sealed`. audited=True alone never unseals; any SealAuditError
+    (dirty tree, unwritable log, ...) propagates and no sealed label is
+    returned. Day-to-day eval calls get the dev split by default.
     """
     if split not in SPLITS:
         raise LabelError(f"unknown split {split!r}; expected one of {SPLITS}")
-    if split == "sealed" and not audited:
-        raise SealedLabelError(
-            "sealed-split labels are not evaluated until results freeze; "
-            "pass audited=True only from the audited freeze path"
+    if split == "sealed":
+        if not audited:
+            raise SealedLabelError(
+                "sealed-split labels are not evaluated until results freeze; "
+                "pass audited=True only from the audited freeze path"
+            )
+        if audit is None:
+            raise SealedLabelError(
+                "audited=True alone does not unseal: the unsealing must be "
+                "recorded first (D-017). Pass audit= a mapping with keys "
+                f"{AUDIT_KEYS} so record_unsealing can append the audit line."
+            )
+        missing = [key for key in AUDIT_KEYS if key not in audit]
+        if missing:
+            raise SealedLabelError(
+                f"audit is missing {missing}; record_unsealing needs all of "
+                f"{AUDIT_KEYS} to append the audit line"
+            )
+        # Raises SealAuditError without writing if the run cannot be recorded;
+        # sealed labels are handed back only after the line is on disk.
+        record_unsealing(
+            argv=["labels", "--split", "sealed"],
+            manifest_path=audit["manifest_path"],
+            audit_path=audit["audit_path"],
+            repo=audit["repo"],
+            config=audit["config"],
         )
     return [
         label for label in labels if assign_split(label["entrance_id"]) == split
