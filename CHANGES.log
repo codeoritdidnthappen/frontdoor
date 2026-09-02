@@ -473,8 +473,25 @@ quietly become the other.
 
 The live storage tests ran for the first time: 53 passed with FRONTDOOR_STORAGE_LIVE=1.
 
-STILL OPEN on #20, and needing the Cloudflare dashboard rather than a shell: confirm no
-payment method is attached (D-026 depends on the free tier hard-stopping), confirm neither
-bucket is publicly readable, and record the bucket region. `data/STORAGE.md` says WNAM;
-`FRONTDOOR_S3_REGION` is `auto`, which is the S3 API's region parameter for R2 and says
-nothing about where the buckets actually live. The evaluation host region is still #50.
+Confirmed in the Cloudflare dashboard on the same day:
+
+- No payment method attached. D-026 depends on the free tier hard-stopping rather than
+  billing quietly starting, and that only holds while no card is on the account.
+- Neither bucket is publicly readable: Public Development URL disabled, no custom domain,
+  on both. This is not a nicety. The sealed split lives in `frontdoor-image`, key names are
+  `sealed/<capture_id>`, and `data/manifest.csv` will commit every capture_id to a public
+  repo -- so a public bucket would let anyone reconstruct every sealed URL exactly. D-028
+  records that the seal is a code-level refusal and not an access control; a public bucket
+  is the hole underneath it.
+- Bucket location is WNAM, read back from the provider rather than taken on trust:
+  `get_bucket_location` returns 'WNAM' for `frontdoor-image`. Note that
+  `FRONTDOOR_S3_REGION=auto` is a different thing -- the S3 API's region parameter, which is
+  what R2 expects -- and says nothing about where the bucket lives. The two are easy to
+  confuse and both are correct here.
+
+The same call against `frontdoor-depth` with the images credential returns AccessDenied, so
+the quarantine holds for metadata and not only for object bytes.
+
+The evaluation host region remains open (#50). WNAM was chosen to match a North American
+host; if #50 lands elsewhere, the mismatch is a latency question rather than a correctness
+one, since R2 egress is free and the dataset is single-digit gigabytes.
