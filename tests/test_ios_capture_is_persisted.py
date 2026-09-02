@@ -159,10 +159,18 @@ def test_success_state_is_set_only_on_a_successful_write(needle):
         (APP / "Capture" / "CaptureController.swift").read_text(encoding="utf-8")
     )
     body = _body_of(source, COMMIT)
-    assert "case .success:" in body, (
-        "the success branch must stand alone; a combined `case .success, .failure:` runs the "
-        "success path on a write that failed"
+    # Matched as a rule rather than as one spelling. The branch may bind the write result --
+    # `case .success(let written)` -- which TICK-063 needs in order to measure the file it just
+    # wrote, and which is every bit as standalone as `case .success:`. What must never appear is a
+    # combined case, which is the thing this test exists to forbid.
+    assert re.search(r"case \.success[:(]", body), (
+        "the success branch must exist and stand alone; a combined `case .success, .failure:` "
+        "runs the success path on a write that failed"
     )
+    for combined in ("case .success, .failure", "case .failure, .success"):
+        assert combined not in body, (
+            f"`{combined}:` runs the success path on a write that failed"
+        )
     success, _, failure = body.partition("case .failure")
     assert needle in success, f"{needle!r} must sit in the success branch"
     assert needle not in failure, f"{needle!r} must not run when the write failed"

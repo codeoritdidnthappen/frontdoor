@@ -44,6 +44,20 @@ struct RootView: View {
         .sheet(isPresented: $importing) {
             ImportPhotosView(store: entrances, controller: controller) { importing = false }
         }
+        // Over the viewfinder, so the operator sees the result beside the doorway they just shot.
+        // Dismissing returns them to the shutter rather than out of the session.
+        //
+        // The reading it is shown beside was a caliper's until D-036 superseded D-003: there is no
+        // instrument ground truth, so metrology mode is inert for this study and this sheet has
+        // nothing to compare against this week. It stays because A-3 keeps the mode in the app.
+        .sheet(item: $controller.measurement) { response in
+            ResultView(
+                response: response,
+                caliperInches: controller.measurementCaliperInches
+            ) {
+                controller.measurement = nil
+            }
+        }
         .sheet(isPresented: $showingDiagnostics) {
             DiagnosticsView { showingDiagnostics = false }
         }

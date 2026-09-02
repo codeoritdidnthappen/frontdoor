@@ -4,7 +4,11 @@ import Foundation
 ///
 /// Modelled against the committed schema rather than against what the stub happens to send today,
 /// so the client is already right when TICK-061 fills real values in behind the identical shape.
-struct MeasureResponse: Decodable, Equatable {
+struct MeasureResponse: Decodable, Equatable, Identifiable {
+    /// Identified by the capture it describes, so presenting it as a sheet ties the result on
+    /// screen to the frame that produced it rather than to whichever arrived last.
+    var id: String { captureId }
+
     /// True while the endpoint returns fixed placeholders. The schema requires clients to surface
     /// it: on stage, a fabricated number rendered like a measurement is the single most damaging
     /// thing this app could do.

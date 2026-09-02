@@ -539,13 +539,17 @@ final class CaptureController: ObservableObject {
             into: Self.capturesDirectory)
 
         switch written {
-        case .success:
+        case .success(let written):
             photosTaken += 1
             refreshPendingUploads()
             lastThumbnail = pending.image
             lastRecord = record
             lastCaptureError = nil
             pendingReview = nil
+            // The capture is on disk and queued before this runs, so the measurement is a read of
+            // it, never a gate on it. AC6: with no server configured nothing below happens and the
+            // capture flow is byte-for-byte what it was.
+            measure(written, caliperInches: record.entrance.riseInches)
         case .failure(let failure):
             // Complete-or-nothing (AC5): nothing is counted for a capture that is not on disk.
             //
@@ -555,6 +559,54 @@ final class CaptureController: ObservableObject {
             // retaken. That is why the screening path refuses so little: the camera-model gate
             // does not apply to it, and the remaining failures are disk failures.
             lastCaptureError = failure.message
+        }
+    }
+
+    // MARK: measurement (TICK-063)
+
+    /// The server's answer for the last capture, and the reason if it could not be obtained.
+    @Published var measurement: MeasureResponse?
+    @Published private(set) var measurementCaliperInches: Double = 0
+    @Published private(set) var isMeasuring = false
+    @Published private(set) var measurementError: String?
+
+    /// Built from the same Info.plist settings the uploader uses, so a build has one server or
+    /// none -- two sources would let captures upload to one host and measure against another.
+    /// Nil when the build has no server, which is what makes rendering additive.
+    var measureClient: MeasureClient? = UploadSettings.fromBundle().serverURL
+        .map { MeasureClient(baseURL: $0) }
+
+    /// Ask the server to measure a capture that is already safely on disk.
+    ///
+    /// Deliberately not awaited by `confirmReview`. A measurement that hangs on a venue network
+    /// must not hold the shutter: the operator has to be able to take the next frame, and the
+    /// capture is already written and queued whatever this returns (AC4).
+    private func measure(_ written: CaptureWriter.Written, caliperInches: Double) {
+        guard let measureClient else { return }
+        let image: Data
+        do {
+            image = try Data(contentsOf: written.imageURL)
+        } catch {
+            measurementError = MeasureClient.Failure
+                .unreadable(error.localizedDescription).message
+            return
+        }
+        measurementCaliperInches = caliperInches
+        isMeasuring = true
+        measurementError = nil
+        Task { [measureClient, sidecar = written.sidecarBytes,
+                filename = written.imageURL.lastPathComponent] in
+            let outcome = await measureClient.measure(
+                sidecar: sidecar, image: image, filename: filename)
+            isMeasuring = false
+            switch outcome {
+            case .success(let response):
+                measurement = response
+            case .failure(let failure):
+                // Every one of these ends "The capture is saved", which is true here: it is on
+                // disk and in the queue before this method is entered.
+                measurementError = failure.message
+            }
         }
     }
 

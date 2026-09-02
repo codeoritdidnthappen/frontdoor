@@ -74,6 +74,24 @@ struct CaptureView: View {
                 .ignoresSafeArea()
 
             VStack(spacing: 0) {
+                if controller.isMeasuring {
+                    Label("Measuring…", systemImage: "ruler")
+                        .font(.footnote)
+                        .padding(8)
+                        .background(.black.opacity(0.55), in: Capsule())
+                        .foregroundStyle(.white)
+                }
+                if let problem = controller.measurementError {
+                    // The capture is on disk and queued before a measurement is attempted, so
+                    // this says what failed without implying anything was lost (AC4).
+                    Text(problem)
+                        .font(.footnote)
+                        .multilineTextAlignment(.center)
+                        .padding(10)
+                        .background(.orange, in: RoundedRectangle(cornerRadius: 10))
+                        .foregroundStyle(.black)
+                        .padding(.horizontal, 16)
+                }
                 if let failure = controller.lastCaptureError {
                     Text(failure)
                         .font(.footnote)
