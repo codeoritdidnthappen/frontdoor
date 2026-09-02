@@ -30,10 +30,35 @@ therefore the D-020 layout, not a prefix inside one bucket.
 
 Both buckets are private. Do not enable public access.
 
-Object key is the `capture_id` (no prefix). Sidecars are not stored here —
+Object key is `<partition>/<capture_id>`, where the partition is `open/`
+or `sealed/` (D-007, #182). The partition is in the key so that this layer can
+refuse a sealed read without consulting the manifest — see **What the seal
+covers** below. Build keys with `frontdoor.storage.storage_key()`; a key with
+no partition prefix is refused rather than assumed open.
+
+Sidecars are not stored here —
 they are committed at `data/sidecars/<capture_id>.json`, next to the
 manifest, and hashed in `sidecar_sha256`. The dataset loader (TICK-014)
 verifies image and sidecar hashes on every read.
+
+## What the seal covers
+
+`ObjectStore.get` refuses any key under `sealed/` unless the caller passes
+`allow_sealed=True`, which only the audited `python -m frontdoor.eval
+--include-sealed` run does. Writes are not refused — capture upload has to be
+able to store sealed captures.
+
+**This is a code-level refusal, not a provider-level one.** Anyone holding the
+images token can still reach sealed bytes with a raw `boto3` client, because R2
+scopes API tokens per bucket and not per prefix (D-026), so no token policy can
+express "this credential may not read `sealed/`". Closing that would need a
+third bucket, and it is not closed today.
+
+So the guarantee is: **no code path in this repository reaches a sealed capture
+without writing a `SEAL_AUDIT.log` line first.** It is not: sealed bytes are
+unreachable. Someone who sets out to bypass it can. The seal is an integrity
+mechanism for honest use, backed by an audit trail — which is what D-007 needs
+it to be, but it is worth stating in the words that are actually true.
 
 ## Credentials
 

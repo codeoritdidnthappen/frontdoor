@@ -10,7 +10,11 @@ from moto import mock_aws
 
 from frontdoor import storage
 from frontdoor.storage import (
+    OPEN_PREFIX,
     PROBE_KEY,
+    SEALED_PREFIX,
+    SPLITS,
+    SealedObjectDenied,
     StorageDenied,
     StorageError,
     depth_store,
@@ -19,6 +23,7 @@ from frontdoor.storage import (
     load_image_creds,
     main,
     probe_loader_denied_depth,
+    storage_key,
     verify,
 )
 
@@ -113,16 +118,18 @@ def test_image_put_and_get_round_trip(monkeypatch):
     _image_env(monkeypatch)
     _create_buckets()
     store = image_store()
-    store.put("cap-1", b"jpeg-bytes")
-    assert store.get("cap-1") == b"jpeg-bytes"
+    key = storage_key("cap-1", "dev")
+    store.put(key, b"jpeg-bytes")
+    assert store.get(key) == b"jpeg-bytes"
 
 
 @mock_aws
 def test_harness_reads_depth_that_the_loader_wrote_to_the_depth_bucket(monkeypatch):
     _both_env(monkeypatch)
     _create_buckets()
-    depth_store().put("cap-1", b"depth-bytes")
-    assert depth_store().get("cap-1") == b"depth-bytes"
+    key = storage_key("cap-1", "dev")
+    depth_store().put(key, b"depth-bytes")
+    assert depth_store().get(key) == b"depth-bytes"
 
 
 @mock_aws
@@ -130,7 +137,7 @@ def test_unknown_capture_is_an_error(monkeypatch):
     _image_env(monkeypatch)
     _create_buckets()
     with pytest.raises(StorageError):
-        image_store().get("missing")
+        image_store().get(storage_key("missing", "dev"))
 
 
 @mock_aws
@@ -343,3 +350,157 @@ def test_verify_fails_when_one_token_is_used_for_both_credential_sets(monkeypatc
     monkeypatch.setattr(storage, "_client", account.client)
     with pytest.raises(StorageError, match="not denied on the depth bucket"):
         verify()
+
+
+@mock_aws
+def test_the_images_credential_cannot_fetch_a_sealed_capture(monkeypatch):
+    """The attack from #182, which used to return the bytes.
+
+    Before the key carried its partition, the seal lived only in `loader` and
+    `eval`. Anyone holding the images credential -- everyone on the team, per
+    `data/STORAGE.md` -- could fetch a sealed capture directly, and no audit line
+    was written. What #166 established was that the harness would not read sealed
+    data by accident, not that sealed data could not be read.
+    """
+    _image_env(monkeypatch)
+    _create_buckets()
+    store = image_store()
+    key = storage_key("cap-sealed", "sealed")
+    store.put(key, b"sealed-bytes")  # ingest must still be able to write it
+
+    with pytest.raises(StorageDenied, match="sealed"):
+        store.get(key)
+
+
+@mock_aws
+def test_the_audited_run_can_still_open_the_seal(monkeypatch):
+    """Refusing everything would be a seal nobody can open on 2026-09-07."""
+    _image_env(monkeypatch)
+    _create_buckets()
+    store = image_store()
+    key = storage_key("cap-sealed", "sealed")
+    store.put(key, b"sealed-bytes")
+
+    assert store.get(key, allow_sealed=True) == b"sealed-bytes"
+
+
+@mock_aws
+def test_an_unpartitioned_key_is_refused_rather_than_assumed_open(monkeypatch):
+    """Fail closed. Guessing 'probably open' is how a sealed object gets served."""
+    _image_env(monkeypatch)
+    _create_buckets()
+    with pytest.raises(StorageError, match="no partition prefix"):
+        image_store().get("cap-1")
+
+
+@pytest.mark.parametrize(
+    "split,expected",
+    [("sealed", "sealed/cap-1"), ("dev", "open/cap-1"), ("calib", "open/cap-1")],
+)
+def test_only_the_sealed_split_gets_the_sealed_prefix(split, expected):
+    assert storage_key("cap-1", split) == expected
+
+
+@pytest.mark.parametrize(
+    "split", ["Sealed", " sealed", "SEALED", "sealed ", "sealed\n", "", None, 0, "typo"]
+)
+def test_storage_key_fails_closed_on_anything_that_is_not_a_split(split):
+    """Fail closed on write, the way `get` does on read (QA B02).
+
+    This test previously asserted the opposite for `""` -- it pinned the fail-open
+    behaviour as correct. Every spelling here other than the exact literal produced
+    `open/cap-1`, and `loader.is_sealed`'s own docstring names this same set as the
+    dangerous one: a sealed capture written to the open partition is served on a
+    default run with no flag, no error and no audit line.
+    """
+    with pytest.raises(StorageError, match="unknown split"):
+        storage_key("cap-1", split)
+
+
+def test_storage_denied_on_a_sealed_key_is_not_the_d020_denial():
+    """Both raise StorageDenied; they are different claims and must stay separable."""
+    assert SEALED_PREFIX != OPEN_PREFIX
+    assert PROBE_KEY.startswith(OPEN_PREFIX)
+
+
+def test_the_two_split_tuples_do_not_drift():
+    """`storage.SPLITS` is duplicated from the loader to keep the dependency one-way."""
+    from frontdoor.loader import DatasetLoader
+
+    assert SPLITS == DatasetLoader.SPLITS
+
+
+@mock_aws
+def test_put_writes_exactly_one_object_and_only_at_the_given_key(monkeypatch):
+    """The mutation that defeated the seal invisibly (QA B01).
+
+    Making `put` mirror every sealed object into the open partition left all 417
+    tests green: `get("sealed/<id>")` still raised, so THE SEAL STILL LOOKED INTACT,
+    while `get("open/<id>")` returned the sealed bytes with no refusal and no audit
+    line. That is exactly the failure #182 was opened to close, reintroduced through
+    the write side. Nothing asserted which key `put` writes to.
+    """
+    _image_env(monkeypatch)
+    client = _create_buckets()
+    sealed = storage_key("cap-s", "sealed")
+    image_store().put(sealed, b"sealed-bytes")
+
+    listed = client.list_objects_v2(Bucket=IMAGES).get("Contents", [])
+    assert [o["Key"] for o in listed] == [sealed], "put wrote somewhere it was not asked to"
+
+
+@mock_aws
+def test_delete_removes_only_the_given_key(monkeypatch):
+    """`delete` had zero coverage: a no-op and a wrong-key mutation both survived."""
+    _image_env(monkeypatch)
+    client = _create_buckets()
+    store = image_store()
+    keep, drop = storage_key("cap-keep", "dev"), storage_key("cap-drop", "dev")
+    store.put(keep, b"keep")
+    store.put(drop, b"drop")
+
+    store.delete(drop)
+    remaining = [o["Key"] for o in client.list_objects_v2(Bucket=IMAGES).get("Contents", [])]
+    assert remaining == [keep]
+
+
+@mock_aws
+@pytest.mark.parametrize("method", ["put", "delete"])
+def test_writes_also_refuse_an_unpartitioned_key(monkeypatch, method):
+    """Nothing else tells the #66 ingest path to call storage_key() (QA B01, B04)."""
+    _image_env(monkeypatch)
+    _create_buckets()
+    store = image_store()
+    args = (b"bytes",) if method == "put" else ()
+    with pytest.raises(StorageError, match="no partition prefix"):
+        getattr(store, method)("cap-1", *args)
+
+
+def test_the_sealed_refusal_is_distinguishable_from_the_d020_denial():
+    """Both are StorageDenied; a caller must still be able to tell them apart (QA B05).
+
+    `_raise_from_client` already keeps authentication failures from masquerading as
+    the quarantine, because a denial for the wrong reason is not evidence of the right
+    policy. The sealed refusal is a third claim -- this code refused, the provider was
+    never asked -- and it needs the same separation.
+    """
+    assert issubclass(SealedObjectDenied, StorageDenied)
+    assert not issubclass(StorageDenied, SealedObjectDenied)
+
+
+@mock_aws
+def test_opening_the_seal_must_be_spelled_out_at_the_call_site(monkeypatch):
+    """`allow_sealed` is keyword-only, and that is load-bearing (QA B01).
+
+    A positional flag lets a sealed read be authorised by a bare `True` -- easy to
+    pass by accident, and invisible when reading the call site. Keyword-only means
+    every unsealing in this repository is greppable as `allow_sealed=True`.
+    """
+    _image_env(monkeypatch)
+    _create_buckets()
+    store = image_store()
+    key = storage_key("cap-s", "sealed")
+    store.put(key, b"sealed-bytes")
+
+    with pytest.raises(TypeError):
+        store.get(key, True)

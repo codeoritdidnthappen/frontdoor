@@ -6,6 +6,7 @@ import pytest
 
 import frontdoor.eval as eval_mod
 import frontdoor.seal_audit as seal_audit
+import frontdoor.storage as storage
 from frontdoor.eval import main
 
 
@@ -38,12 +39,28 @@ def _three_captures(tmp_path):
     return written[0], written[1], images
 
 
+class _FakeStore:
+    """Stands in for ObjectStore, and enforces the seal the same way it does."""
+
+    def __init__(self, get_image):
+        self._get_image = get_image
+
+    def get(self, key, *, allow_sealed=False):
+        if key.startswith(storage.SEALED_PREFIX) and not allow_sealed:
+            raise storage.StorageDenied(f"{key!r} is sealed")
+        capture_id = key.split("/", 1)[1]
+        return self._get_image(capture_id)
+
+
 def _point_harness(monkeypatch, tmp_path, manifest, sidecar_dir, get_image):
     monkeypatch.setattr(eval_mod, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(eval_mod, "MANIFEST", manifest)
     monkeypatch.setattr(eval_mod, "SIDECARS", sidecar_dir)
     monkeypatch.setattr(eval_mod, "AUDIT_LOG", tmp_path / "SEAL_AUDIT.log")
-    monkeypatch.setattr(eval_mod, "_image_getter", lambda: get_image)
+    # Intercept at the store, not at a loader argument. eval used to inject a
+    # capture_id-keyed getter, which walked straight past the partitioned key the
+    # loader now builds -- so patching that seam would have tested nothing (#182).
+    monkeypatch.setattr(storage, "image_store", lambda: _FakeStore(get_image))
     monkeypatch.setattr(seal_audit, "_working_tree_dirty", lambda repo: False)
     monkeypatch.setattr(seal_audit, "_git_commit", lambda repo: "a" * 40)
     # The audit line records which bucket the run read; there is no storage in a temp repo,

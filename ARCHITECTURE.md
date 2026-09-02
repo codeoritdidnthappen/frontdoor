@@ -171,8 +171,19 @@ budget, and it is the component that enforces D-007 mechanically rather than by 
 `depth_sha256` is the SHA-256 of the depth file, or empty when that capture has no depth map
 (TICK-023 AC5).
 
-**Refusal.** The dataset loader filters on `split`. Sealed rows are unreadable without an explicit
-`--include-sealed` flag; there is no code path that reaches a sealed image incidentally.
+**Refusal, in two layers.** The dataset loader derives each row's split from `assign_split` and the
+committed seed — never from the manifest's `split` cell, which is a cache — and refuses sealed rows
+without an explicit `--include-sealed` flag. Underneath it, object keys carry their partition
+(`open/` or `sealed/`), so `storage.ObjectStore.get` refuses a sealed key on its own, without
+reading the manifest (#182). The second layer exists because the first one was, for a while, the
+only one: the seal lived entirely in `loader` and `eval`, and anyone holding the images credential
+could fetch sealed bytes directly with no audit line.
+
+**What that does and does not guarantee.** No code path in this repository reaches a sealed capture
+without writing a `SEAL_AUDIT.log` line first. Sealed bytes are not, however, unreachable: R2 scopes
+tokens per bucket rather than per prefix (D-026), so the images token still permits a raw client to
+read `sealed/`. Closing that would take a third bucket. The seal is an integrity mechanism for
+honest use, backed by an audit trail — not an access control.
 
 **Audit.** Any run passing `--include-sealed` appends one line to `SEAL_AUDIT.log`, committed.
 Tab-separated fields, in this order — the same order `seal_audit.AUDIT_FIELDS` writes, so the log

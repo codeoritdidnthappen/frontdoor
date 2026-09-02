@@ -319,10 +319,59 @@ shipping the two-bucket client the loader and harness will use.
   method is attached to the account. Do not add one. 10 GB then hard-stops.
 - Two buckets, because R2 API tokens scope per bucket not per prefix (D-026):
   `frontdoor-image` (loader, server, harness) and `frontdoor-depth` (harness only).
-  The core metrology library gets no credential. Object key is the capture_id.
+  The core metrology library gets no credential. Object key was the capture_id;
+  superseded by D-028 below, which puts the partition in the key.
 - Credentials via environment variables, documented in `.env.example` and
   `data/STORAGE.md`. Nothing in this commit is a secret.
 - `python -m frontdoor.storage verify` uploads a probe, reads the image back with
   the loader credential, and fails unless that same credential is denied on the
   depth bucket. That check is the DoD for the quarantine; TICK-072 (library-level
   refusal) is a later defence, not a substitute.
+
+## D-028  Object keys carry their partition, and the seal is enforced in storage
+
+Taken 2026-09-01, closing #182. Decided by David; recorded here because the ticket's
+done-when required a logged decision rather than a silent code change.
+
+**The finding.** After TICK-070/TICK-071 (#166) the seal lived entirely in `loader.py`
+and `eval.py`. `ObjectStore.get(capture_id)` consulted neither, so anyone holding the
+images credential -- everyone on the team, per `data/STORAGE.md` -- could fetch a sealed
+capture's bytes directly, and no `SEAL_AUDIT.log` line was written:
+
+    from frontdoor.storage import image_store
+    image_store().get("<a sealed capture_id>")   # returned the bytes
+
+What #166 established was that the harness will not read sealed data BY ACCIDENT. Not
+that sealed data cannot be read. Those are different claims and the PRD's language
+implies the stronger one.
+
+**The decision.** Object keys become `<partition>/<capture_id>`, partition being `open/`
+or `sealed/`. `ObjectStore.get` refuses a `sealed/` key unless passed `allow_sealed=True`,
+which only the audited `--include-sealed` run does. Writes are not refused; capture upload
+must be able to store sealed captures. An unpartitioned key is refused rather than assumed
+open -- guessing "probably open" is how a sealed object gets served.
+
+**Why the key and not a lookup.** The obvious fix -- derive the split inside storage and
+refuse -- is not available. `assign_split` takes an entrance_id; the store is keyed by
+capture_id, which TICK-028 fixes as a UUID; nothing maps one to the other except the
+manifest, and reading the manifest is the loader's job. `loader` already imports `storage`,
+so the dependency would invert. Putting the partition in the key removes the question:
+storage classifies on the key alone, imports nothing new, and depends on nothing.
+
+**Why now.** `data/manifest.csv` was header-only and `data/sidecars/` held only `.gitkeep`
+-- zero captures existed, so the key layout was still free. After TICK-066 (#66) writes the
+first pilot entrances, changing it means migrating every object and re-verifying each
+against its sidecar hash, during capture week, days before the 2026-09-07 unsealing.
+
+**What this does NOT do, stated plainly.** It is a code-level refusal, not an access
+control. R2 scopes API tokens per bucket and not per prefix (D-026), so no token policy can
+express "this credential may not read `sealed/`" -- a raw boto3 client with the images token
+still reads sealed bytes. Closing that needs a third bucket and is NOT closed. The guarantee
+is: no code path in this repository reaches a sealed capture without writing an audit line
+first. Anyone setting out to bypass it can. Recorded in `data/STORAGE.md` and ARCHITECTURE
+sections 7 and 8 in the same words.
+
+**Rejected.** (a) Refuse by deriving the split in storage -- not implementable, above.
+(b) Wait for a provider-scoped token -- needs the key change underneath it anyway, and
+waiting means migrating after #66 rather than before. (c) Document the boundary and change
+no code -- honest, but leaves the cheap window closed for nothing.
