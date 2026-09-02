@@ -92,7 +92,9 @@ device has no depth sensor), and one JSON sidecar:**
   "lens":           "builtInWideAngleCamera",
   "image":          {"path": "...", "sha256": "6105d6cc76af400325e94d588ce511be5bfdbb73b437dc51eca43917d7a43e3d", "width": 4032, "height": 3024},
   "depth":          {"path": "...", "sha256": "ded32129b05bfc16ce501e654a169960583352cbc974824ed16ce94855904386"},
-  "intrinsics":     {"fx": 2934.1, "fy": 2934.1, "cx": 2016.4, "cy": 1512.7},
+  "intrinsics":     {"fx": 2934.1, "fy": 2934.1, "cx": 2016.4, "cy": 1512.7,
+                     "distortion_table": [0.0, 0.0021, 0.0086, 0.0195, 0.0349],
+                     "distortion_center": {"x": 2016.4, "y": 1512.7}},
   "gravity":        [0.02, -0.98, -0.19],
   "card_placement": "vertical",
   "ground_truth":   {"rise_in": 0.53, "instrument": "caliper"},
@@ -101,6 +103,12 @@ device has no depth sensor), and one JSON sidecar:**
   "split":          "dev"
 }
 ```
+
+The `distortion_table` above is truncated for readability. A real one is as long as the camera
+delivers -- 42 entries on both team phones (TICK-020) -- and is recorded verbatim, never resampled
+or applied on device. `distortion_center` is deliberately separate from `cx`/`cy`: the table is
+radial about that point, and substituting the principal point biases exactly the frame-edge
+corrections the table exists to make.
 
 Three things this shape buys:
 

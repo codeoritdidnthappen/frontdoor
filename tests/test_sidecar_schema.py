@@ -253,3 +253,44 @@ def test_entrance_id_rejects_trailing_whitespace(record, suffix):
     record["entrance_id"] = "E-014" + suffix
     with pytest.raises(ValidationError):
         validate_sidecar(record)
+
+
+# --------------------------------------------------- distortion (TICK-028, #36, #37)
+
+
+@pytest.mark.parametrize("field", ["distortion_table", "distortion_center"])
+def test_intrinsics_require_the_distortion_data(record, field):
+    """Section 2 lists the distortion table as part of the method's legal input, and #36 and #37
+    both consume it. Until TICK-028 the schema had no field for it and `additionalProperties` was
+    false, so a capture could not carry one even if the camera delivered it -- and both phones do,
+    42 entries each. Arms A and A-prime had nothing to undistort with.
+
+    Required rather than optional: a frame whose taps cannot be undistorted is not measurable, and
+    this project refuses such frames rather than recording them and finding out at analysis.
+    """
+    del record["intrinsics"][field]
+    with pytest.raises(ValidationError, match=field):
+        validate_sidecar(record)
+
+
+def test_a_one_entry_distortion_table_is_rejected(record):
+    """One sample cannot be interpolated between, so it describes no correction at all."""
+    record["intrinsics"]["distortion_table"] = [0.0]
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+@pytest.mark.parametrize("missing", ["x", "y"])
+def test_the_distortion_centre_needs_both_coordinates(record, missing):
+    del record["intrinsics"]["distortion_center"][missing]
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+def test_the_distortion_centre_is_not_assumed_to_be_the_principal_point(record):
+    """They are different quantities and the schema must let them differ. The table is radial
+    about the distortion centre; using cx/cy in its place biases the frame-edge corrections the
+    table exists to make.
+    """
+    record["intrinsics"]["distortion_center"] = {"x": 2000.0, "y": 1500.0}
+    validate_sidecar(record)
