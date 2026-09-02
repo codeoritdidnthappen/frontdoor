@@ -89,6 +89,13 @@ final class CaptureController: ObservableObject {
     /// spelling would silently match nothing.
     static let lensName = "builtInWideAngleCamera"
 
+    /// The device type actually opened, as a string for the record. `lensName` is the optics;
+    /// this is the door they were reached through, and the two differ on both team phones.
+    static func deviceName(for device: AVCaptureDevice) -> String {
+        device.deviceType.rawValue.replacingOccurrences(
+            of: "AVCaptureDeviceType", with: "")
+    }
+
     /// The zoom factor at which the 1x main lens is the one exposing.
     ///
     /// On a virtual device the scale is relative to its WIDEST constituent, so 1.0 selects the
@@ -280,6 +287,7 @@ final class CaptureController: ObservableObject {
         // between a physical wide camera and the dual-wide virtual device.
         let mainLensZoom = Self.mainLensZoomFactor(for: device)
         let lens = Self.lensName
+        let captureDevice = Self.deviceName(for: device)
         // Sampled here, on the main actor, at the moment of the press — not inside the delegate
         // callback, which runs after the exposure and would describe a different instant.
         let gravity = motion.deviceMotion.map {
@@ -305,7 +313,7 @@ final class CaptureController: ObservableObject {
                     self.accept(
                         captured,
                         subject: subject, gravity: gravity, zoomFactor: zoomFactor,
-                        mainLensZoom: mainLensZoom, lens: lens,
+                        mainLensZoom: mainLensZoom, lens: lens, captureDevice: captureDevice,
                         capturedAt: capturedAt, sensorMax: sensorMax
                     )
                 case .failure(let message):
@@ -363,6 +371,7 @@ final class CaptureController: ObservableObject {
         zoomFactor: Double,
         mainLensZoom: Double,
         lens: String,
+        captureDevice: String,
         capturedAt: String,
         sensorMax: CMVideoDimensions?
     ) {
@@ -388,6 +397,7 @@ final class CaptureController: ObservableObject {
             gravity: gravity,
             deviceModel: CaptureValidation.hardwareIdentifier(),
             lens: lens,
+            captureDevice: captureDevice,
             zoomFactor: zoomFactor,
             mainLensZoomFactor: mainLensZoom,
             capturedAt: capturedAt,

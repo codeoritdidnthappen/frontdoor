@@ -90,6 +90,8 @@ device has no depth sensor), and one JSON sidecar:**
   "captured_at":    "2026-08-30T14:22:31Z",
   "device_model":   "iPhone15,3",
   "lens":           "builtInWideAngleCamera",
+  "capture_device": "builtInDualWideCamera",
+  "zoom_factor":    2.0,
   "image":          {"path": "...", "sha256": "6105d6cc76af400325e94d588ce511be5bfdbb73b437dc51eca43917d7a43e3d", "width": 4032, "height": 3024},
   "depth":          {"path": "...", "sha256": "ded32129b05bfc16ce501e654a169960583352cbc974824ed16ce94855904386"},
   "intrinsics":     {"fx": 2934.1, "fy": 2934.1, "cx": 2016.4, "cy": 1512.7,
@@ -103,6 +105,17 @@ device has no depth sensor), and one JSON sidecar:**
   "split":          "dev"
 }
 ```
+
+`lens` and `capture_device` are different claims and both are needed. The 1x main lens is the
+optics D-014 fixes; on both team phones it is reached through `builtInDualWideCamera`, because the
+bare `builtInWideAngleCamera` delivers no calibration data at all and therefore cannot produce a
+measurable frame (TICK-020). `zoom_factor` is what makes the claim checkable: on that device the
+zoom scale is relative to the ultra-wide, so **2.00 is the 1x main lens** and 1.00 would be the
+ultra-wide's ~120 degrees. A record carrying only a lens name cannot tell those apart.
+
+**D-014 names `builtInWideAngleCamera` as the device type. That is not satisfiable on the hardware
+the team has, and the decision log entry amending it is still owed** -- the optics it fixes are
+unchanged, the device reaching them is not.
 
 The `distortion_table` above is truncated for readability. A real one is as long as the camera
 delivers -- 42 entries on both team phones (TICK-020) -- and is recorded verbatim, never resampled

@@ -39,6 +39,7 @@ final class CaptureValidationBoundaryTests: XCTestCase {
             hadCalibrationData: hadCalibration,
             gravity: gravity ?? goodGravity,
             deviceModel: "iPhone17,1", lens: "builtInWideAngleCamera",
+            captureDevice: "builtInDualWideCamera",
             zoomFactor: zoom, mainLensZoomFactor: mainLensZoom,
             capturedAt: capturedAt,
             sensorWidth: sensorWidth ?? width,

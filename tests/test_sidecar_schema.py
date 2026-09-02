@@ -294,3 +294,35 @@ def test_the_distortion_centre_is_not_assumed_to_be_the_principal_point(record):
     """
     record["intrinsics"]["distortion_center"] = {"x": 2000.0, "y": 1500.0}
     validate_sidecar(record)
+
+
+# ------------------------------------------- the D-014 claim must be checkable (TICK-020)
+
+
+@pytest.mark.parametrize("field", ["capture_device", "zoom_factor"])
+def test_the_camera_provenance_fields_are_required(record, field):
+    """`lens` alone cannot support the claim D-014 makes.
+
+    On builtInDualWideCamera the zoom scale is relative to the ultra-wide, so 2.00 is the 1x main
+    lens and 1.00 is ~120 degrees of ultra-wide. A record carrying only a lens name describes both
+    identically -- and the wrong one is a D-014 violation nothing downstream could detect.
+    """
+    del record[field]
+    with pytest.raises(ValidationError, match=field):
+        validate_sidecar(record)
+
+
+def test_lens_and_capture_device_are_allowed_to_differ(record):
+    """They are different claims: the optics used, and the device opened to reach them. Both team
+    phones reach the 1x wide lens through builtInDualWideCamera, because the bare wide camera
+    delivers no calibration data and cannot produce a measurable frame at all (TICK-020).
+    """
+    assert record["lens"] != record["capture_device"]
+    validate_sidecar(record)
+
+
+def test_a_zero_or_negative_zoom_factor_is_rejected(record):
+    for bad in (0, -1.0):
+        record["zoom_factor"] = bad
+        with pytest.raises(ValidationError):
+            validate_sidecar(record)
