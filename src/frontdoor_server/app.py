@@ -15,6 +15,7 @@ from werkzeug.exceptions import HTTPException
 
 from frontdoor.sidecar import validate_sidecar
 from frontdoor_server.map_view import map_page
+from frontdoor_server.screen_view import screen_page
 
 RESPONSE_SCHEMA = json.loads(
     resources.files("frontdoor_server")
@@ -149,6 +150,8 @@ def create_app():
     app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
     # Public stamp map: GET /map and GET /map/data (TICK-247).
     app.register_blueprint(map_page)
+    # Photo-upload ADA feature screening: POST /screen (TICK-245).
+    app.register_blueprint(screen_page)
 
     @app.get("/health")
     def health():
