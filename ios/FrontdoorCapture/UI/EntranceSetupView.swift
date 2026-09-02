@@ -86,14 +86,14 @@ struct EntranceSetupView: View {
                     }
                 }
             }
-            .navigationTitle("New capture")
+            .navigationTitle("Capture")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("Cancel", action: onCancel)
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Open viewfinder") { submit() }
+                    Button("Viewfinder") { submit() }
                 }
             }
             .alert("Unusual reading", isPresented: confirmingRiseBinding) {
