@@ -17,6 +17,8 @@ Object storage stays on the R2 free tier.
 | Region | `sjc` — near the WNAM buckets |
 | Arms served live | A and A′. B is `unavailable` (no depth model), C is `cut` (D-030) |
 | Cost | ~$2/month. Cancel after the Showcase, 2026-09-11 |
+| **Live URL** | **https://frontdoor-measure.fly.dev** |
+| Deployed | 2026-09-02, machine `0803444b2dd568`, region `sjc` |
 
 There are no model weights in the image and nothing is downloaded at start-up, so the laptop
 fallback needs no network beyond the pull it already did.
@@ -42,7 +44,7 @@ having no card, so it is replaced by an explicit cap (D-031):
 2. Enable the billing alert email.
 3. Record the date it was set in this file, below.
 
-**Spend limit set:** _not yet — do this before the first deploy._
+**Spend limit set:** 2026-09-02, before the first deploy, with the billing alert enabled.
 
 ### Credentials
 
@@ -85,8 +87,23 @@ docker build -t frontdoor-server . && docker inspect --format='{{index .RepoDige
 
 Record both here and confirm they match. If they differ, the fallback is not a fallback.
 
-**Host digest:** _record at first deploy_
-**Laptop digest:** _record at first deploy_
+**Host digest:** `sha256:a20ca31a250970669988974385c950a1df72025f8ed7ae2e9ad4933533fb637a`
+(deployment `01M1HRE8MS93JZTJPTEYJV32M5`, 2026-09-02)
+**Laptop digest:** _record when the image is pulled and cached on the demo laptop, before Demo Day._
+
+A local `docker build` does **not** reproduce the host digest and is not expected to — Fly builds
+remotely and the digest covers its own layer metadata. The check that matters is that the laptop
+**pulls the deployed image** rather than rebuilding it:
+
+```
+fly auth docker
+docker pull registry.fly.io/frontdoor-measure:deployment-01M1HRE8MS93JZTJPTEYJV32M5
+docker inspect --format='{{index .RepoDigests 0}}' \
+  registry.fly.io/frontdoor-measure:deployment-01M1HRE8MS93JZTJPTEYJV32M5
+```
+
+That digest must equal the host digest above. Rebuilding locally gives a *different* image that
+merely came from the same source, which is the thing D-016's step 3 is supposed to rule out.
 
 **3. The laptop fallback works, offline**, with the venue wifi turned off:
 

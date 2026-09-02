@@ -665,6 +665,13 @@ by this entry. The criteria it does NOT waive -- same image digest on host and l
 credentials by environment variable, `/health` answered from a phone on cellular, image cached
 on the laptop before Demo Day -- all stand.
 
+**Deployed 2026-09-02.** https://frontdoor-measure.fly.dev, machine `0803444b2dd568` in `sjc`,
+image digest `sha256:a20ca31a...fb637a`, 72 MB. Spend limit and billing alert set before the first
+deploy, satisfying D-026's no-silent-billing clause by cap rather than by absence of a card.
+Verified live: `/health` 200 over HTTPS, plain HTTP 301s to TLS (iOS ATS), and `POST /measure`
+returns a response that validates against the frozen schema with Arm A and A-prime measured, Arm B
+`unavailable` and Arm C `cut`. Runbook: `docs/server-deploy.md`.
+
 **Still open, and NOT decided here:** whether the evaluation harness runs on this host or
 locally on a team Mac. D-026 lists it as required before #50 closes. A 256 MB machine cannot
 score a few hundred captures through four arms, so the answer is almost certainly local -- but
