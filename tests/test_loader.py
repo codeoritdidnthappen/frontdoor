@@ -262,10 +262,13 @@ def test_live_load_one_capture_from_the_image_bucket():
     if len(rows) < 2:
         pytest.skip("manifest has no captures yet")
     capture_id = rows[1].split(",")[0]
+    # No get_image injection. The injected getter is called with a bare capture_id,
+    # which storage now fail-closes on -- the same mistake #186 removed from eval.py,
+    # left in place here and hidden by the skip (QA B03). The loader's own default
+    # builds the partitioned key.
     loaded = DatasetLoader(
         manifest_path=REPO / "data" / "manifest.csv",
         sidecar_dir=REPO / "data" / "sidecars",
-        get_image=image_store().get,
     ).load(capture_id)
     assert loaded.capture_id == capture_id
     assert loaded.image

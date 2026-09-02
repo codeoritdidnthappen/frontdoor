@@ -4,9 +4,12 @@ Images and depth maps live in separate buckets so credentials can be scoped
 per bucket. The dataset loader and the server get the images credential only;
 the evaluation harness gets both; the core metrology library gets neither.
 
-The object key is the capture_id. Separation is the bucket, not a prefix —
-providers that cannot scope below bucket level cannot enforce D-020 with a
-prefix alone.
+The object key is `<partition>/<capture_id>` — `open/` or `sealed/` (D-007,
+D-028). Build keys with `storage_key()`; `get`, `put` and `delete` all refuse a
+key without a partition. Images and depth remain separated by BUCKET, not by
+prefix: providers that cannot scope below bucket level cannot enforce D-020 with
+a prefix alone (D-026), which is also why the sealed partition is a code-level
+refusal here and not a credential scope.
 
 Run as a tool:  python -m frontdoor.storage verify
 Uploads a probe object with each credential, reads the image back with the
@@ -33,15 +36,47 @@ SEALED_PREFIX = "sealed/"
 PROBE_KEY = OPEN_PREFIX + "_frontdoor_probe"
 
 
+#: D-007's three splits. Duplicated from `loader.DatasetLoader.SPLITS` rather than
+#: imported: `loader` imports this module, and that dependency must not invert.
+#: `test_the_two_split_tuples_do_not_drift` pins them together.
+SPLITS = ("dev", "calib", "sealed")
+
+
+def _partition_of(key):
+    """Which partition a key belongs to. Refuses rather than guessing.
+
+    Fail closed. An unpartitioned key is one this module cannot classify, and
+    guessing "probably open" is how a sealed object gets served.
+    """
+    if key.startswith(SEALED_PREFIX):
+        return "sealed"
+    if key.startswith(OPEN_PREFIX):
+        return "open"
+    raise StorageError(
+        f"{key!r} has no partition prefix; keys must start with "
+        f"{OPEN_PREFIX!r} or {SEALED_PREFIX!r} (D-007). Build them with storage_key()."
+    )
+
+
 def storage_key(capture_id, split):
     """The object key for a capture, with its partition in the key.
 
     The caller passes the split because the caller is the one that derived it.
-    Anything not `sealed` is open: a typo in a split name must not silently
-    produce an unprefixed key that `get` would then refuse.
+
+    Fails CLOSED on anything that is not one of D-007's three splits, matching `get`.
+    An earlier version treated every non-`sealed` value as open, so `"Sealed"`,
+    `" sealed"`, `"SEALED"` and `None` all produced an open key -- the exact set
+    `loader.is_sealed`'s docstring names as dangerous (QA B02).
     """
-    prefix = SEALED_PREFIX if split == "sealed" else OPEN_PREFIX
-    return f"{prefix}{capture_id}"
+    if split == "sealed":
+        return f"{SEALED_PREFIX}{capture_id}"
+    if split in SPLITS:
+        return f"{OPEN_PREFIX}{capture_id}"
+    raise StorageError(
+        f"unknown split {split!r}; expected one of {', '.join(SPLITS)}. Refusing to "
+        "guess a partition: 'Sealed', ' sealed' and None are exactly the spellings that "
+        "would otherwise be written to the open partition and served without an audit line."
+    )
 
 
 class StorageError(Exception):
@@ -50,6 +85,17 @@ class StorageError(Exception):
 
 class StorageDenied(StorageError):
     """The credential was not allowed to read or write the object."""
+
+
+class SealedObjectDenied(StorageDenied):
+    """THIS CODE refused a sealed key (D-007) -- the provider was never asked.
+
+    Distinct from the D-020 denial, which is the provider refusing a credential.
+    `_raise_from_client` already keeps authentication failures from masquerading as
+    the quarantine, on the grounds that a denial for the wrong reason is not evidence
+    of the right policy; the same reasoning applies here (QA B05). Subclasses
+    StorageDenied so existing handlers still work.
+    """
 
 
 @dataclass(frozen=True)
@@ -184,13 +230,17 @@ class ObjectStore:
         self.creds = creds
         self._client = _client(creds)
 
-    def put(self, capture_id, body):
+    def put(self, key, body):
+        """Write one object. Sealed keys ARE allowed -- capture upload has to store them.
+
+        The key is still classified, so an ingest path that forgets `storage_key()`
+        fails here rather than writing an object no reader can classify (QA B01).
+        """
+        _partition_of(key)
         try:
-            self._client.put_object(
-                Bucket=self.creds.bucket, Key=capture_id, Body=body
-            )
+            self._client.put_object(Bucket=self.creds.bucket, Key=key, Body=body)
         except Exception as exc:
-            _raise_from_client(exc, "put", self.creds.bucket, capture_id)
+            _raise_from_client(exc, "put", self.creds.bucket, key)
 
     def get(self, key, *, allow_sealed=False):
         """Read one object. Sealed keys are refused (D-007).
@@ -204,17 +254,10 @@ class ObjectStore:
         Only the audited `--include-sealed` run passes `allow_sealed=True`, the
         same shape as `DatasetLoader._load_row`.
         """
-        if key.startswith(SEALED_PREFIX) and not allow_sealed:
-            raise StorageDenied(
+        if _partition_of(key) == "sealed" and not allow_sealed:
+            raise SealedObjectDenied(
                 f"{key!r} is sealed; it is opened once, by an audited "
                 "`python -m frontdoor.eval --include-sealed` run (D-007, D-017)"
-            )
-        if not key.startswith((OPEN_PREFIX, SEALED_PREFIX)):
-            # Fail closed. An unpartitioned key is one this module cannot classify,
-            # and guessing "probably open" is how a sealed object gets served.
-            raise StorageError(
-                f"{key!r} has no partition prefix; keys must start with "
-                f"{OPEN_PREFIX!r} or {SEALED_PREFIX!r} (D-007). Build them with storage_key()."
             )
         try:
             response = self._client.get_object(Bucket=self.creds.bucket, Key=key)
@@ -222,11 +265,12 @@ class ObjectStore:
             _raise_from_client(exc, "get", self.creds.bucket, key)
         return response["Body"].read()
 
-    def delete(self, capture_id):
+    def delete(self, key):
+        _partition_of(key)
         try:
-            self._client.delete_object(Bucket=self.creds.bucket, Key=capture_id)
+            self._client.delete_object(Bucket=self.creds.bucket, Key=key)
         except Exception as exc:
-            _raise_from_client(exc, "delete", self.creds.bucket, capture_id)
+            _raise_from_client(exc, "delete", self.creds.bucket, key)
 
 
 def image_store():
