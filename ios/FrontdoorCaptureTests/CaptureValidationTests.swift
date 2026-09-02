@@ -95,6 +95,19 @@ final class CaptureValidationTests: XCTestCase {
         XCTAssertNotEqual(record.lens, record.captureDevice)
     }
 
+    /// Through the real function, against the spelling every document uses. The previous version
+    /// re-implemented the transform in the test and asserted against its own copy, so it passed
+    /// while `deviceName` was returning a capital B (#154's mistake, made again).
+    @MainActor
+    func testTheDeviceNameIsSpeltTheWayEveryDocumentSpellsIt() {
+        XCTAssertEqual(
+            CaptureController.deviceName(fromRawValue: "AVCaptureDeviceTypeBuiltInDualWideCamera"),
+            "builtInDualWideCamera")
+        XCTAssertEqual(
+            CaptureController.deviceName(fromRawValue: "AVCaptureDeviceTypeBuiltInWideAngleCamera"),
+            CaptureController.lensName)
+    }
+
     func testLensNameMatchesTheDocumentedSidecarValue() {
         XCTAssertEqual(CaptureController.lensName, "builtInWideAngleCamera")
     }

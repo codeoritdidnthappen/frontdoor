@@ -92,8 +92,21 @@ final class CaptureController: ObservableObject {
     /// The device type actually opened, as a string for the record. `lensName` is the optics;
     /// this is the door they were reached through, and the two differ on both team phones.
     static func deviceName(for device: AVCaptureDevice) -> String {
-        device.deviceType.rawValue.replacingOccurrences(
-            of: "AVCaptureDeviceType", with: "")
+        deviceName(fromRawValue: device.deviceType.rawValue)
+    }
+
+    /// Split out from the device so a test can reach it. An AVCaptureDevice cannot be constructed
+    /// in a unit test, so the previous test re-implemented the transform and asserted against its
+    /// own copy -- which is the mistake #154 was filed for, and it passed while the real function
+    /// was wrong.
+    static func deviceName(fromRawValue rawValue: String) -> String {
+        // Stripping the prefix alone yields "BuiltInDualWideCamera" with a capital B, while the
+        // schema, ARCHITECTURE section 4 and every document spell it "builtInDualWideCamera".
+        // The same trap `lensName` has a comment about, walked into again -- and invisible to the
+        // tests, which hardcode the lowercase string on both sides of the assertion.
+        let stripped = rawValue.replacingOccurrences(of: "AVCaptureDeviceType", with: "")
+        guard let first = stripped.first else { return stripped }
+        return first.lowercased() + stripped.dropFirst()
     }
 
     /// The zoom factor at which the 1x main lens is the one exposing.
