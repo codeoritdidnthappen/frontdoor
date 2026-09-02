@@ -4,7 +4,7 @@ import XCTest
 /// A capture always has an entrance and conditions behind it now (TICK-024); these stand in for
 /// the ones the operator entered, so the other suites stay about the frame.
 let testEntrance = Entrance(
-    id: "E-014", riseInches: 0.75, instrument: "digital caliper", split: nil)
+    id: "E-014", riseInches: 0.75, instrument: "digital caliper", split: .dev)
 let testConditions = ConditionTags(
     distanceM: 2.0, lighting: .overcast, surface: .concrete, occlusion: .none)
 

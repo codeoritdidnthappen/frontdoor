@@ -122,8 +122,9 @@ enum CaptureRejected: Error, Equatable {
             """
         case .notFullResolution(let delivered, let sensor):
             return """
-            The frame came back at \(delivered) rather than the sensor's \(sensor), so it is \
-            cropped or downscaled and its intrinsics would not describe it. Nothing was recorded.
+            The frame came back at \(delivered), a different shape from the sensor's \(sensor), \
+            so it is cropped and its intrinsics would not describe it. Nothing was recorded; \
+            check that no zoom or crop is applied and take the shot again.
             """
         case .captureTimeUnusable(let value):
             return """
@@ -187,17 +188,42 @@ enum CaptureValidation {
         guard abs(zoomFactor - 1.0) < 0.001 else { return .failure(.zoomNotUnity(zoomFactor)) }
         guard let gravity else { return .failure(.noGravitySample) }
         guard gravity.isPlausible else { return .failure(.gravityImplausible(gravity.magnitude)) }
-        // TICK-022 AC3: the frame must be the sensor's full resolution, confirming no crop and no
-        // digital zoom. Zoom pinned to 1.0 is not a substitute — maxPhotoDimensions can be set
-        // below the sensor maximum, or a format can deliver a smaller frame, and either yields an
-        // uncropped-looking still whose intrinsics describe a grid it does not have.
+        // TICK-022 AC3: no crop and no digital zoom. Zoom pinned to 1.0 is not a substitute --
+        // maxPhotoDimensions can be set below what the format can deliver, and a cropped still
+        // looks uncropped while its intrinsics describe a grid it does not have.
         //
         // An unknown maximum is not a pass: it cannot confirm anything, and accepting it silently
         // is how this check would stop meaning something.
         guard let sensorWidth, let sensorHeight, sensorWidth > 0, sensorHeight > 0 else {
             return .failure(.sensorResolutionUnknown)
         }
-        guard pixelWidth == sensorWidth, pixelHeight == sensorHeight else {
+        // Compared by ASPECT, not by pixel count. A 48MP sensor delivers a binned 4032x3024 frame
+        // against a 8064x6048 maximum -- confirmed on iPhone17,3 by TICK-020's probe, which
+        // requested 8064x6048 and was given 4032x3024. That frame is the FULL field of view, not a
+        // crop: same 4:3 geometry, and CameraIntrinsics.from already rescales fx, fy, cx and cy
+        // onto whichever grid arrived. Requiring equal pixel counts would refuse every capture on
+        // both team phones while proving nothing about cropping, which is what AC3 is for.
+        //
+        // A crop changes the field of view and therefore the aspect ratio; that is what this
+        // catches. The tolerance absorbs the odd-pixel rounding in dimensions like 5712x4284.
+        let deliveredAspect = Double(pixelWidth) / Double(pixelHeight)
+        let sensorAspect = Double(sensorWidth) / Double(sensorHeight)
+        guard abs(deliveredAspect - sensorAspect) <= 0.01 else {
+            return .failure(.notFullResolution(
+                delivered: "\(pixelWidth)x\(pixelHeight)",
+                sensor: "\(sensorWidth)x\(sensorHeight)"
+            ))
+        }
+        // Shape alone is not enough: a half-size frame is uncropped and still costs precision the
+        // measurement cannot get back, since every ROI tap lands on a coarser grid.
+        //
+        // The floor is half the sensor's linear dimension, which is not arbitrary -- it is exactly
+        // one binning step. A 48MP sensor reads out 8064x6048 or bins to 4032x3024, and TICK-020's
+        // probe saw the second on iPhone17,3. Anything smaller than that is not a readout mode; it
+        // is the output having been configured below what the format offers, which is the case
+        // AC3 exists to catch. Upscaling past the sensor is likewise not something a camera does.
+        guard pixelWidth <= sensorWidth, pixelHeight <= sensorHeight,
+              pixelWidth * 2 >= sensorWidth, pixelHeight * 2 >= sensorHeight else {
             return .failure(.notFullResolution(
                 delivered: "\(pixelWidth)x\(pixelHeight)",
                 sensor: "\(sensorWidth)x\(sensorHeight)"

@@ -216,4 +216,50 @@ final class CaptureValidationBoundaryTests: XCTestCase {
         )
         XCTAssertNotEqual(CaptureValidation.hardwareIdentifier(environment: [:]), "")
     }
+
+    // MARK: full resolution measured by shape, not by pixel count (TICK-020 probe)
+
+    /// A 48MP sensor delivers a binned 4032x3024 frame against a 8064x6048 maximum. TICK-020's
+    /// probe requested 8064x6048 on iPhone17,3 and was handed 4032x3024. That frame is the full
+    /// field of view, and requiring equal pixel counts would refuse every capture on both team
+    /// phones.
+    func testABinnedFrameFromA48MPSensorIsAccepted() throws {
+        let record = try validate(width: 4032, height: 3024,
+                                sensorWidth: 8064, sensorHeight: 6048).get()
+        XCTAssertEqual(record.pixelWidth, 4032)
+    }
+
+    /// What AC3 is actually for: a crop changes the field of view, and therefore the shape.
+    func testAFrameCroppedToADifferentShapeIsRefused() {
+        let rejection = rejection(validate(width: 4032, height: 2268,
+                                         sensorWidth: 8064, sensorHeight: 6048))
+        XCTAssertEqual(rejection, .notFullResolution(
+            delivered: "4032x2268", sensor: "8064x6048"))
+    }
+
+    /// A 16:9 crop taken across the sensor's full width: large enough to clear the resolution
+    /// floor, and wrong only in its shape. Nothing but the aspect comparison rejects it, which is
+    /// what makes it the case that proves the aspect comparison is doing work.
+    func testAFullWidthWidescreenCropIsRefused() {
+        XCTAssertEqual(
+            rejection(validate(width: 8064, height: 4536,
+                               sensorWidth: 8064, sensorHeight: 6048)),
+            .notFullResolution(delivered: "8064x4536", sensor: "8064x6048"))
+    }
+
+    /// Cameras do not deliver more pixels than the sensor has. If that appears, the numbers are
+    /// not describing the frame that arrived.
+    func testAFrameLargerThanTheSensorIsRefused() {
+        XCTAssertEqual(
+            rejection(validate(width: 9000, height: 6750, sensorWidth: 8064, sensorHeight: 6048)),
+            .notFullResolution(delivered: "9000x6750", sensor: "8064x6048"))
+    }
+
+    /// 5712x4284 is the dual-wide maximum the probe reported; its odd dimensions must not trip
+    /// the shape comparison against themselves.
+    func testTheDualWideMaximumMatchesItself() throws {
+        let record = try validate(width: 5712, height: 4284,
+                                sensorWidth: 5712, sensorHeight: 4284).get()
+        XCTAssertEqual(record.pixelHeight, 4284)
+    }
 }

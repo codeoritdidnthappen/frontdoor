@@ -1,0 +1,87 @@
+{
+  "_comment": "Golden vectors for the split assignment, shared by the Python tool (TICK-011) and the capture app (TICK-025). Both suites read THIS file. Two implementations of one rule disagreeing is not a bug that shows up as a crash -- it shows up as an entrance sitting in a different fold on the phone than in the analysis, which nothing downstream can detect.",
+  "sealed_percent": 30,
+  "calib_percent": 20,
+  "vectors": [
+    {
+      "entrance_id": "E-000",
+      "split": "dev"
+    },
+    {
+      "entrance_id": "E-003",
+      "split": "dev"
+    },
+    {
+      "entrance_id": "E-006",
+      "split": "sealed"
+    },
+    {
+      "entrance_id": "E-009",
+      "split": "dev"
+    },
+    {
+      "entrance_id": "E-012",
+      "split": "calib"
+    },
+    {
+      "entrance_id": "E-015",
+      "split": "sealed"
+    },
+    {
+      "entrance_id": "E-018",
+      "split": "dev"
+    },
+    {
+      "entrance_id": "E-021",
+      "split": "sealed"
+    },
+    {
+      "entrance_id": "E-024",
+      "split": "calib"
+    },
+    {
+      "entrance_id": "E-027",
+      "split": "dev"
+    },
+    {
+      "entrance_id": "E-030",
+      "split": "dev"
+    },
+    {
+      "entrance_id": "E-033",
+      "split": "dev"
+    },
+    {
+      "entrance_id": "E-036",
+      "split": "sealed"
+    },
+    {
+      "entrance_id": "E-039",
+      "split": "sealed"
+    },
+    {
+      "entrance_id": "E-042",
+      "split": "calib"
+    },
+    {
+      "entrance_id": "E-045",
+      "split": "dev"
+    },
+    {
+      "entrance_id": "E-048",
+      "split": "dev"
+    },
+    {
+      "entrance_id": "E-051",
+      "split": "dev"
+    },
+    {
+      "entrance_id": "E-054",
+      "split": "dev"
+    },
+    {
+      "entrance_id": "E-057",
+      "split": "calib"
+    }
+  ]
+}

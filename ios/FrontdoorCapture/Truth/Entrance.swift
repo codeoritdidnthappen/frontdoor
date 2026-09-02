@@ -20,9 +20,9 @@ struct Entrance: Equatable {
     /// The sidecar's `ground_truth.instrument`, required by the schema and recorded per entrance
     /// because a reading is only as good as what it was taken with.
     let instrument: String
-    /// Assigned by TICK-025 when the entrance is created; carried here so re-entering an existing
-    /// ID reuses it rather than re-rolling it.
-    let split: String?
+    /// Assigned once, when the entrance is created (TICK-025, D-023), and carried so re-entering
+    /// an existing ID reuses it rather than re-rolling it. Never surfaced to the operator.
+    let split: Split
 }
 
 /// The stratification variables the error budget is reported against (PRD section 6). Fixed
@@ -162,7 +162,6 @@ enum TruthValidation {
         id: String,
         rise: String,
         instrument: String,
-        split: String? = nil,
         confirmedImplausibleRise: Bool = false
     ) -> Result<Entrance, TruthRejected> {
         guard let canonical = canonicalEntranceId(id) else {
@@ -179,6 +178,12 @@ enum TruthValidation {
         let trimmedInstrument = instrument.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedInstrument.isEmpty else { return .failure(.instrumentMissing) }
 
+        // Assigned here and nowhere else. canonicalEntranceId has already accepted the ID, so
+        // the only way this returns nil is a disagreement between the two, which would be a bug
+        // rather than a state to recover from.
+        guard let split = SplitAssignment.split(for: canonical) else {
+            return .failure(.entranceIdMalformed(canonical))
+        }
         return .success(Entrance(
             id: canonical,
             riseInches: value,
