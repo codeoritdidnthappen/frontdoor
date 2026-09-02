@@ -677,3 +677,66 @@ locally on a team Mac. D-026 lists it as required before #50 closes. A 256 MB ma
 score a few hundred captures through four arms, so the answer is almost certainly local -- but
 that contradicts the "bucket beside the VM" premise in ARCHITECTURE sections 7-8 and needs its
 own entry rather than being assumed here.
+
+## D-032  LiDAR depth is captured, on James's iPhone 17 Pro (`iPhone18,1`)
+
+Taken 2026-09-02 by David. Reverses the 2026-09-01 pivot's "no LiDAR depth" clause for
+capture; everything else in the pivot stands.
+
+**The decision.** Every entrance is captured with LiDAR depth (D-020), and the device that
+carries it is **James's iPhone 17 Pro (`iPhone18,1`)**. One LiDAR device is enough: D-020 asks for depth on
+every entrance, not on every device, so a single phone that shoots every entrance satisfies it.
+
+**What this does NOT claim, because the probe measured otherwise.** TICK-020 (#24) ran
+`builtInLiDARDepthCamera` on an iPhone 15 Pro Max on 2026-09-02: depth is delivered, calibration
+is **not**, and intrinsics are not delivered. The depth that arrives through the dual-wide is
+`accuracy=relative`. So LiDAR is a depth map to store and compare against, NOT a route to
+intrinsics and NOT a metric ruler. D-015 is untouched: the metrology method still never consumes
+device depth. This entry authorises capture and storage of depth, nothing further.
+
+**The device is an iPhone 17 Pro, not the iPhone 16 Pro the roster recorded.** Read from
+`devicectl` on 2026-09-02 (#203, Emily). This entry was first written against the audited model
+and is corrected here rather than quietly: probe rows are keyed by model identifier, so a depth
+row filed against the wrong one would prove nothing about the phone actually shooting the dataset.
+
+**Two prerequisites that are real and are not waived.** A build **has** run on that phone
+(installed and launched 2026-09-02), correcting an earlier claim in TEAM.md section 2. What is
+still missing is its **capability-probe row**: its depth delivery is expected, not measured, and TICK-020
+should be run on it before it carries a capture day. Separately, James runs Windows, so the
+mandatory 7-day re-sign (D-025) is a physical session with a Mac owner. Both were raised before
+this decision was taken and are recorded here rather than discovered in the field.
+
+**Consequence for TEAM.md section 3.** The constraint "field capture runs on Emily's two phones,
+not James's" is reopened by this entry: capture on the LiDAR device means capture through James's
+phone, which is the arrangement TICK-020 had retired. Who operates which device is not settled
+here.
+
+## D-033  AMENDMENT TO D-020 and D-031: the server holds a WRITE-ONLY depth token
+
+Taken 2026-09-02 by David, to let TICK-029 (#33) upload depth without breaking the quarantine.
+
+**The problem.** D-031 gives the server the images credential ONLY, never depth. But #33 requires
+depth to reach the quarantined bucket, and the chosen upload path (option 2) routes bytes through
+the server. A read-capable depth token on the server would put depth where the metrology path can
+reach it, which is exactly what D-020 forbids.
+
+**The decision.** The server holds a third token, scoped **Object Write only** on
+`frontdoor-depth` -- no read, no list. It can store a depth map and can never read one back.
+
+**Why this satisfies D-020 rather than eroding it.** D-020's guarantee is that the metrology code
+path cannot *read* depth: "if depth sits where the method can reach it, it eventually gets used to
+tune." A write-only credential cannot be used to tune, to peek, or to load. The evaluation harness
+keeps the read token and remains the only reader. The invariant is unchanged; only the direction
+of the server's access is.
+
+**What is now true of each credential:**
+
+    server / loader    frontdoor-image   read + write
+    server             frontdoor-depth   WRITE ONLY  (this entry)
+    harness            frontdoor-image   read
+    harness            frontdoor-depth   read
+    metrology library  neither           no credential at all
+
+**Verification.** `python -m frontdoor.storage verify` must still print `loader-denied-on-depth`.
+A new check asserts the server's depth token can PUT and is REFUSED on GET; if a read succeeds,
+the write-only scope leaked and this entry's guarantee is void.

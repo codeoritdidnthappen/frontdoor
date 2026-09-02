@@ -45,7 +45,7 @@ Measured 2026-09-02 with the in-app capability probe (TICK-020, #24); see
 | David | Samsung Galaxy S25 | **No** — Android | — | — | Cannot capture |
 | Emily | iPhone 16 (non-Pro) | Yes | **Yes**, verified | Relative (stereo) | **Full capture** |
 | Emily *(unconfirmed — see §5)* | iPhone 15 Pro Max | Yes | **Yes**, verified | Relative | **Full capture** |
-| James | iPhone 17 Pro (`iPhone18,1`) | **Yes**, build installed and launched 2026-09-02 | Probe not yet run | — | Signing proven; capability unmeasured |
+| James | iPhone 17 Pro (`iPhone18,1`) | **Yes**, build installed and launched 2026-09-02 | Probe not yet run | **LiDAR — the depth device (D-032)** | **Carries LiDAR capture.** Signing proven; capability unmeasured, so run the probe before it carries a capture day |
 | Ruben | Google Pixel 9 | **No** — Android | — | — | Cannot capture |
 
 Three things the probe changed. **Intrinsics arrive on both tested phones, including the non-Pro**,
@@ -64,8 +64,12 @@ probe rows are keyed by model, and a row filed against the wrong one proves noth
 
 A free-provisioning build installs and launches on it, so the signing chain is proven on three
 devices. The capability probe has NOT been run there, which is the remaining row in TICK-020 (#24)
-and the reason it is still open. Two verified capture devices are enough for
-dataset, so it is recorded as a spare rather than a blocker.
+and the reason it is still open.
+
+**D-032 (2026-09-02) makes this phone the depth device**, so it is no longer a spare: LiDAR
+capture runs on it and nowhere else. That raises the stakes on the missing probe row rather than
+lowering them — the device carrying all of the depth is the one device whose capability has not
+been measured, and the probe is keyed by a model identifier that was wrong until today.
 
 ### Development machines
 
@@ -105,10 +109,11 @@ Free-provisioning builds still expire every seven days (R-7), which is what TICK
 schedules; see [docs/signing-calendar.md](docs/signing-calendar.md).
 
 - **Verified capture devices: 2**, both Emily's (iPhone 16, iPhone 15 Pro Max) — against A-3's
-  assumed three. James's iPhone 17 Pro now runs a build but has never had the probe run on it, so it
-  is a spare, not a third.
-- **LiDAR-capable devices: 1** (James's, untested) — and LiDAR is no longer a route to intrinsics
-  on any device, so this count no longer gates capture the way A-1 assumed.
+  assumed three. James's iPhone 17 Pro now runs a build but has never had the probe run on it, so
+  it is not counted as verified until it has a measured row.
+- **LiDAR-capable devices: 1** (James's, unprobed). LiDAR is not a route to intrinsics on any
+  device, so it does not gate capture the way A-1 assumed — but **D-032 (2026-09-02) puts depth
+  capture on this phone**, so the count now gates *depth*: one unprobed device carries all of it.
 
 All five devices are now recorded. The two verified capture phones are an **iPhone 16 and an
 iPhone 15 Pro Max** — two generations and two camera tiers, not the single generation an earlier
@@ -146,7 +151,12 @@ Two constraints shape it, both from §2:
 - **Field capture runs on Emily's two phones, not James's.** This constraint used to read "James
   holds the only LiDAR device, so every entrance must pass through his phone". TICK-020 retired it:
   LiDAR is not a route to intrinsics, both verified capture devices are Emily's, and James's iPhone
-  16 Pro has never had a build on it. James still runs Windows and cannot build iOS.
+  16 Pro had not been probed. James still runs Windows and cannot build iOS.
+
+  > **Reopened 2026-09-02 by D-032.** Depth capture is now assigned to James's iPhone 17 Pro (`iPhone18,1`), so
+  > entrances carrying LiDAR do pass through his phone after all. A build has run on that phone, so
+  > the install is not the open item — the capability probe is, and so is the 7-day re-sign, which
+  > James cannot do unaided on Windows. Who operates which device is still unsettled.
 
   **This has a consequence §3 does not yet resolve.** Field capture (#9, #64–#69) is assigned to
   James, and the phones that can capture belong to Emily. Either the devices move to the operator,
