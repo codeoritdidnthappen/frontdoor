@@ -131,6 +131,7 @@ struct ROIReviewView: View {
                     Button {
                         marks[target] = ROIValidation.nudge(
                             marks[target]!, dx: dx, dy: dy,
+                            orientation: image.imageOrientation,
                             pixelWidth: pixelWidth, pixelHeight: pixelHeight)
                     } label: {
                         Image(systemName: icon).frame(width: 34, height: 30)
@@ -199,6 +200,8 @@ private struct Magnifier: View {
     private let size: CGFloat = 120
 
     var body: some View {
+        // Still needed below, to place the loupe WINDOW away from the finger; the region it
+        // magnifies is `loupeOffset`'s job.
         let clamped = CGPoint(
             x: min(max(at.x, displayed.minX), displayed.maxX),
             y: min(max(at.y, displayed.minY), displayed.maxY))
@@ -207,10 +210,14 @@ private struct Magnifier: View {
                 .resizable()
                 .scaledToFit()
                 .frame(width: displayed.width * zoom, height: displayed.height * zoom)
-                .offset(
-                    x: -(clamped.x - displayed.minX) * zoom + size / 2,
-                    y: -(clamped.y - displayed.minY) * zoom + size / 2)
-                .frame(width: size, height: size)
+                .offset(ROIValidation.loupeOffset(
+                    at: at, displayed: displayed, zoom: zoom, windowSize: size))
+                // topLeading, not the default centre. `.frame(width:height:)` CENTRES its
+                // content, so the offset above -- which positions the magnified still as if its
+                // origin sat at the window's top-left -- was off by half the magnified image.
+                // The loupe showed a fixed region near the picture's middle no matter where the
+                // finger was, at the derived zoom and at the old 4x alike.
+                .frame(width: size, height: size, alignment: .topLeading)
                 .clipped()
             Path { p in
                 p.move(to: CGPoint(x: size / 2, y: 0)); p.addLine(to: CGPoint(x: size / 2, y: size))

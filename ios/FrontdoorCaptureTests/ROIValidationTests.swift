@@ -264,3 +264,96 @@ final class ROIValidationTests: XCTestCase {
         XCTAssertEqual(CardCorner.allCases.count, 4)
     }
 }
+
+// MARK: - QA #197: the loupe magnified the wrong region, and nudge ignored orientation
+
+extension ROIValidationTests {
+
+    /// The point the operator is placing must be the point under the crosshair.
+    ///
+    /// It was not. `.frame(width:height:)` centres its content, and the offset was written for a
+    /// top-left origin, so the loupe showed a fixed region near the middle of the picture wherever
+    /// the finger went (QA B01). Asserted as a round trip so the test does not simply restate the
+    /// arithmetic it is checking.
+    func testLoupeShowsThePointBeingPlaced() {
+        let displayed = CGRect(x: 12, y: 80, width: 366, height: 488)
+        for zoom in [1.0, 1.19, 4.0] as [CGFloat] {
+            for p in [CGPoint(x: 12, y: 80), CGPoint(x: 195, y: 324),
+                      CGPoint(x: 378, y: 568), CGPoint(x: 100, y: 500)] {
+                let offset = ROIValidation.loupeOffset(
+                    at: p, displayed: displayed, zoom: zoom, windowSize: 120)
+                let centre = ROIValidation.loupeCentre(
+                    offset: offset, displayed: displayed, zoom: zoom, windowSize: 120)
+                XCTAssertEqual(centre.x, p.x, accuracy: 0.001, "zoom \(zoom) at \(p)")
+                XCTAssertEqual(centre.y, p.y, accuracy: 0.001, "zoom \(zoom) at \(p)")
+            }
+        }
+    }
+
+    /// A touch outside the image still magnifies inside it, rather than empty space.
+    func testLoupeClampsToTheDisplayedImage() {
+        let displayed = CGRect(x: 12, y: 80, width: 366, height: 488)
+        let offset = ROIValidation.loupeOffset(
+            at: CGPoint(x: -500, y: 9999), displayed: displayed, zoom: 2, windowSize: 120)
+        let centre = ROIValidation.loupeCentre(
+            offset: offset, displayed: displayed, zoom: 2, windowSize: 120)
+        XCTAssertEqual(centre.x, displayed.minX, accuracy: 0.001)
+        XCTAssertEqual(centre.y, displayed.maxY, accuracy: 0.001)
+    }
+
+    /// "Up" must move the marker up the SCREEN, in every orientation.
+    ///
+    /// The arrows are labelled in screen space and the record is in sensor space; on a
+    /// portrait-held phone those are a quarter turn apart. Applying the screen delta straight to
+    /// sensor coordinates moved the marker sideways on `.right`, which is the portrait capture
+    /// orientation -- so 12 of 16 combinations were wrong and only `.up` was right, which a
+    /// portrait-only app never produces (QA B02).
+    func testNudgeMovesTheMarkerTheWayTheArrowPoints() {
+        let w = 4032, h = 3024
+        let start = PixelPoint(x: 2000, y: 1500)
+        let displayed = CGRect(x: 0, y: 0, width: 300, height: 400)
+
+        for orientation in [UIImage.Orientation.up, .right, .left, .down] {
+            for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                let moved = ROIValidation.nudge(
+                    start, dx: dx, dy: dy, orientation: orientation,
+                    pixelWidth: w, pixelHeight: h)
+                // Round-trip through the same mapping taps use: convert both points back to
+                // screen space and check the SCREEN delta matches the arrow.
+                let before = Self.screenPoint(start, displayed: displayed, orientation: orientation,
+                                              pixelWidth: w, pixelHeight: h)
+                let after = Self.screenPoint(moved, displayed: displayed, orientation: orientation,
+                                             pixelWidth: w, pixelHeight: h)
+                let sdx = after.x - before.x, sdy = after.y - before.y
+                XCTAssertEqual(sdx.sign == .minus, dx < 0 && sdx != 0,
+                               "\(orientation) dx=\(dx) moved screen x by \(sdx)")
+                if dx != 0 { XCTAssertTrue(abs(sdx) > 0 && abs(sdy) < 0.001,
+                                           "\(orientation) dx=\(dx) also moved y by \(sdy)") }
+                if dy != 0 { XCTAssertTrue(abs(sdy) > 0 && abs(sdx) < 0.001,
+                                           "\(orientation) dy=\(dy) also moved x by \(sdx)") }
+                if dy < 0 { XCTAssertLessThan(sdy, 0, "\(orientation): up must move up") }
+                if dy > 0 { XCTAssertGreaterThan(sdy, 0, "\(orientation): down must move down") }
+                if dx < 0 { XCTAssertLessThan(sdx, 0, "\(orientation): left must move left") }
+                if dx > 0 { XCTAssertGreaterThan(sdx, 0, "\(orientation): right must move right") }
+            }
+        }
+    }
+
+    /// Sensor pixel -> screen point, the inverse of `pixel(of:)`, for the assertion above.
+    private static func screenPoint(
+        _ p: PixelPoint, displayed: CGRect, orientation: UIImage.Orientation,
+        pixelWidth: Int, pixelHeight: Int
+    ) -> CGPoint {
+        let fx = CGFloat(p.x) / CGFloat(pixelWidth)
+        let fy = CGFloat(p.y) / CGFloat(pixelHeight)
+        let u: CGFloat, v: CGFloat
+        switch orientation {
+        case .right, .rightMirrored: u = 1 - fy; v = fx
+        case .left, .leftMirrored:   u = fy;     v = 1 - fx
+        case .down, .downMirrored:   u = 1 - fx; v = 1 - fy
+        default:                     u = fx;     v = fy
+        }
+        return CGPoint(x: displayed.minX + u * displayed.width,
+                       y: displayed.minY + v * displayed.height)
+    }
+}

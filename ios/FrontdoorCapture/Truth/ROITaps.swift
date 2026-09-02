@@ -131,6 +131,44 @@ enum ROIValidation {
         return PixelPoint(x: x, y: y)
     }
 
+    /// Where to offset the magnified still so `at` lands under the loupe's crosshair.
+    ///
+    /// The caller must place this in a frame aligned `.topLeading`. SwiftUI's
+    /// `.frame(width:height:)` CENTRES by default, and with centring this offset put a fixed
+    /// region near the middle of the picture under the crosshair no matter where the finger was --
+    /// at the derived zoom and at the old 4x alike (QA B01).
+    ///
+    /// Pure geometry, extracted from the view so it can be tested. `ROIReviewView` had no tests at
+    /// all, and a loupe that magnifies the wrong place still looks like a working loupe.
+    static func loupeOffset(
+        at point: CGPoint,
+        displayed: CGRect,
+        zoom: CGFloat,
+        windowSize: CGFloat
+    ) -> CGSize {
+        let clamped = CGPoint(
+            x: min(max(point.x, displayed.minX), displayed.maxX),
+            y: min(max(point.y, displayed.minY), displayed.maxY))
+        return CGSize(
+            width: -(clamped.x - displayed.minX) * zoom + windowSize / 2,
+            height: -(clamped.y - displayed.minY) * zoom + windowSize / 2)
+    }
+
+    /// Which displayed point ends up under the crosshair, given that offset.
+    ///
+    /// The inverse of `loupeOffset`, so a test can assert the round trip rather than restate the
+    /// arithmetic it is checking.
+    static func loupeCentre(
+        offset: CGSize,
+        displayed: CGRect,
+        zoom: CGFloat,
+        windowSize: CGFloat
+    ) -> CGPoint {
+        CGPoint(
+            x: (windowSize / 2 - offset.width) / zoom + displayed.minX,
+            y: (windowSize / 2 - offset.height) / zoom + displayed.minY)
+    }
+
     /// Whether an orientation puts the image on screen turned a quarter turn from its pixels.
     ///
     /// A still is landscape sensor pixels carrying an EXIF orientation, and on a portrait-held
@@ -197,16 +235,43 @@ enum ROIValidation {
     /// AC3: precision must not depend on landing the tap first time. A finger cannot reliably
     /// resolve one image pixel even under the loupe, so the last placement is adjustable before it
     /// is committed.
+    /// Nudge a placed point by one step in a direction the OPERATOR sees on screen.
+    ///
+    /// `dx`/`dy` arrive in SCREEN space, because that is where the arrows are: "up" means the
+    /// marker should move up the display. Everything stored is SENSOR space, and on a
+    /// portrait-held phone those are a quarter turn apart -- so applying a screen delta straight
+    /// to sensor coordinates sent the marker sideways. `pixel(of:)` already backs taps out of the
+    /// display turn; this is the same transform for a delta rather than a position, and it must
+    /// stay the same transform or a tap and a nudge would disagree about which way is up.
+    ///
+    /// Deltas rotate but do not translate, so `pixel(of:)`'s `1 - u` terms become sign flips.
     static func nudge(
         _ point: PixelPoint,
         dx: Int,
         dy: Int,
+        orientation: UIImage.Orientation = .up,
         pixelWidth: Int,
         pixelHeight: Int
     ) -> PixelPoint {
-        PixelPoint(
-            x: min(max(point.x + dx, 0), max(pixelWidth - 1, 0)),
-            y: min(max(point.y + dy, 0), max(pixelHeight - 1, 0)))
+        let sx: Int
+        let sy: Int
+        switch orientation {
+        case .right, .rightMirrored:
+            sx = dy
+            sy = -dx
+        case .left, .leftMirrored:
+            sx = -dy
+            sy = dx
+        case .down, .downMirrored:
+            sx = -dx
+            sy = -dy
+        default:
+            sx = dx
+            sy = dy
+        }
+        return PixelPoint(
+            x: min(max(point.x + sx, 0), max(pixelWidth - 1, 0)),
+            y: min(max(point.y + sy, 0), max(pixelHeight - 1, 0)))
     }
 
     /// Assemble the six collected points, in ROITarget order, into a record.
