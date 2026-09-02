@@ -103,7 +103,7 @@ enum CaptureRejected: Error, Equatable {
     case noImageData
     case noCalibrationData
     case unusableCalibrationData
-    case zoomNotUnity(Double)
+    case zoomNotMainLens(factor: Double, expected: Double)
     case noGravitySample
     case gravityImplausible(Double)
 
@@ -143,10 +143,11 @@ enum CaptureRejected: Error, Equatable {
             The calibration data for that frame could not be matched to the image, so the \
             intrinsics would not describe it. Nothing was recorded.
             """
-        case .zoomNotUnity(let factor):
+        case .zoomNotMainLens(let factor, let expected):
             return """
-            Zoom was \(String(format: "%.2f", factor))x, not 1x. Captures must use the 1x main lens \
-            with no crop, or the intrinsics travelling with the frame are wrong. Nothing was recorded.
+            Zoom was \(String(format: "%.2f", factor)), not the \(String(format: "%.2f", expected)) \
+            this camera uses for its 1x main lens. Captures must be on the main lens with no crop, \
+            or the intrinsics travelling with the frame are wrong. Nothing was recorded.
             """
         case .noGravitySample:
             return """
@@ -173,6 +174,11 @@ enum CaptureValidation {
         deviceModel: String,
         lens: String,
         zoomFactor: Double,
+        /// The factor at which the 1x main lens exposes on THIS camera. 1.0 on a physical wide
+        /// device; the first switch-over factor on a virtual one, which is 2.00 on both team
+        /// phones. Passed in rather than assumed, because the number that means "main lens" is a
+        /// property of the device, not a constant.
+        mainLensZoomFactor: Double,
         capturedAt: String,
         sensorWidth: Int?,
         sensorHeight: Int?,
@@ -184,8 +190,15 @@ enum CaptureValidation {
         guard hadCalibrationData else { return .failure(.noCalibrationData) }
         guard let intrinsics else { return .failure(.unusableCalibrationData) }
         // Compared against a tolerance rather than !=: videoZoomFactor is a float the system may
-        // return as 1.0000001, and rejecting a capture over that would be a lie.
-        guard abs(zoomFactor - 1.0) < 0.001 else { return .failure(.zoomNotUnity(zoomFactor)) }
+        // return as 2.0000001, and rejecting a capture over that would be a lie.
+        //
+        // Against the device's main-lens factor, not the literal 1.0. On builtInDualWideCamera the
+        // scale is relative to the ultra-wide, so the main lens is at 2.00 -- demanding 1.0 there
+        // would reject every measurable frame, and accepting 1.0 would silently accept the
+        // ultra-wide's ~120-degree glass.
+        guard abs(zoomFactor - mainLensZoomFactor) < 0.001 else {
+            return .failure(.zoomNotMainLens(factor: zoomFactor, expected: mainLensZoomFactor))
+        }
         guard let gravity else { return .failure(.noGravitySample) }
         guard gravity.isPlausible else { return .failure(.gravityImplausible(gravity.magnitude)) }
         // TICK-022 AC3: no crop and no digital zoom. Zoom pinned to 1.0 is not a substitute --

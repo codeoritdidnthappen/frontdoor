@@ -24,16 +24,21 @@ struct ROIReviewView: View {
             header
             GeometryReader { geo in
                 let rect = ROIValidation.fittedRect(
-                    pixelWidth: pixelWidth, pixelHeight: pixelHeight, in: geo.size)
+                    pixelWidth: pixelWidth, pixelHeight: pixelHeight,
+                    orientation: image.imageOrientation, in: geo.size)
                 ZStack(alignment: .topLeading) {
                     Color.black
-                    // Framed and positioned to `rect` explicitly rather than left to scaledToFit
-                    // inside the stack. The stack's alignment and fittedRect's centring are two
-                    // separate assumptions about where the image sits, and when they disagreed
-                    // taps were mapped against a rect the image did not occupy -- silently, since
-                    // both halves are individually correct.
+                    // Framed and positioned to `rect` explicitly rather than left to the stack's
+                    // alignment: two assumptions about where the image sits disagreed once
+                    // already, and taps were converted against a rect the image did not occupy.
+                    //
+                    // scaledToFit stays because resizable alone STRETCHES to the frame. The rect
+                    // now carries the displayed aspect, so fitting inside it is exact rather than
+                    // approximate -- and a mismatch shows as letterboxing instead of a silently
+                    // squashed picture with silently wrong taps.
                     Image(uiImage: image)
                         .resizable()
+                        .scaledToFit()
                         .frame(width: rect.width, height: rect.height)
                         .position(x: rect.midX, y: rect.midY)
                     marksOverlay(in: rect)
@@ -73,8 +78,14 @@ struct ROIReviewView: View {
     private func marksOverlay(in rect: CGRect) -> some View {
         ForEach(ROITarget.allCases.filter { marks[$0] != nil }, id: \.self) { target in
             if let mark = marks[target] {
-                let x = rect.minX + CGFloat(mark.x) / CGFloat(pixelWidth) * rect.width
-                let y = rect.minY + CGFloat(mark.y) / CGFloat(pixelHeight) * rect.height
+                // Sensor pixels turned forward into display space -- the inverse of what `place`
+                // does. Drawing them with the untuned mapping would put every marker somewhere the
+                // operator did not tap, on exactly the frames where it matters.
+                let point = ROIValidation.displayPoint(
+                    of: mark, in: rect, orientation: image.imageOrientation,
+                    pixelWidth: pixelWidth, pixelHeight: pixelHeight)
+                let x = point.x
+                let y = point.y
                 ZStack {
                     Circle().stroke(.yellow, lineWidth: 2).frame(width: 18, height: 18)
                     Circle().fill(.yellow).frame(width: 3, height: 3)
@@ -109,7 +120,7 @@ struct ROIReviewView: View {
     private func place(_ point: CGPoint, in rect: CGRect) {
         guard let target = next else { return }
         guard let pixel = ROIValidation.pixel(
-            of: point, displayed: rect,
+            of: point, displayed: rect, orientation: image.imageOrientation,
             pixelWidth: pixelWidth, pixelHeight: pixelHeight) else { return }
         marks[target] = pixel
     }

@@ -19,7 +19,7 @@ final class CaptureValidationTests: XCTestCase {
     private func result(
         width: Int = 4032, height: Int = 3024,
         intrinsics: CameraIntrinsics?? = nil, hadCalibration: Bool = true,
-        gravity: GravitySample?? = nil, zoom: Double = 1.0,
+        gravity: GravitySample?? = nil, zoom: Double = 1.0, mainLensZoom: Double = 1.0,
         capturedAt: String = "2026-09-01T14:22:31Z",
         sensorWidth: Int?? = nil, sensorHeight: Int?? = nil
     ) -> Result<CaptureRecord, CaptureRejected> {
@@ -28,7 +28,7 @@ final class CaptureValidationTests: XCTestCase {
             intrinsics: intrinsics ?? self.intrinsics,
             hadCalibrationData: hadCalibration,
             gravity: gravity ?? self.gravity,
-            deviceModel: "iPhone17,3", lens: CaptureController.lensName, zoomFactor: zoom,
+            deviceModel: "iPhone17,3", lens: CaptureController.lensName, zoomFactor: zoom, mainLensZoomFactor: mainLensZoom,
             capturedAt: capturedAt,
             // Default to the frame's own size, so cases not about resolution stay unaffected.
             sensorWidth: sensorWidth ?? width, sensorHeight: sensorHeight ?? height,
@@ -50,6 +50,39 @@ final class CaptureValidationTests: XCTestCase {
     /// The recorded lens must match the sidecar example in ARCHITECTURE section 4. Derived from
     /// the AVFoundation raw value it comes out capitalised, and anything filtering on the
     /// documented spelling then matches nothing.
+    // MARK: the 1x main lens is a device-dependent number (TICK-020, both team phones)
+
+    /// On builtInDualWideCamera the zoom scale is relative to the ultra-wide, so the main lens
+    /// exposes at 2.00. TICK-020's probe measured exactly that on iPhone16,2 and iPhone17,3, and
+    /// fx=2792 confirms the main lens rather than the ultra-wide's ~1456. Demanding a literal 1.0
+    /// would reject every measurable frame either phone can produce.
+    func testTheMainLensFactorOnTheDualWideIsAccepted() throws {
+        let record = try result(zoom: 2.0, mainLensZoom: 2.0).get()
+        XCTAssertEqual(record.zoomFactor, 2.0)
+    }
+
+    /// The other half of the trap: 1.0 on that device is the ultra-wide, roughly 120 degrees of
+    /// barrel distortion. It must be refused, not waved through for looking like "1x".
+    func testUnityZoomOnTheDualWideIsRefusedAsTheWrongLens() {
+        XCTAssertEqual(
+            rejection(result(zoom: 1.0, mainLensZoom: 2.0)),
+            .zoomNotMainLens(factor: 1.0, expected: 2.0))
+    }
+
+    /// Digital zoom past the main lens is still digital zoom.
+    func testZoomBeyondTheMainLensFactorIsRefused() {
+        XCTAssertEqual(
+            rejection(result(zoom: 3.0, mainLensZoom: 2.0)),
+            .zoomNotMainLens(factor: 3.0, expected: 2.0))
+    }
+
+    /// The message has to name both numbers, or an operator sees "2.00, not 2.00".
+    func testTheRefusalNamesBothFactors() {
+        let message = CaptureRejected.zoomNotMainLens(factor: 1.0, expected: 2.0).message
+        XCTAssertTrue(message.contains("1.00"), message)
+        XCTAssertTrue(message.contains("2.00"), message)
+    }
+
     func testLensNameMatchesTheDocumentedSidecarValue() {
         XCTAssertEqual(CaptureController.lensName, "builtInWideAngleCamera")
     }
@@ -57,7 +90,7 @@ final class CaptureValidationTests: XCTestCase {
     // MARK: - Zoom is fixed by D-014, not merely preferred
 
     func testZoomOtherThanOneIsRejected() {
-        XCTAssertEqual(rejection(result(zoom: 2.0)), .zoomNotUnity(2.0))
+        XCTAssertEqual(rejection(result(zoom: 2.0)), .zoomNotMainLens(factor: 2.0, expected: 1.0))
     }
 
     func testTinyFloatingPointDriftAroundOneIsAccepted() {
@@ -166,7 +199,7 @@ final class CaptureValidationTests: XCTestCase {
     func testEveryRejectionSaysNothingWasRecorded() {
         let all: [CaptureRejected] = [
             .noImageData, .noCalibrationData, .unusableCalibrationData,
-            .zoomNotUnity(2.0), .noGravitySample, .gravityImplausible(0.2),
+            .zoomNotMainLens(factor: 2.0, expected: 1.0), .noGravitySample, .gravityImplausible(0.2),
         ]
         for rejection in all {
             XCTAssertTrue(
@@ -192,7 +225,7 @@ final class CaptureValidationTests: XCTestCase {
     func testSessionNotReadyIsDistinctFromEveryOtherRejection() {
         let others: [CaptureRejected] = [
             .noImageData, .noCalibrationData, .unusableCalibrationData,
-            .zoomNotUnity(2.0), .noGravitySample, .gravityImplausible(0.4)
+            .zoomNotMainLens(factor: 2.0, expected: 1.0), .noGravitySample, .gravityImplausible(0.4)
         ]
         for other in others {
             XCTAssertNotEqual(CaptureRejected.sessionNotReady, other)

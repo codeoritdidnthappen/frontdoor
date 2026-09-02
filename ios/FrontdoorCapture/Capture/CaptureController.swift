@@ -64,12 +64,41 @@ final class CaptureController: ObservableObject {
     /// Invalidates an in-flight `start()` when `stop()` or another `start()` supersedes it.
     private var startGeneration = 0
 
-    /// Fixed capture geometry: 1x main lens, no digital zoom, no crop (ARCHITECTURE.md section 4).
-    private static let lens: AVCaptureDevice.DeviceType = .builtInWideAngleCamera
+    /// Fixed capture geometry: the 1x main lens, no digital zoom, no crop (D-014).
+    ///
+    /// Reached through builtInDualWideCamera rather than builtInWideAngleCamera, on the evidence
+    /// of TICK-020's probe run on iPhone17,3 and iPhone16,2. Both report depth=false on the bare
+    /// wide camera, and depthData.cameraCalibrationData is the only channel that delivers
+    /// intrinsics -- direct delivery needs two constituent devices, which a single physical lens
+    /// cannot offer. So the documented device type can never produce a measurable frame on either
+    /// team phone, while the dual-wide does: fx=2792 fy=2792, reference dimensions matching the
+    /// still, and a 42-entry distortion table.
+    ///
+    /// The optics D-014 fixes are unchanged. builtInDualWideCamera is ultra-wide plus wide, and at
+    /// its switch-over factor the main lens is the one taking the picture -- fx=2792 on a
+    /// 4032-wide frame is the ~24mm main lens, nowhere near the ultra-wide's ~1456.
+    private static let lens: AVCaptureDevice.DeviceType = .builtInDualWideCamera
+
+    /// Fallback for a device with no dual-wide. It cannot deliver intrinsics on either phone
+    /// tested, so a capture will be refused rather than silently recorded without them -- which is
+    /// the correct outcome, not a workaround.
+    private static let fallbackLens: AVCaptureDevice.DeviceType = .builtInWideAngleCamera
+
     /// Spelled to match the sidecar example in ARCHITECTURE.md section 4. Derived from the raw
     /// value it would be "BuiltInWideAngleCamera", and anything filtering on the documented
     /// spelling would silently match nothing.
     static let lensName = "builtInWideAngleCamera"
+
+    /// The zoom factor at which the 1x main lens is the one exposing.
+    ///
+    /// On a virtual device the scale is relative to its WIDEST constituent, so 1.0 selects the
+    /// ultra-wide and the main lens sits at the first switch-over point -- 2.00 on both team
+    /// phones. Pinning the literal number 1.0 here would pin the wrong glass: ~120 degrees of
+    /// barrel distortion, while every check in the app still reported 1x. A physical wide device
+    /// publishes no switch-over factors and is already the main lens at 1.0.
+    static func mainLensZoomFactor(for device: AVCaptureDevice) -> Double {
+        device.virtualDeviceSwitchOverVideoZoomFactors.first?.doubleValue ?? 1.0
+    }
 
     init() {
         refreshReadiness()
@@ -247,6 +276,9 @@ final class CaptureController: ObservableObject {
             return
         }
         let zoomFactor = Double(device.videoZoomFactor)
+        // Read from the device, not assumed: what "1x main lens" means as a number differs
+        // between a physical wide camera and the dual-wide virtual device.
+        let mainLensZoom = Self.mainLensZoomFactor(for: device)
         let lens = Self.lensName
         // Sampled here, on the main actor, at the moment of the press — not inside the delegate
         // callback, which runs after the exposure and would describe a different instant.
@@ -272,7 +304,8 @@ final class CaptureController: ObservableObject {
                 case .success(let captured):
                     self.accept(
                         captured,
-                        subject: subject, gravity: gravity, zoomFactor: zoomFactor, lens: lens,
+                        subject: subject, gravity: gravity, zoomFactor: zoomFactor,
+                        mainLensZoom: mainLensZoom, lens: lens,
                         capturedAt: capturedAt, sensorMax: sensorMax
                     )
                 case .failure(let message):
@@ -328,6 +361,7 @@ final class CaptureController: ObservableObject {
         subject: CaptureSubject,
         gravity: GravitySample?,
         zoomFactor: Double,
+        mainLensZoom: Double,
         lens: String,
         capturedAt: String,
         sensorMax: CMVideoDimensions?
@@ -355,6 +389,7 @@ final class CaptureController: ObservableObject {
             deviceModel: CaptureValidation.hardwareIdentifier(),
             lens: lens,
             zoomFactor: zoomFactor,
+            mainLensZoomFactor: mainLensZoom,
             capturedAt: capturedAt,
             sensorWidth: sensorMax.map { Int($0.width) },
             sensorHeight: sensorMax.map { Int($0.height) },
@@ -419,7 +454,8 @@ final class CaptureController: ObservableObject {
         to session: AVCaptureSession,
         output: AVCapturePhotoOutput
     ) -> Result<AVCaptureDevice, CaptureUnavailable> {
-        guard let device = AVCaptureDevice.default(lens, for: .video, position: .back) else {
+        guard let device = AVCaptureDevice.default(lens, for: .video, position: .back)
+            ?? AVCaptureDevice.default(fallbackLens, for: .video, position: .back) else {
             return .failure(.noCaptureDevice)
         }
         session.beginConfiguration()
@@ -468,14 +504,18 @@ final class CaptureController: ObservableObject {
             output.isDepthDataDeliveryEnabled = true
         }
 
-        // 1x, no digital zoom, no crop (D-014). Pinned rather than assumed: the system can restore
-        // a previous zoom, and a cropped frame silently invalidates the intrinsics beside it.
+        // The 1x main lens, no digital zoom, no crop (D-014). Pinned rather than assumed: the
+        // system can restore a previous zoom, and a cropped frame silently invalidates the
+        // intrinsics beside it. On the dual-wide this is 2.00 -- the factor at which the main lens
+        // exposes, not a 2x crop of anything.
+        let mainLens = Self.mainLensZoomFactor(for: device)
         do {
             try device.lockForConfiguration()
-            device.videoZoomFactor = 1.0
+            device.videoZoomFactor = CGFloat(mainLens)
             device.unlockForConfiguration()
         } catch {
-            return .failure(.configurationFailed("zoom could not be pinned to 1x: \(error.localizedDescription)"))
+            return .failure(.configurationFailed(
+                "zoom could not be pinned to the main lens: \(error.localizedDescription)"))
         }
 
         return .success(device)
