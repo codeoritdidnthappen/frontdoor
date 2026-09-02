@@ -72,9 +72,17 @@ def _error(message, detail, field=None, status=400):
     return body, status
 
 # Fixed placeholder values. The repdigit rises are deliberately synthetic so nobody reads stub
-# output as a measurement, and the four arms between them exercise every decision value, giving
-# TICK-063 all three render states to build against. Intervals are consistent with the decisions:
-# an interval straddling a line abstains at that line, and says so (D-009, TICK-222).
+# output as a measurement. TICK-062 serves A and A' live on the free-tier image; B and C need
+# the depth model and return unavailable. A and A' still exercise every decision value so
+# TICK-063 has all three render states. Intervals are consistent with the decisions: an
+# interval straddling a line abstains at that line, and says so (D-009, TICK-222).
+_UNAVAILABLE_DEPTH_ARM = {
+    "absent_reason": "unavailable",
+    "detail": (
+        "Arms B and C need the monocular depth model, which this free-tier image "
+        "does not carry (TICK-062)."
+    ),
+}
 STUB_ARMS = {
     "A": {
         "rise_in": 0.11,
@@ -85,41 +93,21 @@ STUB_ARMS = {
         },
     },
     "A_prime": {
-        "rise_in": 0.22,
-        "interval_in": {"low": 0.17, "high": 0.27},
-        "decisions": {
-            "half_inch": {"verdict": "pass"},
-            "quarter_inch": {
-                "verdict": "abstain",
-                "explanation": (
-                    "The 0.17-0.27 in interval straddles the 1/4 in line, so this capture "
-                    "cannot be classified against it either way."
-                ),
-            },
-        },
-    },
-    "B": {
-        "rise_in": 0.44,
-        "interval_in": {"low": 0.31, "high": 0.57},
+        "rise_in": 0.55,
+        "interval_in": {"low": 0.40, "high": 0.70},
         "decisions": {
             "half_inch": {
                 "verdict": "abstain",
                 "explanation": (
-                    "The 0.31-0.57 in interval straddles the 1/2 in line, so this capture "
+                    "The 0.40-0.70 in interval straddles the 1/2 in line, so this capture "
                     "cannot be classified against it either way."
                 ),
             },
             "quarter_inch": {"verdict": "fail"},
         },
     },
-    "C": {
-        "rise_in": 0.77,
-        "interval_in": {"low": 0.60, "high": 0.94},
-        "decisions": {
-            "half_inch": {"verdict": "fail"},
-            "quarter_inch": {"verdict": "fail"},
-        },
-    },
+    "B": dict(_UNAVAILABLE_DEPTH_ARM),
+    "C": dict(_UNAVAILABLE_DEPTH_ARM),
 }
 
 
