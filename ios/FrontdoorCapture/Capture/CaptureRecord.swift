@@ -25,6 +25,12 @@ struct CaptureRecord: Equatable {
     /// Metadata for the quarantined depth map, or nil when the device or the frame produced none.
     /// Never nil-checked to decide anything about the measurement (D-020).
     var depth: DepthRecord?
+    /// The entrance this capture is of, and the caliper reading that is true of it. Not optional:
+    /// a capture with no ground truth cannot be saved (TICK-024), and making that unrepresentable
+    /// is stronger than checking for it.
+    var entrance: Entrance
+    /// The stratification variables this frame was taken under.
+    var conditions: ConditionTags
 }
 
 /// Intrinsics as delivered for one frame, already expressed in the pixel grid of the still that
@@ -165,6 +171,8 @@ enum CaptureValidation {
         capturedAt: String,
         sensorWidth: Int?,
         sensorHeight: Int?,
+        entrance: Entrance,
+        conditions: ConditionTags,
         depth: DepthRecord? = nil
     ) -> Result<CaptureRecord, CaptureRejected> {
         guard pixelWidth > 0, pixelHeight > 0 else { return .failure(.noImageData) }
@@ -204,7 +212,9 @@ enum CaptureValidation {
             lens: lens,
             zoomFactor: zoomFactor,
             capturedAt: capturedAt,
-            depth: depth
+            depth: depth,
+            entrance: entrance,
+            conditions: conditions
         ))
     }
 

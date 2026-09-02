@@ -222,8 +222,17 @@ final class CaptureController: ObservableObject {
     /// Takes one photo and, if the frame carries everything the method legally needs, publishes a
     /// `CaptureRecord`. A frame missing intrinsics or taken at the wrong zoom is refused rather
     /// than saved: an unusable still that looks saved is worse than a visible failure.
+    /// The entrance and conditions every capture is bound to. Set before the viewfinder opens; a
+    /// shutter press with either missing is refused rather than saved without ground truth
+    /// (TICK-024, D-018).
+    @Published var subject: CaptureSubject?
+
     func capturePhoto() {
         guard state == .running else { return }
+        guard let subject else {
+            lastCaptureError = CaptureUnavailable.noSubject.message
+            return
+        }
         // nil would mean the controller lost its device, which is not a zoom problem — reporting
         // it as "zoom was 0.00x" would send the operator after the wrong thing.
         guard let device else {
@@ -255,7 +264,8 @@ final class CaptureController: ObservableObject {
                 switch result {
                 case .success(let captured):
                     self.accept(
-                        captured, gravity: gravity, zoomFactor: zoomFactor, lens: lens,
+                        captured,
+                        subject: subject, gravity: gravity, zoomFactor: zoomFactor, lens: lens,
                         capturedAt: capturedAt, sensorMax: sensorMax
                     )
                 case .failure(let message):
@@ -308,6 +318,7 @@ final class CaptureController: ObservableObject {
     /// Applies the rules that decide whether a frame is usable, then publishes or refuses.
     private func accept(
         _ captured: CapturedPhoto,
+        subject: CaptureSubject,
         gravity: GravitySample?,
         zoomFactor: Double,
         lens: String,
@@ -340,6 +351,8 @@ final class CaptureController: ObservableObject {
             capturedAt: capturedAt,
             sensorWidth: sensorMax.map { Int($0.width) },
             sensorHeight: sensorMax.map { Int($0.height) },
+            entrance: subject.entrance,
+            conditions: subject.conditions,
             // Absence is recorded, never punished: depth is a comparison, so a frame without it
             // must still cost nothing (D-020, TICK-023).
             depth: DepthCapture.record(from: captured.depthData)

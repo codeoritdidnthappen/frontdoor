@@ -31,7 +31,8 @@ final class CaptureValidationTests: XCTestCase {
             deviceModel: "iPhone17,3", lens: CaptureController.lensName, zoomFactor: zoom,
             capturedAt: capturedAt,
             // Default to the frame's own size, so cases not about resolution stay unaffected.
-            sensorWidth: sensorWidth ?? width, sensorHeight: sensorHeight ?? height
+            sensorWidth: sensorWidth ?? width, sensorHeight: sensorHeight ?? height,
+            entrance: testEntrance, conditions: testConditions
         )
     }
 
