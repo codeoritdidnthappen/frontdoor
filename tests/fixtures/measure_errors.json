@@ -1,0 +1,45 @@
+{
+  "missing image": {
+    "body": {
+      "detail": "POST /measure expects multipart/form-data with a file part named 'image'.",
+      "error": "missing image"
+    },
+    "status": 400
+  },
+  "missing sidecar": {
+    "body": {
+      "detail": "POST /measure expects multipart/form-data with a form field named 'sidecar' holding the capture sidecar JSON.",
+      "error": "missing sidecar"
+    },
+    "status": 400
+  },
+  "no such endpoint": {
+    "body": {
+      "detail": "The requested URL was not found on the server. If you entered the URL manually please check your spelling and try again.",
+      "error": "no such endpoint"
+    },
+    "status": 404
+  },
+  "sidecar failed validation": {
+    "body": {
+      "detail": "'entrance_id' is a required property",
+      "error": "sidecar failed validation",
+      "field": "$"
+    },
+    "status": 422
+  },
+  "sidecar is not valid JSON": {
+    "body": {
+      "detail": "Expecting value: line 1 column 1 (char 0)",
+      "error": "sidecar is not valid JSON"
+    },
+    "status": 400
+  },
+  "wrong method for this endpoint": {
+    "body": {
+      "detail": "The method is not allowed for the requested URL.",
+      "error": "wrong method for this endpoint"
+    },
+    "status": 405
+  }
+}

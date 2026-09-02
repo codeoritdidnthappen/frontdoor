@@ -152,6 +152,74 @@ final class ROIValidationTests: XCTestCase {
         }
     }
 
+    // MARK: tap precision (TICK-135)
+
+    /// AC1 asks for roughly 1:1 image pixels to screen pixels at the moment of placement. A
+    /// 4032-wide still fitted to ~400 points is ten image pixels per point, so an unmagnified tap
+    /// places a point the operator cannot see -- and that error lands in a rise judged against a
+    /// quarter-inch bar.
+    func testTheLoupeReachesOneToOneOnBothTeamPhones() {
+        let fitted = CGRect(x: 0, y: 0, width: 400, height: 300)
+        let zoom = ROIValidation.loupeZoom(
+            pixelWidth: w, displayed: fitted, displayScale: 3)
+        let screenPixelsPerImagePixel = fitted.width * zoom * 3 / CGFloat(w)
+        XCTAssertGreaterThanOrEqual(screenPixelsPerImagePixel, 1.0)
+    }
+
+    /// The old fixed 4x cleared 1:1 on these phones by luck. On a narrower display of the same
+    /// still it would not, and nothing would have said so.
+    func testTheLoupeGrowsWhenTheStillIsShownSmaller() {
+        let wide = ROIValidation.loupeZoom(
+            pixelWidth: w, displayed: CGRect(x: 0, y: 0, width: 400, height: 300), displayScale: 3)
+        let narrow = ROIValidation.loupeZoom(
+            pixelWidth: w, displayed: CGRect(x: 0, y: 0, width: 200, height: 150), displayScale: 3)
+        XCTAssertGreaterThan(narrow, wide)
+    }
+
+    /// It magnifies or leaves alone; it never shrinks what the operator is aiming at.
+    func testTheLoupeNeverDeMagnifies() {
+        XCTAssertGreaterThanOrEqual(
+            ROIValidation.loupeZoom(
+                pixelWidth: 100, displayed: CGRect(x: 0, y: 0, width: 400, height: 300),
+                displayScale: 3),
+            1.0)
+    }
+
+    /// A quarter-turned still is shown across the view's height, so that is the extent the ratio
+    /// has to be computed against.
+    func testTheLoupeMeasuresAcrossTheAxisTheWidthIsShownOn() {
+        let portrait = CGRect(x: 0, y: 0, width: 300, height: 400)
+        XCTAssertEqual(
+            ROIValidation.loupeZoom(
+                pixelWidth: w, displayed: portrait, orientation: .right, displayScale: 3),
+            ROIValidation.loupeZoom(
+                pixelWidth: w, displayed: CGRect(x: 0, y: 0, width: 400, height: 300),
+                displayScale: 3))
+    }
+
+    /// AC3: precision must not depend on landing the tap first time.
+    func testNudgeMovesAPointByWholeImagePixels() {
+        let point = PixelPoint(x: 2000, y: 1500)
+        XCTAssertEqual(
+            ROIValidation.nudge(point, dx: -1, dy: 0, pixelWidth: w, pixelHeight: h),
+            PixelPoint(x: 1999, y: 1500))
+        XCTAssertEqual(
+            ROIValidation.nudge(point, dx: 0, dy: 1, pixelWidth: w, pixelHeight: h),
+            PixelPoint(x: 2000, y: 1501))
+    }
+
+    /// Nudging off the frame would record a coordinate outside the image the intrinsics describe.
+    func testNudgeStaysInsideTheFrame() {
+        XCTAssertEqual(
+            ROIValidation.nudge(PixelPoint(x: 0, y: 0), dx: -1, dy: -1,
+                                pixelWidth: w, pixelHeight: h),
+            PixelPoint(x: 0, y: 0))
+        XCTAssertEqual(
+            ROIValidation.nudge(PixelPoint(x: w - 1, y: h - 1), dx: 1, dy: 1,
+                                pixelWidth: w, pixelHeight: h),
+            PixelPoint(x: w - 1, y: h - 1))
+    }
+
     // MARK: assembling the six
 
     func testAllSixInOrderProduceTheRecord() throws {
@@ -194,5 +262,147 @@ final class ROIValidationTests: XCTestCase {
         XCTAssertEqual(ROITarget.allCases.map(\.shortLabel),
                        ["Top", "Bottom", "TL", "TR", "BR", "BL"])
         XCTAssertEqual(CardCorner.allCases.count, 4)
+    }
+}
+
+// MARK: - QA #197: the loupe magnified the wrong region, and nudge ignored orientation
+
+extension ROIValidationTests {
+
+    /// The point the operator is placing must be the point under the crosshair.
+    ///
+    /// It was not. `.frame(width:height:)` centres its content, and the offset was written for a
+    /// top-left origin, so the loupe showed a fixed region near the middle of the picture wherever
+    /// the finger went (QA B01). Asserted as a round trip so the test does not simply restate the
+    /// arithmetic it is checking.
+    func testLoupeShowsThePointBeingPlaced() {
+        let displayed = CGRect(x: 12, y: 80, width: 366, height: 488)
+        for zoom in [1.0, 1.19, 4.0] as [CGFloat] {
+            for p in [CGPoint(x: 12, y: 80), CGPoint(x: 195, y: 324),
+                      CGPoint(x: 378, y: 568), CGPoint(x: 100, y: 500)] {
+                let offset = ROIValidation.loupeOffset(
+                    at: p, displayed: displayed, zoom: zoom, windowSize: 120)
+                let centre = ROIValidation.loupeCentre(
+                    offset: offset, displayed: displayed, zoom: zoom, windowSize: 120)
+                XCTAssertEqual(centre.x, p.x, accuracy: 0.001, "zoom \(zoom) at \(p)")
+                XCTAssertEqual(centre.y, p.y, accuracy: 0.001, "zoom \(zoom) at \(p)")
+            }
+        }
+    }
+
+    /// A touch outside the image still magnifies inside it, rather than empty space.
+    func testLoupeClampsToTheDisplayedImage() {
+        let displayed = CGRect(x: 12, y: 80, width: 366, height: 488)
+        let offset = ROIValidation.loupeOffset(
+            at: CGPoint(x: -500, y: 9999), displayed: displayed, zoom: 2, windowSize: 120)
+        let centre = ROIValidation.loupeCentre(
+            offset: offset, displayed: displayed, zoom: 2, windowSize: 120)
+        XCTAssertEqual(centre.x, displayed.minX, accuracy: 0.001)
+        XCTAssertEqual(centre.y, displayed.maxY, accuracy: 0.001)
+    }
+
+    /// "Up" must move the marker up the SCREEN, in every orientation.
+    ///
+    /// The arrows are labelled in screen space and the record is in sensor space; on a
+    /// portrait-held phone those are a quarter turn apart. Applying the screen delta straight to
+    /// sensor coordinates moved the marker sideways on `.right`, which is the portrait capture
+    /// orientation -- so 12 of 16 combinations were wrong and only `.up` was right, which a
+    /// portrait-only app never produces (QA B02).
+    func testNudgeMovesTheMarkerTheWayTheArrowPoints() {
+        let w = 4032, h = 3024
+        let start = PixelPoint(x: 2000, y: 1500)
+        let displayed = CGRect(x: 0, y: 0, width: 300, height: 400)
+
+        for orientation in [UIImage.Orientation.up, .right, .left, .down] {
+            for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
+                let moved = ROIValidation.nudge(
+                    start, dx: dx, dy: dy, orientation: orientation,
+                    pixelWidth: w, pixelHeight: h)
+                // Round-trip through the same mapping taps use: convert both points back to
+                // screen space and check the SCREEN delta matches the arrow.
+                let before = Self.screenPoint(start, displayed: displayed, orientation: orientation,
+                                              pixelWidth: w, pixelHeight: h)
+                let after = Self.screenPoint(moved, displayed: displayed, orientation: orientation,
+                                             pixelWidth: w, pixelHeight: h)
+                let sdx = after.x - before.x, sdy = after.y - before.y
+                XCTAssertEqual(sdx.sign == .minus, dx < 0 && sdx != 0,
+                               "\(orientation) dx=\(dx) moved screen x by \(sdx)")
+                if dx != 0 { XCTAssertTrue(abs(sdx) > 0 && abs(sdy) < 0.001,
+                                           "\(orientation) dx=\(dx) also moved y by \(sdy)") }
+                if dy != 0 { XCTAssertTrue(abs(sdy) > 0 && abs(sdx) < 0.001,
+                                           "\(orientation) dy=\(dy) also moved x by \(sdx)") }
+                if dy < 0 { XCTAssertLessThan(sdy, 0, "\(orientation): up must move up") }
+                if dy > 0 { XCTAssertGreaterThan(sdy, 0, "\(orientation): down must move down") }
+                if dx < 0 { XCTAssertLessThan(sdx, 0, "\(orientation): left must move left") }
+                if dx > 0 { XCTAssertGreaterThan(sdx, 0, "\(orientation): right must move right") }
+            }
+        }
+    }
+
+    /// Sensor pixel -> screen point, the inverse of `pixel(of:)`, for the assertion above.
+    private static func screenPoint(
+        _ p: PixelPoint, displayed: CGRect, orientation: UIImage.Orientation,
+        pixelWidth: Int, pixelHeight: Int
+    ) -> CGPoint {
+        let fx = CGFloat(p.x) / CGFloat(pixelWidth)
+        let fy = CGFloat(p.y) / CGFloat(pixelHeight)
+        let u: CGFloat, v: CGFloat
+        switch orientation {
+        case .right, .rightMirrored: u = 1 - fy; v = fx
+        case .left, .leftMirrored:   u = fy;     v = 1 - fx
+        case .down, .downMirrored:   u = 1 - fx; v = 1 - fy
+        default:                     u = fx;     v = fy
+        }
+        return CGPoint(x: displayed.minX + u * displayed.width,
+                       y: displayed.minY + v * displayed.height)
+    }
+}
+
+extension ROIValidationTests {
+
+    /// `screenPoint(of:)` must invert `pixel(of:)` exactly, or the loupe follows the wrong mark.
+    func testScreenPointInvertsPixelOf() {
+        let displayed = CGRect(x: 12, y: 80, width: 366, height: 488)
+        let w = 4032, h = 3024
+        for orientation in [UIImage.Orientation.up, .right, .left, .down] {
+            for p in [PixelPoint(x: 0, y: 0), PixelPoint(x: 4031, y: 3023),
+                      PixelPoint(x: 2016, y: 1512), PixelPoint(x: 100, y: 2900)] {
+                guard let screen = ROIValidation.screenPoint(
+                    of: p, displayed: displayed, orientation: orientation,
+                    pixelWidth: w, pixelHeight: h) else { return XCTFail("nil for \(p)") }
+                guard let back = ROIValidation.pixel(
+                    of: screen, displayed: displayed, orientation: orientation,
+                    pixelWidth: w, pixelHeight: h) else { return XCTFail("nil back for \(p)") }
+                XCTAssertEqual(back.x, p.x, accuracy: 1, "\(orientation) \(p)")
+                XCTAssertEqual(back.y, p.y, accuracy: 1, "\(orientation) \(p)")
+            }
+        }
+    }
+
+    /// A huge delta must clamp, not trap. `Int` addition overflow is a crash in Swift (QA B08).
+    func testNudgeSurvivesAnExtremeDelta() {
+        let p = PixelPoint(x: 2000, y: 1500)
+        let hi = ROIValidation.nudge(p, dx: Int.max, dy: Int.max, pixelWidth: 4032, pixelHeight: 3024)
+        XCTAssertEqual(hi.x, 4031)
+        XCTAssertEqual(hi.y, 3023)
+        let lo = ROIValidation.nudge(p, dx: Int.min, dy: Int.min, pixelWidth: 4032, pixelHeight: 3024)
+        XCTAssertEqual(lo.x, 0)
+        XCTAssertEqual(lo.y, 0)
+    }
+
+    /// The 12x cap must not bind on any device the project actually targets (QA B09).
+    ///
+    /// The cap exists so a pathological ratio cannot zoom into one flat pixel. If it ever DID bind,
+    /// the loupe would quietly stop being 1:1 and AC1 would fail silently -- so the point is to know
+    /// it does not, on the phones that will shoot the dataset.
+    func testTheLoupeCapDoesNotBindOnTargetDevices() {
+        // iPhone 16 and 15 Pro Max: 4032-wide stills, ~393pt and ~430pt portrait widths, @3x.
+        for (ptWidth, scale) in [(393.0, 3.0), (430.0, 3.0), (375.0, 2.0)] as [(CGFloat, CGFloat)] {
+            let rect = CGRect(x: 0, y: 0, width: ptWidth, height: ptWidth * 4 / 3)
+            let z = ROIValidation.loupeZoom(
+                pixelWidth: 4032, displayed: rect, orientation: .right, displayScale: scale)
+            XCTAssertLessThan(z, 12, "cap bound at \(ptWidth)pt @\(scale)x — loupe is no longer 1:1")
+            XCTAssertGreaterThanOrEqual(z, 1, "loupe must never de-magnify")
+        }
     }
 }

@@ -28,7 +28,17 @@ struct Entrance: Equatable {
 /// The stratification variables the error budget is reported against (PRD section 6). Fixed
 /// vocabularies rather than free text, so stratification does not have to clean up strings.
 struct ConditionTags: Equatable {
-    /// Metres from the lens to the threshold. Capped at 3 m by R-3.
+    /// Metres from the lens to the threshold.
+    ///
+    /// **2.5 m** is the cap, revised from 3 m by TICK-233 (#136) after the Arm A error budget
+    /// (`docs/rise-error-vs-angle.md`) found tap precision, not obliquity, to be the binding term.
+    /// At 3 m the per-tap budget is 4.12 px against TICK-232's 5 px target; at 2.5 m it is 4.95 px.
+    ///
+    /// NOT ENFORCED HERE, and deliberately not added blind: the sidecar schema puts no upper bound
+    /// on `distance_m`, and the 2026-09-01 pivot's 5-6-view protocol asks for a "far, ~3-4 m" shot
+    /// to show the approach path -- a screening view, not a rise measurement. Whether both kinds of
+    /// capture share this record is open (A-3, #67), and a hard cap here would silently reject the
+    /// screening shots. Recorded so the gap is visible rather than discovered in the field.
     let distanceM: Double
     let lighting: Lighting
     let surface: Surface

@@ -131,6 +131,69 @@ enum ROIValidation {
         return PixelPoint(x: x, y: y)
     }
 
+    /// Sensor pixel back to the screen point showing it -- the inverse of `pixel(of:)`.
+    ///
+    /// Needed so the loupe can follow a point that is being nudged rather than touched.
+    static func screenPoint(
+        of point: PixelPoint,
+        displayed: CGRect,
+        orientation: UIImage.Orientation = .up,
+        pixelWidth: Int,
+        pixelHeight: Int
+    ) -> CGPoint? {
+        guard pixelWidth > 0, pixelHeight > 0 else { return nil }
+        let fx = CGFloat(point.x) / CGFloat(pixelWidth)
+        let fy = CGFloat(point.y) / CGFloat(pixelHeight)
+        let u: CGFloat
+        let v: CGFloat
+        switch orientation {
+        case .right, .rightMirrored: u = 1 - fy; v = fx
+        case .left, .leftMirrored:   u = fy;     v = 1 - fx
+        case .down, .downMirrored:   u = 1 - fx; v = 1 - fy
+        default:                     u = fx;     v = fy
+        }
+        return CGPoint(x: displayed.minX + u * displayed.width,
+                       y: displayed.minY + v * displayed.height)
+    }
+
+    /// Where to offset the magnified still so `at` lands under the loupe's crosshair.
+    ///
+    /// The caller must place this in a frame aligned `.topLeading`. SwiftUI's
+    /// `.frame(width:height:)` CENTRES by default, and with centring this offset put a fixed
+    /// region near the middle of the picture under the crosshair no matter where the finger was --
+    /// at the derived zoom and at the old 4x alike (QA B01).
+    ///
+    /// Pure geometry, extracted from the view so it can be tested. `ROIReviewView` had no tests at
+    /// all, and a loupe that magnifies the wrong place still looks like a working loupe.
+    static func loupeOffset(
+        at point: CGPoint,
+        displayed: CGRect,
+        zoom: CGFloat,
+        windowSize: CGFloat
+    ) -> CGSize {
+        let clamped = CGPoint(
+            x: min(max(point.x, displayed.minX), displayed.maxX),
+            y: min(max(point.y, displayed.minY), displayed.maxY))
+        return CGSize(
+            width: -(clamped.x - displayed.minX) * zoom + windowSize / 2,
+            height: -(clamped.y - displayed.minY) * zoom + windowSize / 2)
+    }
+
+    /// Which displayed point ends up under the crosshair, given that offset.
+    ///
+    /// The inverse of `loupeOffset`, so a test can assert the round trip rather than restate the
+    /// arithmetic it is checking.
+    static func loupeCentre(
+        offset: CGSize,
+        displayed: CGRect,
+        zoom: CGFloat,
+        windowSize: CGFloat
+    ) -> CGPoint {
+        CGPoint(
+            x: (windowSize / 2 - offset.width) / zoom + displayed.minX,
+            y: (windowSize / 2 - offset.height) / zoom + displayed.minY)
+    }
+
     /// Whether an orientation puts the image on screen turned a quarter turn from its pixels.
     ///
     /// A still is landscape sensor pixels carrying an EXIF orientation, and on a portrait-held
@@ -167,6 +230,80 @@ enum ROIValidation {
             width: size.width,
             height: size.height
         )
+    }
+
+    /// Magnification that puts one image pixel on at least one screen pixel (TICK-135 AC1).
+    ///
+    /// Derived rather than chosen. A 4032-wide still fitted to ~400 points is about ten image
+    /// pixels per point, so a bare tap places a point the operator cannot see -- and the tap error
+    /// goes straight into the rise, which is being measured against a quarter-inch bar. The old
+    /// fixed 4x happened to clear 1:1 on these phones and would not on a wider screen or a larger
+    /// sensor; this cannot drift, because it is computed from both.
+    ///
+    /// Floored at 1 so the loupe never shrinks the image, and capped so a pathological ratio
+    /// cannot magnify to the point of showing nothing but one flat pixel.
+    static func loupeZoom(
+        pixelWidth: Int,
+        displayed: CGRect,
+        orientation: UIImage.Orientation = .up,
+        displayScale: CGFloat
+    ) -> CGFloat {
+        // Across the axis the sensor's width is actually shown on, which the quarter turn swaps.
+        let shownAcross = isQuarterTurned(orientation) ? displayed.height : displayed.width
+        guard pixelWidth > 0, shownAcross > 0, displayScale > 0 else { return 1 }
+        let needed = CGFloat(pixelWidth) / (shownAcross * displayScale)
+        return min(max(needed, 1), 12)
+    }
+
+    /// Move a placed point by whole image pixels, staying inside the frame.
+    ///
+    /// AC3: precision must not depend on landing the tap first time. A finger cannot reliably
+    /// resolve one image pixel even under the loupe, so the last placement is adjustable before it
+    /// is committed.
+    /// Nudge a placed point by one step in a direction the OPERATOR sees on screen.
+    ///
+    /// `dx`/`dy` arrive in SCREEN space, because that is where the arrows are: "up" means the
+    /// marker should move up the display. Everything stored is SENSOR space, and on a
+    /// portrait-held phone those are a quarter turn apart -- so applying a screen delta straight
+    /// to sensor coordinates sent the marker sideways. `pixel(of:)` already backs taps out of the
+    /// display turn; this is the same transform for a delta rather than a position, and it must
+    /// stay the same transform or a tap and a nudge would disagree about which way is up.
+    ///
+    /// Deltas rotate but do not translate, so `pixel(of:)`'s `1 - u` terms become sign flips.
+    static func nudge(
+        _ point: PixelPoint,
+        dx: Int,
+        dy: Int,
+        orientation: UIImage.Orientation = .up,
+        pixelWidth: Int,
+        pixelHeight: Int
+    ) -> PixelPoint {
+        let sx: Int
+        let sy: Int
+        switch orientation {
+        case .right, .rightMirrored:
+            sx = dy
+            sy = -dx
+        case .left, .leftMirrored:
+            sx = -dy
+            sy = dx
+        case .down, .downMirrored:
+            sx = -dx
+            sy = -dy
+        default:
+            sx = dx
+            sy = dy
+        }
+        // Clamp with overflow-safe addition: `point.x + sx` on Int TRAPS in Swift, so a large
+        // delta would crash the process before the clamp could run (QA B08). The buttons only
+        // ever send +/-1, but this is a public entry point and a trap is a poor contract.
+        let nx = point.x.addingReportingOverflow(sx)
+        let ny = point.y.addingReportingOverflow(sy)
+        let px = nx.overflow ? (sx > 0 ? Int.max : Int.min) : nx.partialValue
+        let py = ny.overflow ? (sy > 0 ? Int.max : Int.min) : ny.partialValue
+        return PixelPoint(
+            x: min(max(px, 0), max(pixelWidth - 1, 0)),
+            y: min(max(py, 0), max(pixelHeight - 1, 0)))
     }
 
     /// Assemble the six collected points, in ROITarget order, into a record.
