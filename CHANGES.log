@@ -825,3 +825,52 @@ protocol the field is actually running, without deciding that the other one is d
 original subject. That plan was written for card placements and the A-prime subset, both
 gone with the pivot; the view set now lives in the protocol and is followed by hand.
 Re-prescribing it in the instrument is worth doing and is not done here.
+
+## A-3  AMENDMENT TO THE PRE-REGISTRATION: one product, on iPhone Pro with LiDAR
+
+Taken 2026-09-02 by David. This is the amendment James asked for on #67 on 2026-09-01 and
+again on 2026-09-02. It amends PRD section 2, so it MUST BE REPORTED AS AN AMENDMENT AT
+DEMO DAY.
+
+**The decision. There is one product**, and its target device is an **iPhone Pro with
+LiDAR**. Everything that exists to serve a different device or a different route to scale
+is a LATER VERSION and is deprioritised: it is not dead, and it is not competing for this
+week.
+
+**What that resolves.** Since the 2026-09-01 pivot the repository has carried two lines of
+work -- the plain-photo screening stack (engine, /screen, ground-truth labels, Street View
+pre-catalogue, map) and the metrology arms with their caliper truth and reference card.
+Both were being invested in, and both cannot be the Demo Day story. The screening product
+is the product. The metrology arms are the later version.
+
+**Consequence for the pre-registered hypothesis, stated plainly.** PRD section 2 pre-
+registers MAE <= 0.25" on threshold rise, against caliper ground truth, on the sealed test
+split, judged on Arm A. That study is deprioritised by this entry, so **the primary
+hypothesis is not tested in this window.** It is not relaxed, not re-scoped and not
+re-judged against a different arm -- it is untested, and reporting it as untested is the
+only honest option available. D-007 exists so that this is said out loud rather than
+replaced by a number from too few entrances.
+
+**What survives from the metrology work, and is reported as findings rather than
+discarded:** the rise-error-versus-angle budget (#35, #138, #159) was derived BEFORE any
+data existed, and stands as a predicted error budget -- deliverable #3 in its predictive
+half. The seal machinery (D-017, D-028) is exercised by the screening study, which carries
+its own sealed split from the same committed seed.
+
+**Deliverables this changes.** #1 becomes photographs with operator presence labels rather
+than caliper truth. #4 (arm ablation) and #5 (monocular versus LiDAR) are not delivered in
+this window; both belong to the later version. #2, #6 and #7 stand.
+
+**LiDAR is CAPTURED, not CONSUMED, and this entry does not change that.** Targeting Pro
+hardware with a depth sensor does not make depth an input to the method: D-015's boundary
+holds, and D-020's quarantine holds with it. LiDAR is recorded per D-032 for the later
+comparison, and the screening engine does not read it.
+
+**The device pool is TWO, not one.** TEAM.md section 2 records "LiDAR-capable devices: 1".
+That is wrong: every iPhone 15 Pro has a LiDAR scanner, so Emily's iPhone 15 Pro Max
+qualifies as well -- and it is the device TICK-020 actually ran `builtInLiDARDepthCamera`
+on. So the target device for this product is held by two people, one of whom has a Mac and
+a probed phone. Corrected in TEAM.md by this entry.
+
+**Not decided here:** whether A-2's Arm-A-only rule originates in A-2 or D-022 (#132, #183)
+is a separate attribution question and is untouched.

@@ -46,6 +46,19 @@ Capture angle became continuously measurable when capture moved into an instrume
 Committed before first capture and before any image was processed. Reported as an amendment at
 Demo Day.
 
+**Amendment A-3 (2026-09-02) — one product, on iPhone Pro with LiDAR.** There is one product,
+and its target device is an **iPhone Pro with LiDAR**. Everything serving a different device or a
+different route to scale is a later version and is deprioritised. The plain-photo screening study
+is the product; the metrology arms are not.
+
+**The consequence for this section, stated plainly: the primary hypothesis above is not tested in
+this window.** It is not relaxed, not re-scoped and not re-judged against a different arm — it is
+untested, and is reported as untested. Reaching for a number from too few sealed entrances is the
+failure D-007 exists to prevent. What survives as a finding is the rise-error-versus-angle budget,
+derived before any data existed. LiDAR remains **captured, not consumed**: D-015's method boundary
+and D-020's quarantine are unchanged by targeting hardware that has a depth sensor. Reported as an
+amendment at Demo Day. Full entry in `CHANGES.log`.
+
 **Amendment A-2 (date not established) — the success criterion names its arm.** The criterion
 above reads "MAE ≤ 0.25" on the sealed test split" without saying which of the arms it judges.
 A-2 fixes it to **Arm A only**; A′, B and C are reported without a pass/fail bar. Reason, as

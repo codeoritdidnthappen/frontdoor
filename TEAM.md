@@ -111,9 +111,13 @@ schedules; see [docs/signing-calendar.md](docs/signing-calendar.md).
 - **Verified capture devices: 2**, both Emily's (iPhone 16, iPhone 15 Pro Max) — against A-3's
   assumed three. James's iPhone 17 Pro now runs a build but has never had the probe run on it, so
   it is not counted as verified until it has a measured row.
-- **LiDAR-capable devices: 1** (James's, unprobed). LiDAR is not a route to intrinsics on any
-  device, so it does not gate capture the way A-1 assumed — but **D-032 (2026-09-02) puts depth
-  capture on this phone**, so the count now gates *depth*: one unprobed device carries all of it.
+- **LiDAR-capable devices: 2**, corrected by A-3 (2026-09-02). This line said 1. Every iPhone 15
+  Pro carries a LiDAR scanner, so Emily's **iPhone 15 Pro Max** qualifies alongside James's
+  iPhone 17 Pro — and the Pro Max is the device TICK-020 actually ran `builtInLiDARDepthCamera`
+  on, making it the *probed* one of the two. LiDAR is not a route to intrinsics on any device, so
+  it does not gate capture the way A-1 assumed. **A-3 makes an iPhone Pro with LiDAR the product's
+  target device**, so this count is now the capture pool for the product itself: two devices, one
+  of them probed and held by a Mac owner.
 
 All five devices are now recorded. The two verified capture phones are an **iPhone 16 and an
 iPhone 15 Pro Max** — two generations and two camera tiers, not the single generation an earlier
