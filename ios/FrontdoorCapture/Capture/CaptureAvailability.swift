@@ -6,6 +6,7 @@ enum CaptureUnavailable: Error, Equatable {
     case cameraDenied
     case cameraRestricted
     case noCaptureDevice
+    case noSubject
     case motionUnavailable
     case calibrationUnavailable
     case configurationFailed(String)
@@ -25,6 +26,12 @@ enum CaptureUnavailable: Error, Equatable {
             return """
             No rear wide-angle camera was found. Captures must use the 1x main lens (D-014), so \
             this device cannot be used for the dataset.
+            """
+        case .noSubject:
+            return """
+            No entrance is set. Ground truth binds at the shutter press (D-018), so a capture with \
+            no entrance ID and caliper reading cannot be saved -- there would be nothing to \
+            measure it against. Set the entrance, then capture.
             """
         case .motionUnavailable:
             return """

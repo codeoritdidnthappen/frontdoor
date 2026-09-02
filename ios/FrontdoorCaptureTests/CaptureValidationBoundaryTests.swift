@@ -42,6 +42,7 @@ final class CaptureValidationBoundaryTests: XCTestCase {
             capturedAt: capturedAt,
             sensorWidth: sensorWidth ?? width,
             sensorHeight: sensorHeight ?? height,
+            entrance: testEntrance, conditions: testConditions,
             depth: depth
         )
     }

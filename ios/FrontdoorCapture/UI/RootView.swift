@@ -4,8 +4,10 @@ import SwiftUI
 /// actually pointing it at something, and leaving the viewfinder does not mean leaving the app.
 struct RootView: View {
     @StateObject private var controller = CaptureController()
+    @StateObject private var entrances = EntranceStore()
     @Environment(\.scenePhase) private var scenePhase
     @State private var isCapturing = false
+    @State private var settingUpEntrance = false
     @State private var showingDiagnostics = false
 
     var body: some View {
@@ -14,13 +16,27 @@ struct RootView: View {
                 CaptureView(controller: controller) { isCapturing = false }
             } else {
                 HomeView(controller: controller) {
-                    isCapturing = true
+                    // Truth first, viewfinder second. There is no route to the camera that
+                    // skips the entrance ID and the caliper reading (D-018, TICK-024).
+                    settingUpEntrance = true
                 } onDiagnostics: {
                     showingDiagnostics = true
                 }
             }
         }
         .animation(.default, value: isCapturing)
+        .sheet(isPresented: $settingUpEntrance) {
+            EntranceSetupView(
+                store: entrances,
+                initialConditions: controller.subject?.conditions
+            ) { subject in
+                controller.subject = subject
+                settingUpEntrance = false
+                isCapturing = true
+            } onCancel: {
+                settingUpEntrance = false
+            }
+        }
         .sheet(isPresented: $showingDiagnostics) {
             DiagnosticsView { showingDiagnostics = false }
         }
