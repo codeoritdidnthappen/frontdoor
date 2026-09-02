@@ -36,7 +36,10 @@ both — and that is not the whole answer.** See the second table.
 | Emily — iPhone 16 | `iPhone17,3` | 26.6.1 | **no** | **no** | 8064×6048 / 4032×3024 | no | none |
 | iPhone 15 Pro Max | `iPhone16,2` | 26.6.1 | **no** | **no** | 8064×6048 / 4032×3024 | no | none |
 
-James's iPhone 16 Pro is still unmeasured. Both phones tested so far agree, so the expectation is
+James's phone is still unmeasured. It is an **iPhone 17 Pro** (`iPhone18,1`), not the iPhone 16 Pro
+the team audit recorded, and a build was installed and launched on it on 2026-09-02 -- so the only
+thing standing between it and a row here is running the probe. Both phones tested so far agree, so
+the expectation is
 that it agrees too — but it is an expectation, not a row.
 
 ### The row that matters: `builtInDualWideCamera`

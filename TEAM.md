@@ -45,7 +45,7 @@ Measured 2026-09-02 with the in-app capability probe (TICK-020, #24); see
 | David | Samsung Galaxy S25 | **No** — Android | — | — | Cannot capture |
 | Emily | iPhone 16 (non-Pro) | Yes | **Yes**, verified | Relative (stereo) | **Full capture** |
 | Emily *(unconfirmed — see §5)* | iPhone 15 Pro Max | Yes | **Yes**, verified | Relative | **Full capture** |
-| James | iPhone 16 Pro | Yes | Expected, **unverified** | — | Untested; treated as spare |
+| James | iPhone 17 Pro (`iPhone18,1`) | **Yes**, build installed and launched 2026-09-02 | Probe not yet run | — | Signing proven; capability unmeasured |
 | Ruben | Google Pixel 9 | **No** — Android | — | — | Cannot capture |
 
 Three things the probe changed. **Intrinsics arrive on both tested phones, including the non-Pro**,
@@ -56,7 +56,15 @@ it is not a route to intrinsics on any device. And **the depth that does arrive 
 reading for the iPhone 16 specifically; the 15 Pro Max is recorded as relative without the
 disparity detail, so "stereo on both" would say more than was measured.
 
-James's iPhone 16 Pro has never had a build on it. Two verified capture devices are enough for the
+**The audit said James had an iPhone 16 Pro. The device is an iPhone 17 Pro** (`iPhone18,1`), read
+from `devicectl` when a build was installed on it on 2026-09-02. Which of the two is stale --
+an upgrade, or an error in the original audit -- is not something the evidence settles, so the
+model identifier above is what was measured rather than what was assumed. It matters because the
+probe rows are keyed by model, and a row filed against the wrong one proves nothing.
+
+A free-provisioning build installs and launches on it, so the signing chain is proven on three
+devices. The capability probe has NOT been run there, which is the remaining row in TICK-020 (#24)
+and the reason it is still open. Two verified capture devices are enough for
 dataset, so it is recorded as a spare rather than a blocker.
 
 ### Development machines
@@ -97,7 +105,7 @@ Free-provisioning builds still expire every seven days (R-7), which is what TICK
 schedules; see [docs/signing-calendar.md](docs/signing-calendar.md).
 
 - **Verified capture devices: 2**, both Emily's (iPhone 16, iPhone 15 Pro Max) — against A-3's
-  assumed three. James's iPhone 16 Pro is expected to work but has never had a build on it, so it
+  assumed three. James's iPhone 17 Pro now runs a build but has never had the probe run on it, so it
   is a spare, not a third.
 - **LiDAR-capable devices: 1** (James's, untested) — and LiDAR is no longer a route to intrinsics
   on any device, so this count no longer gates capture the way A-1 assumed.

@@ -20,14 +20,19 @@ out on stage.
 ## Schedule
 
 Both verified capture devices (iPhone 16, iPhone 15 Pro Max) and the build Mac are held by **Emily**,
-so every session below is one person at one desk. No co-location to arrange, which is what made
-this a scheduling risk in the original ticket.
+so sessions 1 and 2 are one person at one desk. No co-location to arrange, which is what made this
+a scheduling risk in the original ticket.
+
+James's phone is the exception, and the exception is now proven rather than assumed: a build was
+installed and launched on it on 2026-09-02. That is the AC1 criterion met on a third device, and it
+means a re-sign for his handset is a real session with two people in it, not a hypothetical.
 
 | # | Date | Mac owner | Devices | Purpose |
 |---|------|-----------|---------|---------|
 | 1 | 2026-09-02 ✅ | Emily | iPhone 16, iPhone 15 Pro Max | Done. Both launched and ran the capability probe. |
 | 2 | **2026-09-06** | Emily | iPhone 16, iPhone 15 Pro Max | **Required.** Covers Demo Day and the Showcase to Sep 13. |
-| 3 | 2026-09-08 *(optional)* | Emily | whichever device demos | Top-up only if session 2 slipped. Expires Sep 15. |
+| 3 | **before he next captures** | Emily | James's iPhone 17 Pro | **Requires both people present.** His build was signed 2026-09-02 and expires with the others. |
+| 4 | 2026-09-08 *(optional)* | Emily | whichever device demos | Top-up only if session 2 slipped. Expires Sep 15. |
 
 Session 2 is the one that cannot be missed. **D-025 fixes the deadline at 2026-09-06 and this
 document does not move it.**
@@ -40,8 +45,9 @@ to close, and it falls inside the capture window rather than after it. Sep 5 or 
 Widening a locked decision's mandatory date is a decision, not a scheduling detail. If Sep 8 is
 genuinely wanted, it needs an amendment in `CHANGES.log` with the two dead days stated.
 
-James's iPhone 16 Pro is a spare and is not in this schedule. If it is ever brought into capture it
-needs its own session, and that one *does* require physical co-location.
+James's handset is an **iPhone 17 Pro** (`iPhone18,1`), not the iPhone 16 Pro the team audit
+recorded. Session 3 covers it. Its capability probe has still not been run, so it is signed but
+unproven as a capture device -- see TICK-020 (#24).
 
 ## Start of every capture day
 
