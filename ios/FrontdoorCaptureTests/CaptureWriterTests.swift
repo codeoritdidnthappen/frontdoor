@@ -23,7 +23,8 @@ final class CaptureWriterTests: XCTestCase {
             PixelPoint(x: 900, y: 1500), PixelPoint(x: 1100, y: 1500),
             PixelPoint(x: 1100, y: 1620), PixelPoint(x: 900, y: 1620),
         ]),
-        table: Data? = Data(repeating: 0, count: 42 * MemoryLayout<Float>.size)
+        table: Data? = Data(repeating: 0, count: 42 * MemoryLayout<Float>.size),
+        depth: DepthRecord? = nil
     ) -> CaptureRecord {
         CaptureRecord(
             captureId: "3F2504E0-4F89-11D3-9A0C-0305E82C3301",
@@ -38,7 +39,7 @@ final class CaptureWriterTests: XCTestCase {
             captureDevice: "builtInDualWideCamera",
             zoomFactor: 2.0,
             capturedAt: "2026-09-02T14:22:31Z",
-            depth: nil,
+            depth: depth,
             entrance: Entrance(
                 id: "E-014", riseInches: 0.75, instrument: "digital caliper", split: .dev),
             conditions: ConditionTags(
@@ -133,12 +134,79 @@ final class CaptureWriterTests: XCTestCase {
     /// The golden sidecar the Python suite validates against the committed schema. Regenerated
     /// here so the two languages cannot drift: if Swift starts emitting a shape the schema
     /// rejects, tests/test_written_sidecar.py fails.
-    func testWriteGoldenSidecarForThePythonSuite() throws {
-        let written = try CaptureWriter.write(
-            record(), imageData: Data("jpeg".utf8), depthData: nil, into: directory).get()
-        let root = URL(fileURLWithPath: #filePath)
+    /// Compare, do not regenerate. A test that rewrites its own expectation cannot fail:
+    /// the fixture silently became whatever Swift last emitted, so the Python suite was
+    /// only ever shown output Swift already agreed with (QA B04). Set
+    /// FRONTDOOR_UPDATE_FIXTURES=1 to rewrite deliberately.
+    func testGoldenSidecarsMatchTheCommittedFixtures() throws {
+        let cases: [(String, DepthRecord?)] = [
+            ("written_sidecar.json", nil),
+            // The depth shape had NO coverage on either side: every case here passed
+            // depth: nil, so the fixture read "depth": null and Python never saw a depth
+            // capture. That is how the writer came to emit width/height into an object the
+            // schema declares additionalProperties: false (QA B01).
+            ("written_sidecar_with_depth.json",
+             DepthRecord(
+                width: 320, height: 240, sha256: String(repeating: "a", count: 64),
+                byteCount: 320 * 240 * 4, isAbsolutelyAccurate: true, isFiltered: false)),
+        ]
+        for (name, depth) in cases {
+            let written = try CaptureWriter.write(
+                record(depth: depth),
+                imageData: Data("jpeg".utf8),
+                depthData: depth == nil ? nil : Data("depth".utf8),
+                into: directory.appendingPathComponent(name)).get()
+            let golden = Self.fixtures.appendingPathComponent(name)
+            // Bootstrap a fixture that does not exist yet, and rewrite on request; otherwise
+            // COMPARE. test_written_sidecar.py asserts both files exist, so a fixture that
+            // never got committed fails CI rather than quietly regenerating itself here.
+            let missing = !FileManager.default.fileExists(atPath: golden.path)
+            if missing || ProcessInfo.processInfo.environment["FRONTDOOR_UPDATE_FIXTURES"] == "1" {
+                try written.sidecarBytes.write(to: golden, options: .atomic)
+                continue
+            }
+            let committed = try Data(contentsOf: golden)
+            XCTAssertEqual(
+                String(decoding: written.sidecarBytes, as: UTF8.self),
+                String(decoding: committed, as: UTF8.self),
+                "\(name) drifted. Re-run with FRONTDOOR_UPDATE_FIXTURES=1 if the change is intended.")
+        }
+    }
+
+    private static var fixtures: URL {
+        URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
-        let golden = root.appendingPathComponent("tests/fixtures/written_sidecar.json")
-        try written.sidecarBytes.write(to: golden, options: .atomic)
+            .appendingPathComponent("tests/fixtures")
+    }
+
+    /// The shape that had no test at all: a real depth capture (QA B01).
+    func testADepthCaptureWritesOnlyPathAndSha256() throws {
+        let written = try CaptureWriter.write(
+            record(depth: DepthRecord(
+                width: 320, height: 240, sha256: String(repeating: "a", count: 64),
+                byteCount: 320 * 240 * 4, isAbsolutelyAccurate: true, isFiltered: false)),
+            imageData: Data("jpeg".utf8), depthData: Data("depth".utf8), into: directory).get()
+        let json = try XCTUnwrap(
+            try JSONSerialization.jsonObject(with: written.sidecarBytes) as? [String: Any])
+        let depth = try XCTUnwrap(json["depth"] as? [String: Any])
+        XCTAssertEqual(
+            Set(depth.keys), ["path", "sha256"],
+            "the schema declares depth additionalProperties: false")
+    }
+
+    /// A card is a rectangle; three corners do not determine the homography (QA B03).
+    func testACaptureWithoutFourCardCornersWritesNothing() throws {
+        let short = ROITaps(
+            thresholdTop: PixelPoint(x: 1010, y: 1400),
+            thresholdBottom: PixelPoint(x: 1012, y: 1480),
+            cardCorners: [PixelPoint(x: 900, y: 1500), PixelPoint(x: 1100, y: 1500)])
+        let result = CaptureWriter.write(
+            record(roi: short), imageData: Data("jpeg".utf8), depthData: nil, into: directory)
+        guard case .failure(.incomplete) = result else {
+            return XCTFail("a two-corner ROI must write nothing, got \(result)")
+        }
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: directory.path),
+            "an incomplete capture must leave no image behind it (AC5)")
     }
 }

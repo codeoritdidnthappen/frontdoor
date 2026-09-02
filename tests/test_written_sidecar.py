@@ -18,7 +18,14 @@ from jsonschema import ValidationError
 
 from frontdoor.sidecar import validate_sidecar
 
-WRITTEN = Path(__file__).resolve().parent / "fixtures" / "written_sidecar.json"
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+WRITTEN = FIXTURES / "written_sidecar.json"
+#: Every shape the Swift writer can emit needs one, or the shape it never emits is the
+#: shape neither side checks. The depth object had NO fixture: every Swift test passed
+#: `depth: nil`, so this suite only ever saw `"depth": null`, and the writer emitted
+#: `width`/`height` into an object the schema declares additionalProperties: false
+#: without either language noticing (QA B01).
+GOLDEN = ("written_sidecar.json", "written_sidecar_with_depth.json")
 
 
 @pytest.fixture
@@ -71,3 +78,37 @@ def test_keys_are_sorted_so_the_bytes_are_reproducible(written):
     """`sidecar_sha256` is only meaningful if identical content gives identical bytes (AC6)."""
     raw = WRITTEN.read_text(encoding="utf-8")
     assert list(json.loads(raw).keys()) == sorted(written.keys())
+
+
+@pytest.mark.parametrize("name", GOLDEN)
+def test_every_golden_fixture_exists(name):
+    """The Swift test bootstraps a missing fixture rather than failing on it.
+
+    That is convenient when adding a case and dangerous if it is never committed, so
+    the existence check lives here, where CI runs without a simulator.
+    """
+    assert (FIXTURES / name).is_file(), (
+        f"{name} is missing. Run the Swift suite once to emit it, then commit it."
+    )
+
+
+@pytest.mark.parametrize("name", GOLDEN)
+def test_every_shape_the_writer_emits_satisfies_the_schema(name):
+    validate_sidecar(json.loads((FIXTURES / name).read_text(encoding="utf-8")))
+
+
+def test_a_depth_capture_carries_only_path_and_sha256():
+    """ARCHITECTURE section 4 defines depth as {path, sha256}; the schema forbids more.
+
+    The writer built its depth reference from the same type as the image reference, so
+    `width` and `height` rode along and every real depth capture wrote an invalid
+    sidecar. Caught by no test on either side, because no test had a depth capture.
+    """
+    doc = json.loads((FIXTURES / "written_sidecar_with_depth.json").read_text(encoding="utf-8"))
+    assert set(doc["depth"]) == {"path", "sha256"}
+
+
+def test_the_depth_fixture_really_has_depth():
+    """Otherwise this file could pass while testing the null case twice."""
+    doc = json.loads((FIXTURES / "written_sidecar_with_depth.json").read_text(encoding="utf-8"))
+    assert doc["depth"] is not None

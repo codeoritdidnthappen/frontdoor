@@ -60,15 +60,22 @@ enum CaptureWriter {
         guard let roi = record.roi else {
             return .failure(.incomplete("This capture has no ROI taps, so no arm can measure it."))
         }
+        // Exactly four, because the homography is built from a known rectangle: three corners
+        // do not determine it and five are not a rectangle. The schema says minItems 4 and
+        // maxItems 4, so anything else wrote an invalid sidecar and left the image behind
+        // it -- a partial record, which is what AC5 exists to prevent (QA B03).
+        guard roi.cardCorners.count == Sidecar.requiredCardCorners else {
+            return .failure(.incomplete(
+                "This capture has \(roi.cardCorners.count) card corners, not "
+                + "\(Sidecar.requiredCardCorners), so its scale cannot be recovered."))
+        }
         guard let table = record.intrinsics.lensDistortionLookupTable, table.count >= 8 else {
             return .failure(.incomplete(
                 "This capture carries no lens distortion table, so its taps cannot be undistorted."))
         }
-        let depth: Sidecar.FileRef? = {
+        let depth: Sidecar.DepthRef? = {
             guard let depthPath, let depthSHA256 else { return nil }
-            return Sidecar.FileRef(
-                path: depthPath, sha256: depthSHA256,
-                width: record.depth?.width, height: record.depth?.height)
+            return Sidecar.DepthRef(path: depthPath, sha256: depthSHA256)
         }()
 
         return .success(Sidecar(

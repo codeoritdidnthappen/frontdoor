@@ -15,6 +15,21 @@ struct Sidecar: Encodable, Equatable {
         var height: Int?
     }
 
+    /// A card is a rectangle, so the homography needs all four of its corners.
+    /// Mirrors `card_corners` minItems/maxItems in capture_sidecar.schema.json.
+    static let requiredCardCorners = 4
+
+    /// Depth is `{path, sha256}` and nothing else (ARCHITECTURE section 4).
+    ///
+    /// A separate type rather than a reused `FileRef`: the schema declares this object
+    /// `additionalProperties: false`, so a `width` that rides along on the shared type
+    /// makes every depth capture fail validation. Structure it so the extra fields
+    /// cannot be passed rather than trusting a caller to leave them nil (QA B01).
+    struct DepthRef: Encodable, Equatable {
+        var path: String
+        var sha256: String
+    }
+
     struct Intrinsics: Encodable, Equatable {
         var fx: Double
         var fy: Double
@@ -80,7 +95,7 @@ struct Sidecar: Encodable, Equatable {
     var image: FileRef
     /// Null when the device or the frame produced no depth. Absence must never cost an entrance
     /// (D-020, TICK-023), so this is a value the schema accepts rather than a reason to refuse.
-    var depth: FileRef?
+    var depth: DepthRef?
     var intrinsics: Intrinsics
     var gravity: [Double]
     var cardPlacement: String
