@@ -1,12 +1,14 @@
 """Tests for two-bucket object storage (TICK-012, #20)."""
 
 import os
+from io import BytesIO
 from pathlib import Path
 
 import boto3
 import pytest
 from moto import mock_aws
 
+from frontdoor import storage
 from frontdoor.storage import (
     PROBE_KEY,
     StorageDenied,
@@ -244,3 +246,100 @@ def test_a_network_failure_is_not_the_denial():
 def test_storage_denied_is_a_storage_error():
     """Callers that catch StorageError must still see a denial; verify() depends on the ordering."""
     assert issubclass(StorageDenied, StorageError)
+
+
+class _StubS3:
+    """S3 stand-in that can refuse by credential, unlike moto.
+
+    Salvaged from Ruben's #161. moto authorises every request, so under moto
+    `verify()` fails no matter how the buckets are configured -- which is why
+    nothing in this file proved it could pass. This models an ACL per access
+    key, so a correct D-020 setup and a broken one look different.
+    """
+
+    def __init__(self):
+        self.buckets = set()
+        self.objects = {}
+        self.acl = {}
+        self.get_error = {}
+
+    def client(self, creds):
+        return _StubClient(self, creds)
+
+
+class _StubClient:
+    def __init__(self, account, creds):
+        self._account = account
+        self._creds = creds
+
+    def put_object(self, Bucket, Key, Body):
+        self._authorize(Bucket)
+        self._account.objects[(Bucket, Key)] = bytes(Body)
+
+    def get_object(self, Bucket, Key):
+        forced = self._account.get_error.get((self._creds.access_key, Bucket))
+        if forced is not None:
+            raise forced
+        self._authorize(Bucket)
+        if Bucket not in self._account.buckets:
+            raise _client_error("NoSuchBucket", 404)
+        data = self._account.objects.get((Bucket, Key))
+        if data is None:
+            raise _client_error("NoSuchKey", 404)
+        return {"Body": BytesIO(data)}
+
+    def delete_object(self, Bucket, Key):
+        self._account.objects.pop((Bucket, Key), None)
+
+    def _authorize(self, bucket):
+        allowed = self._account.acl.get(self._creds.access_key)
+        if allowed is None or bucket not in allowed:
+            raise _client_error("AccessDenied", 403)
+
+
+def _scoped_stub(monkeypatch):
+    """A correctly configured account: each token reaches only its own bucket."""
+    _both_env(monkeypatch)
+    account = _StubS3()
+    account.buckets = {IMAGES, DEPTH}
+    account.acl = {"img-key": {IMAGES}, "dep-key": {DEPTH}}
+    monkeypatch.setattr(storage, "_client", account.client)
+    return account
+
+
+def test_verify_passes_when_the_loader_is_denied_on_depth(monkeypatch, capsys):
+    """The success path, which no other test reaches.
+
+    Every other offline test runs under moto, which authorises everything, so
+    they all assert `verify()` fails. Without this one, deleting the branch that
+    accepts a valid denial leaves the suite green -- the D-020 check could be
+    permanently broken and CI would not say so.
+    """
+    _scoped_stub(monkeypatch)
+    verify()
+    assert "loader-denied-on-depth" in capsys.readouterr().out
+
+
+def test_verify_fails_when_both_buckets_are_the_same_bucket(monkeypatch):
+    """The quarantine is gone but the config still reads plausibly (D-020)."""
+    _both_env(monkeypatch)
+    monkeypatch.setenv("FRONTDOOR_DEPTH_BUCKET", IMAGES)
+    account = _StubS3()
+    account.buckets = {IMAGES}
+    account.acl = {"img-key": {IMAGES}, "dep-key": {IMAGES}}
+    monkeypatch.setattr(storage, "_client", account.client)
+    with pytest.raises(StorageError, match="not denied on the depth bucket"):
+        verify()
+
+
+def test_verify_fails_when_one_token_is_used_for_both_credential_sets(monkeypatch):
+    """Two bucket names, one token: the images key can read depth (D-020)."""
+    _both_env(monkeypatch)
+    monkeypatch.setenv("FRONTDOOR_DEPTH_ACCESS_KEY", "img-key")
+    monkeypatch.setenv("FRONTDOOR_DEPTH_SECRET_KEY", "img-secret")
+    account = _StubS3()
+    account.buckets = {IMAGES, DEPTH}
+    account.acl = {"img-key": {IMAGES, DEPTH}}
+    monkeypatch.setattr(storage, "_client", account.client)
+    with pytest.raises(StorageError, match="not denied on the depth bucket"):
+        verify()
