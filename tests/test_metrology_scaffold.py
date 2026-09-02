@@ -108,9 +108,9 @@ def test_a_reserved_arm_fails_loudly_instead_of_returning_a_plausible_zero():
 
 def test_only_arm_a_is_free_of_the_camera_model():
     """ARCHITECTURE section 5: a homography from a known rectangle absorbs the projection."""
-    assert get_arm("A").needs_intrinsics is False
+    assert get_arm("A").needs_camera_model is False
     for name in ("A_prime", "B", "C"):
-        assert get_arm(name).needs_intrinsics is True, name
+        assert get_arm(name).needs_camera_model is True, name
 
 
 def test_a_stub_arm_round_trips_through_the_interface():
@@ -118,7 +118,7 @@ def test_a_stub_arm_round_trips_through_the_interface():
 
     class _Stub(Arm):
         name = "B"
-        needs_intrinsics = True
+        needs_camera_model = True
 
         def measure(self, image, sidecar):
             return Measurement(value=1.5, interval=Interval(1.0, 2.0), arm=self.name)
@@ -380,6 +380,34 @@ def test_the_guard_reaches_into_subpackages(tmp_path):
     scanned = [path.name for path, _ in _sources(tmp_path)]
     assert "arm_b.py" in scanned, "a nested arm would escape every guard in this file"
 
+
+def test_the_flag_is_about_the_camera_model_not_the_whole_intrinsics_block():
+    """Arm A needs no fx/fy/cx/cy, and still needs the distortion table.
+
+    TICK-043 AC3 draws the line itself: "a sidecar with intrinsics removed (distortion
+    table retained)". A flag named for the whole block invites someone to satisfy it by
+    dropping the block, taking the distortion table with it -- and every arm undistorts
+    its ROI taps before measuring anything (TICK-042).
+    """
+    assert not hasattr(get_arm("A"), "needs_intrinsics"), (
+        "the old name conflated the camera model with the intrinsics block"
+    )
+    assert get_arm("A").needs_camera_model is False
+
+
+def test_the_arm_contract_does_not_promise_a_type_that_does_not_exist():
+    """`measure` is the most-read line for anyone implementing an arm.
+
+    It used to say "Return a Measurement or an Abstention". There is no Abstention type,
+    on purpose: abstaining is a verdict inside a Measurement, and ArmAbsent is the
+    different thing. Someone reaching for the named type finds nothing and may settle on
+    ArmAbsent to mean "abstained" -- the exact collapse result.py exists to prevent.
+    """
+    contract = (Arm.measure.__doc__ or "").strip().splitlines()[0]
+    assert "ArmAbsent" in contract, contract
+    assert "Abstention" not in contract, (
+        f"the return contract names a type the package does not define: {contract}"
+    )
 
 # --- Arm C, cut by D-030 -------------------------------------------------------
 

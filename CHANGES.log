@@ -678,13 +678,13 @@ score a few hundred captures through four arms, so the answer is almost certainl
 that contradicts the "bucket beside the VM" premise in ARCHITECTURE sections 7-8 and needs its
 own entry rather than being assumed here.
 
-## D-032  LiDAR depth is captured, on James's iPhone 16 Pro
+## D-032  LiDAR depth is captured, on James's iPhone 17 Pro (`iPhone18,1`)
 
 Taken 2026-09-02 by David. Reverses the 2026-09-01 pivot's "no LiDAR depth" clause for
 capture; everything else in the pivot stands.
 
 **The decision.** Every entrance is captured with LiDAR depth (D-020), and the device that
-carries it is **James's iPhone 16 Pro**. One LiDAR device is enough: D-020 asks for depth on
+carries it is **James's iPhone 17 Pro (`iPhone18,1`)**. One LiDAR device is enough: D-020 asks for depth on
 every entrance, not on every device, so a single phone that shoots every entrance satisfies it.
 
 **What this does NOT claim, because the probe measured otherwise.** TICK-020 (#24) ran
@@ -694,9 +694,14 @@ is **not**, and intrinsics are not delivered. The depth that arrives through the
 intrinsics and NOT a metric ruler. D-015 is untouched: the metrology method still never consumes
 device depth. This entry authorises capture and storage of depth, nothing further.
 
-**Two prerequisites that are real and are not waived.** A build **has** run on James's iPhone 16
-Pro (confirmed 2026-09-02), correcting TEAM.md section 2, which said otherwise. What is still
-missing is its **capability-probe row**: its depth delivery is expected, not measured, and TICK-020
+**The device is an iPhone 17 Pro, not the iPhone 16 Pro the roster recorded.** Read from
+`devicectl` on 2026-09-02 (#203, Emily). This entry was first written against the audited model
+and is corrected here rather than quietly: probe rows are keyed by model identifier, so a depth
+row filed against the wrong one would prove nothing about the phone actually shooting the dataset.
+
+**Two prerequisites that are real and are not waived.** A build **has** run on that phone
+(installed and launched 2026-09-02), correcting an earlier claim in TEAM.md section 2. What is
+still missing is its **capability-probe row**: its depth delivery is expected, not measured, and TICK-020
 should be run on it before it carries a capture day. Separately, James runs Windows, so the
 mandatory 7-day re-sign (D-025) is a physical session with a Mac owner. Both were raised before
 this decision was taken and are recorded here rather than discovered in the field.

@@ -295,7 +295,7 @@ capture app in place this is free, and it strengthens deliverable #5. A device w
 sensor still captures: the sidecar writes `"depth": null` and the manifest leaves `depth_sha256`
 empty (TICK-023).
 
-> **Amended 2026-09-02.** **D-032** puts depth capture on James's iPhone 16 Pro — one LiDAR
+> **Amended 2026-09-02.** **D-032** puts depth capture on James's iPhone 17 Pro (`iPhone18,1`) — one LiDAR
 > device shooting every entrance satisfies "every entrance", and that phone has not yet run a
 > build, so probing it is a prerequisite. **D-033** lets depth reach its bucket without crossing
 > the quarantine: uploads route through the server (TICK-029), which holds a **write-only** token
@@ -315,11 +315,17 @@ reference (D-003). Whether LiDAR clears your own bar is an open empirical questi
 
 ## 10. Assumptions
 
-- **A-1. FALSIFIED — one LiDAR-capable iPhone, not a fleet.** The team holds an iPhone 16 Pro
-  (LiDAR), an iPhone 16 (no depth sensor) and two Android devices, which cannot run an
-  AVFoundation capture app at all. Evidence comes from **two devices of one generation across two
-  camera tiers**, not from Pro-class cameras uniformly; `device_model` is recorded per capture so
-  device remains visible to the error analysis. See TEAM.md §2.
+- **A-1. FALSIFIED — but not in the way this said.** The device list here was wrong: the team
+  holds an iPhone 16, an iPhone 15 Pro Max and an iPhone 17 Pro (`iPhone18,1`, not the iPhone 16
+  Pro recorded), plus two Android devices that cannot run an AVFoundation capture app at all.
+  Three iPhones, spanning three generations and two camera tiers.
+
+  TICK-020 also falsified the premise underneath the assumption. LiDAR is not the thing that
+  matters: `builtInLiDARDepthCamera` delivers depth with **no calibration data at all**, so it is
+  not a route to intrinsics on any device. Intrinsics arrive through `builtInDualWideCamera`,
+  which every tested iPhone has, Pro or not — so capture capability does not track the Pro tier
+  the way this assumption presumed. `device_model` is recorded per capture, so device remains
+  visible to the error analysis. See TEAM.md §2 and docs/tick-020-capability-probe.md.
 - **A-2. Calibration-data delivery works on the team's actual devices.** Verified day one (R-9).
   ARKit is the fallback if it does not, at the resolution cost described in §2.
 - **A-3. FALSIFIED — two capture-capable devices, one with LiDAR.** R-8 has fired; its response
