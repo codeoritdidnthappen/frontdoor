@@ -239,9 +239,12 @@ label stays until someone who was in the decision says otherwise.
 - D-022  (reconstructed) Compliance verdicts are reported for Arm A ONLY. No pass/fail bar or
          threshold line is attached to Arms A-prime, B or C; those arms report measurement error
          alone. Referenced by: #91, #93, #95, #72.
-         GROUNDED IN: #91 ("no pass/fail verdict is attached to any arm but A (D-022)"), #93 ("the
-         pass/fail bar appears on Arm A only (D-022)"), #95 ("Arm A is the only arm with a threshold
-         line drawn (D-022)"), #72 ("the 0.25-inch bar is drawn against Arm A only (D-022)").
+         GROUNDED IN, each quoted as its ticket writes it (emphasis markers kept, since #72 uses
+         the inch mark and quoting it inside quotes would be unreadable):
+           #91  **no** pass/fail verdict is attached to any arm but A (D-022)
+           #93  the pass/fail bar appears on **Arm A only** (D-022)
+           #95  Arm A is the only arm with a threshold line drawn (D-022)
+           #72  The 0.25" bar is drawn against **Arm A only** (D-022)
          UNRESOLVED, AND THE REASON THIS BLOCK IS STILL OPEN: this is the same rule as Amendment
          A-2 below. A decision and an amendment cannot both be the origin of one rule -- either A-2
          amended the pre-registration to name Arm A and D-022 is being cited for something it never
@@ -256,10 +259,13 @@ label stays until someone who was in the decision says otherwise.
          `sealed` precisely so the intervals are not calibrated on the data they are then evaluated
          against" -- and TICK-201 (#84), "the seed embedded in the installed build matches the
          committed seed file", with splits described as immutable at analysis time. Also implemented:
-         `frontdoor.split.assign_split` and `DatasetLoader.SPLITS`.
-- D-024  (reconstructed, CORRECTED 2026-09-01) One capture writes one image, one depth map and one
-         JSON sidecar. Image and depth are hashed over the WRITTEN FILE BYTES on device, and the
-         sidecar is written ATOMICALLY AFTER both files are fully written, so a crash mid-capture
+         `frontdoor.split.assign_split` (split.py) and `frontdoor.labels.SPLITS` (labels.py).
+- D-024  (reconstructed, CORRECTED 2026-09-01) One capture writes one image, one JSON sidecar, and
+         one depth map WHERE THE DEVICE HAS DEPTH -- the sidecar's `depth` is nullable and its
+         absence must not cost an entrance (TICK-023 AC5, D-020), which is why #32 AC5 lists only a
+         missing caliper reading, fewer than six ROI taps and missing intrinsics as the values that
+         void a capture. Each file written is hashed over its WRITTEN FILE BYTES on device, and the
+         sidecar is written ATOMICALLY AFTER those files are fully written, so a crash mid-capture
          never leaves a sidecar pointing at a truncated file. A capture missing any required value
          -- no caliper reading, fewer than six ROI taps, no intrinsics -- writes NOTHING AT ALL
          rather than a partial record. Referenced by: #32, #83, #85.
