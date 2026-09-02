@@ -31,6 +31,10 @@ struct CaptureRecord: Equatable {
     var entrance: Entrance
     /// The stratification variables this frame was taken under.
     var conditions: ConditionTags
+    /// The six points Arm A measures from, marked after the shutter (TICK-026). Optional on the
+    /// record only because it is filled in a step later; a frame leaves review with all six or is
+    /// discarded, so nothing reaches the sidecar without them.
+    var roi: ROITaps?
 }
 
 /// Intrinsics as delivered for one frame, already expressed in the pixel grid of the still that

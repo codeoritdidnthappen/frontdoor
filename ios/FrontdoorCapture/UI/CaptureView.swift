@@ -89,6 +89,17 @@ struct CaptureView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .topLeading) { closeButton }
         .overlay(alignment: .top) { conditionsBar }
+        // Between the shutter and the record: the frame cannot become a capture until its six
+        // points are marked, and it cannot be marked from behind the viewfinder.
+        .fullScreenCover(item: $controller.pendingReview) { pending in
+            ROIReviewView(
+                image: pending.image,
+                pixelWidth: pending.record.pixelWidth,
+                pixelHeight: pending.record.pixelHeight,
+                onConfirm: controller.confirmReview,
+                onDiscard: controller.discardReview
+            )
+        }
         .sheet(isPresented: $editingConditions) {
             if let subject = controller.subject {
                 ConditionsSheet(current: subject.conditions) { tags in
