@@ -9,6 +9,7 @@ from jsonschema import ValidationError
 
 from frontdoor.loader import Capture, LoaderError, DatasetLoader
 from frontdoor.manifest import COLUMNS, append_capture
+from frontdoor.manifest import read_manifest
 from frontdoor.split import assign_split
 from test_sidecar_schema import architecture_example
 
@@ -170,6 +171,86 @@ def test_corrupt_image_still_raises_when_skip_env_is_set(tmp_path, monkeypatch):
         loader.load("cap-1")
 
 
+def test_list_omits_sealed_rows_even_when_asked_for_that_split(tmp_path):
+    images = {}
+    written = None
+    for capture_id, entrance_id, blob in (
+        ("cap-dev", "E-001", b"dev"),
+        ("cap-calib", "E-042", b"calib"),
+        ("cap-sealed", "E-002", b"secret"),
+    ):
+        manifest, sidecar_dir, image = _write_capture(
+            tmp_path, capture_id=capture_id, entrance_id=entrance_id, image=blob
+        )
+        images[capture_id] = image
+        written = (manifest, sidecar_dir)
+    loader = DatasetLoader(
+        manifest_path=written[0],
+        sidecar_dir=written[1],
+        get_image=images.__getitem__,
+    )
+    assert loader.list_captures() == ["cap-calib", "cap-dev"]
+    assert loader.list_captures(split="dev") == ["cap-dev"]
+    assert loader.list_captures(split="calib") == ["cap-calib"]
+    # Asking for the sealed split refuses rather than returning [] (QA B08): an empty list is the
+    # same shape as "no such split" and "no captures yet", so a caller cannot tell a working seal
+    # from a misspelled filter — and reading [] as "nothing is sealed" is the wrong lesson.
+    with pytest.raises(LoaderError, match="sealed split cannot be listed"):
+        loader.list_captures(split="sealed")
+    # Filtering by a sealed entrance still yields nothing, without naming it as sealed.
+    assert loader.list_captures(entrance_id="E-002") == []
+    assert list(loader) == ["cap-calib", "cap-dev"]
+    assert len(loader) == 2
+
+
+def test_load_of_a_sealed_id_raises_naming_the_split_and_reads_nothing(tmp_path):
+    reads = []
+
+    def get_image(capture_id):
+        reads.append(capture_id)
+        return b"secret"
+
+    manifest, sidecar_dir, _ = _write_capture(
+        tmp_path, capture_id="cap-sealed", entrance_id="E-002", image=b"secret"
+    )
+    loader = DatasetLoader(
+        manifest_path=manifest,
+        sidecar_dir=sidecar_dir,
+        get_image=get_image,
+    )
+    with pytest.raises(LoaderError, match=r"sealed.*split=sealed"):
+        loader.load("cap-sealed")
+    assert reads == []
+
+
+def test_loader_has_no_include_sealed_switch():
+    import inspect
+
+    for target in (
+        DatasetLoader.__init__,
+        DatasetLoader.load,
+        DatasetLoader.list_captures,
+    ):
+        assert "include_sealed" not in inspect.signature(target).parameters
+
+
+def test_env_var_cannot_unseal_a_row(tmp_path, monkeypatch):
+    monkeypatch.setenv("FRONTDOOR_INCLUDE_SEALED", "1")
+    monkeypatch.setenv("INCLUDE_SEALED", "1")
+    manifest, sidecar_dir, image = _write_capture(
+        tmp_path, capture_id="cap-sealed", entrance_id="E-002", image=b"secret"
+    )
+    loader = DatasetLoader(
+        manifest_path=manifest,
+        sidecar_dir=sidecar_dir,
+        get_image={"cap-sealed": image}.__getitem__,
+    )
+    with pytest.raises(LoaderError, match="sealed"):
+        loader.load("cap-sealed")
+    assert loader.list_captures() == []
+
+
+
 @pytest.mark.skipif(
     not os.environ.get("FRONTDOOR_STORAGE_LIVE"),
     reason="live storage not configured",
@@ -189,3 +270,152 @@ def test_live_load_one_capture_from_the_image_bucket():
     assert loaded.capture_id == capture_id
     assert loaded.image
     assert loaded.sidecar["capture_id"] == capture_id
+
+
+# --- The seal is derived from the seed, not read from the manifest (QA B01, B02, B03) -----------
+#
+# D-007 defines the split as a pure function of the entrance ID and the committed seed. Comparing
+# the manifest's `split` cell to the literal "sealed" instead made the seal depend on a CSV string:
+# a cell reading `dev`, `DEV`, `Sealed`, ` sealed` or empty read sealed bytes on a default run with
+# no flag, no error and no audit line.
+
+_SEALED_ENTRANCE = next(
+    f"E-{n:03d}" for n in range(1000) if assign_split(f"E-{n:03d}") == "sealed"
+)
+
+
+@pytest.mark.parametrize("claimed_split", ["dev", "DEV", "Sealed", " sealed", "", "calib"])
+def test_a_manifest_cell_cannot_unseal_a_sealed_entrance(tmp_path, claimed_split):
+    reads = []
+
+    def get_image(capture_id):
+        reads.append(capture_id)
+        return b"secret"
+
+    manifest, sidecar_dir, _ = _write_capture(
+        tmp_path, capture_id="cap-x", entrance_id=_SEALED_ENTRANCE, image=b"secret"
+    )
+    # Rewrite the split column to whatever the manifest claims.
+    rows = manifest.read_text(encoding="utf-8").splitlines()
+    header = rows[0].split(",")
+    idx = header.index("split")
+    cells = rows[1].split(",")
+    cells[idx] = claimed_split
+    manifest.write_text("\n".join([rows[0], ",".join(cells)]) + "\n", encoding="utf-8")
+
+    loader = DatasetLoader(
+        manifest_path=manifest, sidecar_dir=sidecar_dir, get_image=get_image
+    )
+    with pytest.raises(LoaderError, match="sealed"):
+        loader.load("cap-x")
+    assert reads == [], "sealed image bytes were read"
+    assert loader.list_captures() == [], "a sealed capture was listed"
+
+
+def test_load_row_refuses_sealed_without_being_asked(tmp_path):
+    """`eval.py` calls `_load_row` directly, so a check living only in `load` was walked past."""
+    reads = []
+    manifest, sidecar_dir, _ = _write_capture(
+        tmp_path, capture_id="cap-y", entrance_id=_SEALED_ENTRANCE, image=b"secret"
+    )
+    loader = DatasetLoader(
+        manifest_path=manifest, sidecar_dir=sidecar_dir,
+        get_image=lambda cid: (reads.append(cid), b"secret")[1],
+    )
+    row = next(r for r in read_manifest(manifest) if r["capture_id"] == "cap-y")
+    with pytest.raises(LoaderError, match="sealed"):
+        loader._load_row(row)
+    assert reads == []
+
+
+def test_a_duplicate_capture_id_does_not_let_the_first_row_win(tmp_path):
+    """A `dev` twin ahead of the sealed row would otherwise decide the seal."""
+    manifest, sidecar_dir, _ = _write_capture(
+        tmp_path, capture_id="cap-z", entrance_id=_SEALED_ENTRANCE, image=b"secret"
+    )
+    rows = manifest.read_text(encoding="utf-8").splitlines()
+    manifest.write_text("\n".join([rows[0], rows[1], rows[1]]) + "\n", encoding="utf-8")
+    loader = DatasetLoader(
+        manifest_path=manifest, sidecar_dir=sidecar_dir, get_image=lambda cid: b"secret"
+    )
+    with pytest.raises(LoaderError, match="more than once"):
+        loader.load("cap-z")
+
+
+def test_an_entrance_the_seed_cannot_classify_is_not_treated_as_unsealed(tmp_path):
+    manifest, sidecar_dir, _ = _write_capture(
+        tmp_path, capture_id="cap-w", entrance_id="E-002", image=b"secret"
+    )
+    rows = manifest.read_text(encoding="utf-8").splitlines()
+    header = rows[0].split(",")
+    cells = rows[1].split(",")
+    cells[header.index("entrance_id")] = "NOT-AN-ID"
+    manifest.write_text("\n".join([rows[0], ",".join(cells)]) + "\n", encoding="utf-8")
+    loader = DatasetLoader(
+        manifest_path=manifest, sidecar_dir=sidecar_dir, get_image=lambda cid: b"secret"
+    )
+    with pytest.raises(LoaderError, match="cannot classify"):
+        loader.load("cap-w")
+
+
+def test_listing_the_sealed_split_refuses_rather_than_returning_empty(tmp_path):
+    """[] is the same shape as 'no such split' and 'no captures yet' (QA B08)."""
+    manifest, sidecar_dir, _ = _write_capture(
+        tmp_path, capture_id="cap-s", entrance_id=_SEALED_ENTRANCE, image=b"secret"
+    )
+    loader = DatasetLoader(
+        manifest_path=manifest, sidecar_dir=sidecar_dir, get_image=lambda cid: b"secret"
+    )
+    with pytest.raises(LoaderError, match="sealed split cannot be listed"):
+        loader.list_captures(split="sealed")
+
+
+def test_an_unknown_split_is_a_typo_not_an_empty_result(tmp_path):
+    manifest, sidecar_dir, _ = _write_capture(
+        tmp_path, capture_id="cap-t", entrance_id="E-001", image=b"x"
+    )
+    loader = DatasetLoader(
+        manifest_path=manifest, sidecar_dir=sidecar_dir, get_image=lambda cid: b"x"
+    )
+    with pytest.raises(LoaderError, match="unknown split"):
+        loader.list_captures(split="nonsense")
+
+
+def test_the_dev_filter_uses_the_derived_split_not_the_csv_cell(tmp_path):
+    """A calib entrance whose cell reads `dev` must not enter the dev evaluation set.
+
+    `is_sealed` re-derives because the column is a cache rather than an authority. Every other
+    partition has to use the same source, or the argument is only half made — this is a D-007 leak
+    of a different kind from unsealing (review finding 2).
+    """
+    calib_entrance = next(
+        f"E-{n:03d}" for n in range(1000) if assign_split(f"E-{n:03d}") == "calib"
+    )
+    manifest, sidecar_dir, _ = _write_capture(
+        tmp_path, capture_id="cap-c", entrance_id=calib_entrance, image=b"calib"
+    )
+    rows = manifest.read_text(encoding="utf-8").splitlines()
+    header = rows[0].split(",")
+    cells = rows[1].split(",")
+    cells[header.index("split")] = "dev"          # the manifest lies
+    manifest.write_text("\n".join([rows[0], ",".join(cells)]) + "\n", encoding="utf-8")
+
+    loader = DatasetLoader(
+        manifest_path=manifest, sidecar_dir=sidecar_dir, get_image=lambda cid: b"calib"
+    )
+    assert loader.list_captures(split="dev") == [], "calib data entered the dev set"
+    assert loader.list_captures(split="calib") == ["cap-c"]
+    # And a loaded capture reports the derived split, not what the row claimed.
+    assert loader.load("cap-c").split == "calib"
+
+
+def test_the_entrance_filter_is_canonicalised(tmp_path):
+    """`e-001` and ` E-001` returning [] is the same shape as a working seal (review finding 3)."""
+    manifest, sidecar_dir, _ = _write_capture(
+        tmp_path, capture_id="cap-e", entrance_id="E-001", image=b"dev"
+    )
+    loader = DatasetLoader(
+        manifest_path=manifest, sidecar_dir=sidecar_dir, get_image=lambda cid: b"dev"
+    )
+    for spelling in ("E-001", "e-001", " E-001", "E-001 "):
+        assert loader.list_captures(entrance_id=spelling) == ["cap-e"], spelling
