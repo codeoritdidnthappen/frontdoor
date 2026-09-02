@@ -224,6 +224,13 @@ final class CaptureController: ObservableObject {
     /// ground truth (TICK-024, D-018).
     @Published var subject: CaptureSubject?
 
+    /// A frame that passed validation and is waiting for its six ROI points (TICK-026).
+    ///
+    /// It is not a capture yet. `photosTaken` does not count it and `lastRecord` does not hold it:
+    /// Arm A measures from the taps, so a frame without them is unmeasurable, and a count that
+    /// rose here would tell the operator an entrance was covered when nothing usable exists.
+    @Published var pendingReview: PendingReview?
+
     /// Takes one photo and, if the frame carries everything the method legally needs, publishes a
     /// `CaptureRecord`. A frame missing intrinsics or taken at the wrong zoom is refused rather
     /// than saved: an unusable still that looks saved is worse than a visible failure.
@@ -358,13 +365,29 @@ final class CaptureController: ObservableObject {
             depth: DepthCapture.record(from: captured.depthData)
         ) {
         case .success(let record):
-            photosTaken += 1
-            lastThumbnail = captured.image
-            lastRecord = record
             lastCaptureError = nil
+            pendingReview = PendingReview(record: record, image: captured.image)
         case .failure(let rejection):
             lastCaptureError = rejection.message
         }
+    }
+
+    /// Accept the frame under review once its six ROI points are marked. Only here does a frame
+    /// become a capture.
+    func confirmReview(_ taps: ROITaps) {
+        guard let pending = pendingReview else { return }
+        var record = pending.record
+        record.roi = taps
+        photosTaken += 1
+        lastThumbnail = pending.image
+        lastRecord = record
+        pendingReview = nil
+    }
+
+    /// Throw the frame away. Nothing is recorded and nothing is counted: re-shooting is free, and
+    /// a bad frame kept is not (TICK-026).
+    func discardReview() {
+        pendingReview = nil
     }
 
     private func configureSession() async -> CaptureUnavailable? {
