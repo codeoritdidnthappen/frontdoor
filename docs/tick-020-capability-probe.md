@@ -28,10 +28,58 @@ model alongside every row.
 
 ## Results
 
+Run 2026-09-02 on both phones. **The 1× lens the probe originally asked about answers "no" on
+both — and that is not the whole answer.** See the second table.
+
 | Device | Model ID | iOS | 1× calibration | 1× depth | Requested / delivered pixels | Full res? | Distortion table |
 |--------|----------|-----|----------------|----------|------------------------------|-----------|------------------|
-| Emily — iPhone 16 | `iPhone17,3` | 26.6.1 | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ |
-| James — iPhone 16 Pro | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ | _pending_ |
+| Emily — iPhone 16 | `iPhone17,3` | 26.6.1 | **no** | **no** | 8064×6048 / 4032×3024 | no | none |
+| iPhone 15 Pro Max | `iPhone16,2` | 26.6.1 | **no** | **no** | 8064×6048 / 4032×3024 | no | none |
+
+James's iPhone 16 Pro is still unmeasured. Both phones tested so far agree, so the expectation is
+that it agrees too — but it is an expectation, not a row.
+
+### The row that matters: `builtInDualWideCamera`
+
+| Device | calibration | depth | zoom for the 1× main lens | Delivered pixels | Intrinsics | Distortion table |
+|--------|-------------|-------|---------------------------|------------------|------------|------------------|
+| iPhone 15 Pro Max | **yes**, via `depthData.cameraCalibrationData` | yes (`accuracy=relative`) | **2.00** | 4032×3024 | `fx=2792.0 fy=2792.0 cx=2037.2 cy=1499.0`, reference 4032×3024 | 42 entries |
+| Emily — iPhone 16 | **yes**, same channel | yes | 2.00 | 4032×3024 | delivered | delivered |
+
+`builtInLiDARDepthCamera` on the Pro Max: depth **yes**, calibration **no**, intrinsics not
+delivered. LiDAR is not a route to intrinsics on this hardware.
+
+**Both phones can capture measurable frames. Neither can do it through the device type D-014
+names.**
+
+### What follows
+
+1. **D-014's device type is unsatisfiable; its optics are fine.** A device with no depth stream has
+   no route to intrinsics — direct delivery needs two constituent devices
+   (`AVCapturePhotoOutput.h:1496`), which one physical lens cannot offer. `builtInDualWideCamera`
+   is ultra-wide + wide, and at its switch-over factor the main lens is exposing: `fx=2792` on a
+   4032-wide frame against ~2688 predicted for a 24 mm-equivalent main lens and ~1456 for the
+   ultra-wide. **ARCHITECTURE §4 and D-014 name the wrong device type and need amending** — a team
+   decision, not a quiet code change.
+
+2. **"1×" is a device-dependent number.** On a virtual device the zoom scale is relative to its
+   *widest* constituent, so `videoZoomFactor = 1.0` selects the **ultra-wide** and the main lens
+   sits at the first switch-over factor — 2.00 on both phones. Pinning the literal 1.0 would have
+   captured ~120° of barrel-distorted glass while every check reported "1×". The app reads
+   `virtualDeviceSwitchOverVideoZoomFactors` and refuses 1.0 there as the wrong lens.
+
+3. **The dual-wide's depth is `accuracy=relative`, not metric,** and on the iPhone 16 it is stereo
+   disparity rather than LiDAR. Arms B and C were meant to lean on metric depth. Arm A is
+   unaffected: it takes scale from the reference card.
+
+4. **No device delivers its sensor maximum.** Both requested 8064×6048 and were handed 4032×3024 —
+   a binned readout, full field of view, one binning step down. TICK-022 AC3's literal wording is
+   unsatisfiable on a 48 MP iPhone; the check now compares aspect (which catches a crop) and
+   requires at least one binning step.
+
+5. **Capture works on both phones, not one.** ASM-3 and TEAM.md §4's single-device risk are
+   relieved. Frames are 4032×3024, so the Arm A error derivation should be re-checked against that
+   grid rather than 8064×6048.
 
 Simulator, for contrast — every lens unavailable, capture fails with "no rear wide-angle camera":
 
@@ -77,3 +125,11 @@ active format's maximum — which is the comparison AC-3 exists to make.
 
 It answers availability, not correctness. A delivered intrinsic matrix that is subtly wrong would
 pass every check here. Confirming the numbers are right is TICK-207's job, against caliper truth.
+
+**An earlier revision could not have found the answer at all.** It captured only on
+`builtInWideAngleCamera` — the one device type that reports `depth=false`, and therefore the one
+that can never carry `depthData.cameraCalibrationData`. It reported "no calibration" on two phones
+while proving nothing, because it was asking the only camera structurally incapable of saying yes.
+It now captures once on every available back-camera device type and prints a verdict naming those
+that delivered. Worth remembering as a shape of mistake: a probe that cannot observe the positive
+case reads exactly like evidence of absence.
