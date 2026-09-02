@@ -114,8 +114,9 @@ zoom scale is relative to the ultra-wide, so **2.00 is the 1x main lens** and 1.
 ultra-wide's ~120 degrees. A record carrying only a lens name cannot tell those apart.
 
 **D-014 names `builtInWideAngleCamera` as the device type. That is not satisfiable on the hardware
-the team has, and the decision log entry amending it is still owed** -- the optics it fixes are
-unchanged, the device reaching them is not.
+the team has** -- the optics it fixes are unchanged, the device reaching them is not. **Amended
+2026-09-02 by D-029** (CHANGES.log), which moves the device to `builtInDualWideCamera` and withdraws
+D-014's claim that this path yields LiDAR depth.
 
 The `distortion_table` above is truncated for readability. A real one is as long as the camera
 delivers -- 42 entries on both team phones (TICK-020) -- and is recorded verbatim, never resampled

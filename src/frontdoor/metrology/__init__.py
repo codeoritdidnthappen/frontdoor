@@ -14,7 +14,7 @@ Result types are shaped against `src/frontdoor_server/measure_response.schema.js
 which was frozen before this package existed.
 """
 
-from frontdoor.metrology.arm import Arm, ArmNotImplemented, PendingArm
+from frontdoor.metrology.arm import Arm, ArmCut, ArmNotImplemented, CutArm, PendingArm
 from frontdoor.metrology.registry import (
     ARM_NAMES,
     UnknownArm,
@@ -39,7 +39,9 @@ __all__ = [
     "AbsentReason",
     "Arm",
     "ArmAbsent",
+    "ArmCut",
     "ArmNotImplemented",
+    "CutArm",
     "Interval",
     "LineDecision",
     "Measurement",

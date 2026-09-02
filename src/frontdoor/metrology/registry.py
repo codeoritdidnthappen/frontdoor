@@ -7,7 +7,7 @@ call sites.
 
 from __future__ import annotations
 
-from frontdoor.metrology.arm import Arm, PendingArm
+from frontdoor.metrology.arm import Arm, CutArm, PendingArm
 from frontdoor.metrology.result import ResultError
 
 #: The four arms ARCHITECTURE section 5 defines, in the order its table lists them.
@@ -18,7 +18,10 @@ _ARMS = {
     "A": PendingArm("A", "TICK-043 (#37)", needs_intrinsics=False),
     "A_prime": PendingArm("A_prime", "TICK-045 (#39)"),
     "B": PendingArm("B", "TICK-047 (#41)"),
-    "C": PendingArm("C", "TICK-048 (#42)"),
+    "C": CutArm(
+        "C", "D-030 (2026-09-02, #43)",
+        "the Sep 2 scope gate lapsed with no arm implemented and no captures taken; cut on "
+        "scope rather than on measured error, which is weaker and is recorded as such"),
 }
 
 
