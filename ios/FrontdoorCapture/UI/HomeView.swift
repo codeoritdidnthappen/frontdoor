@@ -20,20 +20,26 @@ struct HomeView: View {
     @ViewBuilder
     private var pendingRow: some View {
         let pending = controller.pendingUploads
-        if pending > 0 {
+        // The result is shown whether or not anything is still queued. It used to live inside
+        // `pending > 0`, so a fully successful drain -- the one case worth confirming -- set the
+        // count to zero and took its own confirmation with it: the operator tapped Upload now and
+        // watched the row vanish with nothing said. AC6 is about not leaving a site unsure.
+        if pending > 0 || controller.lastDrainMessage != nil {
             VStack(spacing: 6) {
-                Text("^[\(pending) capture](inflect: true) on this phone only")
-                    .font(.subheadline.weight(.medium))
-                Button(controller.isDraining ? "Uploading…" : "Upload now") {
-                    Task { await controller.drainQueue() }
+                if pending > 0 {
+                    Text("^[\(pending) capture](inflect: true) on this phone only")
+                        .font(.subheadline.weight(.medium))
+                    Button(controller.isDraining ? "Uploading…" : "Upload now") {
+                        Task { await controller.drainQueue() }
+                    }
+                    .buttonStyle(.bordered)
+                    .disabled(controller.isDraining)
                 }
-                .buttonStyle(.bordered)
-                .disabled(controller.isDraining)
                 if let outcome = controller.lastDrainMessage {
                     Text(outcome)
                         .font(.footnote)
                         .multilineTextAlignment(.center)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(pending > 0 ? .secondary : .primary)
                         .padding(.horizontal, 24)
                 }
             }
@@ -102,9 +108,10 @@ struct HomeView: View {
                 .font(.footnote)
 
             Text("\(controller.photosTaken) captured this session")
-            pendingRow
                 .font(.footnote.monospacedDigit())
                 .foregroundStyle(.secondary)
+
+            pendingRow
                 .padding(.bottom, 12)
         }
     }

@@ -6,6 +6,9 @@ final class CaptureQueueTests: XCTestCase {
 
     private var directory: URL!
     private var queue: CaptureQueue!
+    /// Successive captures get successive times, so "written in this order" means "taken in this
+    /// order" unless a test says otherwise.
+    private var clock = 0
 
     override func setUpWithError() throws {
         directory = FileManager.default.temporaryDirectory
@@ -20,14 +23,19 @@ final class CaptureQueueTests: XCTestCase {
 
     @discardableResult
     private func writeCapture(_ id: String, image: Data = Data("jpeg".utf8),
-                              corruptHash: Bool = false) throws -> URL {
+                              corruptHash: Bool = false,
+                              capturedAt: String? = nil, withDepth: Bool = false) throws -> URL {
+        clock += 1
+        let stamp = capturedAt ?? String(format: "2026-09-02T%02d:00:00Z", 7 + clock)
         let imageURL = directory.appendingPathComponent("\(id).jpg")
         try image.write(to: imageURL)
         let sha = corruptHash ? String(repeating: "0", count: 64) : CaptureWriter.sha256(image)
         let sidecar: [String: Any] = [
-            "capture_id": id, "entrance_id": "E-014",
+            "capture_id": id, "entrance_id": "E-014", "captured_at": stamp,
             "image": ["path": "\(id).jpg", "sha256": sha, "width": 4032, "height": 3024],
-            "depth": NSNull(),
+            "depth": withDepth
+                ? ["path": "\(id).depth", "sha256": String(repeating: "a", count: 64)]
+                : NSNull(),
         ]
         let url = directory.appendingPathComponent("\(id).json")
         try JSONSerialization.data(withJSONObject: sidecar).write(to: url)
@@ -44,9 +52,51 @@ final class CaptureQueueTests: XCTestCase {
         XCTAssertEqual(CaptureQueue(directory: directory).count, 2)
     }
 
-    func testCapturesDrainOldestFirst() throws {
-        try writeCapture("c3"); try writeCapture("c1"); try writeCapture("c2")
-        XCTAssertEqual(queue.pending().map(\.captureId), ["c1", "c2", "c3"])
+    /// Ids that sort the OPPOSITE way to the timestamps, so the order can only come from
+    /// captured_at. The previous version used c1/c2/c3 written in scrambled order, which sorted
+    /// into the right answer under either rule -- and it passed while pending() was sorting by a
+    /// random UUID and promising "oldest first".
+    func testCapturesDrainOldestFirstByCaptureTimeNotByIdentifier() throws {
+        try writeCapture("zzz-first", capturedAt: "2026-09-02T08:00:00Z")
+        try writeCapture("mmm-second", capturedAt: "2026-09-02T09:00:00Z")
+        try writeCapture("aaa-third", capturedAt: "2026-09-02T10:00:00Z")
+        XCTAssertEqual(
+            queue.pending().map(\.captureId), ["zzz-first", "mmm-second", "aaa-third"],
+            "order must follow captured_at, not the identifier")
+    }
+
+    /// Real capture ids are random UUIDs and carry no time at all, which is what made the old
+    /// ordering meaningless in the field while passing in the suite.
+    func testRealUUIDIdentifiersStillDrainInCaptureOrder() throws {
+        let ids = (0..<6).map { _ in UUID().uuidString }
+        for (index, id) in ids.enumerated() {
+            try writeCapture(id, capturedAt: String(format: "2026-09-02T%02d:00:00Z", 8 + index))
+        }
+        XCTAssertEqual(queue.pending().map(\.captureId), ids)
+    }
+
+    /// Two presses inside one second share a timestamp. The order must still be the same on every
+    /// run, or "the failure stays at the head" fails exactly when captures come fastest.
+    func testCapturesSharingASecondAreOrderedDeterministically() throws {
+        try writeCapture("b", capturedAt: "2026-09-02T09:00:00Z")
+        try writeCapture("a", capturedAt: "2026-09-02T09:00:00Z")
+        try writeCapture("c", capturedAt: "2026-09-02T09:00:00Z")
+        XCTAssertEqual(queue.pending().map(\.captureId), ["a", "b", "c"])
+        XCTAssertEqual(CaptureQueue(directory: directory).pending().map(\.captureId),
+                       ["a", "b", "c"], "the order must not change between reads")
+    }
+
+    /// A sidecar with no captured_at cannot be placed in the order, and captured_at is a required
+    /// schema field -- so its absence means a malformed record, not one to guess a position for.
+    func testASidecarWithoutACaptureTimeIsSkipped() throws {
+        try writeCapture("good")
+        let bad: [String: Any] = [
+            "capture_id": "no-time", "entrance_id": "E-014",
+            "image": ["path": "x.jpg", "sha256": String(repeating: "0", count: 64)],
+        ]
+        try JSONSerialization.data(withJSONObject: bad)
+            .write(to: directory.appendingPathComponent("no-time.json"))
+        XCTAssertEqual(queue.pending().map(\.captureId), ["good"])
     }
 
     /// A sidecar that cannot be parsed is not a capture this can act on. Guessing at a partial one
@@ -163,6 +213,39 @@ final class CaptureQueueTests: XCTestCase {
         XCTAssertEqual(report.remaining, 2)
         XCTAssertEqual(queue.pending().map(\.captureId), ["c2", "c3"],
                        "the failed capture stays at the head so the next drain retries it first")
+    }
+
+    // MARK: deletion leaves nothing behind
+
+    /// Image and depth go before the sidecar. The sidecar is what makes a capture visible to
+    /// pending(), so removing it first and then failing on the image would strand bytes nothing
+    /// ever enumerates again -- invisible to the count, never drained, never collected.
+    func testNoFilesAreLeftBehindWhenACaptureIsRemoved() throws {
+        try writeCapture("c1", withDepth: true)
+        try Data("depth".utf8).write(to: directory.appendingPathComponent("c1.depth"))
+        let capture = try XCTUnwrap(queue.pending().first)
+        XCTAssertNotNil(capture.depthURL, "the sidecar must name the depth map for it to be removed")
+        XCTAssertNoThrow(try queue.remove(capture).get())
+
+        let left = try FileManager.default.contentsOfDirectory(atPath: directory.path)
+        XCTAssertEqual(left.filter { $0.hasPrefix("c1") }, [], "orphans: \(left)")
+    }
+
+    /// A capture whose image cannot be read is refused before anything is deleted. The hash check
+    /// is the gate, and it cannot pass on bytes it never saw.
+    func testACaptureWhoseImageIsGoneIsRefusedNotDeleted() throws {
+        try writeCapture("c1")
+        let capture = try XCTUnwrap(queue.pending().first)
+        try FileManager.default.removeItem(at: capture.imageURL)
+
+        guard case .failure(let failure) = queue.remove(capture) else {
+            return XCTFail("a capture with no readable image must not be removed")
+        }
+        guard case .unreadable = failure else {
+            return XCTFail("expected unreadable, got \(failure)")
+        }
+        XCTAssertEqual(queue.count, 1, "its sidecar must survive so the capture stays visible")
+        XCTAssertTrue(failure.message.contains("still on the phone"), failure.message)
     }
 
     /// An empty queue is not a failure, and must not read like one to someone about to leave.

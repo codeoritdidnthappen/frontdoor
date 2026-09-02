@@ -122,6 +122,11 @@ final class CaptureController: ObservableObject {
 
     init() {
         refreshReadiness()
+        // A cold launch fires no scenePhase change, so without this the count reads zero after
+        // exactly the event AC2 is about -- termination or a restart -- while the captures sit in
+        // Documents. It corrected itself on the next background-and-return, which made it look
+        // imagined rather than wrong.
+        refreshPendingUploads()
         observeSession()
     }
 
