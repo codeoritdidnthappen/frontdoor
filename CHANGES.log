@@ -874,3 +874,34 @@ a probed phone. Corrected in TEAM.md by this entry.
 
 **Not decided here:** whether A-2's Arm-A-only rule originates in A-2 or D-022 (#132, #183)
 is a separate attribution question and is untouched.
+
+## D-035  The evaluation harness runs on a team Mac, not on the server host
+
+Taken 2026-09-02 by David, closing the second decision TICK-062 (#50) requires and the
+question D-031 explicitly left open.
+
+**Why it needed an entry rather than a code change.** `ARCHITECTURE.md` sections 7 and 8
+already SAY the harness runs on a team Mac -- "It does not run on the server VM. TICK-062
+put it on a team Mac" -- while D-031 said the question was still open. The document was
+asserting a decision that no entry backed. This is that entry; the architecture text was
+right and is now sourced.
+
+**The decision.** The harness runs locally on a team Mac, reading the dataset from R2 over
+the network. The server host runs the request path only: `/health`, `/measure`, `/screen`,
+`/upload` and the map.
+
+**Why.** The host is one 256 MB machine with a single gunicorn worker and two threads. It
+is sized for one request at a time, not for scoring a few hundred captures; and the team
+has three Macs sitting idle for that purpose. Putting the harness there would also give the
+host a reason to hold the depth READ credential, which D-020 and D-033 exist to prevent --
+the harness is the only reader of depth, and it should not live where the request path
+lives.
+
+**What this supersedes.** ARCHITECTURE sections 7-8's original "bucket beside the VM"
+premise. That text has already been corrected; this entry is its source.
+
+**Consequence, stated so it is not discovered later.** The harness reads from R2 over the
+network rather than from a local disk beside the bucket. Egress on R2 is free, so this
+costs nothing in money; it costs time on a slow link, and the unsealing run (#63) is the
+one execution where that matters. Whoever runs it should sync the dataset before Sep 7
+rather than streaming it on the day.

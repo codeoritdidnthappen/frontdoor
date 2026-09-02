@@ -223,9 +223,11 @@ Steps 1–3 run the same container image, so a fallback changes the network path
 The harness is the second entrypoint over the core library. It produces every number in the error
 budget, and it is the component that enforces D-007 mechanically rather than by promise.
 
-It does not run on the server VM. TICK-062 put it on a team Mac: the free instance is sized for
+It does not run on the server VM. **D-035** put it on a team Mac: the host is sized for
 `POST /measure`, not for scoring a few hundred captures through four arms, and the team already
-has the machines. Object storage stays on R2; the Mac reads it over the network.
+has the machines. Object storage stays on R2; the Mac reads it over the network. It also keeps the
+depth READ credential off the request path, which is what D-020 and D-033 are for — the harness is
+the only reader of depth, and it should not live where the server lives.
 
 **Manifest.** `data/manifest.csv`, committed to git, one row per capture: `capture_id`,
 `entrance_id`, `image_sha256`, `depth_sha256`, `split`. Written at capture time, never edited.
