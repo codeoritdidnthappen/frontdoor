@@ -27,14 +27,29 @@ class Arm(ABC):
     #: Selector used by the registry and by `--arm` on the harness.
     name = None
 
-    #: Whether this arm needs the camera model. Arm A does not: a homography from a
-    #: known rectangle already absorbs the projection, so any length inside that
-    #: plane is metric (ARCHITECTURE section 5, D-012).
-    needs_intrinsics = True
+    #: Whether this arm needs the CAMERA MODEL -- fx, fy, cx, cy. Arm A does not: a
+    #: homography from a known rectangle already absorbs the projection, so any length
+    #: inside that plane is metric (ARCHITECTURE section 5, D-012).
+    #:
+    #: Not the same as needing nothing from `intrinsics`. Every arm undistorts its ROI
+    #: taps first (TICK-042), which reads `intrinsics.distortion_table` and
+    #: `distortion_center` -- so an arm with this False still fails without them.
+    #: TICK-043 AC3 draws exactly this line: "a sidecar with intrinsics removed
+    #: (distortion table retained)". Named for the camera model rather than for the
+    #: whole block so nobody strips the block to satisfy the flag.
+    needs_camera_model = True
 
     @abstractmethod
     def measure(self, image, sidecar):
-        """Return a `Measurement` or an `Abstention`. Never None."""
+        """Return a `Measurement` or an `ArmAbsent`. Never None.
+
+        There is no `Abstention` type to return, deliberately. Abstaining is a verdict
+        this arm REACHED about a capture it did measure, so it rides inside the
+        `Measurement` as a `Verdict.ABSTAIN` in a `LineDecision`, and `rise_in` is still
+        reported. `ArmAbsent` is the other thing entirely: no measurement happened at
+        all. Collapsing the two emits an abstain verdict with no measurement behind it,
+        which the frozen wire schema rejects -- see the module docstring in `result.py`.
+        """
 
 
 class CutArm(Arm):
@@ -62,10 +77,10 @@ class PendingArm(Arm):
     ticket, rather than returning a plausible zero.
     """
 
-    def __init__(self, name, ticket, *, needs_intrinsics=True):
+    def __init__(self, name, ticket, *, needs_camera_model=True):
         self.name = name
         self.ticket = ticket
-        self.needs_intrinsics = needs_intrinsics
+        self.needs_camera_model = needs_camera_model
 
     def measure(self, image, sidecar):
         raise ArmNotImplemented(
