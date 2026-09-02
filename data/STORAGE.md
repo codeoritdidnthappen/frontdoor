@@ -25,8 +25,12 @@ therefore the D-020 layout, not a prefix inside one bucket.
 
 | Bucket | Who may read | Who may write |
 |---|---|---|
-| `frontdoor-image` | loader, server, harness | capture upload |
-| `frontdoor-depth` | harness only | capture upload |
+| `frontdoor-image` | loader, server, harness | server, on behalf of capture upload |
+| `frontdoor-depth` | **harness only** | server, on behalf of capture upload (**write-only token**, D-033) |
+
+Capture uploads go **through the server** (TICK-029, #33), not straight from the phone: no R2
+credential ships inside the app. The server holds read+write on `frontdoor-image` and
+**write-only** on `frontdoor-depth`, so it can store a depth map and can never read one back.
 
 Both buckets are private. Do not enable public access.
 
@@ -62,12 +66,16 @@ it to be, but it is worth stating in the words that are actually true.
 
 ## Credentials
 
-Two tokens, never one:
+Three tokens, never one (D-020, D-033):
 
-1. **Loader / server** — Object Read (and Write, for upload) on
-   `frontdoor-image` only. This is `FRONTDOOR_IMAGES_*`.
-2. **Harness** — Object Read on both buckets. This is the images token
-   plus `FRONTDOOR_DEPTH_*`.
+1. **Loader / server** — Object Read and Write on `frontdoor-image` only.
+   This is `FRONTDOOR_IMAGES_*`.
+2. **Server, depth ingest** — Object **Write only** on `frontdoor-depth`.
+   No read, no list. This is `FRONTDOOR_DEPTH_WRITE_*`, and it is the only
+   depth credential the server ever gets (D-033). A write-only token cannot
+   be used to peek or to tune, which is the guarantee D-020 actually makes.
+3. **Harness** — Object Read on both buckets. This is the images token
+   plus `FRONTDOOR_DEPTH_*`. The harness is the only reader of depth.
 
 The core metrology library gets neither. Copy `.env.example` to `.env`
 and fill in the values; `.env` is gitignored and is read automatically by

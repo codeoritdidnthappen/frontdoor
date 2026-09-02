@@ -45,7 +45,7 @@ Measured 2026-09-02 with the in-app capability probe (TICK-020, #24); see
 | David | Samsung Galaxy S25 | **No** — Android | — | — | Cannot capture |
 | Emily | iPhone 16 (non-Pro) | Yes | **Yes**, verified | Relative (stereo) | **Full capture** |
 | Emily *(unconfirmed — see §5)* | iPhone 15 Pro Max | Yes | **Yes**, verified | Relative | **Full capture** |
-| James | iPhone 16 Pro | Yes | Expected, **unverified** | — | Untested; treated as spare |
+| James | iPhone 16 Pro | Yes — a build has run on it (confirmed 2026-09-02) | Expected, **not yet probed** | **LiDAR — the depth device (D-032)** | **Carries LiDAR capture.** Run the capability probe on it to record its row |
 | Ruben | Google Pixel 9 | **No** — Android | — | — | Cannot capture |
 
 Three things the probe changed. **Intrinsics arrive on both tested phones, including the non-Pro**,
@@ -56,8 +56,9 @@ it is not a route to intrinsics on any device. And **the depth that does arrive 
 reading for the iPhone 16 specifically; the 15 Pro Max is recorded as relative without the
 disparity detail, so "stereo on both" would say more than was measured.
 
-James's iPhone 16 Pro has never had a build on it. Two verified capture devices are enough for the
-dataset, so it is recorded as a spare rather than a blocker.
+James's iPhone 16 Pro **has had a build run on it** (confirmed 2026-09-02), but it has not been
+through the capability probe, so it has no measured row above. D-032 makes it the depth device, so
+that probe run is what is outstanding — not an install.
 
 ### Development machines
 
@@ -97,10 +98,12 @@ Free-provisioning builds still expire every seven days (R-7), which is what TICK
 schedules; see [docs/signing-calendar.md](docs/signing-calendar.md).
 
 - **Verified capture devices: 2**, both Emily's (iPhone 16, iPhone 15 Pro Max) — against A-3's
-  assumed three. James's iPhone 16 Pro is expected to work but has never had a build on it, so it
-  is a spare, not a third.
-- **LiDAR-capable devices: 1** (James's, untested) — and LiDAR is no longer a route to intrinsics
-  on any device, so this count no longer gates capture the way A-1 assumed.
+  assumed three. James's iPhone 16 Pro runs a build but has not been probed, so it is not counted
+  as verified until it has a measured row.
+- **LiDAR-capable devices: 1** (James's, untested). LiDAR is not a route to intrinsics on any
+  device, so it does not gate capture the way A-1 assumed — but **D-032 (2026-09-02) puts depth
+  capture on this phone**, so the count now gates *depth*: one unprobed device carries all of it.
+  A build runs on it; what is missing is its measured probe row.
 
 All five devices are now recorded. The two verified capture phones are an **iPhone 16 and an
 iPhone 15 Pro Max** — two generations and two camera tiers, not the single generation an earlier
@@ -138,7 +141,12 @@ Two constraints shape it, both from §2:
 - **Field capture runs on Emily's two phones, not James's.** This constraint used to read "James
   holds the only LiDAR device, so every entrance must pass through his phone". TICK-020 retired it:
   LiDAR is not a route to intrinsics, both verified capture devices are Emily's, and James's iPhone
-  16 Pro has never had a build on it. James still runs Windows and cannot build iOS.
+  16 Pro had not been probed. James still runs Windows and cannot build iOS.
+
+  > **Reopened 2026-09-02 by D-032.** Depth capture is now assigned to James's iPhone 16 Pro, so
+  > entrances carrying LiDAR do pass through his phone after all. A build has run on that phone, so
+  > the install is not the open item — the capability probe is, and so is the 7-day re-sign, which
+  > James cannot do unaided on Windows. Who operates which device is still unsettled.
 
   **This has a consequence §3 does not yet resolve.** Field capture (#9, #64–#69) is assigned to
   James, and the phones that can capture belong to Emily. Either the devices move to the operator,

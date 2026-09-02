@@ -5,6 +5,8 @@ import SwiftUI
 struct RootView: View {
     @StateObject private var controller = CaptureController()
     @StateObject private var entrances = EntranceStore()
+    @StateObject private var uploads = UploadCoordinator(
+        directory: CaptureController.capturesDirectory)
     @Environment(\.scenePhase) private var scenePhase
     @State private var isCapturing = false
     @State private var settingUpEntrance = false
@@ -15,7 +17,7 @@ struct RootView: View {
             if isCapturing {
                 CaptureView(controller: controller) { isCapturing = false }
             } else {
-                HomeView(controller: controller) {
+                HomeView(controller: controller, uploads: uploads) {
                     // Truth first, viewfinder second. There is no route to the camera that
                     // skips the entrance ID and the caliper reading (D-018, TICK-024).
                     settingUpEntrance = true
@@ -44,7 +46,16 @@ struct RootView: View {
         // grants it, and comes back. Re-sample on foreground so the home screen cannot keep
         // showing Denied over a permission that has since been granted.
         .onChange(of: scenePhase) { _, phase in
-            if phase == .active { controller.refreshReadiness() }
+            if phase == .active {
+                controller.refreshReadiness()
+                // The count is derived from the disk, so it has to be re-read after time away --
+                // a drain may have finished, or captures may have arrived, while backgrounded.
+                uploads.refreshCount()
+            }
         }
+        // A capture just landed on disk, so the queue grew. Recounting here keeps the home
+        // screen's number honest without polling.
+        .onChange(of: controller.photosTaken) { _, _ in uploads.refreshCount() }
+        .task { uploads.start() }
     }
 }

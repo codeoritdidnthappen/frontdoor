@@ -9,6 +9,7 @@ import SwiftUI
 /// from a viewfinder that will not open.
 struct HomeView: View {
     @ObservedObject var controller: CaptureController
+    @ObservedObject var uploads: UploadCoordinator
     let onStart: () -> Void
     let onDiagnostics: () -> Void
 
@@ -72,10 +73,48 @@ struct HomeView: View {
             Button("Run capability probe") { onDiagnostics() }
                 .font(.footnote)
 
+            uploadRow
+
             Text("\(controller.photosTaken) captured this session")
                 .font(.footnote.monospacedDigit())
                 .foregroundStyle(.secondary)
                 .padding(.bottom, 12)
+        }
+    }
+
+    /// The pending-upload count and a manual drain (AC6).
+    ///
+    /// It is on the home screen rather than behind a menu because the question it answers -- "is
+    /// the day's work safe yet?" -- is asked while packing up, and an answer nobody can find is
+    /// the same as no answer.
+    @ViewBuilder private var uploadRow: some View {
+        VStack(spacing: 6) {
+            if !uploads.isConfigured {
+                Text("Upload is not configured in this build")
+                    .font(.footnote)
+                    .foregroundStyle(.orange)
+            } else {
+                HStack(spacing: 10) {
+                    Text(uploads.pendingCount == 0
+                         ? "All captures uploaded"
+                         : "\(uploads.pendingCount) waiting to upload")
+                        .font(.footnote.monospacedDigit())
+                        .foregroundStyle(uploads.pendingCount == 0 ? .secondary : .primary)
+                    if uploads.isDraining {
+                        ProgressView().controlSize(.small)
+                    } else if uploads.pendingCount > 0 {
+                        Button("Upload now") { Task { await uploads.drain() } }
+                            .font(.footnote)
+                    }
+                }
+            }
+            if let blocking = uploads.blockingError {
+                Text(blocking)
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 24)
+            }
         }
     }
 
