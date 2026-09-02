@@ -740,3 +740,88 @@ of the server's access is.
 **Verification.** `python -m frontdoor.storage verify` must still print `loader-denied-on-depth`.
 A new check asserts the server's depth token can PUT and is REFUSED on GET; if a read succeeds,
 the write-only scope leaked and this entry's guarantee is void.
+
+## D-034  The capture sidecar carries its mode: metrology, screening, or imported
+
+Taken 2026-09-02 by David, closing TICK-027 (#31). This changes a FROZEN CONTRACT -- the
+capture sidecar schema -- so it is logged here rather than made as a quiet code change.
+
+**The problem.** The 2026-09-01 pivot made capture plain photos: no caliper, no card, no
+ROI taps. The app implemented the pre-pivot study and refused to save anything else. Three
+gates, each of them correct for metrology and each fatal for screening: the camera sat
+behind a caliper reading, `CaptureWriter` refused a capture with no ROI taps, and the
+schema required `ground_truth`, `card_placement` and `intrinsics`. So an operator
+following `docs/capture-protocol.md` literally could not produce a record at all, which
+is the likeliest reason #67 still reads 0/40 entrances.
+
+**The decision.** One sidecar schema with a `capture_mode` discriminator, not two schemas:
+
+    metrology   the pre-registered study. Caliper truth, ROI taps, card placement,
+                intrinsics, gravity -- everything it always required, unchanged.
+    screening   the plain-photo protocol. Our camera, so intrinsics and gravity are
+                recorded WHEN THE DEVICE OFFERS THEM and omitted when it does not;
+                no caliper, no card, no taps, no surface.
+
+                Optional rather than required, corrected during review: the phone
+                carrying depth capture (D-032) has never been through the capability
+                probe, and a protocol that refused outright on a device delivering no
+                distortion table would lose the entrance rather than record it. A lost
+                doorway is worse than a sidecar with a gap. Metrology still REQUIRES
+                the camera model, because every arm depends on it.
+    imported    a photo taken outside this app. None of our capture metadata exists
+                for it and none is invented.
+
+**Absent means metrology.** Every sidecar written before this entry stays valid and stays
+held to its original contract. The loosening does not reach backwards.
+
+**The forbidding is the point, not the optionality.** A screening capture may not CARRY a
+caliper reading, and an imported photo may not carry intrinsics -- the schema refuses
+them rather than merely allowing them to be missing. A plausible number in one of those
+fields would be read downstream as a measurement, and the error analysis treats device,
+lens and intrinsics as facts. A gap that says "nobody measured this" is worth more than a
+value nobody looked at.
+
+**What else moved, and why each one is a correctness fix rather than a loosening:**
+
+- `conditions.surface` is optional. `docs/capture-protocol.md` never asks a screening
+  operator to record it, and a picker with a default is a value nobody observed.
+- **R-3's 3 m distance cap is metrology-only.** The protocol asks for a "far, ~3-4 m" shot
+  to show the approach path; the cap would have refused the shot the protocol requires.
+  ConditionTags' own note predicted exactly this ("a hard cap here would silently reject
+  the screening shots"). The cap still binds for metrology, where the Arm A error budget
+  is the reason it exists.
+- The condition-tag vocabulary is reconciled. The protocol offered "dusk/low light" and
+  the app had no such tag, so an operator following it had to pick a wrong one; `lowLight`
+  is added. The protocol listed occluders ("parked vehicle, scaffolding") where the app
+  records a degree (none/partial/heavy); the protocol now asks for the degree and gives
+  those as examples. One vocabulary, named identically in both places.
+- An imported photo whose file cannot say WHEN it was taken, or WHAT took it, is refused.
+  Dating it to the import time would put a wrong answer in the field that records when the
+  entrance was seen, and a wrong answer is worse than a missing photo.
+
+**Two leaks found in review, both worth recording because they are the failure this entry
+claims to prevent.** First, `conditions.surface` was moved out of the shared required list
+and not restored for metrology, so a metrology capture -- and every sidecar written before
+this entry -- could drop it and still validate. The loosening reached backwards, which is
+exactly what "absent means metrology" promises it cannot. Second, `EntranceStore` returns
+an entrance already recorded WITH its caliper reading, deliberately, so a doorway shot in
+metrology in the morning and screening in the afternoon wrote `ground_truth` into a
+screening sidecar. The writer now gates those fields on the MODE rather than on whether
+the entrance happens to carry them, and the same applies to `card_placement` and
+`surface`. Both are pinned by tests.
+
+**An entrance first recorded by a screening capture can later take a reading.** Without
+that it could never be captured in metrology mode on that device: the setup screen reused
+the reading-less entrance and the writer refused it, with no way to supply one. The
+no-overwrite rule still stands where it was meant to -- an entrance that already has a
+reading keeps it against a second operator.
+
+**Metrology is not deleted.** Its path stays in the app behind a mode switch, and every
+one of its gates still fires. Whether that study is alive is A-3 (#67), an open team
+question this entry deliberately does not answer -- it makes the app able to run the
+protocol the field is actually running, without deciding that the other one is dead.
+
+**What this does NOT do.** It does not enforce the 5-6 view shot list, which was TICK-027's
+original subject. That plan was written for card placements and the A-prime subset, both
+gone with the pivot; the view set now lives in the protocol and is followed by hand.
+Re-prescribing it in the instrument is worth doing and is not done here.

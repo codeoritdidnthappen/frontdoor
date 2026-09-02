@@ -277,6 +277,11 @@ final class CaptureController: ObservableObject {
     /// The entrance and conditions every capture is bound to. Set before the viewfinder opens and
     /// editable from it; a shutter press with it missing is refused rather than saved without
     /// ground truth (TICK-024, D-018).
+    /// Which contract captures are written against (D-034). Screening is what the app opens into,
+    /// because it is the protocol the field is running (docs/capture-protocol.md); metrology stays
+    /// reachable rather than deleted, because whether it is alive is an open question (A-3, #67).
+    @Published var captureMode: CaptureMode = .default
+
     @Published var subject: CaptureSubject?
 
     /// A frame that passed validation and is waiting for its six ROI points (TICK-026).
@@ -433,13 +438,76 @@ final class CaptureController: ObservableObject {
             // must still cost nothing (D-020, TICK-023).
             depth: depth?.record
         ) {
-        case .success(let record):
+        case .success(let validated):
+            var record = validated
+            record.captureMode = captureMode
             lastCaptureError = nil
-            pendingReview = PendingReview(
+            let pending = PendingReview(
                 record: record, image: captured.image,
                 imageData: captured.imageData, depthBytes: depth?.bytes)
+            if captureMode.carriesMetrologyTruth {
+                pendingReview = pending
+            } else {
+                // No ROI step under the plain-photo protocol: there are no taps to place, so a
+                // review screen asking for six of them would be a gate with nothing behind it.
+                // The frame becomes a capture at the shutter. `pendingReview` is never set, so
+                // the review sheet cannot flicker into view and back out within one update.
+                commit(pending, taps: nil)
+            }
         case .failure(let rejection):
             lastCaptureError = rejection.message
+        }
+    }
+
+    /// Write a photo taken outside this app as an `imported` capture (D-034, TICK-027 / #31).
+    ///
+    /// Everything recorded comes from the file itself. If it cannot say when it was taken or what
+    /// took it, it is refused: dating the record to the import time would put a wrong answer in
+    /// the field that says when the entrance was seen, and a wrong answer is worse than no photo.
+    ///
+    /// It goes through `CaptureWriter` and lands in the same directory as every other capture, so
+    /// the queue and the uploader treat it identically -- there is no second path to keep working.
+    func importPhoto(
+        _ data: Data, entrance: Entrance, conditions: ConditionTags
+    ) -> ImportOutcome {
+        let details: ImportedPhoto.Details
+        switch ImportedPhoto.read(data) {
+        case .success(let read): details = read
+        case .failure(let refusal): return .refused(refusal.message)
+        }
+
+        let record = CaptureRecord(
+            captureId: UUID().uuidString,
+            captureMode: .imported,
+            pixelWidth: details.pixelWidth,
+            pixelHeight: details.pixelHeight,
+            intrinsics: nil,
+            gravity: nil,
+            deviceModel: details.deviceModel,
+            lens: nil,
+            captureDevice: nil,
+            zoomFactor: nil,
+            capturedAt: details.capturedAt,
+            depth: nil,
+            entrance: entrance,
+            conditions: conditions,
+            roi: nil)
+
+        switch CaptureWriter.write(record, imageData: data, depthData: nil,
+                                   into: Self.capturesDirectory,
+                                   imageExtension: details.fileExtension) {
+        case .success:
+            photosTaken += 1
+            refreshPendingUploads()
+            // The same evidence any other capture leaves. Without it the home screen keeps
+            // showing the previous capture as the most recent one, which is the state an operator
+            // reads to decide whether the last thing they did worked.
+            lastRecord = record
+            lastCaptureError = nil
+            return .imported
+        case .failure(let failure):
+            lastCaptureError = failure.message
+            return .refused(failure.message)
         }
     }
 
@@ -447,6 +515,15 @@ final class CaptureController: ObservableObject {
     /// become a capture.
     func confirmReview(_ taps: ROITaps) {
         guard let pending = pendingReview else { return }
+        commit(pending, taps: taps)
+    }
+
+    /// Turn the frame under review into a capture on disk.
+    ///
+    /// `taps` is nil for a screening capture, which places none. Everything after this point --
+    /// hashing, the write, the counter, the queue -- is identical in both modes, which is what
+    /// keeps one path to test rather than two.
+    private func commit(_ pending: PendingReview, taps: ROITaps?) {
         var record = pending.record
         record.roi = taps
 
@@ -470,8 +547,13 @@ final class CaptureController: ObservableObject {
             lastCaptureError = nil
             pendingReview = nil
         case .failure(let failure):
-            // Complete-or-nothing (AC5): the frame stays under review so the operator can fix
-            // what is missing, and nothing is counted for a capture that is not on disk.
+            // Complete-or-nothing (AC5): nothing is counted for a capture that is not on disk.
+            //
+            // In METROLOGY the frame stays under review, so the operator can fix what is missing
+            // and confirm again. In SCREENING there is no review screen to stay on -- the frame
+            // was never held there -- so a failed write means the shot is gone and has to be
+            // retaken. That is why the screening path refuses so little: the camera-model gate
+            // does not apply to it, and the remaining failures are disk failures.
             lastCaptureError = failure.message
         }
     }

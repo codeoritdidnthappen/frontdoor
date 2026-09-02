@@ -9,6 +9,7 @@ struct RootView: View {
     @State private var isCapturing = false
     @State private var settingUpEntrance = false
     @State private var showingDiagnostics = false
+    @State private var importing = false
 
     var body: some View {
         Group {
@@ -19,6 +20,8 @@ struct RootView: View {
                     // Truth first, viewfinder second. There is no route to the camera that
                     // skips the entrance ID and the caliper reading (D-018, TICK-024).
                     settingUpEntrance = true
+                } onImport: {
+                    importing = true
                 } onDiagnostics: {
                     showingDiagnostics = true
                 }
@@ -28,6 +31,7 @@ struct RootView: View {
         .sheet(isPresented: $settingUpEntrance) {
             EntranceSetupView(
                 store: entrances,
+                mode: controller.captureMode,
                 initialConditions: controller.subject?.conditions
             ) { subject in
                 controller.subject = subject
@@ -36,6 +40,9 @@ struct RootView: View {
             } onCancel: {
                 settingUpEntrance = false
             }
+        }
+        .sheet(isPresented: $importing) {
+            ImportPhotosView(store: entrances, controller: controller) { importing = false }
         }
         .sheet(isPresented: $showingDiagnostics) {
             DiagnosticsView { showingDiagnostics = false }

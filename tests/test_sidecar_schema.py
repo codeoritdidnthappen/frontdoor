@@ -326,3 +326,143 @@ def test_a_zero_or_negative_zoom_factor_is_rejected(record):
         record["zoom_factor"] = bad
         with pytest.raises(ValidationError):
             validate_sidecar(record)
+
+
+# --- capture_mode: one schema, three kinds of record (D-034, TICK-027 / #31) -------------
+
+
+def screening_record():
+    """A plain-photo capture: our camera, no caliper, no card, no ROI taps."""
+    record = architecture_example()
+    record["capture_mode"] = "screening"
+    for gone in ("ground_truth", "card_placement", "roi"):
+        record.pop(gone, None)
+    record["conditions"].pop("surface", None)
+    return record
+
+
+def imported_record():
+    """A photo taken outside this app. None of our capture metadata exists for it."""
+    record = screening_record()
+    record["capture_mode"] = "imported"
+    for gone in ("lens", "capture_device", "zoom_factor", "intrinsics", "gravity"):
+        record.pop(gone, None)
+    return record
+
+
+def test_a_screening_capture_validates_without_caliper_card_or_roi():
+    validate_sidecar(screening_record())
+
+
+def test_an_imported_photo_validates_without_any_of_our_capture_metadata():
+    validate_sidecar(imported_record())
+
+
+def test_a_sidecar_with_no_capture_mode_is_still_held_to_the_metrology_contract():
+    """Every sidecar written before D-034 must keep meaning exactly what it meant.
+
+    Absent is metrology, not "any mode I like" -- otherwise the loosening would silently
+    reach backwards and let an old record drop its intrinsics.
+    """
+    record = architecture_example()
+    record.pop("capture_mode", None)
+    record.pop("intrinsics")
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+@pytest.mark.parametrize(
+    "missing", ["lens", "capture_device", "zoom_factor", "intrinsics", "gravity",
+                "card_placement", "ground_truth"])
+def test_a_metrology_capture_still_requires_everything_it_always_did(missing):
+    record = architecture_example()
+    record["capture_mode"] = "metrology"
+    record.pop(missing)
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+@pytest.mark.parametrize("field", ["ground_truth", "card_placement", "roi"])
+def test_a_screening_capture_may_not_carry_metrology_fields(field):
+    """Not merely optional -- forbidden.
+
+    A screening capture that carried a caliper reading would mean the protocol was not
+    followed, or that someone filled a field in to make a form pass. Either way the record
+    would claim a measurement nobody took.
+    """
+    record = screening_record()
+    record[field] = architecture_example().get(field, {"rise_in": 0.5, "instrument": "caliper"})
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+@pytest.mark.parametrize("field", ["intrinsics", "gravity", "zoom_factor", "lens"])
+def test_an_imported_photo_may_not_claim_capture_metadata_it_cannot_have(field):
+    """The whole point of the imported mode: a camera-roll photo has none of this.
+
+    Letting it carry intrinsics would put a measured-looking value on a record that
+    measured nothing -- and the error analysis reads device and lens as facts.
+    """
+    record = imported_record()
+    record[field] = architecture_example()[field]
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+def test_a_screening_capture_still_needs_its_entrance_conditions_and_split():
+    for field in ("entrance_id", "conditions", "split", "image", "depth", "captured_at"):
+        record = screening_record()
+        record.pop(field)
+        with pytest.raises(ValidationError):
+            validate_sidecar(record)
+
+
+def test_surface_is_optional_because_the_protocol_never_asks_for_it():
+    record = screening_record()
+    assert "surface" not in record["conditions"]
+    validate_sidecar(record)
+
+
+def test_lighting_and_occlusion_are_still_required_because_the_protocol_does_ask():
+    for field in ("lighting", "occlusion", "distance_m"):
+        record = screening_record()
+        record["conditions"].pop(field)
+        with pytest.raises(ValidationError):
+            validate_sidecar(record)
+
+
+def test_an_unknown_capture_mode_is_refused():
+    record = screening_record()
+    record["capture_mode"] = "guess"
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+def test_the_loosening_does_not_reach_conditions_either():
+    """D-034's promise is that a pre-existing record keeps its whole contract.
+
+    `surface` was moved out of `conditions.required` and, for one revision, nothing put it back
+    for metrology -- so a metrology capture, and every sidecar written before D-034, could drop
+    it and still validate. That is the promise failing quietly, which is the only way it fails.
+    """
+    for mode in ("metrology", None):
+        record = architecture_example()
+        if mode:
+            record["capture_mode"] = mode
+        else:
+            record.pop("capture_mode", None)
+        record["conditions"].pop("surface")
+        with pytest.raises(ValidationError):
+            validate_sidecar(record)
+
+
+def test_a_screening_capture_may_omit_the_camera_model_but_not_lie_about_it():
+    """Recording it is optional; the phone carrying depth has never been probed (D-032).
+
+    A protocol that failed outright on a device delivering no distortion table would lose the
+    entrance rather than record it, and a lost doorway is worse than a sidecar with a gap.
+    """
+    record = screening_record()
+    for optional in ("intrinsics", "gravity", "lens", "capture_device", "zoom_factor"):
+        thinner = {k: v for k, v in record.items() if k != optional}
+        validate_sidecar(thinner)

@@ -8,6 +8,9 @@ import SwiftUI
 /// cheap to get right.
 struct EntranceSetupView: View {
     @ObservedObject var store: EntranceStore
+    /// Which contract this capture is written against (D-034). Screening asks for an entrance ID
+    /// and condition tags only; metrology also asks for the caliper reading and the surface.
+    var mode: CaptureMode = .default
     /// Carried over from the previous entrance so a run of captures does not retype it.
     let initialConditions: ConditionTags?
     let onReady: (CaptureSubject) -> Void
@@ -38,32 +41,52 @@ struct EntranceSetupView: View {
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
                         .font(.body.monospaced())
-                    if let known {
+                    if let known, let rise = known.riseInches, let tool = known.instrument {
                         LabeledContent("Rise") {
-                            Text(String(format: "%.2f in", known.riseInches)).monospacedDigit()
+                            Text(String(format: "%.2f in", rise)).monospacedDigit()
                         }
-                        LabeledContent("Instrument", value: known.instrument)
+                        LabeledContent("Instrument", value: tool)
                         Text("Already recorded. Its reading and split are reused unchanged.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-                    } else {
+                    } else if known != nil, !mode.carriesMetrologyTruth {
+                        Text("Already recorded. Its split is reused unchanged.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else if mode.carriesMetrologyTruth {
                         HStack {
                             TextField("Caliper rise", text: $rise)
                                 .keyboardType(.decimalPad)
                             Text("in").foregroundStyle(.secondary)
                         }
                         TextField("Instrument", text: $instrument)
+                        if known != nil {
+                            // The entrance exists but was first seen under the plain-photo
+                            // protocol, so it has no reading. Without asking for one here the
+                            // operator gets a green light, shoots, places all six taps, and only
+                            // then is refused by the writer -- with no way to supply the reading,
+                            // because `resolve` never overwrites an existing entry (D-034).
+                            Text("Recorded from a screening capture, so it has no reading yet. "
+                                 + "Enter one to capture it in metrology mode.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
 
                 Section {
                     ConditionsForm(distance: $distance, lighting: $lighting,
-                                   surface: $surface, occlusion: $occlusion)
+                                   surface: $surface, occlusion: $occlusion,
+                                   showsSurface: mode.carriesMetrologyTruth)
                 } header: {
                     Text("Conditions for this shot")
                 } footer: {
-                    Text("Capture angle is not entered. It is derived from the recovered plane "
-                         + "pose, which is what makes the error-versus-angle curve a measurement.")
+                    Text(mode.carriesMetrologyTruth
+                         ? "Capture angle is not entered. It is derived from the recovered plane "
+                           + "pose, which is what makes the error-versus-angle curve a measurement."
+                         : "Angle, lighting and occlusion stay uncontrolled on purpose — "
+                           + "realistic capture is the condition under evaluation "
+                           + "(docs/capture-protocol.md).")
                 }
 
                 if let rejection {
@@ -95,7 +118,7 @@ struct EntranceSetupView: View {
             guard let initialConditions else { return }
             distance = ConditionsSheet.text(for: initialConditions.distanceM)
             lighting = initialConditions.lighting
-            surface = initialConditions.surface
+            surface = initialConditions.surface ?? .concrete
             occlusion = initialConditions.occlusion
         }
     }
@@ -113,7 +136,8 @@ struct EntranceSetupView: View {
         // with no way to correct it afterwards (editing a recorded reading is out of scope).
         // Nothing here touches the store.
         let checkedConditions = TruthValidation.conditions(
-            distance: distance, lighting: lighting, surface: surface, occlusion: occlusion)
+            distance: distance, lighting: lighting, surface: surface, occlusion: occlusion,
+            mode: mode)
         guard case .success(let conditions) = checkedConditions else {
             if case .failure(let error) = checkedConditions { rejection = error }
             return
@@ -121,7 +145,22 @@ struct EntranceSetupView: View {
 
         // Validate the entrance without recording it, so an implausible reading can be queried
         // before anything is committed.
-        if store.existing(id: entranceId) == nil {
+        // A screening capture has no reading to validate and none to stand behind, so the whole
+        // implausible-rise conversation below does not apply to it (D-034).
+        guard mode.carriesMetrologyTruth else {
+            switch store.resolveScreening(id: entranceId) {
+            case .failure(let error):
+                rejection = error
+            case .success(let entrance):
+                rejection = nil
+                onReady(CaptureSubject(entrance: entrance, conditions: conditions))
+            }
+            return
+        }
+
+        // A known entrance with no reading still has to go through validation in metrology mode:
+        // it is exactly the entrance that needs one supplied.
+        if store.existing(id: entranceId)?.riseInches == nil {
             let checked = TruthValidation.entrance(
                 id: entranceId, rise: rise, instrument: instrument,
                 confirmedImplausibleRise: confirmedRise)
@@ -140,7 +179,7 @@ struct EntranceSetupView: View {
             }
         }
 
-        switch store.resolve(
+        switch store.upgradeToMetrology(
             id: entranceId, rise: rise, instrument: instrument,
             confirmedImplausibleRise: confirmedRise
         ) {

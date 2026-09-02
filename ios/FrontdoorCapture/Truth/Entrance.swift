@@ -16,10 +16,14 @@ struct Entrance: Equatable {
     /// which string gets hashed into the split.
     let id: String
     /// Threshold rise in inches, read from the caliper. The sidecar's `ground_truth.rise_in`.
-    let riseInches: Double
+    /// Optional since D-034: the plain-photo protocol seats no caliper, so a screening entrance
+    /// has no reading. Absent means nobody measured it -- never zero, which would be a measurement.
+    let riseInches: Double?
     /// The sidecar's `ground_truth.instrument`, required by the schema and recorded per entrance
     /// because a reading is only as good as what it was taken with.
-    let instrument: String
+    /// Absent for the same reason as `riseInches`, and always together with it: an instrument
+    /// recorded with no reading would name a tool that took nothing.
+    let instrument: String?
     /// Assigned once, when the entrance is created (TICK-025, D-023), and carried so re-entering
     /// an existing ID reuses it rather than re-rolling it. Never surfaced to the operator.
     let split: Split
@@ -41,11 +45,14 @@ struct ConditionTags: Equatable {
     /// screening shots. Recorded so the gap is visible rather than discovered in the field.
     let distanceM: Double
     let lighting: Lighting
-    let surface: Surface
+    /// Optional since D-034. `docs/capture-protocol.md` never asks a screening operator to record
+    /// the surface, and a value nobody looked at is worse than a gap that says so.
+    let surface: Surface?
     let occlusion: Occlusion
     /// Per shot, not per entrance: the same doorway is captured with the card vertical for Arm A
     /// and on the ground for Arm A-prime.
-    let cardPlacement: CardPlacement
+    /// Metrology only. A screening capture places no card.
+    let cardPlacement: CardPlacement?
 }
 
 /// R-3's capture-distance cap. Beyond this the capture is refused, not warned about.
@@ -59,6 +66,10 @@ enum Lighting: String, CaseIterable, Equatable {
     case directSun = "direct_sun"
     case overcast
     case shade
+    /// Dusk, or a doorway in deep shadow. Named by docs/capture-protocol.md and missing here
+    /// until TICK-027 (#31): an operator following the protocol literally was offered no tag
+    /// for it, so the honest answer was to pick a wrong one.
+    case lowLight = "low_light"
     case artificial
 
     var label: String {
@@ -66,6 +77,7 @@ enum Lighting: String, CaseIterable, Equatable {
         case .directSun: return "Direct sun"
         case .overcast: return "Overcast"
         case .shade: return "Shade"
+        case .lowLight: return "Low light"
         case .artificial: return "Artificial"
         }
     }
@@ -186,6 +198,24 @@ enum TruthValidation {
     /// `confirmedImplausibleRise` is the operator explicitly standing behind a reading outside
     /// 0-6". An out-of-range value is never silently accepted and never silently dropped -- a real
     /// 7" step exists, and so does a mistyped one.
+    /// A screening entrance: an ID and nothing else.
+    ///
+    /// The plain-photo protocol seats no caliper (D-034), so there is no reading to validate and
+    /// none is invented. The ID is still canonicalised and the split still assigned from it, which
+    /// is what keeps a screening entrance in the same partition as a metrology one for the same
+    /// doorway.
+    static func screeningEntrance(id: String) -> Result<Entrance, TruthRejected> {
+        guard let canonical = canonicalEntranceId(id) else {
+            return .failure(.entranceIdMalformed(
+                id.trimmingCharacters(in: .whitespacesAndNewlines)))
+        }
+        guard let split = SplitAssignment.split(for: canonical) else {
+            return .failure(.entranceIdMalformed(canonical))
+        }
+        return .success(Entrance(
+            id: canonical, riseInches: nil, instrument: nil, split: split))
+    }
+
     static func entrance(
         id: String,
         rise: String,
@@ -225,19 +255,30 @@ enum TruthValidation {
     static func conditions(
         distance: String,
         lighting: Lighting,
-        surface: Surface,
+        surface: Surface?,
         occlusion: Occlusion,
-        cardPlacement: CardPlacement = .vertical
+        cardPlacement: CardPlacement? = .vertical,
+        mode: CaptureMode = .metrology
     ) -> Result<ConditionTags, TruthRejected> {
         let trimmed = distance.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let value = number(from: trimmed) else {
             return .failure(.distanceNotANumber(trimmed))
         }
         guard value > 0 else { return .failure(.distanceNotPositive(value)) }
-        guard value <= maxCaptureDistanceM else { return .failure(.distanceBeyondCap(value)) }
+        // R-3's cap is a METROLOGY cap: it exists because the Arm A error budget grows with
+        // distance. The plain-photo protocol asks for a "far, ~3-4 m" shot on purpose, to show the
+        // approach path, and applying the cap to it would silently refuse the shot the protocol
+        // requires -- the conflict ConditionTags' own note predicted (D-034).
+        if mode.carriesMetrologyTruth {
+            guard value <= maxCaptureDistanceM else {
+                return .failure(.distanceBeyondCap(value))
+            }
+        }
         return .success(ConditionTags(
-            distanceM: value, lighting: lighting, surface: surface, occlusion: occlusion,
-            cardPlacement: cardPlacement))
+            distanceM: value, lighting: lighting,
+            surface: mode.carriesMetrologyTruth ? surface : nil,
+            occlusion: occlusion,
+            cardPlacement: mode.carriesMetrologyTruth ? cardPlacement : nil))
     }
 }
 

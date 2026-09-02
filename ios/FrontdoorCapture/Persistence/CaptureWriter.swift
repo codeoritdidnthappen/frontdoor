@@ -57,21 +57,66 @@ enum CaptureWriter {
         depthPath: String?,
         depthSHA256: String?
     ) -> Result<Sidecar, Failure> {
-        guard let roi = record.roi else {
-            return .failure(.incomplete("This capture has no ROI taps, so no arm can measure it."))
+        // Each mode is complete-or-nothing against ITS OWN contract. Screening does not relax
+        // metrology's requirements; it has different ones, and the schema enforces the difference
+        // in both directions -- a screening capture carrying a caliper reading is refused too.
+        var roi: ROITaps?
+        if record.captureMode.carriesMetrologyTruth {
+            guard let taps = record.roi else {
+                return .failure(.incomplete(
+                    "This capture has no ROI taps, so no arm can measure it."))
+            }
+            // Exactly four, because the homography is built from a known rectangle: three corners
+            // do not determine it and five are not a rectangle. The schema says minItems 4 and
+            // maxItems 4, so anything else wrote an invalid sidecar and left the image behind
+            // it -- a partial record, which is what AC5 exists to prevent (QA B03).
+            guard taps.cardCorners.count == Sidecar.requiredCardCorners else {
+                return .failure(.incomplete(
+                    "This capture has \(taps.cardCorners.count) card corners, not "
+                    + "\(Sidecar.requiredCardCorners), so its scale cannot be recovered."))
+            }
+            guard record.entrance.riseInches != nil, record.entrance.instrument != nil else {
+                return .failure(.incomplete(
+                    "This is a metrology capture with no caliper reading, so it has no truth to "
+                    + "be measured against."))
+            }
+            guard record.conditions.cardPlacement != nil else {
+                return .failure(.incomplete(
+                    "This is a metrology capture with no card placement, so its scale cannot be "
+                    + "interpreted."))
+            }
+            roi = taps
         }
-        // Exactly four, because the homography is built from a known rectangle: three corners
-        // do not determine it and five are not a rectangle. The schema says minItems 4 and
-        // maxItems 4, so anything else wrote an invalid sidecar and left the image behind
-        // it -- a partial record, which is what AC5 exists to prevent (QA B03).
-        guard roi.cardCorners.count == Sidecar.requiredCardCorners else {
-            return .failure(.incomplete(
-                "This capture has \(roi.cardCorners.count) card corners, not "
-                + "\(Sidecar.requiredCardCorners), so its scale cannot be recovered."))
-        }
-        guard let table = record.intrinsics.lensDistortionLookupTable, table.count >= 8 else {
-            return .failure(.incomplete(
-                "This capture carries no lens distortion table, so its taps cannot be undistorted."))
+
+        // Our camera knows its own optics, whichever mode it is shooting in; an imported photo
+        // knows none of them. The schema requires the whole intrinsics block or forbids it
+        // outright, so a half-filled one must not be assembled here.
+        // Metrology REQUIRES the camera model and refuses without it -- every arm needs it.
+        // Screening RECORDS it when the camera offers it and proceeds without it: the phone
+        // carrying depth capture has never been through the capability probe (D-032), and a
+        // protocol that fails outright on a device delivering no distortion table would lose the
+        // entrance rather than record it. Losing a doorway is worse than a sidecar with a gap.
+        var intrinsics: Sidecar.Intrinsics?
+        var gravity: [Double]?
+        if record.captureMode.isOurCamera {
+            let table = record.intrinsics?.lensDistortionLookupTable
+            let complete = record.intrinsics != nil && record.gravity != nil
+                && (table?.count ?? 0) >= 8
+            if record.captureMode.carriesMetrologyTruth && !complete {
+                return .failure(.incomplete(
+                    "This capture carries no lens distortion table, so its taps cannot be "
+                    + "undistorted and no arm can measure it."))
+            }
+            if complete, let model = record.intrinsics, let sample = record.gravity,
+               let table {
+                intrinsics = Sidecar.Intrinsics(
+                    fx: model.fx, fy: model.fy, cx: model.cx, cy: model.cy,
+                    distortionTable: unpack(table),
+                    distortionCenter: Sidecar.Point(
+                        x: model.lensDistortionCenterX,
+                        y: model.lensDistortionCenterY))
+                gravity = [sample.x, sample.y, sample.z]
+            }
         }
         let depth: Sidecar.DepthRef? = {
             guard let depthPath, let depthSHA256 else { return nil }
@@ -83,36 +128,46 @@ enum CaptureWriter {
             entranceId: record.entrance.id,
             capturedAt: record.capturedAt,
             deviceModel: record.deviceModel,
-            lens: record.lens,
-            captureDevice: record.captureDevice,
-            zoomFactor: record.zoomFactor,
+            lens: record.captureMode.isOurCamera ? record.lens : nil,
+            captureDevice: record.captureMode.isOurCamera ? record.captureDevice : nil,
+            zoomFactor: record.captureMode.isOurCamera ? record.zoomFactor : nil,
+            captureMode: record.captureMode,
             image: Sidecar.FileRef(
                 path: imagePath, sha256: imageSHA256,
                 width: record.pixelWidth, height: record.pixelHeight),
             depth: depth,
-            intrinsics: Sidecar.Intrinsics(
-                fx: record.intrinsics.fx,
-                fy: record.intrinsics.fy,
-                cx: record.intrinsics.cx,
-                cy: record.intrinsics.cy,
-                distortionTable: unpack(table),
-                distortionCenter: Sidecar.Point(
-                    x: record.intrinsics.lensDistortionCenterX,
-                    y: record.intrinsics.lensDistortionCenterY)),
-            gravity: [record.gravity.x, record.gravity.y, record.gravity.z],
-            cardPlacement: record.conditions.cardPlacement.rawValue,
-            groundTruth: Sidecar.GroundTruth(
-                riseIn: record.entrance.riseInches,
-                instrument: record.entrance.instrument),
+            intrinsics: intrinsics,
+            gravity: gravity,
+            // Gated on the MODE, never on whether the entrance happens to carry a reading.
+            // `EntranceStore.resolveScreening` deliberately returns an entrance already recorded
+            // with its caliper reading intact, so a doorway shot in metrology mode in the morning
+            // and in screening mode in the afternoon would otherwise write `ground_truth` into a
+            // screening sidecar -- a reading nobody took at that shot, and a record the schema
+            // refuses. Same for the card placement.
+            cardPlacement: record.captureMode.carriesMetrologyTruth
+                ? record.conditions.cardPlacement?.rawValue : nil,
+            groundTruth: record.captureMode.carriesMetrologyTruth
+                ? record.entrance.riseInches.flatMap({ rise in
+                    record.entrance.instrument.map {
+                        Sidecar.GroundTruth(riseIn: rise, instrument: $0)
+                    }
+                  })
+                : nil,
             conditions: Sidecar.Conditions(
                 distanceM: record.conditions.distanceM,
                 lighting: record.conditions.lighting.rawValue,
-                surface: record.conditions.surface.rawValue,
+                // Gated on the mode for the same reason as the card placement: the screening
+                // protocol never asks an operator for a surface, so any value reaching here came
+                // from a default rather than from someone looking at the ground.
+                surface: record.captureMode.carriesMetrologyTruth
+                    ? record.conditions.surface?.rawValue : nil,
                 occlusion: record.conditions.occlusion.rawValue),
-            roi: Sidecar.ROI(
-                thresholdTop: [roi.thresholdTop.x, roi.thresholdTop.y],
-                thresholdBottom: [roi.thresholdBottom.x, roi.thresholdBottom.y],
-                cardCorners: roi.cardCorners.map { [$0.x, $0.y] }),
+            roi: roi.map {
+                Sidecar.ROI(
+                    thresholdTop: [$0.thresholdTop.x, $0.thresholdTop.y],
+                    thresholdBottom: [$0.thresholdBottom.x, $0.thresholdBottom.y],
+                    cardCorners: $0.cardCorners.map { [$0.x, $0.y] })
+            },
             split: record.entrance.split.rawValue))
     }
 
@@ -130,10 +185,14 @@ enum CaptureWriter {
         _ record: CaptureRecord,
         imageData: Data,
         depthData: Data?,
-        into directory: URL
+        into directory: URL,
+        imageExtension: String = "jpg"
     ) -> Result<Written, Failure> {
         let base = record.captureId
-        let imageURL = directory.appendingPathComponent("\(base).jpg")
+        // Our camera emits JPEG; an imported photo is whatever the library handed over, which on
+        // an iPhone is usually HEIC and for a screenshot is PNG. Naming those `.jpg` would label
+        // a file for a format it does not hold (D-034).
+        let imageURL = directory.appendingPathComponent("\(base).\(imageExtension)")
         let depthURL = depthData.map { _ in directory.appendingPathComponent("\(base).depth") }
         let sidecarURL = directory.appendingPathComponent("\(base).json")
 

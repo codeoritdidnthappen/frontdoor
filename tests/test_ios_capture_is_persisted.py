@@ -86,15 +86,63 @@ def test_the_camera_bytes_are_retained_for_writing():
     assert "imageData" in source, "the captured bytes must be carried to the writer"
 
 
-def test_the_writer_is_reached_from_the_review_confirmation():
+#: The single function where a frame becomes a capture on disk. Both modes go through it: the
+#: metrology path via confirmReview once ROI taps exist, the screening path straight from the
+#: shutter, because the plain-photo protocol places no taps (D-034, TICK-027).
+COMMIT = "func commit("
+
+
+def test_the_writer_is_reached_from_the_commit():
     """The one place a frame becomes a capture (TICK-026) is the one place it must persist."""
     source = _strip_comments(
         (APP / "Capture" / "CaptureController.swift").read_text(encoding="utf-8")
     )
-    body = _body_of(source, "func confirmReview")
-    assert "CaptureWriter.write(" in body, "confirmReview must write the capture"
+    body = _body_of(source, COMMIT)
+    assert "CaptureWriter.write(" in body, "commit must write the capture"
     assert body.index("CaptureWriter.write(") < body.index("photosTaken += 1"), (
         "the counter must not advance before the bytes are on disk"
+    )
+
+
+def test_every_route_to_a_capture_reaches_the_commit():
+    """The guard is only worth anything if nothing can become a capture around it.
+
+    Splitting `confirmReview` into a thin caller is exactly the refactor that could leave a
+    second, writer-less path behind -- which is the shape of QA B02 all over again.
+    """
+    source = _strip_comments(
+        (APP / "Capture" / "CaptureController.swift").read_text(encoding="utf-8")
+    )
+    # The metrology route: taps confirmed, then commit.
+    confirm = _body_of(source, "func confirmReview")
+    assert "commit(" in confirm, "confirmReview must reach the commit"
+    assert "CaptureWriter.write(" not in confirm, (
+        "confirmReview must not write directly; one writer call, one guarded path"
+    )
+    # The screening route: no ROI step, so the shutter path commits for itself.
+    assert source.count("commit(pending, taps:") == 2, (
+        "expected exactly two routes into commit -- confirmReview and the screening shutter"
+    )
+    # And the invariant that actually matters: every way of creating a capture goes through the
+    # writer, and each one advances the counter only after it. Asserting on `commit(` alone stopped
+    # covering that the moment importPhoto began writing directly (D-034).
+    calls = source.count("CaptureWriter.write(")
+    assert calls == 2, (
+        f"expected exactly two CaptureWriter.write call sites (commit and importPhoto), found "
+        f"{calls}; a third is an unguarded way to create a capture"
+    )
+    imported = _body_of(source, "func importPhoto")
+    assert "CaptureWriter.write(" in imported, "importPhoto must write the photo"
+    assert imported.index("CaptureWriter.write(") < imported.index("photosTaken += 1"), (
+        "the counter must not advance before the bytes are on disk"
+    )
+    # Scoped to the WRITE switch. importPhoto refuses unreadable files first, so partitioning the
+    # whole body on the first `case .failure` splits at the wrong switch and the check passes or
+    # fails for reasons that have nothing to do with the counter.
+    write_switch = imported[imported.index("CaptureWriter.write("):]
+    success, _, failure = write_switch.partition("case .failure")
+    assert "photosTaken += 1" in success and "photosTaken += 1" not in failure, (
+        "an import that failed to write must not be counted"
     )
 
 
@@ -110,7 +158,7 @@ def test_success_state_is_set_only_on_a_successful_write(needle):
     source = _strip_comments(
         (APP / "Capture" / "CaptureController.swift").read_text(encoding="utf-8")
     )
-    body = _body_of(source, "func confirmReview")
+    body = _body_of(source, COMMIT)
     assert "case .success:" in body, (
         "the success branch must stand alone; a combined `case .success, .failure:` runs the "
         "success path on a write that failed"
@@ -125,7 +173,7 @@ def test_the_failure_branch_reports_and_keeps_the_frame():
     source = _strip_comments(
         (APP / "Capture" / "CaptureController.swift").read_text(encoding="utf-8")
     )
-    _, _, failure = _body_of(source, "func confirmReview").partition("case .failure")
+    _, _, failure = _body_of(source, COMMIT).partition("case .failure")
     assert "lastCaptureError" in failure, "a failed write must say why"
     assert "pendingReview = nil" not in failure, (
         "the frame must stay under review, or the operator loses it with no capture on disk"
