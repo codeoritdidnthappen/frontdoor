@@ -49,7 +49,7 @@ struct EntranceSetupView: View {
                         Text("Already recorded. Its reading and split are reused unchanged.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
-                    } else if known != nil {
+                    } else if known != nil, !mode.carriesMetrologyTruth {
                         Text("Already recorded. Its split is reused unchanged.")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
@@ -60,6 +60,17 @@ struct EntranceSetupView: View {
                             Text("in").foregroundStyle(.secondary)
                         }
                         TextField("Instrument", text: $instrument)
+                        if known != nil {
+                            // The entrance exists but was first seen under the plain-photo
+                            // protocol, so it has no reading. Without asking for one here the
+                            // operator gets a green light, shoots, places all six taps, and only
+                            // then is refused by the writer -- with no way to supply the reading,
+                            // because `resolve` never overwrites an existing entry (D-034).
+                            Text("Recorded from a screening capture, so it has no reading yet. "
+                                 + "Enter one to capture it in metrology mode.")
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
                     }
                 }
 
@@ -147,7 +158,9 @@ struct EntranceSetupView: View {
             return
         }
 
-        if store.existing(id: entranceId) == nil {
+        // A known entrance with no reading still has to go through validation in metrology mode:
+        // it is exactly the entrance that needs one supplied.
+        if store.existing(id: entranceId)?.riseInches == nil {
             let checked = TruthValidation.entrance(
                 id: entranceId, rise: rise, instrument: instrument,
                 confirmedImplausibleRise: confirmedRise)
@@ -166,7 +179,7 @@ struct EntranceSetupView: View {
             }
         }
 
-        switch store.resolve(
+        switch store.upgradeToMetrology(
             id: entranceId, rise: rise, instrument: instrument,
             confirmedImplausibleRise: confirmedRise
         ) {

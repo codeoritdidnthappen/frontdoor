@@ -759,7 +759,15 @@ is the likeliest reason #67 still reads 0/40 entrances.
     metrology   the pre-registered study. Caliper truth, ROI taps, card placement,
                 intrinsics, gravity -- everything it always required, unchanged.
     screening   the plain-photo protocol. Our camera, so intrinsics and gravity are
-                still recorded; no caliper, no card, no taps.
+                recorded WHEN THE DEVICE OFFERS THEM and omitted when it does not;
+                no caliper, no card, no taps, no surface.
+
+                Optional rather than required, corrected during review: the phone
+                carrying depth capture (D-032) has never been through the capability
+                probe, and a protocol that refused outright on a device delivering no
+                distortion table would lose the entrance rather than record it. A lost
+                doorway is worse than a sidecar with a gap. Metrology still REQUIRES
+                the camera model, because every arm depends on it.
     imported    a photo taken outside this app. None of our capture metadata exists
                 for it and none is invented.
 
@@ -790,6 +798,23 @@ value nobody looked at.
 - An imported photo whose file cannot say WHEN it was taken, or WHAT took it, is refused.
   Dating it to the import time would put a wrong answer in the field that records when the
   entrance was seen, and a wrong answer is worse than a missing photo.
+
+**Two leaks found in review, both worth recording because they are the failure this entry
+claims to prevent.** First, `conditions.surface` was moved out of the shared required list
+and not restored for metrology, so a metrology capture -- and every sidecar written before
+this entry -- could drop it and still validate. The loosening reached backwards, which is
+exactly what "absent means metrology" promises it cannot. Second, `EntranceStore` returns
+an entrance already recorded WITH its caliper reading, deliberately, so a doorway shot in
+metrology in the morning and screening in the afternoon wrote `ground_truth` into a
+screening sidecar. The writer now gates those fields on the MODE rather than on whether
+the entrance happens to carry them, and the same applies to `card_placement` and
+`surface`. Both are pinned by tests.
+
+**An entrance first recorded by a screening capture can later take a reading.** Without
+that it could never be captured in metrology mode on that device: the setup screen reused
+the reading-less entrance and the writer refused it, with no way to supply one. The
+no-overwrite rule still stands where it was meant to -- an entrance that already has a
+reading keeps it against a second operator.
 
 **Metrology is not deleted.** Its path stays in the app behind a mode switch, and every
 one of its gates still fires. Whether that study is alive is A-3 (#67), an open team

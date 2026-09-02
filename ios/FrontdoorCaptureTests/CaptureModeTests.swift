@@ -175,6 +175,109 @@ final class CaptureModeTests: XCTestCase {
         }
     }
 
+    // MARK: - the reading must not leak across modes
+
+    func testAScreeningCaptureOfAnEntranceWithAReadingStillWritesNoGroundTruth() throws {
+        // E-014 is shot in metrology mode in the morning; in the afternoon the operator switches
+        // to Screening and shoots it again. `resolveScreening` returns the SAME entrance, reading
+        // intact and deliberately so -- so the writer must gate on the mode, not on whether the
+        // entrance happens to carry one. Otherwise the screening sidecar claims a caliper reading
+        // nobody took at that shot, and the schema refuses the record after it is on disk.
+        var r = record(mode: .screening)
+        r.entrance = metrologyEntrance()
+        let assembled = CaptureWriter.sidecar(
+            for: r, imagePath: "a.jpg", imageSHA256: String(repeating: "a", count: 64),
+            depthPath: nil, depthSHA256: nil)
+        guard case .success(let sidecar) = assembled else {
+            return XCTFail("a screening capture of a known entrance must still be writable")
+        }
+        XCTAssertNil(sidecar.groundTruth)
+        XCTAssertNil(sidecar.cardPlacement)
+    }
+
+    func testAScreeningCaptureWithACardPlacementInItsTagsStillWritesNone() throws {
+        // The same leak by the other route: conditions edited from the viewfinder used to come
+        // back carrying `cardPlacement: .vertical` from a default argument.
+        var r = record(mode: .screening)
+        r.conditions = ConditionTags(
+            distanceM: 2.0, lighting: .overcast, surface: .concrete,
+            occlusion: Occlusion.none, cardPlacement: .vertical)
+        guard case .success(let sidecar) = CaptureWriter.sidecar(
+            for: r, imagePath: "a.jpg", imageSHA256: String(repeating: "a", count: 64),
+            depthPath: nil, depthSHA256: nil) else {
+            return XCTFail("expected a writable screening capture")
+        }
+        XCTAssertNil(sidecar.cardPlacement)
+        XCTAssertNil(sidecar.conditions.surface)
+    }
+
+    func testEditingConditionsMidSessionKeepsTheScreeningContract() {
+        // What ConditionsSheet does on Save. Defaulting to metrology here re-applied the 3 m cap
+        // and handed back a card placement, mid-session, with no way for the operator to tell.
+        guard case .success(let tags) = TruthValidation.conditions(
+            distance: "3.5", lighting: .lowLight, surface: .concrete,
+            occlusion: .partial, mode: .screening) else {
+            return XCTFail("the protocol's far shot must survive a mid-session edit")
+        }
+        XCTAssertNil(tags.cardPlacement)
+        XCTAssertNil(tags.surface)
+        XCTAssertEqual(tags.distanceM, 3.5)
+    }
+
+    // MARK: - a screening entrance can still be upgraded
+
+    func testAnEntranceFirstSeenByScreeningCanLaterTakeAReading() async {
+        // Otherwise that doorway could never be captured in metrology mode on this device: the
+        // setup screen reused the reading-less entrance and the writer then refused it, with no
+        // way to supply one.
+        let store = await EntranceStore()
+        _ = await store.resolveScreening(id: "E-014")
+        guard case .success(let upgraded) = await store.upgradeToMetrology(
+            id: "E-014", rise: "0.75", instrument: "digital caliper") else {
+            return XCTFail("a reading-less entrance must be able to take a reading")
+        }
+        XCTAssertEqual(upgraded.riseInches, 0.75)
+    }
+
+    func testAnEntranceThatAlreadyHasAReadingKeepsItAgainstASecondOperator() async {
+        // The no-overwrite rule still stands where it was meant to.
+        let store = await EntranceStore()
+        _ = await store.resolve(id: "E-014", rise: "0.75", instrument: "digital caliper")
+        guard case .success(let same) = await store.upgradeToMetrology(
+            id: "E-014", rise: "2.50", instrument: "tape measure") else {
+            return XCTFail("expected the known entrance")
+        }
+        XCTAssertEqual(same.riseInches, 0.75)
+        XCTAssertEqual(same.instrument, "digital caliper")
+    }
+
+    // MARK: - a screening capture is not lost to a missing camera model
+
+    func testAScreeningCaptureSurvivesADeviceThatDeliversNoDistortionTable() throws {
+        // The phone carrying depth capture (D-032) has never been through the capability probe.
+        // Refusing here would lose the entrance rather than record it.
+        var r = record(mode: .screening)
+        r.intrinsics = nil
+        r.gravity = nil
+        guard case .success(let sidecar) = CaptureWriter.sidecar(
+            for: r, imagePath: "a.jpg", imageSHA256: String(repeating: "a", count: 64),
+            depthPath: nil, depthSHA256: nil) else {
+            return XCTFail("a screening capture must not be lost to a missing camera model")
+        }
+        XCTAssertNil(sidecar.intrinsics)
+        XCTAssertNil(sidecar.gravity)
+    }
+
+    func testAMetrologyCaptureIsStillRefusedWithoutTheCameraModel() {
+        var r = record(mode: .metrology)
+        r.intrinsics = nil
+        guard case .failure = CaptureWriter.sidecar(
+            for: r, imagePath: "a.jpg", imageSHA256: String(repeating: "a", count: 64),
+            depthPath: nil, depthSHA256: nil) else {
+            return XCTFail("metrology still needs the camera model every arm depends on")
+        }
+    }
+
     func testAMetrologyCaptureWithNoReadingIsRefused() {
         var r = record(mode: .metrology)
         r.entrance = entrance()          // screening entrance: no rise

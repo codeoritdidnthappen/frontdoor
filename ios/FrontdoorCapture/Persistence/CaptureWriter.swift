@@ -91,26 +91,32 @@ enum CaptureWriter {
         // Our camera knows its own optics, whichever mode it is shooting in; an imported photo
         // knows none of them. The schema requires the whole intrinsics block or forbids it
         // outright, so a half-filled one must not be assembled here.
+        // Metrology REQUIRES the camera model and refuses without it -- every arm needs it.
+        // Screening RECORDS it when the camera offers it and proceeds without it: the phone
+        // carrying depth capture has never been through the capability probe (D-032), and a
+        // protocol that fails outright on a device delivering no distortion table would lose the
+        // entrance rather than record it. Losing a doorway is worse than a sidecar with a gap.
         var intrinsics: Sidecar.Intrinsics?
         var gravity: [Double]?
         if record.captureMode.isOurCamera {
-            guard let model = record.intrinsics, let sample = record.gravity else {
+            let table = record.intrinsics?.lensDistortionLookupTable
+            let complete = record.intrinsics != nil && record.gravity != nil
+                && (table?.count ?? 0) >= 8
+            if record.captureMode.carriesMetrologyTruth && !complete {
                 return .failure(.incomplete(
-                    "This capture came from our camera but carries no camera model or gravity "
-                    + "vector, so the record the schema requires cannot be assembled."))
+                    "This capture carries no lens distortion table, so its taps cannot be "
+                    + "undistorted and no arm can measure it."))
             }
-            guard let table = model.lensDistortionLookupTable, table.count >= 8 else {
-                return .failure(.incomplete(
-                    "This capture carries no lens distortion table, so the camera model the "
-                    + "schema requires is incomplete."))
+            if complete, let model = record.intrinsics, let sample = record.gravity,
+               let table {
+                intrinsics = Sidecar.Intrinsics(
+                    fx: model.fx, fy: model.fy, cx: model.cx, cy: model.cy,
+                    distortionTable: unpack(table),
+                    distortionCenter: Sidecar.Point(
+                        x: model.lensDistortionCenterX,
+                        y: model.lensDistortionCenterY))
+                gravity = [sample.x, sample.y, sample.z]
             }
-            intrinsics = Sidecar.Intrinsics(
-                fx: model.fx, fy: model.fy, cx: model.cx, cy: model.cy,
-                distortionTable: unpack(table),
-                distortionCenter: Sidecar.Point(
-                    x: model.lensDistortionCenterX,
-                    y: model.lensDistortionCenterY))
-            gravity = [sample.x, sample.y, sample.z]
         }
         let depth: Sidecar.DepthRef? = {
             guard let depthPath, let depthSHA256 else { return nil }
@@ -132,16 +138,29 @@ enum CaptureWriter {
             depth: depth,
             intrinsics: intrinsics,
             gravity: gravity,
-            cardPlacement: record.conditions.cardPlacement?.rawValue,
-            groundTruth: record.entrance.riseInches.flatMap { rise in
-                record.entrance.instrument.map {
-                    Sidecar.GroundTruth(riseIn: rise, instrument: $0)
-                }
-            },
+            // Gated on the MODE, never on whether the entrance happens to carry a reading.
+            // `EntranceStore.resolveScreening` deliberately returns an entrance already recorded
+            // with its caliper reading intact, so a doorway shot in metrology mode in the morning
+            // and in screening mode in the afternoon would otherwise write `ground_truth` into a
+            // screening sidecar -- a reading nobody took at that shot, and a record the schema
+            // refuses. Same for the card placement.
+            cardPlacement: record.captureMode.carriesMetrologyTruth
+                ? record.conditions.cardPlacement?.rawValue : nil,
+            groundTruth: record.captureMode.carriesMetrologyTruth
+                ? record.entrance.riseInches.flatMap({ rise in
+                    record.entrance.instrument.map {
+                        Sidecar.GroundTruth(riseIn: rise, instrument: $0)
+                    }
+                  })
+                : nil,
             conditions: Sidecar.Conditions(
                 distanceM: record.conditions.distanceM,
                 lighting: record.conditions.lighting.rawValue,
-                surface: record.conditions.surface?.rawValue,
+                // Gated on the mode for the same reason as the card placement: the screening
+                // protocol never asks an operator for a surface, so any value reaching here came
+                // from a default rather than from someone looking at the ground.
+                surface: record.captureMode.carriesMetrologyTruth
+                    ? record.conditions.surface?.rawValue : nil,
                 occlusion: record.conditions.occlusion.rawValue),
             roi: roi.map {
                 Sidecar.ROI(
@@ -166,10 +185,14 @@ enum CaptureWriter {
         _ record: CaptureRecord,
         imageData: Data,
         depthData: Data?,
-        into directory: URL
+        into directory: URL,
+        imageExtension: String = "jpg"
     ) -> Result<Written, Failure> {
         let base = record.captureId
-        let imageURL = directory.appendingPathComponent("\(base).jpg")
+        // Our camera emits JPEG; an imported photo is whatever the library handed over, which on
+        // an iPhone is usually HEIC and for a screenshot is PNG. Naming those `.jpg` would label
+        // a file for a format it does not hold (D-034).
+        let imageURL = directory.appendingPathComponent("\(base).\(imageExtension)")
         let depthURL = depthData.map { _ in directory.appendingPathComponent("\(base).depth") }
         let sidecarURL = directory.appendingPathComponent("\(base).json")
 

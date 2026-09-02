@@ -270,7 +270,7 @@
   },
   "allOf": [
     {
-      "description": "A metrology capture carries everything the pre-registered study needs. Absent capture_mode means metrology, so this also holds every pre-D-034 sidecar to its original contract.",
+      "description": "A metrology capture carries everything the pre-registered study needs, INCLUDING the full condition set. Absent capture_mode means metrology, so this also holds every pre-D-034 sidecar to its original contract -- conditions.surface included, which is why it is restated here rather than left to conditions.required.",
       "if": {
         "anyOf": [
           {
@@ -301,11 +301,21 @@
           "gravity",
           "card_placement",
           "ground_truth"
-        ]
+        ],
+        "properties": {
+          "conditions": {
+            "required": [
+              "distance_m",
+              "lighting",
+              "surface",
+              "occlusion"
+            ]
+          }
+        }
       }
     },
     {
-      "description": "A screening capture comes through our camera, so it still carries what the camera knows; it does not carry a caliper reading, a card placement or ROI taps, because the 2026-09-01 protocol places none of them.",
+      "description": "A screening capture may carry what our camera knows, and is not required to: the phone that carries the depth device has never been through the capability probe (D-032), and a capture protocol that fails outright on a device delivering no distortion table would lose the entrance rather than record it. What it may NOT carry is a caliper reading, a card placement or ROI taps -- the protocol places none of them, so a value in any of them would describe something nobody did.",
       "if": {
         "properties": {
           "capture_mode": {
@@ -317,13 +327,6 @@
         ]
       },
       "then": {
-        "required": [
-          "lens",
-          "capture_device",
-          "zoom_factor",
-          "intrinsics",
-          "gravity"
-        ],
         "not": {
           "anyOf": [
             {

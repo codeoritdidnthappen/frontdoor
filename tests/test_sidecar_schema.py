@@ -436,3 +436,33 @@ def test_an_unknown_capture_mode_is_refused():
     record["capture_mode"] = "guess"
     with pytest.raises(ValidationError):
         validate_sidecar(record)
+
+
+def test_the_loosening_does_not_reach_conditions_either():
+    """D-034's promise is that a pre-existing record keeps its whole contract.
+
+    `surface` was moved out of `conditions.required` and, for one revision, nothing put it back
+    for metrology -- so a metrology capture, and every sidecar written before D-034, could drop
+    it and still validate. That is the promise failing quietly, which is the only way it fails.
+    """
+    for mode in ("metrology", None):
+        record = architecture_example()
+        if mode:
+            record["capture_mode"] = mode
+        else:
+            record.pop("capture_mode", None)
+        record["conditions"].pop("surface")
+        with pytest.raises(ValidationError):
+            validate_sidecar(record)
+
+
+def test_a_screening_capture_may_omit_the_camera_model_but_not_lie_about_it():
+    """Recording it is optional; the phone carrying depth has never been probed (D-032).
+
+    A protocol that failed outright on a device delivering no distortion table would lose the
+    entrance rather than record it, and a lost doorway is worse than a sidecar with a gap.
+    """
+    record = screening_record()
+    for optional in ("intrinsics", "gravity", "lens", "capture_device", "zoom_factor"):
+        thinner = {k: v for k, v in record.items() if k != optional}
+        validate_sidecar(thinner)

@@ -17,6 +17,30 @@ final class EntranceStore: ObservableObject {
         TruthValidation.canonicalEntranceId(id).flatMap { entrances[$0] }
     }
 
+    /// The entrance for a metrology capture, supplying a reading if it does not have one yet.
+    ///
+    /// The no-overwrite rule stands where it matters: an entrance that already HAS a reading keeps
+    /// it, so a second operator cannot give E-014 a different rise. What this adds is the one case
+    /// the rule was never meant to cover -- an entrance first recorded by a screening capture,
+    /// which has no reading at all. Without it that doorway could never be captured in metrology
+    /// mode on this device, because `resolve` returns the reading-less entrance unchanged and the
+    /// writer then refuses it (D-034).
+    func upgradeToMetrology(
+        id: String,
+        rise: String,
+        instrument: String,
+        confirmedImplausibleRise: Bool = false
+    ) -> Result<Entrance, TruthRejected> {
+        if let known = existing(id: id), known.riseInches != nil { return .success(known) }
+        let created = TruthValidation.entrance(
+            id: id, rise: rise, instrument: instrument,
+            confirmedImplausibleRise: confirmedImplausibleRise)
+        if case .success(let entrance) = created {
+            entrances[entrance.id] = entrance
+        }
+        return created
+    }
+
     /// The entrance for a screening capture: the one already recorded, or a new one with no
     /// reading (D-034).
     ///

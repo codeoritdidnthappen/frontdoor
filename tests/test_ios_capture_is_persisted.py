@@ -121,8 +121,28 @@ def test_every_route_to_a_capture_reaches_the_commit():
     )
     # The screening route: no ROI step, so the shutter path commits for itself.
     assert source.count("commit(pending, taps:") == 2, (
-        "expected exactly two routes into commit -- confirmReview and the screening shutter; "
-        "a third would be an unguarded way to create a capture"
+        "expected exactly two routes into commit -- confirmReview and the screening shutter"
+    )
+    # And the invariant that actually matters: every way of creating a capture goes through the
+    # writer, and each one advances the counter only after it. Asserting on `commit(` alone stopped
+    # covering that the moment importPhoto began writing directly (D-034).
+    calls = source.count("CaptureWriter.write(")
+    assert calls == 2, (
+        f"expected exactly two CaptureWriter.write call sites (commit and importPhoto), found "
+        f"{calls}; a third is an unguarded way to create a capture"
+    )
+    imported = _body_of(source, "func importPhoto")
+    assert "CaptureWriter.write(" in imported, "importPhoto must write the photo"
+    assert imported.index("CaptureWriter.write(") < imported.index("photosTaken += 1"), (
+        "the counter must not advance before the bytes are on disk"
+    )
+    # Scoped to the WRITE switch. importPhoto refuses unreadable files first, so partitioning the
+    # whole body on the first `case .failure` splits at the wrong switch and the check passes or
+    # fails for reasons that have nothing to do with the counter.
+    write_switch = imported[imported.index("CaptureWriter.write("):]
+    success, _, failure = write_switch.partition("case .failure")
+    assert "photosTaken += 1" in success and "photosTaken += 1" not in failure, (
+        "an import that failed to write must not be counted"
     )
 
 

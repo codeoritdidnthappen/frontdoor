@@ -120,3 +120,62 @@ final class ImportedPhotoTests: XCTestCase {
         }
     }
 }
+
+extension ImportedPhotoTests {
+
+    func testATiffDateAloneIsNotAcceptedAsACaptureDate() {
+        // TIFF tag 306 is the file's last-modified time. A photo re-saved by an editor, or one
+        // that came through an app which stripped DateTimeOriginal while writing its own DateTime,
+        // would otherwise import with a handling time in captured_at -- indistinguishable
+        // downstream from a real one.
+        let data = jpegForExtension(tiff: [
+            kCGImagePropertyTIFFDateTime: "2026:09:01 14:22:31",
+            kCGImagePropertyTIFFModel: "iPhone 17 Pro",
+        ])
+        guard case .failure(.noCaptureDate) = ImportedPhoto.read(data) else {
+            return XCTFail("a TIFF DateTime is a file time, not a capture time")
+        }
+    }
+
+    func testTheExtensionFollowsTheActualFormat() {
+        // PhotosPicker returns the ORIGINAL representation: HEIC on an iPhone, PNG for a
+        // screenshot. Writing those as .jpg names a file for a format it does not hold.
+        XCTAssertEqual(ImportedPhoto.extension(for: "public.heic"), "heic")
+        XCTAssertEqual(ImportedPhoto.extension(for: "public.png"), "png")
+        XCTAssertEqual(ImportedPhoto.extension(for: "public.jpeg"), "jpeg")
+        // Only a genuinely unknown type falls back.
+        XCTAssertEqual(ImportedPhoto.extension(for: nil), "jpg")
+        XCTAssertEqual(ImportedPhoto.extension(for: "not.a.real.uti"), "jpg")
+    }
+
+    func testAReadPhotoReportsItsOwnFormat() throws {
+        let data = jpegForExtension(exif: [kCGImagePropertyExifDateTimeOriginal: "2026:09:01 14:22:31"],
+                                    tiff: [kCGImagePropertyTIFFModel: "iPhone 17 Pro"])
+        guard case .success(let d) = ImportedPhoto.read(data) else {
+            return XCTFail("expected a readable photo")
+        }
+        XCTAssertEqual(d.fileExtension, "jpeg")
+    }
+
+    /// Same builder as the main suite; named separately so the extension can reach it.
+    private func jpegForExtension(exif: [CFString: Any]? = nil,
+                                  tiff: [CFString: Any]? = nil) -> Data {
+        let width = 8, height = 6
+        let bytes = [UInt8](repeating: 200, count: width * height * 4)
+        let provider = CGDataProvider(data: Data(bytes) as CFData)!
+        let image = CGImage(
+            width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
+            bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)!
+        let out = NSMutableData()
+        let dest = CGImageDestinationCreateWithData(
+            out, UTType.jpeg.identifier as CFString, 1, nil)!
+        var props: [CFString: Any] = [:]
+        if let exif { props[kCGImagePropertyExifDictionary] = exif }
+        if let tiff { props[kCGImagePropertyTIFFDictionary] = tiff }
+        CGImageDestinationAddImage(dest, image, props as CFDictionary)
+        CGImageDestinationFinalize(dest)
+        return out as Data
+    }
+}

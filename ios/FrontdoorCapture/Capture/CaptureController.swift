@@ -494,12 +494,19 @@ final class CaptureController: ObservableObject {
             roi: nil)
 
         switch CaptureWriter.write(record, imageData: data, depthData: nil,
-                                   into: Self.capturesDirectory) {
+                                   into: Self.capturesDirectory,
+                                   imageExtension: details.fileExtension) {
         case .success:
             photosTaken += 1
             refreshPendingUploads()
+            // The same evidence any other capture leaves. Without it the home screen keeps
+            // showing the previous capture as the most recent one, which is the state an operator
+            // reads to decide whether the last thing they did worked.
+            lastRecord = record
+            lastCaptureError = nil
             return .imported
         case .failure(let failure):
+            lastCaptureError = failure.message
             return .refused(failure.message)
         }
     }
@@ -540,8 +547,13 @@ final class CaptureController: ObservableObject {
             lastCaptureError = nil
             pendingReview = nil
         case .failure(let failure):
-            // Complete-or-nothing (AC5): the frame stays under review so the operator can fix
-            // what is missing, and nothing is counted for a capture that is not on disk.
+            // Complete-or-nothing (AC5): nothing is counted for a capture that is not on disk.
+            //
+            // In METROLOGY the frame stays under review, so the operator can fix what is missing
+            // and confirm again. In SCREENING there is no review screen to stay on -- the frame
+            // was never held there -- so a failed write means the shot is gone and has to be
+            // retaken. That is why the screening path refuses so little: the camera-model gate
+            // does not apply to it, and the remaining failures are disk failures.
             lastCaptureError = failure.message
         }
     }

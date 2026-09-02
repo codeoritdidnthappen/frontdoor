@@ -102,7 +102,7 @@ struct CaptureView: View {
         }
         .sheet(isPresented: $editingConditions) {
             if let subject = controller.subject {
-                ConditionsSheet(current: subject.conditions) { tags in
+                ConditionsSheet(mode: controller.captureMode, current: subject.conditions) { tags in
                     controller.subject?.conditions = tags
                     editingConditions = false
                 } onCancel: {

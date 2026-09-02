@@ -1,5 +1,6 @@
 import Foundation
 import ImageIO
+import UniformTypeIdentifiers
 
 /// A photo taken outside this app, read well enough to become a capture record (D-034, #31).
 ///
@@ -36,6 +37,11 @@ enum ImportedPhoto {
     }
 
     struct Details: Equatable {
+        /// The file extension the bytes actually deserve. `PhotosPicker` hands back the ORIGINAL
+        /// representation -- HEIC on an iPhone, PNG for a screenshot -- so writing everything as
+        /// `.jpg` would name a file for a format it does not hold. The hash stays honest either
+        /// way, but anything dispatching on extension, or a person opening the file, is misled.
+        var fileExtension: String
         /// RFC 3339 UTC, from the file's own EXIF, never from the clock at import time.
         var capturedAt: String
         /// Whatever EXIF says took it. A marketing name like "iPhone 17 Pro" rather than the
@@ -62,8 +68,13 @@ enum ImportedPhoto {
         let exif = props[kCGImagePropertyExifDictionary] as? [CFString: Any]
         let tiff = props[kCGImagePropertyTIFFDictionary] as? [CFString: Any]
 
-        guard let taken = (exif?[kCGImagePropertyExifDateTimeOriginal] as? String)
-                ?? (tiff?[kCGImagePropertyTIFFDateTime] as? String),
+        // EXIF DateTimeOriginal ONLY. TIFF tag 306 (`DateTime`) is the file's last-modified time,
+        // not the shutter press: a photo re-saved by an editor, or one that came through a
+        // messaging app which stripped DateTimeOriginal while writing its own DateTime, would
+        // import with a handling time in `captured_at`. That is the exact failure the refusal
+        // below exists to prevent, arriving through the back door and indistinguishable
+        // downstream. A photo that cannot say when it was taken is refused instead.
+        guard let taken = exif?[kCGImagePropertyExifDateTimeOriginal] as? String,
               let stamp = rfc3339(from: taken,
                                   offset: exif?[kCGImagePropertyExifOffsetTimeOriginal] as? String,
                                   timeZone: timeZone)
@@ -73,8 +84,17 @@ enum ImportedPhoto {
             .trimmingCharacters(in: .whitespacesAndNewlines), !model.isEmpty
         else { return .failure(.noDeviceModel) }
 
-        return .success(Details(capturedAt: stamp, deviceModel: model,
-                                pixelWidth: width, pixelHeight: height))
+        let uti = CGImageSourceGetType(source) as String?
+        return .success(Details(
+            fileExtension: Self.extension(for: uti),
+            capturedAt: stamp, deviceModel: model,
+            pixelWidth: width, pixelHeight: height))
+    }
+
+    /// The extension for a UTI, defaulting to `jpg` only when the type is genuinely unknown.
+    static func `extension`(for uti: String?) -> String {
+        guard let uti, let type = UTType(uti) else { return "jpg" }
+        return type.preferredFilenameExtension ?? "jpg"
     }
 
     /// EXIF's `yyyy:MM:dd HH:mm:ss` into the UTC spelling the schema pins.

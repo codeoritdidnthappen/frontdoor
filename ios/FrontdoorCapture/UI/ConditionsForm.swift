@@ -40,6 +40,13 @@ struct ConditionsForm: View {
 /// silently carry the first one's distance -- wrong in a stratification variable, and undetectable
 /// once the capture is over.
 struct ConditionsSheet: View {
+    /// The session's mode, passed in rather than defaulted (D-034).
+    ///
+    /// Defaulting to metrology here re-applied R-3's 3 m cap mid-session, so an operator who had
+    /// set up the protocol's "far, ~3-4 m" shot was refused the moment they edited conditions from
+    /// the viewfinder -- and the saved tags came back carrying `card_placement: vertical` and a
+    /// surface, both of which the schema forbids on a screening capture.
+    let mode: CaptureMode
     let current: ConditionTags
     let onSave: (ConditionTags) -> Void
     let onCancel: () -> Void
@@ -50,9 +57,11 @@ struct ConditionsSheet: View {
     @State private var occlusion: Occlusion
     @State private var rejection: TruthRejected?
 
-    init(current: ConditionTags,
+    init(mode: CaptureMode,
+         current: ConditionTags,
          onSave: @escaping (ConditionTags) -> Void,
          onCancel: @escaping () -> Void) {
+        self.mode = mode
         self.current = current
         self.onSave = onSave
         self.onCancel = onCancel
@@ -73,7 +82,8 @@ struct ConditionsSheet: View {
             Form {
                 Section {
                     ConditionsForm(distance: $distance, lighting: $lighting,
-                                   surface: $surface, occlusion: $occlusion)
+                                   surface: $surface, occlusion: $occlusion,
+                                   showsSurface: mode.carriesMetrologyTruth)
                 } header: {
                     Text("Conditions for the next shot")
                 } footer: {
@@ -91,7 +101,7 @@ struct ConditionsSheet: View {
                     Button("Save") {
                         switch TruthValidation.conditions(
                             distance: distance, lighting: lighting,
-                            surface: surface, occlusion: occlusion
+                            surface: surface, occlusion: occlusion, mode: mode
                         ) {
                         case .failure(let error): rejection = error
                         case .success(let tags): rejection = nil; onSave(tags)
