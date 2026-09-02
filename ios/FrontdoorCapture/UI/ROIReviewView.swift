@@ -114,8 +114,18 @@ struct ROIReviewView: View {
     private var nudgePad: some View {
         if let target = ROITarget.allCases.last(where: { marks[$0] != nil }) {
             HStack(spacing: 10) {
-                Text("Nudge \(target.shortLabel)")
-                    .font(.caption).foregroundStyle(.secondary)
+                // The pixel coordinates, because AC4 asks for a measured standard deviation over
+                // ten placements of one edge and an operator cannot record a number the app never
+                // shows them. Monospaced so a column of ten readings is easy to compare.
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(target.shortLabel).font(.caption.weight(.semibold))
+                    Text("\(marks[target]!.x), \(marks[target]!.y)")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                .frame(minWidth: 76, alignment: .leading)
+                .accessibilityLabel(
+                    "\(target.shortLabel) at \(marks[target]!.x), \(marks[target]!.y)")
                 ForEach([("chevron.left", -1, 0), ("chevron.right", 1, 0),
                          ("chevron.up", 0, -1), ("chevron.down", 0, 1)], id: \.0) { icon, dx, dy in
                     Button {
