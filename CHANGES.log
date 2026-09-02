@@ -533,3 +533,82 @@ the quarantine holds for metadata and not only for object bytes.
 The evaluation host region remains open (#50). WNAM was chosen to match a North American
 host; if #50 lands elsewhere, the mismatch is a latency question rather than a correctness
 one, since R2 egress is free and the dataset is single-digit gigabytes.
+
+## D-029  AMENDMENT TO D-014: the capture device type is the dual-wide, not the bare wide angle
+
+Taken 2026-09-02, closing QA B01 on PR #196. This amends a locked decision, so it is logged
+here and must be REPORTED AS AN AMENDMENT AT DEMO DAY (PRD section 2).
+
+**What D-014 says.** Capture-only app on AVFoundation + CoreMotion, no ARKit, naming
+`builtInWideAngleCamera` as the device and claiming it "yields true intrinsics, gravity,
+LiDAR depth and full-resolution stills" (PRD.md section 4).
+
+**What was measured.** TICK-020's on-device probe (#24), 2026-09-02, on two phones:
+`builtInWideAngleCamera` delivers NO calibration data at all -- no intrinsics, no distortion
+table -- and no depth. Intrinsics arrive only through `builtInDualWideCamera`. This is not a
+device defect: Apple gates calibration delivery on depth or virtual-device constituent
+delivery, and `AVCapturePhotoOutput.isCameraCalibrationDataDeliveryEnabled` requires two or
+more constituent devices, which a single physical camera cannot satisfy. The device D-014
+names cannot produce the data D-014 depends on, on any hardware.
+
+**The amendment.** The capture device becomes `builtInDualWideCamera`, and the still is taken
+from its 1x wide constituent. THE OPTICS D-014 FIXES ARE UNCHANGED: 1x main lens, no digital
+zoom, no crop (ARCHITECTURE section 4). What changes is the AVFoundation device object used
+to reach them, not the geometry of what is photographed, so no capture already specified is
+invalidated and the error budget's premises are untouched.
+
+**Also corrected in the same breath:** D-014's claim that this path yields LiDAR depth. It
+does not. `builtInLiDARDepthCamera` delivers a depth map with no calibration data, so LiDAR
+is not a route to intrinsics on any device; the depth that does arrive comes through the
+dual-wide at `accuracy=relative`. See D-030's note on what that leaves open for D-020.
+
+**Why it was owed and not taken.** The code moved to the dual-wide, ARCHITECTURE section 4
+moved, and TEAM.md moved -- while the decision all three cite still described the wide-angle
+path. ARCHITECTURE.md said the entry "is still owed"; the probe note said it needed "a team
+decision, not a quiet code change"; TICK-020's own AC required it here. It was not written
+for eleven days. That is the exact failure mode the decision log exists to prevent, and it is
+recorded rather than quietly repaired.
+
+PRD section 4's D-014 row is marked as amended and points here. Full sync of PRD section 4
+against the log is TICK-116 (#116).
+
+## D-030  Arm C is CUT. The Sep 2 gate lapsed and is decided here, two days late
+
+Taken 2026-09-02, closing #43 (TICK-049) and QA B08 on PR #196.
+
+**The decision: Arm C is cut.** Depth with intrinsics-only scaling and no reference object
+(ARCHITECTURE section 5) will not be implemented. It is frozen in place rather than deleted:
+`frontdoor.metrology` keeps `C` as a registered `PendingArm`, the ablation reports it as cut
+with this reason, and the wire contract already carries the shape --
+`measure_response.schema.json`'s `absent_reason: "cut"` names "Arm C on 2026-09-02 per D-013"
+by example, written before the decision it anticipated.
+
+**THIS IS NOT THE DECISION #43 ASKED FOR, and the difference matters.** TICK-049's acceptance
+criteria require the decision to "cite Arm C's measured dev-split error, not an impression".
+There is no measured error. Arm C is not implemented (#42 is open), the metrology library was
+scaffolded only on 2026-09-02 (#194) with no geometry in it, and `data/manifest.csv` is
+header-only -- no capture has ever been taken. The gate arrived with nothing to weigh.
+
+So the cut is taken on the ground the gate was created to protect, which is scope and not
+accuracy. PRD section 9 schedules it as "cut Arm C on Sep 2 if weak" precisely so that a
+fourth arm cannot quietly consume the days the error budget, the conformal calibration and
+the deck all need. With seven days to Demo Day, zero arms implemented and zero captures
+taken, carrying a fourth is the risk the gate names. A cut on absence of evidence is weaker
+than a cut on evidence, and saying so is part of the decision.
+
+**What is lost, stated plainly.** Arm C carries the usability claim in D-013: it is the only
+arm an unaided user can perform, needing no reference card. Cutting it means the accuracy
+versus usability gradient in deliverable #4 is reported across A, A-prime and B only, and the
+project can no longer say what "works with what you already carry" costs in accuracy. That is
+a real reduction in what the work can claim, not a tidy-up.
+
+**Consequence for R-10 and deliverable #5, which #43 does not cover.** TICK-020 also found
+device depth arrives at `accuracy=relative` -- stereo disparity, not range. D-020's premise is
+a monocular-versus-LiDAR comparison and deliverable #5 promises it on every entrance; a
+relative map has no metric scale to compare against a caliper. That question is separate from
+this cut, is NOT decided here, and needs its own entry.
+
+**Not decided here either:** whether the 2026-09-01 pivot to plain-photo screening leaves any
+of the four arms with an input at all, given it retires ROI taps and caliper ground truth. If
+it does not, this cut is the smaller half of a much larger question, and A-3 (#67) is the
+amendment ask that owns it.

@@ -112,8 +112,19 @@ free-text reason if none fits):
 Do not substitute a lesser view set, a worse angle, or a cropped shot to force a difficult entrance
 into the dataset. A skipped entrance is honest data. A forced, non-compliant capture is not.
 
+## Before you leave: launch the app on every device going out
+
+Not "check the profile date" — **launch it**. Free-provisioning builds expire after seven days
+(D-025, R-7), and a profile can also be invalidated for reasons that have nothing to do with expiry:
+an Apple ID re-auth, a device re-pair, a Mac that has forgotten the certificate. Launching is the
+only check that covers all of them, and the failure reads like a build error rather than an expiry.
+
+If it does not launch, re-sign **before leaving**. A capture day lost to signing is a whole day of
+entrances, and there are not many left. Schedule and steps: [signing-calendar.md](signing-calendar.md).
+
 ## Checklist — read this at the door
 
+- [ ] **App launches on every device going out** — done before leaving, not at the entrance
 - [ ] Entrance ID assigned (`E-NNN`), written down before shooting
 - [ ] Vantage point, sightlines, and people situation checked — capturable, or logged as a skip
 - [ ] 5-6 views captured: head-on, both obliques, near (~1.5 m), far (~3-4 m), hardware close-up
