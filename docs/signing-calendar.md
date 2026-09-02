@@ -29,9 +29,16 @@ this a scheduling risk in the original ticket.
 | 2 | **2026-09-06** | Emily | iPhone 16, iPhone 15 Pro Max | **Required.** Covers Demo Day and the Showcase to Sep 13. |
 | 3 | 2026-09-08 *(optional)* | Emily | whichever device demos | Top-up only if session 2 slipped. Expires Sep 15. |
 
-Session 2 is the one that cannot be missed. Sep 5–8 all produce valid coverage, so it can move
-within that window — but **not past Sep 8**, and the earlier it happens the more slack there is to
-discover a signing problem while it is still cheap.
+Session 2 is the one that cannot be missed. **D-025 fixes the deadline at 2026-09-06 and this
+document does not move it.**
+
+An earlier draft of this paragraph said Sep 5–8 all produce valid coverage. Sep 7 and Sep 8 do cover
+Demo Day arithmetically — a build signed Sep 8 expires Sep 15 — but they leave the app **dead on Sep
+7 and Sep 8**, because the build signed 2026-08-31 expires 2026-09-07. That is the gap D-025 exists
+to close, and it falls inside the capture window rather than after it. Sep 5 or Sep 6, then.
+
+Widening a locked decision's mandatory date is a decision, not a scheduling detail. If Sep 8 is
+genuinely wanted, it needs an amendment in `CHANGES.log` with the two dead days stated.
 
 James's iPhone 16 Pro is a spare and is not in this schedule. If it is ever brought into capture it
 needs its own session, and that one *does* require physical co-location.
@@ -46,8 +53,10 @@ of them.
 If it does not launch: re-sign before leaving. A capture day lost to signing is a whole day of
 entrances, and there are not many left.
 
-This belongs in the field capture protocol (#64) as a start-of-day step; recorded here so it is
-written down even if #64 is still unwritten.
+This is a start-of-day step and it now lives where operators actually read it:
+[capture-protocol.md](capture-protocol.md), in the pre-departure section and the door checklist.
+(An earlier draft said #64 "is still unwritten" and kept the check here instead. #64 is written and
+merged, so the check was sitting in a document no field operator opens.)
 
 ## Re-signing, step by step
 
