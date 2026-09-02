@@ -169,16 +169,24 @@ or abstain. The abstention rule's parameters are frozen in version control befor
 
 ## 6. Server and the live demo
 
-A single stateless endpoint on a free-tier host (D-016, D-026): `POST /measure` takes the image and sidecar,
+A single stateless endpoint on a small paid host (D-016; D-026 as amended by **D-031**, which authorises
+the server host only — object storage stays on the free tier): `POST /measure` takes the image and sidecar,
 calls the core library, returns per-arm measurement, interval, and decision.
 
 It holds no state and owns no metrology. Its only job is to be reachable from a phone on stage.
 
-**Live arms (TICK-062).** The free-tier image serves Arms A and A′ only. Arms B and C need the
-monocular depth model, which does not fit a free instance and is not in the image. The live
-response still includes those keys: each is `{absent_reason: "unavailable", ...}` so a client can
-tell "this deployment does not serve this arm" from "this capture failed". The offline harness
-still scores all four.
+**Live arms (TICK-062).** The image serves Arms A and A′ only, and carries no depth model or
+weights — which is why it runs in 69 MiB and why the laptop fallback needs no download.
+
+The live response still includes every arm key, with two **different** absences:
+
+- **Arm B** — `{absent_reason: "unavailable"}`. This deployment does not serve it; another could.
+  The offline harness still scores it.
+- **Arm C** — `{absent_reason: "cut"}`. Dropped by **D-030** on 2026-09-02; no deployment will ever
+  serve it. Reporting it as `unavailable` would promise a capability that no longer exists.
+
+TICK-063 renders the two differently — a cut arm is expected, an unavailable one is about this
+host — so a client can tell them apart, and both apart from "this capture failed".
 
 **Run.** From the repo root, one image, one command after the build:
 
