@@ -295,6 +295,13 @@ capture app in place this is free, and it strengthens deliverable #5. A device w
 sensor still captures: the sidecar writes `"depth": null` and the manifest leaves `depth_sha256`
 empty (TICK-023).
 
+> **Amended 2026-09-02.** **D-032** puts depth capture on James's iPhone 17 Pro (`iPhone18,1`) — one LiDAR
+> device shooting every entrance satisfies "every entrance", and that phone has not yet run a
+> build, so probing it is a prerequisite. **D-033** lets depth reach its bucket without crossing
+> the quarantine: uploads route through the server (TICK-029), which holds a **write-only** token
+> on `frontdoor-depth`. It can store depth and can never read it back, so the metrology path still
+> cannot see depth — the guarantee this section makes. The harness keeps the only read token.
+
 Depth maps are stored in a **separate bucket** (D-026) that the image-only loader
 credential cannot read. A prefix inside one bucket is not enough where the provider
 scopes credentials per bucket. They are loaded only by the evaluation harness, only

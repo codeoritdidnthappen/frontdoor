@@ -1,5 +1,6 @@
 import AVFoundation
 import CoreMotion
+import Network
 import SwiftUI
 import UIKit
 
@@ -482,9 +483,31 @@ final class CaptureController: ObservableObject {
     @Published private(set) var isDraining = false
     @Published private(set) var lastDrainMessage: String?
 
-    /// Swapped for a real destination when one exists. Refuses everything until then, which keeps
-    /// captures on the phone rather than reporting them safe (TICK-029).
-    var uploader: CaptureUploader = NoDestinationUploader()
+    /// The destination, when this build has one configured.
+    ///
+    /// Falls back to `NoDestinationUploader`, which refuses everything: captures stay on the phone
+    /// rather than being reported safe. A build with no server URL or no ingest key is the case
+    /// that fallback exists for, and it is silent about nothing -- the count keeps rising and the
+    /// drain says why (TICK-029).
+    var uploader: CaptureUploader = UploadSettings.fromBundle().uploader() ?? NoDestinationUploader()
+
+    private let networkMonitor = NWPathMonitor()
+    private var watchingNetwork = false
+
+    /// Drain whenever a usable connection appears (AC2).
+    ///
+    /// The monitor is the whole of "uploads when connectivity returns": there is no timer and no
+    /// backoff schedule, because the queue is the directory and a drain is cheap to repeat. A
+    /// field session that walks back into signal drains without anyone deciding to.
+    func startDrainingWhenConnected() {
+        guard !watchingNetwork else { return }
+        watchingNetwork = true
+        networkMonitor.pathUpdateHandler = { [weak self] path in
+            guard path.status == .satisfied else { return }
+            Task { @MainActor in await self?.drainQueue() }
+        }
+        networkMonitor.start(queue: DispatchQueue(label: "frontdoor.upload.path"))
+    }
 
     var queue: CaptureQueue { CaptureQueue(directory: Self.capturesDirectory) }
 

@@ -26,6 +26,12 @@ struct CaptureQueue {
         var depthURL: URL?
         /// What the sidecar says the image should hash to. Compared before anything is deleted.
         var imageSHA256: String
+        /// What the sidecar says the depth map should hash to, when there is one.
+        ///
+        /// Carried for the same reason as the image's: an uploader that hashed the file on disk
+        /// instead would send whatever is there, corruption included, and the far end would
+        /// confirm the corrupt bytes as a match. The sidecar is the record that vouches for them.
+        var depthSHA256: String?
     }
 
     enum Failure: Error, Equatable {
@@ -106,7 +112,8 @@ struct CaptureQueue {
         else { return nil }
 
         let base = sidecarURL.deletingLastPathComponent()
-        let depthPath = (json["depth"] as? [String: Any])?["path"] as? String
+        let depth = json["depth"] as? [String: Any]
+        let depthPath = depth?["path"] as? String
         return Pending(
             captureId: captureId,
             entranceId: entranceId,
@@ -114,7 +121,8 @@ struct CaptureQueue {
             sidecarURL: sidecarURL,
             imageURL: base.appendingPathComponent(imagePath),
             depthURL: depthPath.map { base.appendingPathComponent($0) },
-            imageSHA256: sha)
+            imageSHA256: sha,
+            depthSHA256: depth?["sha256"] as? String)
     }
 
     /// Remove a capture from the phone, but only once its bytes have been proven intact.

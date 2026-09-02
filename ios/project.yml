@@ -28,17 +28,27 @@ targets:
         NSMotionUsageDescription: >-
           Frontdoor records the gravity vector at the instant of capture, which is what
           makes capture angle a measured quantity rather than an operator's estimate.
+        # Upload target and ingest key (TICK-029, #33). Both come from build settings so the
+        # key is never committed -- same arrangement as DEVELOPMENT_TEAM below. The key
+        # authorises ingest only; it is not an R2 credential and cannot read the bucket.
+        FrontdoorServerURL: $(FRONTDOOR_SERVER_URL)
+        FrontdoorUploadKey: $(FRONTDOOR_UPLOAD_KEY)
     settings:
       base:
         # Free provisioning (D-025, TICK-001). Set DEVELOPMENT_TEAM locally; it is
         # deliberately not committed, because it differs per team member's Apple ID.
         CODE_SIGN_STYLE: Automatic
+        # The public endpoint (ARCHITECTURE section 6). The key is deliberately empty here and
+        # set locally; an empty key disables upload and the app says so rather than failing quietly.
+        FRONTDOOR_SERVER_URL: https:/$()/frontdoor-measure.fly.dev
+        FRONTDOOR_UPLOAD_KEY: ""
         PRODUCT_BUNDLE_IDENTIFIER: com.frontdoor.capture
         TARGETED_DEVICE_FAMILY: "1"
         SWIFT_VERSION: "5.0"
     dependencies:
       - sdk: AVFoundation.framework
       - sdk: CoreMotion.framework
+      - sdk: Network.framework
     preBuildScripts:
       - name: "Assert no ARKit (D-015)"
         script: '"$SRCROOT/Scripts/assert-no-arkit.sh" "$SRCROOT"'

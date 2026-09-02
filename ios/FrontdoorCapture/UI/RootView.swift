@@ -43,6 +43,7 @@ struct RootView: View {
         // Camera authorisation can change while the app is away — the operator taps Open Settings,
         // grants it, and comes back. Re-sample on foreground so the home screen cannot keep
         // showing Denied over a permission that has since been granted.
+        .task { controller.startDrainingWhenConnected() }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 controller.refreshReadiness()

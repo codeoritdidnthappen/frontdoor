@@ -87,6 +87,15 @@ class StorageDenied(StorageError):
     """The credential was not allowed to read or write the object."""
 
 
+class ObjectExists(StorageError):
+    """A conditional write found an object already at that key.
+
+    Raised only by `put(..., if_absent=True)`. Capture ingest uses it so an upload cannot silently
+    replace bytes already stored under a capture id -- for a sealed capture that would be a
+    substitution no downstream artifact could detect.
+    """
+
+
 class SealedObjectDenied(StorageDenied):
     """THIS CODE refused a sealed key (D-007) -- the provider was never asked.
 
@@ -179,6 +188,25 @@ def load_depth_creds():
     )
 
 
+def load_depth_write_creds():
+    """Write-only credentials for the depth bucket, held by the server (D-033).
+
+    Object Write only -- no read, no list. The server has to be able to STORE a depth map that a
+    phone uploads, and must never be able to read one back: D-020's guarantee is that the metrology
+    path cannot read depth, because depth it can reach is depth it eventually tunes on. A
+    write-only token cannot tune, peek or load, so the invariant holds with the server on the write
+    side of it. The evaluation harness keeps load_depth_creds() and stays the only reader.
+    """
+    loc = _shared_location()
+    return BucketCreds(
+        bucket=_env("FRONTDOOR_DEPTH_BUCKET"),
+        access_key=_env("FRONTDOOR_DEPTH_WRITE_ACCESS_KEY"),
+        secret_key=_env("FRONTDOOR_DEPTH_WRITE_SECRET_KEY"),
+        region=loc["region"],
+        endpoint=loc["endpoint"],
+    )
+
+
 def _client(creds):
     try:
         import boto3
@@ -198,6 +226,16 @@ def _client(creds):
     if creds.endpoint:
         kwargs["endpoint_url"] = creds.endpoint
     return boto3.client("s3", **kwargs)
+
+
+def _is_precondition_failed(exc):
+    """True when a conditional write lost the race, across the spellings providers use."""
+    response = getattr(exc, "response", None)
+    if not isinstance(response, dict):
+        return False
+    error = response.get("Error", {})
+    status = response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+    return error.get("Code") in {"PreconditionFailed", "412"} or status == 412
 
 
 def _raise_from_client(exc, action, bucket, key):
@@ -230,17 +268,43 @@ class ObjectStore:
         self.creds = creds
         self._client = _client(creds)
 
-    def put(self, key, body):
+    def put(self, key, body, *, if_absent=False):
         """Write one object. Sealed keys ARE allowed -- capture upload has to store them.
 
         The key is still classified, so an ingest path that forgets `storage_key()`
         fails here rather than writing an object no reader can classify (QA B01).
+
+        `if_absent=True` sends `If-None-Match: *`, so the write fails rather than overwriting and
+        `ObjectExists` is raised. Ingest uses it: without a conditional write, anyone holding the
+        ingest key can replace a stored capture's bytes, and a read-back check would then confirm
+        the replacement as correct.
         """
         _partition_of(key)
+        extra = {"IfNoneMatch": "*"} if if_absent else {}
         try:
-            self._client.put_object(Bucket=self.creds.bucket, Key=key, Body=body)
+            self._client.put_object(
+                Bucket=self.creds.bucket, Key=key, Body=body, **extra)
         except Exception as exc:
+            if if_absent and _is_precondition_failed(exc):
+                raise ObjectExists(
+                    f"an object already exists at s3://{self.creds.bucket}/{key}"
+                ) from exc
             _raise_from_client(exc, "put", self.creds.bucket, key)
+
+    def get_stream(self, key, *, allow_sealed=False):
+        """Read one object as a stream, so a caller can hash it without holding it whole.
+
+        Same seal as `get`: a sealed key is refused unless the audited run asks for it.
+        """
+        if _partition_of(key) == "sealed" and not allow_sealed:
+            raise SealedObjectDenied(
+                f"{key!r} is sealed; it is opened once, by an audited "
+                "`python -m frontdoor.eval --include-sealed` run (D-007, D-017)"
+            )
+        try:
+            return self._client.get_object(Bucket=self.creds.bucket, Key=key)["Body"]
+        except Exception as exc:
+            _raise_from_client(exc, "get", self.creds.bucket, key)
 
     def get(self, key, *, allow_sealed=False):
         """Read one object. Sealed keys are refused (D-007).
@@ -287,6 +351,15 @@ def depth_store():
     return ObjectStore(load_depth_creds())
 
 
+def depth_write_store():
+    """Store the server uses to accept depth uploads -- write-only (D-033).
+
+    Separate factory rather than a flag on depth_store(), so that a caller wanting to read depth
+    cannot get there by passing an argument. The two credentials are different tokens.
+    """
+    return ObjectStore(load_depth_write_creds())
+
+
 def probe_loader_denied_depth(image_creds, depth_bucket, key=PROBE_KEY):
     """GET depth with the loader credential. Must be denied by the provider.
 
@@ -302,6 +375,33 @@ def probe_loader_denied_depth(image_creds, depth_bucket, key=PROBE_KEY):
     raise StorageError(
         f"loader credential was not denied on the depth bucket "
         f"(read s3://{depth_bucket}/{key})"
+    )
+
+
+DEPTH_WRITE_PROBE_KEY = PROBE_KEY + ".write-probe"
+
+
+def probe_depth_write_is_write_only(write_creds, key=DEPTH_WRITE_PROBE_KEY):
+    """PUT with the server's depth token must succeed; GET with it must be denied (D-033).
+
+    This is the check that makes D-033's guarantee testable rather than asserted. The token is
+    supposed to be Object Write only: if a read succeeds, the scope leaked when the token was
+    created, the server can see depth, and the D-020 quarantine is void from the server outward.
+    Failing loudly here is the difference between finding that in a dashboard and finding it after
+    the comparison has been tuned on data it should never have reached.
+    """
+    store = ObjectStore(write_creds)
+    store.put(key, b"frontdoor-depth-write-probe")
+    try:
+        store.get(key)
+    except StorageDenied:
+        return
+    except StorageError:
+        # Any other failure is not proof of the scope; report it rather than passing.
+        raise
+    raise StorageError(
+        f"the server's depth token was NOT denied on read (s3://{write_creds.bucket}/{key}); "
+        "it is not write-only, so D-033's guarantee does not hold"
     )
 
 
@@ -323,6 +423,16 @@ def verify():
         got_depth = depth.get(PROBE_KEY)
         if got_depth != payload:
             raise StorageError("depth probe round-trip mismatch")
+        # D-033: the server's depth token must be able to write and unable to read. Skipped only
+        # when it is not configured at all, so a laptop without it still runs the D-020 check.
+        write_creds = None
+        try:
+            write_creds = load_depth_write_creds()
+        except StorageError:
+            write_note = "  depth-write-token=unset"
+        if write_creds is not None:
+            probe_depth_write_is_write_only(write_creds)
+            write_note = "  depth-write-denied-on-read"
     finally:
         try:
             images.delete(PROBE_KEY)
@@ -332,9 +442,13 @@ def verify():
             depth.delete(PROBE_KEY)
         except StorageError:
             pass
+        try:
+            depth.delete(DEPTH_WRITE_PROBE_KEY)
+        except StorageError:
+            pass
     print(
         f"ok  images={images.creds.bucket}  depth={depth.creds.bucket}  "
-        "loader-denied-on-depth"
+        "loader-denied-on-depth" + write_note
     )
 
 
