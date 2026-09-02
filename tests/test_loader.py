@@ -262,10 +262,13 @@ def test_live_load_one_capture_from_the_image_bucket():
     if len(rows) < 2:
         pytest.skip("manifest has no captures yet")
     capture_id = rows[1].split(",")[0]
+    # No get_image injection. The injected getter is called with a bare capture_id,
+    # which storage now fail-closes on -- the same mistake #186 removed from eval.py,
+    # left in place here and hidden by the skip (QA B03). The loader's own default
+    # builds the partitioned key.
     loaded = DatasetLoader(
         manifest_path=REPO / "data" / "manifest.csv",
         sidecar_dir=REPO / "data" / "sidecars",
-        get_image=image_store().get,
     ).load(capture_id)
     assert loaded.capture_id == capture_id
     assert loaded.image
@@ -419,3 +422,52 @@ def test_the_entrance_filter_is_canonicalised(tmp_path):
     )
     for spelling in ("E-001", "e-001", " E-001", "E-001 "):
         assert loader.list_captures(entrance_id=spelling) == ["cap-e"], spelling
+
+
+def test_a_sealed_row_never_reaches_storage_with_an_open_key(tmp_path, monkeypatch):
+    """The loader must build the key from the DERIVED split, not the manifest cell.
+
+    Otherwise a sealed capture whose row was edited to say `dev` would be fetched
+    under `open/`, and storage -- which cannot see the manifest -- would serve it (#182).
+    """
+    import frontdoor.storage as storage
+
+    sealed_entrance = next(
+        f"E-{n:03d}" for n in range(1000) if assign_split(f"E-{n:03d}") == "sealed"
+    )
+    manifest, sidecar_dir, _ = _write_capture(
+        tmp_path, capture_id="cap-s", entrance_id=sealed_entrance, image=b"sealed"
+    )
+    rows = manifest.read_text(encoding="utf-8").splitlines()
+    header = rows[0].split(",")
+    cells = rows[1].split(",")
+    cells[header.index("split")] = "dev"          # the manifest lies
+    manifest.write_text("\n".join([rows[0], ",".join(cells)]) + "\n", encoding="utf-8")
+
+    keys = []
+
+    class _Store:
+        def get(self, key, *, allow_sealed=False):
+            keys.append((key, allow_sealed))
+            raise AssertionError("must not reach the fetch")
+
+    monkeypatch.setattr(storage, "image_store", lambda: _Store())
+    loader = DatasetLoader(manifest_path=manifest, sidecar_dir=sidecar_dir)
+
+    with pytest.raises(LoaderError, match="sealed"):
+        loader.load("cap-s")
+    assert keys == [], "the seal must refuse before any key is built"
+
+    # On the audited path the key carries the sealed prefix, so storage can refuse
+    # on its own -- and the permission is PASSED THROUGH, not hardcoded. That second
+    # half is the whole lesson of #182: a seal held in one layer is a seal with one
+    # bug between it and the data, so `_load_row` refusing first is not a reason for
+    # this layer to stop asking.
+    row = loader._row("cap-s")
+    with pytest.raises(LoaderError, match="could not be read"):
+        loader._image_bytes(row, allow_sealed=True)
+    assert keys == [("sealed/cap-s", True)]
+
+    with pytest.raises(LoaderError, match="could not be read"):
+        loader._image_bytes(row)
+    assert keys[-1] == ("sealed/cap-s", False), "permission must not be hardcoded"
