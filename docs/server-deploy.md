@@ -34,17 +34,34 @@ fly launch --no-deploy --copy-config --name frontdoor-measure
 `--copy-config` uses the committed `fly.toml`. Say **no** to Postgres, Redis and any other add-on:
 the server holds no state.
 
-### Set the spend limit before deploying
+### Cap the spend before deploying — with the mechanism Fly actually has
 
 D-026 requires that billing cannot start silently. On a paid plan that is no longer satisfied by
-having no card, so it is replaced by an explicit cap (D-031):
+having no card. An earlier revision of this section instructed setting a "monthly spend limit" in
+the Fly dashboard — **Fly.io documents no such setting**: there is no spend limit, cap, or budget
+control on a Fly organisation. The closest real hard-stop is **prepaid credits**: buy a fixed
+credit balance and do not attach usage billing beyond it — the account suspends when the balance
+reaches zero, which is a hard stop, not an alert. Fly's billing alert emails exist but are
+**advisory only**; they notify, they do not stop anything.
 
-1. Fly dashboard → the organisation → **Billing** → set a **monthly spend limit** (5 USD is ample
-   against a ~2 USD machine).
-2. Enable the billing alert email.
-3. Record the date it was set in this file, below.
+So the real procedure is:
 
-**Spend limit set:** 2026-09-02, before the first deploy, with the billing alert enabled.
+1. Fly dashboard → the organisation → **Billing** → buy a small block of **prepaid credits**
+   (5 USD is ample against a ~2 USD/month machine; the app is destroyed after the Showcase).
+2. Enable the billing alert email as an early warning — understanding it is advisory, not a cap.
+3. Record the credit purchase (amount and date) in this file, below.
+
+**Prepaid credit balance:** _record amount and date when purchased._
+
+~~**Spend limit set:** 2026-09-02, before the first deploy, with the billing alert enabled.~~
+**Recorded in error** — Fly offers no spend-limit setting, so this line cannot have described a
+real control; it is struck rather than deleted so the record stays honest.
+
+> **D-031's stated mechanism needs amending — owed to its author (see PR #200 review F1).**
+> D-031 says D-026's no-silent-billing clause is "replaced by an explicit spend limit on the Fly
+> organisation plus a billing alert". No such limit exists; the entry should be amended to name
+> prepaid credits (hard stop at zero balance) as the mechanism. That amendment is the decision
+> author's to make in CHANGES.log, not this runbook's.
 
 ### Credentials
 
@@ -57,19 +74,67 @@ fly secrets set \
   FRONTDOOR_IMAGES_ACCESS_KEY=... \
   FRONTDOOR_IMAGES_SECRET_KEY=... \
   FRONTDOOR_S3_ENDPOINT=https://<accountid>.r2.cloudflarestorage.com \
-  FRONTDOOR_S3_REGION=auto
+  FRONTDOOR_S3_REGION=auto \
+  ANTHROPIC_API_KEY=...
 ```
 
 Take the values from `.env` (gitignored). **The server gets the images credential only** — never the
 depth one. That is D-020: the loader and the server must not be able to read depth.
 
+`ANTHROPIC_API_KEY` is required for the pivot's own endpoint: without it, `POST /screen` returns
+**503 "screening unavailable"** — `screen_view.py`'s engine gate (`_get_engine`) returns `None`
+when neither `ANTHROPIC_API_KEY` nor `ANTHROPIC_AUTH_TOKEN` is set, by design, so the rest of the
+server still boots and serves. The key was missing from earlier revisions of this block, which is
+why the live host 503s on `/screen` (PR #200 review F3).
+
+### The map dataset
+
+`GET /map/data` reads the pre-catalogue dataset from the path in the **`FRONTDOOR_MAP_DATASET`**
+env var (`map_view.py`), defaulting to `data/precatalogue.json` — a relative path that does not
+exist in the image, because the Dockerfile copies only `pyproject` and `src/`. **Current live
+symptom:** `GET /map/data` returns a payload with `dataset_error` set and an empty pin list — the
+public map renders no pins. Two ways to fix it, pick one and record it here:
+
+1. **Bake the dataset into the image** — add a `COPY` of the dataset file to the Dockerfile and
+   set `FRONTDOOR_MAP_DATASET` (in `fly.toml`'s `[env]`) to that absolute path. Note this changes
+   the image, which the laptop fallback then also carries — that is fine and even desirable.
+2. **Point the env var at a mounted or packaged path** — a Fly volume or a path shipped by some
+   other packaging step, with `FRONTDOOR_MAP_DATASET` naming it.
+
+Either way, verify with `curl https://frontdoor-measure.fly.dev/map/data` and confirm
+`dataset_error` is `null` and pins are present.
+
+### /screen sizing note — measure before Demo Day
+
+The **69 MiB** footprint in the table was measured serving `GET /health`. It says nothing about
+`/screen`'s worst case: up to **64 MB of multipart upload buffered in memory**, base64-encoded
+(+33%) and carried through **up to 6 sequential vision calls**, on a **256 MB** machine — with
+gunicorn's 30 s timeout in front of multi-call model latency. Neither the peak memory nor the
+end-to-end latency of a real worst-case `/screen` request has been measured. **Measure both
+before Demo Day**, with a full 6-photo upload at the size cap, and record the numbers here.
+
+**The offline-laptop fallback cannot serve `/screen` at all** — with the venue offline there is no
+route to the model API. D-016's step 3 ("same image, phone tethered to the laptop") covers
+`/measure` and `/map` only; "a fallback changes the network path and nothing else" is true of the
+metrology surface, not of screening. Plan the demo accordingly.
+
 ## Deploy
 
 ```
-fly deploy
+fly deploy --ha=false
 fly status
 curl https://frontdoor-measure.fly.dev/health      # -> {"status":"ok"}
 ```
+
+`--ha=false` matters: a bare `fly deploy` creates **two** machines by default for high
+availability, which doubles the cost D-031 records (~$2/mo, one machine). If the app already has
+two machines from an earlier deploy, bring it back to one:
+
+```
+fly scale count 1
+```
+
+Then **verify the machine count in the `fly status` output — it must list exactly one machine.**
 
 ## Verify, before Demo Day rather than on it
 
@@ -121,7 +186,9 @@ Pull and cache the image on the laptop **before** Demo Day (#50 AC). Do not fetc
 3. this image on a team laptop, phone tethered to it
 4. the pre-recorded measurement captured Sep 8
 
-Steps 1–3 are the same image, so a fallback changes the network path and nothing else.
+Steps 1–3 are the same image, so a fallback changes the network path and nothing else — **for
+`/measure` and `/map`**. Step 3 cannot serve `/screen` (no route to the model API when offline);
+see the /screen sizing note above.
 
 ## After the Showcase
 
