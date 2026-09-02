@@ -175,10 +175,14 @@ HTTPS matters: iOS App Transport Security refuses plain HTTP, which is why `forc
 python -m frontdoor_server.deployment verify
 ```
 
-It reads `data/deployment.json` and is **red until the laptop has actually pulled the image** —
-"not cached yet" and "cached and matching" must not look alike, because the point is to find out
-now rather than in an atrium. Both digests are committed there, so this is a check rather than a
-procedure someone remembers to run correctly.
+It asks **three** sources and requires all three to agree: what the host is serving right now
+(`fly image show`), what this machine has in its docker cache (`docker inspect`), and what
+`data/deployment.json` records. That matters because the failure mode is a redeploy nobody wrote
+down — the record stays internally consistent while the laptop holds last week's image, so
+comparing the file to itself reports success in exactly the case worth catching.
+
+`verify --recorded-only` does that weaker file-only comparison, for a machine without `flyctl` or
+`docker`. It prints a warning saying so, because it proves nothing about what is deployed.
 
 Currently recorded, both verified on 2026-09-02:
 
@@ -190,11 +194,16 @@ Currently recorded, both verified on 2026-09-02:
 is then stale — which is exactly the state that looks fine until the fallback is needed:
 
 ```
-fly image show                                     # the host's digest and release
+fly image show --app frontdoor-measure             # the host's digest and release
 fly auth docker
 docker pull registry.fly.io/frontdoor-measure:<release>
-docker inspect --format='{{index .RepoDigests 0}}' registry.fly.io/frontdoor-measure:<release>
+docker inspect --format='{{index .RepoDigests 0}}' \
+  registry.fly.io/frontdoor-measure:<release> | cut -d@ -f2
 ```
+
+The `cut` matters: `docker inspect` prints `registry.fly.io/frontdoor-measure@sha256:...`, and
+pasting that whole string into `data/deployment.json` is rejected as not a digest. Then run
+`verify` — it re-reads both systems itself, so the paste is a record, not the check.
 
 A local `docker build` does **not** reproduce the host digest and is not expected to — Fly builds
 remotely and the digest covers its own layer metadata. Rebuilding locally gives a *different* image
@@ -211,7 +220,15 @@ curl http://127.0.0.1:8080/health
 ```
 
 Verified 2026-09-02 on the pulled image: `/health` 200, `POST /upload` 401 (closed, no key set),
-**87.6 MiB** resident — the same answers the host gives.
+**87.6 MiB** resident.
+
+That is **not** the 69 MiB recorded for the host above, and the difference is worth a sentence
+rather than being presented as one measurement. Same image, different measurement: the host figure
+is Fly's own reading of a 256 MB machine, this one is `docker stats` on a Mac with 7.7 GB, where
+the allocator has no reason to be frugal. Both are well under the cap and neither is a regression —
+but the number that governs the cap is the host's, and **`/screen`'s worst case is still
+unmeasured** (see the sizing note above). Measure that before Demo Day rather than inferring it
+from either figure.
 
 Pull and cache the image on the laptop **before** Demo Day (#50 AC). Do not fetch it on venue wifi.
 

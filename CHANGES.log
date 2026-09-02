@@ -880,11 +880,14 @@ is a separate attribution question and is untouched.
 Taken 2026-09-02 by David, closing the second decision TICK-062 (#50) requires and the
 question D-031 explicitly left open.
 
-**Why it needed an entry rather than a code change.** `ARCHITECTURE.md` sections 7 and 8
-already SAY the harness runs on a team Mac -- "It does not run on the server VM. TICK-062
-put it on a team Mac" -- while D-031 said the question was still open. The document was
-asserting a decision that no entry backed. This is that entry; the architecture text was
-right and is now sourced.
+**Why it needed an entry.** Not because nothing backed it -- something did, and getting
+that wrong was the first draft of this entry. The 2026-09-01 entry *Server image, live
+arms, harness location (TICK-062, #50)* already recorded "Evaluation harness runs on a team
+Mac, against the same R2 buckets, not on the server VM". Then D-031, the next day, said the
+question was "Still open, and NOT decided here". So the log CONTRADICTED ITSELF, and
+ARCHITECTURE sections 7-8 followed the earlier entry while the later one said no decision
+existed. This entry settles which is operative: the 2026-09-01 text was right, D-031's
+"still open" is withdrawn, and the reason is recorded below rather than left implicit.
 
 **The decision.** The harness runs locally on a team Mac, reading the dataset from R2 over
 the network. The server host runs the request path only: `/health`, `/measure`, `/screen`,
@@ -897,8 +900,9 @@ host a reason to hold the depth READ credential, which D-020 and D-033 exist to 
 the harness is the only reader of depth, and it should not live where the request path
 lives.
 
-**What this supersedes.** ARCHITECTURE sections 7-8's original "bucket beside the VM"
-premise. That text has already been corrected; this entry is its source.
+**What this supersedes.** D-031's "Still open, and NOT decided here" clause on the harness
+question, and ARCHITECTURE sections 7-8's original "bucket beside the VM" premise. That
+architecture text was corrected on 2026-09-01; this entry is the decision it now cites.
 
 **Consequence, stated so it is not discovered later.** The harness reads from R2 over the
 network rather than from a local disk beside the bucket. Egress on R2 is free, so this

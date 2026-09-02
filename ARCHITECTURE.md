@@ -199,12 +199,19 @@ The live response still includes every arm key, with two **different** absences:
 TICK-063 renders the two differently — a cut arm is expected, an unavailable one is about this
 host — so a client can tell them apart, and both apart from "this capture failed".
 
-**Run.** From the repo root, one image, one command after the build:
+**Run,** for local development. From the repo root:
 
 ```
 docker build -t frontdoor-server .
 docker run --rm -p 8080:8080 -e PORT=8080 frontdoor-server
 ```
+
+> **Not for step 3 of the fallback chain below.** A local build is a *different image that came
+> from the same source*, which is exactly what step 3 exists to rule out — the fallback is only a
+> mitigation if it changes the network path and nothing else. The demo laptop must **pull** the
+> deployed release and run that; `docs/server-deploy.md` has the commands, and
+> `python -m frontdoor_server.deployment verify` checks the host, the laptop's cache and the
+> committed record against each other.
 
 Storage credentials are environment variables at run time (`data/STORAGE.md`). They are never
 baked into the image. There are no depth-model weights to pin; the image does not carry any.
