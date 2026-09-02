@@ -42,13 +42,22 @@ project's existing arithmetic before it is used to argue against it.
 > | scale at 2.0 m | 0.682 mm/px | 0.716 mm/px |
 > | card across, at 2.5 m | 100.5 px | **95.6 px** |
 > | δ budget at 2.0 m | ≤ 6.5 px | **≤ 6.2 px** |
-> | δ budget at 2.5 m | ≤ 5.2 px | **≤ 5.0 px** |
+> | δ budget at 2.5 m | ≤ 5.2 px | **≤ 4.95 px** |
 >
 > The tables below are left at 2934.1 rather than silently rescaled, so the arithmetic stays
 > checkable against the version that was reviewed. **Use the measured column when setting a
 > requirement** — TICK-232 (#135) is the one that depends on it. The conclusions do not change:
 > obliquity is not the binding term, tap precision is, and the distance cap tightens rather than
 > relaxes.
+>
+> **This creates a conflict TICK-232 (#135) has to resolve rather than round away.** #135's AC4
+> accepts a measured tap σ of **≤ 5 px**, and TICK-233 (#136) capped capture distance at **2.5 m**.
+> At that cap the corrected budget is **4.95 px**, so a capture that passes AC4 exactly at 5.0 px
+> misses the budget at the furthest permitted distance. An earlier version of this note wrote the
+> figure as "≤ 5.0 px", which rounds a tolerance in the unsafe direction and made the conflict
+> invisible. The margin is small — 1% — but AC6 exists for precisely this case: if 5 px is what the
+> hardware achieves, the cap tightens below 2.5 m rather than the budget being quietly relaxed.
+> At 2.0 m the budget is 6.19 px and 5 px clears comfortably.
 
 ## 2. The two error terms
 
