@@ -612,3 +612,68 @@ this cut, is NOT decided here, and needs its own entry.
 of the four arms with an input at all, given it retires ROI taps and caliper ground truth. If
 it does not, this cut is the smaller half of a much larger question, and A-3 (#67) is the
 amendment ask that owns it.
+
+## D-031  AMENDMENT TO D-026: the measure server is a PAID host. Object storage stays free.
+
+Taken 2026-09-02, closing the hosting question D-026 left open and unblocking TICK-062 (#50).
+This amends a locked decision, so it is logged here and must be REPORTED AS AN AMENDMENT AT
+DEMO DAY (PRD section 2).
+
+**What D-026 says.** "All hosted infrastructure runs on PROVIDER FREE TIERS. No spend is
+authorised for object storage or the server host." TICK-062's own acceptance criteria repeat
+it: "the host is a free tier with no payment method exposed to overage".
+
+**What changes.** The metrology server runs on **Fly.io**, `shared-cpu-1x` with 256 MB, one
+machine held always-on, at roughly 2 US dollars per month. **Object storage does not change**
+and stays on the R2 free tier exactly as D-026 requires -- this amendment is scoped to the
+server host alone.
+
+**Why free tiers do not work here, specifically.** The constraint is not cost, it is cold
+starts. D-016 puts the demo in an interior atrium and defines a fallback chain because
+cellular fails there. Every free always-on option was ruled out on evidence rather than
+preference:
+
+- Cloudflare, where R2 already lives, cannot run this image at all. The server is Flask and
+  gunicorn on CPython 3.11; Workers are JS/WASM, Python Workers are Pyodide and cannot carry
+  arbitrary dependencies, and Cloudflare Containers require the paid Workers plan.
+- Render's free tier spins down and takes roughly fifty seconds to wake. That is the demo
+  failing on stage, which is precisely the risk D-016 exists to manage.
+- Oracle Always Free would work and costs nothing, but the team owns no domain and no TLS
+  certificate, and iOS App Transport Security requires HTTPS from the phone. That trades two
+  dollars for a DNS-and-certificate failure mode on the one day it cannot fail.
+
+**Why Fly rather than Render's paid tier.** Measured, not estimated: the image serves
+`GET /health` while capped at 256 MB and uses **69 MiB**. Fly's smallest always-on machine is
+256 MB at about 2 dollars; Render's cheapest is 512 MB at 7. Fly also pins the region -- `sjc`,
+near the WNAM buckets -- and runs health checks against the `/health` endpoint the server
+already has.
+
+**D-026's other clause survives and is not waived.** "Billing must be incapable of starting
+silently." On a paid plan that is no longer satisfied by having no card, so it is replaced by
+an explicit spend limit on the Fly organisation plus a billing alert, both recorded in
+`docs/server-deploy.md`. A free tier that hard-stops and a paid plan with a cap are different
+mechanisms for the same requirement; the requirement is unchanged.
+
+**Scope, stated so it is not read too widely.** This authorises the server host and nothing
+else. Object storage stays free (D-026). No GPU, no depth model on the host: the live image
+serves Arms A and A-prime only, Arm B reports `unavailable`, and Arm C reports `cut` (D-030).
+The image is identical to the one the laptop fallback runs, which is what makes step 3 of
+D-016's chain a fallback rather than a different system.
+
+**Consequence for TICK-062 (#50).** Its acceptance criterion naming a free tier is superseded
+by this entry. The criteria it does NOT waive -- same image digest on host and laptop,
+credentials by environment variable, `/health` answered from a phone on cellular, image cached
+on the laptop before Demo Day -- all stand.
+
+**Deployed 2026-09-02.** https://frontdoor-measure.fly.dev, machine `0803444b2dd568` in `sjc`,
+image digest `sha256:a20ca31a...fb637a`, 72 MB. Spend limit and billing alert set before the first
+deploy, satisfying D-026's no-silent-billing clause by cap rather than by absence of a card.
+Verified live: `/health` 200 over HTTPS, plain HTTP 301s to TLS (iOS ATS), and `POST /measure`
+returns a response that validates against the frozen schema with Arm A and A-prime measured, Arm B
+`unavailable` and Arm C `cut`. Runbook: `docs/server-deploy.md`.
+
+**Still open, and NOT decided here:** whether the evaluation harness runs on this host or
+locally on a team Mac. D-026 lists it as required before #50 closes. A 256 MB machine cannot
+score a few hundred captures through four arms, so the answer is almost certainly local -- but
+that contradicts the "bucket beside the VM" premise in ARCHITECTURE sections 7-8 and needs its
+own entry rather than being assumed here.
