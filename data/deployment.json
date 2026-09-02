@@ -1,0 +1,15 @@
+{
+  "_comment": "TICK-062 (#50). D-016's fallback chain is only a mitigation if the host and the demo laptop run the SAME image. Both digests are recorded here and checked by `python -m frontdoor_server.deployment verify`, which stays RED until the laptop has pulled the image.",
+  "app": "frontdoor-measure",
+  "region": "sjc",
+  "host": {
+    "digest": "sha256:6c3e21b3559c5bb9028f7569f941f253820d5d4530366d7d29c4d228f042ff03",
+    "release": "deployment-01M1J5D5GAN1EA0MZYMQQTNHPS",
+    "recorded_at": "2026-09-02"
+  },
+  "laptop": {
+    "_how": "docker pull registry.fly.io/frontdoor-measure:<release>, then docker inspect --format '{{index .RepoDigests 0}}'. Do NOT docker build: a local build is a different image.",
+    "digest": "sha256:6c3e21b3559c5bb9028f7569f941f253820d5d4530366d7d29c4d228f042ff03",
+    "recorded_at": "2026-09-02"
+  }
+}

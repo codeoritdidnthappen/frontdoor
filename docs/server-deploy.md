@@ -169,39 +169,66 @@ Then **verify the machine count in the `fly status` output — it must list exac
 Turn wifi off on the phone, then open `https://frontdoor-measure.fly.dev/health` in Safari.
 HTTPS matters: iOS App Transport Security refuses plain HTTP, which is why `force_https` is set.
 
-**2. The host and the laptop run the same image digest** (#50 AC):
+**2. The host and the laptop run the same image digest** (#50 AC). One command:
 
 ```
-fly image show                                     # digest on the host
-docker build -t frontdoor-server . && docker inspect --format='{{index .RepoDigests 0}}' frontdoor-server
+python -m frontdoor_server.deployment verify
 ```
 
-Record both here and confirm they match. If they differ, the fallback is not a fallback.
+It asks **three** sources and requires all three to agree: what the host is serving right now
+(`fly image show`), what this machine has in its docker cache (`docker inspect`), and what
+`data/deployment.json` records. That matters because the failure mode is a redeploy nobody wrote
+down — the record stays internally consistent while the laptop holds last week's image, so
+comparing the file to itself reports success in exactly the case worth catching.
 
-**Host digest:** `sha256:a20ca31a250970669988974385c950a1df72025f8ed7ae2e9ad4933533fb637a`
-(deployment `01M1HRE8MS93JZTJPTEYJV32M5`, 2026-09-02)
-**Laptop digest:** _record when the image is pulled and cached on the demo laptop, before Demo Day._
+`verify --recorded-only` does that weaker file-only comparison, for a machine without `flyctl` or
+`docker`. It prints a warning saying so, because it proves nothing about what is deployed.
+
+Currently recorded, both verified on 2026-09-02:
+
+**Host digest:** `sha256:6c3e21b3559c5bb9028f7569f941f253820d5d4530366d7d29c4d228f042ff03`
+(release `deployment-01M1J5D5GAN1EA0MZYMQQTNHPS`)
+**Laptop digest:** identical — pulled and cached on a team Mac, not rebuilt.
+
+**After every deploy, re-record both.** A new release is a new digest, and the cached laptop image
+is then stale — which is exactly the state that looks fine until the fallback is needed:
+
+```
+fly image show --app frontdoor-measure             # the host's digest and release
+fly auth docker
+docker pull registry.fly.io/frontdoor-measure:<release>
+docker inspect --format='{{index .RepoDigests 0}}' \
+  registry.fly.io/frontdoor-measure:<release> | cut -d@ -f2
+```
+
+The `cut` matters: `docker inspect` prints `registry.fly.io/frontdoor-measure@sha256:...`, and
+pasting that whole string into `data/deployment.json` is rejected as not a digest. Then run
+`verify` — it re-reads both systems itself, so the paste is a record, not the check.
 
 A local `docker build` does **not** reproduce the host digest and is not expected to — Fly builds
-remotely and the digest covers its own layer metadata. The check that matters is that the laptop
-**pulls the deployed image** rather than rebuilding it:
+remotely and the digest covers its own layer metadata. Rebuilding locally gives a *different* image
+that merely came from the same source, which is the thing D-016's step 3 exists to rule out. The
+laptop must **pull**.
+
+**3. The laptop fallback works, offline**, with the venue wifi turned off — using the PULLED image,
+not a rebuilt one:
 
 ```
-fly auth docker
-docker pull registry.fly.io/frontdoor-measure:deployment-01M1HRE8MS93JZTJPTEYJV32M5
-docker inspect --format='{{index .RepoDigests 0}}' \
-  registry.fly.io/frontdoor-measure:deployment-01M1HRE8MS93JZTJPTEYJV32M5
-```
-
-That digest must equal the host digest above. Rebuilding locally gives a *different* image that
-merely came from the same source, which is the thing D-016's step 3 is supposed to rule out.
-
-**3. The laptop fallback works, offline**, with the venue wifi turned off:
-
-```
-docker run --rm -p 8080:8080 -e PORT=8080 frontdoor-server
+docker run --rm -p 8080:8080 -e PORT=8080 \
+  registry.fly.io/frontdoor-measure:deployment-01M1J5D5GAN1EA0MZYMQQTNHPS
 curl http://127.0.0.1:8080/health
 ```
+
+Verified 2026-09-02 on the pulled image: `/health` 200, `POST /upload` 401 (closed, no key set),
+**87.6 MiB** resident.
+
+That is **not** the 69 MiB recorded for the host above, and the difference is worth a sentence
+rather than being presented as one measurement. Same image, different measurement: the host figure
+is Fly's own reading of a 256 MB machine, this one is `docker stats` on a Mac with 7.7 GB, where
+the allocator has no reason to be frugal. Both are well under the cap and neither is a regression —
+but the number that governs the cap is the host's, and **`/screen`'s worst case is still
+unmeasured** (see the sizing note above). Measure that before Demo Day rather than inferring it
+from either figure.
 
 Pull and cache the image on the laptop **before** Demo Day (#50 AC). Do not fetch it on venue wifi.
 
