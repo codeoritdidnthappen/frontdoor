@@ -13,11 +13,17 @@ import Foundation
 struct DepthRecord: Equatable {
     /// Documented for TICK-077, which has to interpret these bytes without asking anyone.
     ///
-    /// Always `DepthFloat32`: 32-bit float **metres**, one value per pixel, rows tightly packed at
+    /// Always `DepthFloat32`: 32-bit float, one value per pixel, rows tightly packed at
     /// `width * 4` bytes with no padding, in the capture device's native orientation. Converted
     /// from whatever the sensor delivered so the harness reads one format rather than four.
+    ///
+    /// **The unit is not always metres.** This constant used to say it was. TICK-020 (#24) measured
+    /// `accuracy=relative` on both verified phones: the values are stereo-derived and usable for
+    /// ordering, not as distances. `isAbsolutelyAccurate` on each record is the only thing that says
+    /// which you have, so read that rather than assuming — a relative map treated as metres is a
+    /// number in the wrong unit that looks entirely plausible.
     static let pixelFormat = "DepthFloat32"
-    static let units = "metres"
+    static let units = "metres when isAbsolutelyAccurate, otherwise relative"
 
     var width: Int
     var height: Int
@@ -36,7 +42,10 @@ enum DepthCapture {
     ///
     /// Returns nil when depth is absent or unreadable. That is not an error: D-020 makes depth a
     /// comparison, never a method input, so its absence must never cost an entrance (TICK-023).
-    static func record(from depthData: AVDepthData?) -> DepthRecord? {
+    /// Returns the record AND the bytes it describes. The bytes are what gets written to
+    /// disk, so discarding them here meant the only way to produce a depth file later was to
+    /// re-derive it -- and a re-derived buffer is not the buffer the hash was taken over.
+    static func record(from depthData: AVDepthData?) -> (record: DepthRecord, bytes: Data)? {
         guard let depthData else { return nil }
 
         let converted: AVDepthData
@@ -51,7 +60,7 @@ enum DepthCapture {
         let buffer = converted.depthDataMap
         guard let bytes = tightlyPackedBytes(of: buffer) else { return nil }
 
-        return DepthRecord(
+        let record = DepthRecord(
             width: CVPixelBufferGetWidth(buffer),
             height: CVPixelBufferGetHeight(buffer),
             sha256: SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined(),
@@ -59,6 +68,7 @@ enum DepthCapture {
             isAbsolutelyAccurate: converted.depthDataAccuracy == .absolute,
             isFiltered: converted.isDepthDataFiltered
         )
+        return (record, bytes)
     }
 
     /// Copies row by row, dropping the stride padding CoreVideo adds for alignment. Hashing the

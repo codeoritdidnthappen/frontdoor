@@ -231,6 +231,10 @@ struct PendingReview: Identifiable {
     let id = UUID()
     var record: CaptureRecord
     var image: UIImage
+    /// The bytes that will be written and hashed, held from the moment the camera produced
+    /// them. `image` is for the screen only.
+    var imageData: Data
+    var depthBytes: Data?
 }
 
 extension ROIValidation {

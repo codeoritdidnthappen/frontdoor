@@ -132,7 +132,10 @@ def test_container_measure_matches_live_contract(container_url):
     assert status == 200
     assert body["stub"] is True
     assert body["arms"]["B"]["absent_reason"] == "unavailable"
-    assert body["arms"]["C"]["absent_reason"] == "unavailable"
+    # Arm C is cut, not unavailable (D-030). The container must carry the same
+    # distinction as the in-process app, or the demo would show a different answer
+    # from the one the tests check.
+    assert body["arms"]["C"]["absent_reason"] == "cut"
     assert "rise_in" in body["arms"]["A"]
     assert "rise_in" in body["arms"]["A_prime"]
 

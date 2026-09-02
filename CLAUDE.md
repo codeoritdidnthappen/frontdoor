@@ -66,9 +66,11 @@ for review; fixes are made directly and pushed. The previous rule text is in git
 1. **Trace.** Work begins from an up-to-date `main` and traces to a ticket. Short-lived
    branches are fine as a working convenience, but the destination is `main`, same day.
 2. **Code.** Keep commits small and scoped to the ticket. Each commit message says what
-   changed and why, and references the ticket. Attribute every commit to the human author
-   alone — no `Co-Authored-By` trailers, no "generated with" notes, and no other credit for
-   Claude, Codex, or any other AI assistant, in the commit message or anywhere else.
+   changed and why, and references the ticket. Never credit an AI tool anywhere — no
+   `Co-Authored-By` trailers, "generated with" notes, or any other credit for Claude, Codex,
+   Cursor, or any other AI assistant, in the commit message or anywhere else. Crediting a
+   human teammate with a `Co-Authored-By` trailer is fine (clarified 2026-09-02; this was
+   always the rule's intent).
 3. **Test.** Before pushing to `main`, run the project's tests and checks locally. New
    behavior gets new tests. Never push a state you haven't seen pass (the Windows-only
    shell-exec cases in test_ios_no_arkit.py are a known local exception; CI runs them).

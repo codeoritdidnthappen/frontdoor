@@ -16,7 +16,7 @@ metrology library has no credential and performs no I/O of its own.
 | Headroom | comfortable against 10 GB; 5 GB would be marginal |
 | Egress | free |
 | Billing | free-tier ceiling **only if no payment method is attached**. Do not add a card. |
-| Region | `WNAM` (Western North America). The evaluation host region is still open (#50); match it when that lands. |
+| Region | Buckets live in `WNAM` (Western North America), confirmed via `get_bucket_location`. Not to be confused with `FRONTDOOR_S3_REGION`, which is `auto` — that is the S3 API's region parameter, which R2 expects, and says nothing about bucket location. The evaluation host region is still open (#50). |
 
 R2 API tokens are scoped **per bucket**, not per prefix. Two buckets is
 therefore the D-020 layout, not a prefix inside one bucket.

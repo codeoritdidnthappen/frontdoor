@@ -34,11 +34,13 @@ final class CaptureValidationBoundaryTests: XCTestCase {
         depth: DepthRecord? = nil
     ) -> Result<CaptureRecord, CaptureRejected> {
         CaptureValidation.record(
+            captureId: "test-capture",
             pixelWidth: width, pixelHeight: height,
             intrinsics: intrinsics ?? goodIntrinsics,
             hadCalibrationData: hadCalibration,
             gravity: gravity ?? goodGravity,
             deviceModel: "iPhone17,1", lens: "builtInWideAngleCamera",
+            captureDevice: "builtInDualWideCamera",
             zoomFactor: zoom, mainLensZoomFactor: mainLensZoom,
             capturedAt: capturedAt,
             sensorWidth: sensorWidth ?? width,

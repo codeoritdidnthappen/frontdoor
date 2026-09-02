@@ -79,13 +79,32 @@ def test_primary_arm_is_always_present(client, sidecar):
     assert "A" in post_measure(client, sidecar).get_json()["arms"]
 
 
-def test_live_depth_arms_are_unavailable(client, sidecar):
-    """TICK-062: the free-tier image does not carry the depth model, so B and C say so."""
+def test_arm_b_is_unavailable_on_this_deployment(client, sidecar):
+    """TICK-062: this image does not carry the depth model, so Arm B says so."""
+    b = post_measure(client, sidecar).get_json()["arms"]["B"]
+    assert b["absent_reason"] == "unavailable"
+    assert "TICK-062" in b["detail"]
+    assert "rise_in" not in b
+
+
+def test_arm_c_is_cut_not_unavailable(client, sidecar):
+    """`cut` and `unavailable` are different promises (D-030, #43).
+
+    `unavailable` says THIS DEPLOYMENT cannot serve the arm, which implies another one
+    could. `cut` says the project dropped it and nobody is coming back. TICK-063 renders
+    them differently -- a cut arm is expected, an unavailable one is about this host -- so
+    serving `unavailable` for C would promise a capability no deployment will ever have.
+    """
+    c = post_measure(client, sidecar).get_json()["arms"]["C"]
+    assert c["absent_reason"] == "cut"
+    assert "D-030" in c["detail"]
+    assert "rise_in" not in c
+
+
+def test_the_two_absent_reasons_are_not_the_same_response(client, sidecar):
+    """Guards against both arms being pointed back at one shared dict."""
     arms = post_measure(client, sidecar).get_json()["arms"]
-    for name in ("B", "C"):
-        assert arms[name]["absent_reason"] == "unavailable"
-        assert "TICK-062" in arms[name]["detail"]
-        assert "rise_in" not in arms[name]
+    assert arms["B"]["absent_reason"] != arms["C"]["absent_reason"]
 
 
 def test_every_decision_value_is_representable(client, sidecar):

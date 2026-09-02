@@ -33,6 +33,9 @@ struct ConditionTags: Equatable {
     let lighting: Lighting
     let surface: Surface
     let occlusion: Occlusion
+    /// Per shot, not per entrance: the same doorway is captured with the card vertical for Arm A
+    /// and on the ground for Arm A-prime.
+    let cardPlacement: CardPlacement
 }
 
 /// R-3's capture-distance cap. Beyond this the capture is refused, not warned about.
@@ -62,6 +65,21 @@ enum Surface: String, CaseIterable, Equatable {
     case concrete, brick, tile, metal, wood, stone
 
     var label: String { rawValue.capitalized }
+}
+
+/// Where the reference card is for this shot, which is what separates the arms: Arm A measures
+/// from a card held flat against the riser face, Arm A-prime from one lying on the ground
+/// (TICK-043, TICK-045). Required by the sidecar, and not derivable after the fact -- only the
+/// operator standing there knows where they put it.
+enum CardPlacement: String, CaseIterable, Equatable {
+    case vertical, ground
+
+    var label: String {
+        switch self {
+        case .vertical: return "Vertical (against the riser)"
+        case .ground: return "Flat on the ground"
+        }
+    }
 }
 
 enum Occlusion: String, CaseIterable, Equatable {
@@ -198,7 +216,8 @@ enum TruthValidation {
         distance: String,
         lighting: Lighting,
         surface: Surface,
-        occlusion: Occlusion
+        occlusion: Occlusion,
+        cardPlacement: CardPlacement = .vertical
     ) -> Result<ConditionTags, TruthRejected> {
         let trimmed = distance.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let value = number(from: trimmed) else {
@@ -207,7 +226,8 @@ enum TruthValidation {
         guard value > 0 else { return .failure(.distanceNotPositive(value)) }
         guard value <= maxCaptureDistanceM else { return .failure(.distanceBeyondCap(value)) }
         return .success(ConditionTags(
-            distanceM: value, lighting: lighting, surface: surface, occlusion: occlusion))
+            distanceM: value, lighting: lighting, surface: surface, occlusion: occlusion,
+            cardPlacement: cardPlacement))
     }
 }
 

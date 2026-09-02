@@ -1,0 +1,34 @@
+# TICK-062 (#50). The measure server on Fly.io.
+#
+# The image is the repo's Dockerfile, unchanged — D-016's fallback chain requires the
+# host and the laptop to run the SAME image, so nothing here may alter what is built.
+# A fallback changes the network path and nothing else.
+
+app = "frontdoor-measure"
+primary_region = "sjc"          # near WNAM, where the R2 buckets live (D-026)
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8080"
+
+[http_service]
+  internal_port = 8080
+  force_https = true            # iOS App Transport Security requires TLS from the phone
+  # The demo is one shot in an atrium. A cold start is the failure this whole section
+  # exists to prevent, so the machine stays up rather than scaling to zero.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/health"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"              # the image carries no depth model; A and A' only

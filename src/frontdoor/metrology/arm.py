@@ -17,6 +17,10 @@ class ArmNotImplemented(NotImplementedError):
     """A registered arm exists by name but its geometry has not landed yet."""
 
 
+class ArmCut(NotImplementedError):
+    """A registered arm was dropped by a decision. Distinct from not-yet-built."""
+
+
 class Arm(ABC):
     """Measure threshold rise from one image and its sidecar, or abstain."""
 
@@ -31,6 +35,23 @@ class Arm(ABC):
     @abstractmethod
     def measure(self, image, sidecar):
         """Return a `Measurement` or an `Abstention`. Never None."""
+
+
+class CutArm(Arm):
+    """An arm dropped by a project decision. Not pending -- nobody is coming back to it.
+
+    Kept registered rather than deleted so the ablation can report it as cut with its reason
+    (`absent_reason: "cut"` in measure_response.schema.json), and so a caller asking for it
+    gets an explanation instead of an unknown-arm error.
+    """
+
+    def __init__(self, name, decision, reason):
+        self.name = name
+        self.decision = decision
+        self.reason = reason
+
+    def measure(self, image, sidecar):
+        raise ArmCut(f"arm {self.name!r} was cut by {self.decision}: {self.reason}")
 
 
 class PendingArm(Arm):

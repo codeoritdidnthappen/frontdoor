@@ -15,6 +15,7 @@ from werkzeug.exceptions import HTTPException
 
 from frontdoor.sidecar import validate_sidecar
 from frontdoor_server.map_view import map_page
+from frontdoor_server.screen_view import screen_page
 
 RESPONSE_SCHEMA = json.loads(
     resources.files("frontdoor_server")
@@ -79,8 +80,20 @@ def _error(message, detail, field=None, status=400):
 _UNAVAILABLE_DEPTH_ARM = {
     "absent_reason": "unavailable",
     "detail": (
-        "Arms B and C need the monocular depth model, which this free-tier image "
-        "does not carry (TICK-062)."
+        "Arm B needs the monocular depth model, which this image does not carry "
+        "(TICK-062). The offline harness still scores it."
+    ),
+}
+# Arm C is CUT, not unavailable, and the two are different claims: `unavailable` says
+# this deployment cannot serve it, `cut` says the project dropped it and nobody is
+# coming back (D-030, #43). TICK-063 renders them differently -- a cut arm is expected,
+# an unavailable one is about this host -- so serving `unavailable` here would promise a
+# capability that no deployment will ever have.
+_CUT_ARM = {
+    "absent_reason": "cut",
+    "detail": (
+        "Arm C was cut on 2026-09-02 by D-030: the Sep 2 scope gate lapsed with no arm "
+        "implemented and no captures taken. See CHANGES.log."
     ),
 }
 STUB_ARMS = {
@@ -107,7 +120,7 @@ STUB_ARMS = {
         },
     },
     "B": dict(_UNAVAILABLE_DEPTH_ARM),
-    "C": dict(_UNAVAILABLE_DEPTH_ARM),
+    "C": dict(_CUT_ARM),
 }
 
 
@@ -149,6 +162,8 @@ def create_app():
     app.config["MAX_CONTENT_LENGTH"] = MAX_REQUEST_BYTES
     # Public stamp map: GET /map and GET /map/data (TICK-247).
     app.register_blueprint(map_page)
+    # Photo-upload ADA feature screening: POST /screen (TICK-245).
+    app.register_blueprint(screen_page)
 
     @app.get("/health")
     def health():

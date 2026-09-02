@@ -21,7 +21,9 @@ from frontdoor.metrology import (
     PendingArm,
     Arm,
     ArmAbsent,
+    ArmCut,
     ArmNotImplemented,
+    CutArm,
     Interval,
     LineDecision,
     Measurement,
@@ -115,21 +117,21 @@ def test_a_stub_arm_round_trips_through_the_interface():
     """Proves the contract before any geometry is written."""
 
     class _Stub(Arm):
-        name = "C"
+        name = "B"
         needs_intrinsics = True
 
         def measure(self, image, sidecar):
             return Measurement(value=1.5, interval=Interval(1.0, 2.0), arm=self.name)
 
-    original = get_arm("C")
+    original = get_arm("B")
     try:
         register_arm(_Stub())
-        result = get_arm("C").measure(object(), {"capture_id": "cap-1"})
+        result = get_arm("B").measure(object(), {"capture_id": "cap-1"})
         assert isinstance(result, Measurement)
-        assert result.value == 1.5 and result.arm == "C"
+        assert result.value == 1.5 and result.arm == "B"
     finally:
         register_arm(original)
-    assert isinstance(get_arm("C"), type(original))
+    assert isinstance(get_arm("B"), type(original))
 
 
 def test_an_arm_cannot_be_registered_under_a_name_it_does_not_answer_to():
@@ -153,14 +155,14 @@ def test_registering_a_class_instead_of_an_instance_is_caught_at_registration():
     """
 
     class _Unbound(Arm):
-        name = "C"
+        name = "B"
 
         def measure(self, image, sidecar):
             raise AssertionError("never called")
 
     with pytest.raises(ResultError, match="expects an Arm instance"):
         register_arm(_Unbound)
-    assert isinstance(get_arm("C"), PendingArm), "registry must be untouched"
+    assert isinstance(get_arm("B"), PendingArm), "registry must be untouched"
 
 
 def test_an_arm_cannot_be_instantiated_without_implementing_measure():
@@ -377,3 +379,61 @@ def test_the_guard_reaches_into_subpackages(tmp_path):
     (tmp_path / "arms" / "arm_b.py").write_text("import socket\n", encoding="utf-8")
     scanned = [path.name for path, _ in _sources(tmp_path)]
     assert "arm_b.py" in scanned, "a nested arm would escape every guard in this file"
+
+
+# --- Arm C, cut by D-030 -------------------------------------------------------
+
+
+def test_arm_c_is_registered_as_cut_not_pending():
+    """A cut arm and an unbuilt arm are different claims (D-030).
+
+    `absent_reason` in measure_response.schema.json distinguishes `cut` from `failed` and
+    `unavailable`, and the client renders them differently: a cut arm is expected, a failed
+    one is about this capture. Reporting a cut arm as merely pending would say someone is
+    still coming back to it.
+    """
+    c = get_arm("C")
+    assert isinstance(c, CutArm)
+    assert not isinstance(c, PendingArm)
+    assert "D-030" in c.decision
+
+
+def test_calling_a_cut_arm_says_it_was_cut_and_why():
+    with pytest.raises(ArmCut, match="D-030"):
+        get_arm("C").measure(object(), {})
+
+
+def test_a_cut_arm_still_resolves_so_the_ablation_can_report_it():
+    """Frozen in place, not deleted — deliverable #4 reports it as cut with the reason."""
+    assert "C" in [arm.name for arm in all_arms()]
+    with pytest.raises(ArmCut):
+        get_arm("C").measure(object(), {})
+
+
+def test_the_other_three_arms_are_still_pending_not_cut():
+    for name in ("A", "A_prime", "B"):
+        assert isinstance(get_arm(name), PendingArm), name
+        assert not isinstance(get_arm(name), CutArm), name
+
+
+def test_cut_and_not_yet_built_are_different_exceptions():
+    """"Dropped by a decision" and "nobody has written it yet" are different answers.
+
+    The wire contract already separates them -- `absent_reason` is one of cut, failed or
+    unavailable, and TICK-063 renders a cut arm as expected and a failed one as being about
+    this capture. Collapsing the two here would let a caller catch one and silently handle
+    the other, and would tell a reader that Arm C is still coming.
+    """
+    assert ArmCut is not ArmNotImplemented
+    assert not issubclass(ArmNotImplemented, ArmCut)
+    with pytest.raises(ArmCut):
+        get_arm("C").measure(object(), {})
+    with pytest.raises(ArmNotImplemented):
+        get_arm("A").measure(object(), {})
+    # and catching one must not catch the other
+    try:
+        get_arm("A").measure(object(), {})
+    except ArmCut:
+        raise AssertionError("an unbuilt arm was caught as a cut arm")
+    except ArmNotImplemented:
+        pass

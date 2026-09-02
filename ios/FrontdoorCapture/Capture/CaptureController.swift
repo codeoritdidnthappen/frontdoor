@@ -89,6 +89,13 @@ final class CaptureController: ObservableObject {
     /// spelling would silently match nothing.
     static let lensName = "builtInWideAngleCamera"
 
+    /// The device type actually opened, as a string for the record. `lensName` is the optics;
+    /// this is the door they were reached through, and the two differ on both team phones.
+    static func deviceName(for device: AVCaptureDevice) -> String {
+        device.deviceType.rawValue.replacingOccurrences(
+            of: "AVCaptureDeviceType", with: "")
+    }
+
     /// The zoom factor at which the 1x main lens is the one exposing.
     ///
     /// On a virtual device the scale is relative to its WIDEST constituent, so 1.0 selects the
@@ -280,6 +287,8 @@ final class CaptureController: ObservableObject {
         // between a physical wide camera and the dual-wide virtual device.
         let mainLensZoom = Self.mainLensZoomFactor(for: device)
         let lens = Self.lensName
+        let captureDevice = Self.deviceName(for: device)
+        let captureId = UUID().uuidString
         // Sampled here, on the main actor, at the moment of the press — not inside the delegate
         // callback, which runs after the exposure and would describe a different instant.
         let gravity = motion.deviceMotion.map {
@@ -305,7 +314,8 @@ final class CaptureController: ObservableObject {
                     self.accept(
                         captured,
                         subject: subject, gravity: gravity, zoomFactor: zoomFactor,
-                        mainLensZoom: mainLensZoom, lens: lens,
+                        mainLensZoom: mainLensZoom, lens: lens, captureDevice: captureDevice,
+                        captureId: captureId,
                         capturedAt: capturedAt, sensorMax: sensorMax
                     )
                 case .failure(let message):
@@ -363,11 +373,14 @@ final class CaptureController: ObservableObject {
         zoomFactor: Double,
         mainLensZoom: Double,
         lens: String,
+        captureDevice: String,
+        captureId: String,
         capturedAt: String,
         sensorMax: CMVideoDimensions?
     ) {
         // Intrinsics ride in on the depth data (see applyConfiguration), with the photo's own
         // calibration kept as a fallback in case a future configuration can supply it directly.
+        let depth = DepthCapture.record(from: captured.depthData)
         let calibration = captured.depthData?.cameraCalibrationData ?? captured.calibration
         let intrinsics = calibration.flatMap {
             CameraIntrinsics.from(
@@ -381,6 +394,7 @@ final class CaptureController: ObservableObject {
         }
 
         switch CaptureValidation.record(
+            captureId: captureId,
             pixelWidth: captured.pixelWidth,
             pixelHeight: captured.pixelHeight,
             intrinsics: intrinsics,
@@ -388,6 +402,7 @@ final class CaptureController: ObservableObject {
             gravity: gravity,
             deviceModel: CaptureValidation.hardwareIdentifier(),
             lens: lens,
+            captureDevice: captureDevice,
             zoomFactor: zoomFactor,
             mainLensZoomFactor: mainLensZoom,
             capturedAt: capturedAt,
@@ -397,11 +412,13 @@ final class CaptureController: ObservableObject {
             conditions: subject.conditions,
             // Absence is recorded, never punished: depth is a comparison, so a frame without it
             // must still cost nothing (D-020, TICK-023).
-            depth: DepthCapture.record(from: captured.depthData)
+            depth: depth?.record
         ) {
         case .success(let record):
             lastCaptureError = nil
-            pendingReview = PendingReview(record: record, image: captured.image)
+            pendingReview = PendingReview(
+                record: record, image: captured.image,
+                imageData: captured.imageData, depthBytes: depth?.bytes)
         case .failure(let rejection):
             lastCaptureError = rejection.message
         }
@@ -413,10 +430,35 @@ final class CaptureController: ObservableObject {
         guard let pending = pendingReview else { return }
         var record = pending.record
         record.roi = taps
-        photosTaken += 1
-        lastThumbnail = pending.image
-        lastRecord = record
-        pendingReview = nil
+
+        // Write before counting. `photosTaken` and `lastRecord` are the operator's evidence
+        // that the capture exists, and until this call they were the ONLY evidence: the record
+        // lived in memory, the encoded bytes were discarded with the delegate, and nothing
+        // reached the disk. A field session would have ended with a full counter and an empty
+        // directory (TICK-028, QA B02).
+        let written = CaptureWriter.write(
+            record,
+            imageData: pending.imageData,
+            depthData: pending.depthBytes,
+            into: Self.capturesDirectory)
+
+        switch written {
+        case .success:
+            photosTaken += 1
+            lastThumbnail = pending.image
+            lastRecord = record
+            lastCaptureError = nil
+            pendingReview = nil
+        case .failure(let failure):
+            // Complete-or-nothing (AC5): the frame stays under review so the operator can fix
+            // what is missing, and nothing is counted for a capture that is not on disk.
+            lastCaptureError = failure.message
+        }
+    }
+
+    /// Captures live beside the app's own data, so iOS backs them up and Files can reach them.
+    static var capturesDirectory: URL {
+        URL.documentsDirectory.appendingPathComponent("captures", isDirectory: true)
     }
 
     /// Throw the frame away. Nothing is recorded and nothing is counted: re-shooting is free, and
@@ -525,6 +567,9 @@ final class CaptureController: ObservableObject {
 /// What one finished exposure yielded, before any judgement about whether it is usable.
 private struct CapturedPhoto {
     var image: UIImage
+    /// The camera's OWN encoded bytes. Held because AC2 hashes what is written, and a
+    /// UIImage re-encoded on the way to disk is a different file with a different digest.
+    var imageData: Data
     var pixelWidth: Int
     var pixelHeight: Int
     var calibration: AVCameraCalibrationData?
@@ -555,13 +600,15 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
             onFinish(token, .failure(error.localizedDescription))
             return
         }
-        guard let image = photo.fileDataRepresentation().flatMap(UIImage.init(data:)) else {
+        guard let imageData = photo.fileDataRepresentation(),
+              let image = UIImage(data: imageData) else {
             onFinish(token, .failure("the camera returned no image data"))
             return
         }
         let dimensions = photo.resolvedSettings.photoDimensions
         onFinish(token, .success(CapturedPhoto(
             image: image,
+            imageData: imageData,
             pixelWidth: Int(dimensions.width),
             pixelHeight: Int(dimensions.height),
             calibration: photo.cameraCalibrationData,
