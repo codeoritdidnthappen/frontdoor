@@ -218,21 +218,61 @@ this log. The statements below are RECONSTRUCTED from how each ID is used in tic
 confirmation by whoever took the original decisions. They are recorded so the IDs resolve to
 something rather than dangling; they are not claimed to be the original wording.
 
+2026-09-01 (#183): each entry was checked against the tickets that cite it, and each now names the
+line it rests on. D-024 was WRONG and is corrected below -- see its entry. D-021 and D-023 track
+their citing tickets almost verbatim. D-022 says what its citing tickets say, but says the same
+thing as Amendment A-2, which is the one substantive question left for a human: which ID carries
+the Arm-A-only rule. Checking cannot promote any of these to confirmed -- a reconstruction that
+matches the tickets is still a reconstruction, because the tickets are where it came from. The
+label stays until someone who was in the decision says otherwise.
+
 - D-021  (reconstructed) Per-entrance shot plan is enforced by the instrument: the app tells the
          operator which card placement, angle bucket and distance bucket remain outstanding and
          refuses to mark the entrance complete until the plan is met. Arm A-prime ground-card
          frames are requested only for entrances in the A-prime subset, whose membership is fixed
          in advance by a documented rule. Referenced by: #31, #72, #85, #91.
+         GROUNDED IN: TICK-027 (#31) context -- "the plan goes in the instrument (D-021): the app
+         tells the operator which placement, angle and distance are still outstanding for the
+         entrance in hand, and refuses to mark the entrance complete until the plan is met" -- and
+         its AC "subset membership is decided by a documented rule fixed in advance". Every clause
+         above appears there. Nothing invented; still not the original wording.
 - D-022  (reconstructed) Compliance verdicts are reported for Arm A ONLY. No pass/fail bar or
          threshold line is attached to Arms A-prime, B or C; those arms report measurement error
          alone. Referenced by: #91, #93, #95, #72.
+         GROUNDED IN: #91 ("no pass/fail verdict is attached to any arm but A (D-022)"), #93 ("the
+         pass/fail bar appears on Arm A only (D-022)"), #95 ("Arm A is the only arm with a threshold
+         line drawn (D-022)"), #72 ("the 0.25-inch bar is drawn against Arm A only (D-022)").
+         UNRESOLVED, AND THE REASON THIS BLOCK IS STILL OPEN: this is the same rule as Amendment
+         A-2 below. A decision and an amendment cannot both be the origin of one rule -- either A-2
+         amended the pre-registration to name Arm A and D-022 is being cited for something it never
+         said, or D-022 fixed it from the start and A-2 is not an amendment at all. That distinction
+         is not recoverable from the tickets, and it matters: A-2 must be REPORTED AS AN AMENDMENT
+         AT DEMO DAY (PRD section 2), and D-022 carries no such obligation. See TICK-231 and #132.
 - D-023  (reconstructed) Three-way split -- dev, calib, sealed -- assigned deterministically from a
          committed seed at entrance creation and immutable thereafter, with calib reserved for
          interval calibration so conformal intervals are never calibrated on dev or on sealed data.
          Referenced by: #45, #53, #84.
-- D-024  (reconstructed) One capture writes one image, one depth map and one JSON sidecar, hashed
-         at the shutter press, with entrance ID, caliper ground truth and condition tags bound in
-         at capture time rather than reconciled afterwards. Referenced by: #32, #83, #85.
+         GROUNDED IN: TICK-051 (#45) -- "calibrated on the `calib` split, which exists distinct from
+         `sealed` precisely so the intervals are not calibrated on the data they are then evaluated
+         against" -- and TICK-201 (#84), "the seed embedded in the installed build matches the
+         committed seed file", with splits described as immutable at analysis time. Also implemented:
+         `frontdoor.split.assign_split` and `DatasetLoader.SPLITS`.
+- D-024  (reconstructed, CORRECTED 2026-09-01) One capture writes one image, one depth map and one
+         JSON sidecar. Image and depth are hashed over the WRITTEN FILE BYTES on device, and the
+         sidecar is written ATOMICALLY AFTER both files are fully written, so a crash mid-capture
+         never leaves a sidecar pointing at a truncated file. A capture missing any required value
+         -- no caliper reading, fewer than six ROI taps, no intrinsics -- writes NOTHING AT ALL
+         rather than a partial record. Referenced by: #32, #83, #85.
+         GROUNDED IN: TICK-028 (#32) acceptance criteria 2, 4 and 5, quoted almost directly.
+         WHAT WAS WRONG. The previous text said captures were "hashed at the shutter press" and that
+         ground truth and condition tags were "bound in at capture time rather than reconciled
+         afterwards". Both were mine. The first CONTRADICTS #32, which requires hashing over the
+         written bytes after the files are closed -- the opposite ordering, and the ordering is the
+         whole point, since hashing at the shutter would hash something that had not been written
+         yet. The second was reaching for #32's real AC5 (complete-or-nothing) but stated a claim
+         about reconciliation that #32, #83 and #85 do not make. Corrected against the implementing
+         ticket rather than re-guessed; the entry stays reconstructed because #32 is a ticket that
+         cites D-024, not the decision itself.
 
 - A-2    (reconstructed) AMENDMENT TO THE PRE-REGISTRATION. The pre-registered success criterion
          -- MAE <= 0.25" on threshold rise, on the sealed test split (PRD section 2, D-008) -- is
