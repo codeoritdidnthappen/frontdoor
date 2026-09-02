@@ -28,9 +28,25 @@ enum CapabilityProbe {
         var calibrationSupported: Bool
         var depthSupported: Bool
         var maxPhotoDimensions: String
+        /// On a virtual device the zoom scale is relative to its WIDEST constituent, so 1.0 is the
+        /// ultra-wide on builtInDualWideCamera and the main lens sits at the switch-over factor.
+        /// D-014 fixes the optics to the 1x main lens; pinning the number 1.0 would silently pin
+        /// the wrong glass. Reported so the app pins the factor that means "main lens" on
+        /// whichever device it opens.
+        var defaultZoomFactor: String = "-"
+        var switchOverFactors: String = "-"
     }
 
     struct CaptureReport {
+        static func failed(lens: String, reason: String) -> CaptureReport {
+            CaptureReport(
+                lens: lens, requestedDimensions: "-", pixelDimensions: "-",
+                isFullResolution: false, calibrationRequested: false,
+                calibrationDelivered: false, calibrationSource: "capture failed: \(reason)",
+                intrinsics: "-", referenceDimensions: "-", distortionTableEntries: nil,
+                zoomAtCapture: "-", depthRequested: false, depthDelivered: false, depthDetail: "")
+        }
+
         var lens: String
         var requestedDimensions: String
         var pixelDimensions: String
@@ -42,6 +58,7 @@ enum CapabilityProbe {
         var intrinsics: String
         var referenceDimensions: String
         var distortionTableEntries: Int?
+        var zoomAtCapture: String = "-"
         var depthRequested: Bool
         var depthDelivered: Bool
         var depthDetail: String
@@ -51,7 +68,7 @@ enum CapabilityProbe {
         var deviceModel: String
         var systemVersion: String
         var lenses: [LensReport]
-        var capture: CaptureReport?
+        var captures: [CaptureReport] = []
         var failure: String?
 
         /// Plain text, so a result can leave the phone by any route — AirDrop, Notes, a photo of
@@ -67,14 +84,17 @@ enum CapabilityProbe {
                 lines.append(
                     "  \(l.lens): available=\(l.available) calibration=\(l.calibrationSupported) "
                         + "depth=\(l.depthSupported) maxPhoto=\(l.maxPhotoDimensions)"
+                        + "\n    zoom default=\(l.defaultZoomFactor) "
+                        + "switch-over=\(l.switchOverFactors)"
                 )
             }
-            if let c = capture {
+            for c in captures {
                 lines += [
                     "",
                     "Capture on \(c.lens):",
                     "  requested: \(c.requestedDimensions)",
                     "  delivered: \(c.pixelDimensions)  full-resolution=\(c.isFullResolution)",
+                    "  zoom at capture: \(c.zoomAtCapture)",
                     "  calibration requested=\(c.calibrationRequested) delivered=\(c.calibrationDelivered)",
                     "  calibration source=\(c.calibrationSource)",
                     "  intrinsics: \(c.intrinsics)",
@@ -83,6 +103,15 @@ enum CapabilityProbe {
                     "  depth requested=\(c.depthRequested) delivered=\(c.depthDelivered) \(c.depthDetail)",
                 ]
             }
+            // The verdict, so the answer does not have to be reconstructed from the rows.
+            let viable = captures.filter(\.calibrationDelivered).map(\.lens)
+            lines += [
+                "",
+                viable.isEmpty
+                    ? "VERDICT: no device type delivered calibration. D-015's intrinsics route "
+                        + "does not exist on this hardware."
+                    : "VERDICT: calibration delivered on: " + viable.joined(separator: ", "),
+            ]
             if let failure { lines += ["", "FAILED: \(failure)"] }
             return lines.joined(separator: "\n")
         }
@@ -105,7 +134,6 @@ enum CapabilityProbe {
             deviceModel: hardwareIdentifier(),
             systemVersion: UIDevice.current.systemVersion,
             lenses: [],
-            capture: nil,
             failure: nil
         )
 
@@ -131,11 +159,18 @@ enum CapabilityProbe {
             return report
         }
 
-        do {
-            report.capture = try await captureOnWideAngle()
-        } catch {
-            report.failure = error.localizedDescription
+        // One capture per available device type. The answer that matters is not "does the 1x wide
+        // deliver calibration" -- it does not, on both team phones -- but "does ANY device that can
+        // carry depth deliver it", because that is the channel D-015 depends on.
+        for (name, type) in candidates {
+            guard AVCaptureDevice.default(type, for: .video, position: .back) != nil else { continue }
+            do {
+                report.captures.append(try await capture(on: type, named: name))
+            } catch {
+                report.captures.append(CaptureReport.failed(lens: name, reason: error.localizedDescription))
+            }
         }
+        if report.captures.isEmpty { report.failure = "no back camera of any type was available" }
         return report
     }
 
@@ -183,14 +218,30 @@ enum CapabilityProbe {
             available: true,
             calibrationSupported: output.isCameraCalibrationDataDeliverySupported,
             depthSupported: output.isDepthDataDeliverySupported,
-            maxPhotoDimensions: best.map { "\($0.width)x\($0.height)" } ?? "unknown"
+            maxPhotoDimensions: best.map { "\($0.width)x\($0.height)" } ?? "unknown",
+            defaultZoomFactor: String(format: "%.2f", Double(device.videoZoomFactor)),
+            switchOverFactors: device.virtualDeviceSwitchOverVideoZoomFactors.isEmpty
+                ? "none (physical device)"
+                : device.virtualDeviceSwitchOverVideoZoomFactors
+                    .map { String(format: "%.2f", $0.doubleValue) }
+                    .joined(separator: ", ")
         )
     }
 
     // MARK: - Real capture
 
-    private static func captureOnWideAngle() async throws -> CaptureReport {
-        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+    /// Capture on a named device type.
+    ///
+    /// Was hardcoded to builtInWideAngleCamera, which is why the probe kept answering "no
+    /// calibration" on two phones while proving nothing: that device reports depth=false, and
+    /// depthData.cameraCalibrationData is the channel the app takes intrinsics from. A capture
+    /// that cannot carry depth cannot carry calibration through it, so the test was structurally
+    /// unable to find what it was looking for. Every available device type is tried now.
+    private static func capture(
+        on deviceType: AVCaptureDevice.DeviceType,
+        named name: String
+    ) async throws -> CaptureReport {
+        guard let device = AVCaptureDevice.default(deviceType, for: .video, position: .back)
         else { throw ProbeError.noDevice }
 
         let session = AVCaptureSession()
@@ -246,7 +297,7 @@ enum CapabilityProbe {
         let matrix = calibration?.intrinsicMatrix
         let delivered = photo.resolvedSettings.photoDimensions
         return CaptureReport(
-            lens: "builtInWideAngleCamera",
+            lens: name,
             requestedDimensions: sensorMax.map { "\($0.width)x\($0.height)" } ?? "device default",
             pixelDimensions: "\(delivered.width)x\(delivered.height)",
             isFullResolution: sensorMax.map {
@@ -271,6 +322,7 @@ enum CapabilityProbe {
             } ?? "-",
             distortionTableEntries: calibration?.lensDistortionLookupTable
                 .map { $0.count / MemoryLayout<Float>.size },
+            zoomAtCapture: String(format: "%.2f", Double(device.videoZoomFactor)),
             depthRequested: depthRequested,
             depthDelivered: photo.depthData != nil,
             depthDetail: photo.depthData.map {

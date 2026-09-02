@@ -95,15 +95,35 @@ enum ROIValidation {
     static func pixel(
         of point: CGPoint,
         displayed: CGRect,
+        orientation: UIImage.Orientation = .up,
         pixelWidth: Int,
         pixelHeight: Int
     ) -> PixelPoint? {
         guard displayed.width > 0, displayed.height > 0, pixelWidth > 0, pixelHeight > 0 else {
             return nil
         }
-        let fx = (point.x - displayed.minX) / displayed.width
-        let fy = (point.y - displayed.minY) / displayed.height
-        guard (0...1).contains(fx), (0...1).contains(fy) else { return nil }
+        let u = (point.x - displayed.minX) / displayed.width
+        let v = (point.y - displayed.minY) / displayed.height
+        guard (0...1).contains(u), (0...1).contains(v) else { return nil }
+        // Back out of the display turn into sensor space. `.right` is the portrait-held capture:
+        // the buffer is rotated a quarter turn clockwise to show upright, so the display's top-left
+        // is the sensor's bottom-left.
+        let fx: CGFloat
+        let fy: CGFloat
+        switch orientation {
+        case .right, .rightMirrored:
+            fx = v
+            fy = 1 - u
+        case .left, .leftMirrored:
+            fx = 1 - v
+            fy = u
+        case .down, .downMirrored:
+            fx = 1 - u
+            fy = 1 - v
+        default:
+            fx = u
+            fy = v
+        }
         // Round rather than truncate: truncation biases every tap towards the top-left by up to a
         // pixel, which is a systematic error across the whole dataset rather than a random one.
         let x = min(pixelWidth - 1, max(0, Int((fx * CGFloat(pixelWidth)).rounded())))
@@ -111,11 +131,36 @@ enum ROIValidation {
         return PixelPoint(x: x, y: y)
     }
 
+    /// Whether an orientation puts the image on screen turned a quarter turn from its pixels.
+    ///
+    /// A still is landscape sensor pixels carrying an EXIF orientation, and on a portrait-held
+    /// phone it displays upright -- so what the operator sees is a quarter turn from the buffer
+    /// the intrinsics describe. Everything recorded stays in SENSOR space, because that is the
+    /// frame `intrinsicMatrixReferenceDimensions` is expressed in; only the display is turned.
+    static func isQuarterTurned(_ orientation: UIImage.Orientation) -> Bool {
+        switch orientation {
+        case .left, .leftMirrored, .right, .rightMirrored: return true
+        default: return false
+        }
+    }
+
     /// The rect a `scaledToFit` image occupies inside a view of this size.
-    static func fittedRect(pixelWidth: Int, pixelHeight: Int, in view: CGSize) -> CGRect {
-        guard pixelWidth > 0, pixelHeight > 0, view.width > 0, view.height > 0 else { return .zero }
-        let scale = min(view.width / CGFloat(pixelWidth), view.height / CGFloat(pixelHeight))
-        let size = CGSize(width: CGFloat(pixelWidth) * scale, height: CGFloat(pixelHeight) * scale)
+    ///
+    /// Takes the DISPLAYED shape, which is the sensor's swapped when the image is quarter-turned.
+    /// Computing it from the sensor dimensions instead fits a landscape rect around a portrait
+    /// image: the picture is stretched to fill it, and every tap converts against a rectangle the
+    /// image does not occupy.
+    static func fittedRect(
+        pixelWidth: Int, pixelHeight: Int,
+        orientation: UIImage.Orientation = .up,
+        in view: CGSize
+    ) -> CGRect {
+        let turned = isQuarterTurned(orientation)
+        let displayedW = turned ? pixelHeight : pixelWidth
+        let displayedH = turned ? pixelWidth : pixelHeight
+        guard displayedW > 0, displayedH > 0, view.width > 0, view.height > 0 else { return .zero }
+        let scale = min(view.width / CGFloat(displayedW), view.height / CGFloat(displayedH))
+        let size = CGSize(width: CGFloat(displayedW) * scale, height: CGFloat(displayedH) * scale)
         return CGRect(
             x: (view.width - size.width) / 2,
             y: (view.height - size.height) / 2,
@@ -146,4 +191,40 @@ struct PendingReview: Identifiable {
     let id = UUID()
     var record: CaptureRecord
     var image: UIImage
+}
+
+extension ROIValidation {
+    /// Where a recorded sensor pixel lands on screen -- the exact inverse of `pixel(of:...)`.
+    ///
+    /// Marks are stored in sensor space, so drawing them needs the turn applied forward. Doing it
+    /// by hand in the view is how the two directions drift apart.
+    static func displayPoint(
+        of pixel: PixelPoint,
+        in displayed: CGRect,
+        orientation: UIImage.Orientation = .up,
+        pixelWidth: Int,
+        pixelHeight: Int
+    ) -> CGPoint {
+        guard pixelWidth > 0, pixelHeight > 0 else { return .zero }
+        let fx = CGFloat(pixel.x) / CGFloat(pixelWidth)
+        let fy = CGFloat(pixel.y) / CGFloat(pixelHeight)
+        let u: CGFloat
+        let v: CGFloat
+        switch orientation {
+        case .right, .rightMirrored:
+            u = 1 - fy
+            v = fx
+        case .left, .leftMirrored:
+            u = fy
+            v = 1 - fx
+        case .down, .downMirrored:
+            u = 1 - fx
+            v = 1 - fy
+        default:
+            u = fx
+            v = fy
+        }
+        return CGPoint(x: displayed.minX + u * displayed.width,
+                       y: displayed.minY + v * displayed.height)
+    }
 }

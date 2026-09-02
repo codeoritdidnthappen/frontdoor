@@ -97,6 +97,61 @@ final class ROIValidationTests: XCTestCase {
         XCTAssertEqual(pixel, PixelPoint(x: 101, y: 101))
     }
 
+    // MARK: orientation (a portrait-held capture is landscape pixels)
+
+    /// The still is 4032x3024 sensor pixels carrying .right, and displays upright on a portrait
+    /// phone. Fitting it against the SENSOR shape wraps a landscape rect around a portrait image:
+    /// the picture stretches to fill and every tap converts against a rect the image does not
+    /// occupy. Found on device -- the operator said the picture looked distorted.
+    func testAQuarterTurnedImageIsFittedByItsDisplayedShape() {
+        let rect = ROIValidation.fittedRect(
+            pixelWidth: w, pixelHeight: h, orientation: .right,
+            in: CGSize(width: 400, height: 800))
+        // Displayed 3:4, so width-limited at 400x533, centred vertically.
+        XCTAssertEqual(rect.width, 400, accuracy: 0.01)
+        XCTAssertEqual(rect.height, 400 * 4 / 3, accuracy: 0.01)
+    }
+
+    /// Sensor space is what the intrinsics are expressed in, so that is what gets recorded no
+    /// matter how the still is shown. `.right` turns the buffer a quarter clockwise for display,
+    /// which puts the sensor's bottom-left at the display's top-left.
+    func testDisplayCornersMapToTheRightSensorCornersWhenTurned() {
+        let rect = CGRect(x: 0, y: 0, width: 300, height: 400)
+        XCTAssertEqual(
+            ROIValidation.pixel(of: CGPoint(x: 0, y: 0), displayed: rect, orientation: .right,
+                                pixelWidth: w, pixelHeight: h),
+            PixelPoint(x: 0, y: h - 1))
+        XCTAssertEqual(
+            ROIValidation.pixel(of: CGPoint(x: 300, y: 0), displayed: rect, orientation: .right,
+                                pixelWidth: w, pixelHeight: h),
+            PixelPoint(x: 0, y: 0))
+        XCTAssertEqual(
+            ROIValidation.pixel(of: CGPoint(x: 300, y: 400), displayed: rect, orientation: .right,
+                                pixelWidth: w, pixelHeight: h),
+            PixelPoint(x: w - 1, y: 0))
+    }
+
+    /// Marks are stored in sensor space and drawn in display space. If the two directions disagree
+    /// the markers appear somewhere the operator did not tap, which is how a wrong tap gets
+    /// accepted as a correct one.
+    func testTapAndMarkerRoundTripForEveryOrientation() throws {
+        let rect = CGRect(x: 12, y: 30, width: 300, height: 400)
+        for orientation in [UIImage.Orientation.up, .right, .left, .down] {
+            for touch in [CGPoint(x: 40, y: 60), CGPoint(x: 200, y: 330),
+                          CGPoint(x: 312, y: 430), CGPoint(x: 12, y: 30)] {
+                let pixel = try XCTUnwrap(
+                    ROIValidation.pixel(of: touch, displayed: rect, orientation: orientation,
+                                        pixelWidth: w, pixelHeight: h),
+                    "\(orientation) \(touch)")
+                let back = ROIValidation.displayPoint(
+                    of: pixel, in: rect, orientation: orientation,
+                    pixelWidth: w, pixelHeight: h)
+                XCTAssertEqual(back.x, touch.x, accuracy: 0.5, "\(orientation) x")
+                XCTAssertEqual(back.y, touch.y, accuracy: 0.5, "\(orientation) y")
+            }
+        }
+    }
+
     // MARK: assembling the six
 
     func testAllSixInOrderProduceTheRecord() throws {

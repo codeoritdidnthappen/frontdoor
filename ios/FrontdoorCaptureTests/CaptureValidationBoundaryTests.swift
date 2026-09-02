@@ -27,6 +27,7 @@ final class CaptureValidationBoundaryTests: XCTestCase {
         hadCalibration: Bool = true,
         gravity: GravitySample?? = nil,
         zoom: Double = 1.0,
+        mainLensZoom: Double = 1.0,
         capturedAt: String = "2026-09-01T14:22:31Z",
         sensorWidth: Int?? = nil,
         sensorHeight: Int?? = nil,
@@ -38,7 +39,7 @@ final class CaptureValidationBoundaryTests: XCTestCase {
             hadCalibrationData: hadCalibration,
             gravity: gravity ?? goodGravity,
             deviceModel: "iPhone17,1", lens: "builtInWideAngleCamera",
-            zoomFactor: zoom,
+            zoomFactor: zoom, mainLensZoomFactor: mainLensZoom,
             capturedAt: capturedAt,
             sensorWidth: sensorWidth ?? width,
             sensorHeight: sensorHeight ?? height,
@@ -84,8 +85,8 @@ final class CaptureValidationBoundaryTests: XCTestCase {
     // MARK: - Kills M05: the zoom check only ever sees zoom > 1
 
     func testZoomBelowUnityIsRejected() {
-        XCTAssertEqual(rejection(validate(zoom: 0.5)), .zoomNotUnity(0.5))
-        XCTAssertEqual(rejection(validate(zoom: 0.0)), .zoomNotUnity(0.0))
+        XCTAssertEqual(rejection(validate(zoom: 0.5)), .zoomNotMainLens(factor: 0.5, expected: 1.0))
+        XCTAssertEqual(rejection(validate(zoom: 0.0)), .zoomNotMainLens(factor: 0.0, expected: 1.0))
     }
 
     // MARK: - Kills M06/M18: pins the 0.001 zoom tolerance on both sides
@@ -128,11 +129,11 @@ final class CaptureValidationBoundaryTests: XCTestCase {
     func testEachRejectionSaysSomethingDifferentToTheOperator() {
         let all: [CaptureRejected] = [
             .noImageData, .noCalibrationData, .unusableCalibrationData,
-            .zoomNotUnity(2.0), .noGravitySample, .gravityImplausible(0.4)
+            .zoomNotMainLens(factor: 2.0, expected: 1.0), .noGravitySample, .gravityImplausible(0.4)
         ]
         let messages = Set(all.map(\.message))
         XCTAssertEqual(messages.count, all.count, "operator messages must be distinguishable")
-        XCTAssertTrue(CaptureRejected.zoomNotUnity(2.0).message.contains("2.00"))
+        XCTAssertTrue(CaptureRejected.zoomNotMainLens(factor: 2.0, expected: 1.0).message.contains("2.00"))
         XCTAssertTrue(CaptureRejected.gravityImplausible(0.4).message.contains("0.40"))
     }
 
