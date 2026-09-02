@@ -1,0 +1,45 @@
+{
+  "arms": {
+    "A": {
+      "decisions": {
+        "half_inch": {
+          "verdict": "pass"
+        },
+        "quarter_inch": {
+          "verdict": "pass"
+        }
+      },
+      "interval_in": {
+        "high": 0.13,
+        "low": 0.09
+      },
+      "rise_in": 0.11
+    },
+    "A_prime": {
+      "decisions": {
+        "half_inch": {
+          "explanation": "The 0.40-0.70 in interval straddles the 1/2 in line, so this capture cannot be classified against it either way.",
+          "verdict": "abstain"
+        },
+        "quarter_inch": {
+          "verdict": "fail"
+        }
+      },
+      "interval_in": {
+        "high": 0.7,
+        "low": 0.4
+      },
+      "rise_in": 0.55
+    },
+    "B": {
+      "absent_reason": "unavailable",
+      "detail": "Arm B needs the monocular depth model, which this image does not carry (TICK-062). The offline harness still scores it."
+    },
+    "C": {
+      "absent_reason": "cut",
+      "detail": "Arm C was cut on 2026-09-02 by D-030: the Sep 2 scope gate lapsed with no arm implemented and no captures taken. See CHANGES.log."
+    }
+  },
+  "capture_id": "uuid",
+  "stub": true
+}
