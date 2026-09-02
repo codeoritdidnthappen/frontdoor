@@ -108,7 +108,7 @@ struct HomeView: View {
                     }
                 }
             }
-            if let blocking = uploads.blockingError {
+            ForEach(uploads.blockingErrors, id: \.self) { blocking in
                 Text(blocking)
                     .font(.caption2)
                     .foregroundStyle(.orange)

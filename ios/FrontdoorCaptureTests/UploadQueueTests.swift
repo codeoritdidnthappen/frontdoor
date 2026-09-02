@@ -20,12 +20,13 @@ final class UploadQueueTests: XCTestCase {
 
     @discardableResult
     private func writeCapture(
-        _ id: String, split: String = "dev", withDepth: Bool = false, image: Data = Data("jpg".utf8)
+        _ id: String, entrance: String = "E-001", withDepth: Bool = false,
+        image: Data = Data("jpg".utf8)
     ) throws -> URL {
         try image.write(to: dir.appendingPathComponent("\(id).jpg"))
         var sidecar: [String: Any] = [
             "capture_id": id,
-            "split": split,
+            "entrance_id": entrance,
             "image": ["path": "\(id).jpg", "sha256": String(repeating: "a", count: 64)],
         ]
         if withDepth {
@@ -48,7 +49,7 @@ final class UploadQueueTests: XCTestCase {
         XCTAssertEqual(pending.count, 1)
         XCTAssertEqual(pending.first?.kind, .image)
         XCTAssertEqual(pending.first?.captureId, "cap-1")
-        XCTAssertEqual(pending.first?.split, "dev")
+        XCTAssertEqual(pending.first?.entranceId, "E-001")
     }
 
     func testACaptureWithDepthQueuesBothFiles() throws {
@@ -81,10 +82,11 @@ final class UploadQueueTests: XCTestCase {
         XCTAssertEqual(UploadQueue.pending(in: absent), [])
     }
 
-    func testTheSealedSplitIsCarriedThroughUnchanged() throws {
-        try writeCapture("cap-1", split: "sealed")
-        // If this were coerced the capture would land in the wrong partition in the bucket.
-        XCTAssertEqual(UploadQueue.pending(in: dir).first?.split, "sealed")
+    func testTheEntranceIdIsCarriedThroughUnchanged() throws {
+        try writeCapture("cap-1", entrance: "E-002")
+        // The server derives the partition from this, so a coerced value would land the capture
+        // in the wrong one. Nothing here decides the split, which is the point.
+        XCTAssertEqual(UploadQueue.pending(in: dir).first?.entranceId, "E-002")
     }
 
     func testOldestCapturesDrainFirst() throws {
@@ -109,7 +111,7 @@ final class UploadQueueTests: XCTestCase {
     // MARK: - reading the server's answer
 
     private func item(sha: String = String(repeating: "a", count: 64)) -> UploadQueue.Pending {
-        UploadQueue.Pending(captureId: "cap-1", split: "dev", kind: .image,
+        UploadQueue.Pending(captureId: "cap-1", entranceId: "E-001", kind: .image,
                             fileURL: dir.appendingPathComponent("cap-1.jpg"), sha256: sha)
     }
 
@@ -159,12 +161,58 @@ final class UploadQueueTests: XCTestCase {
     }
 
     func testServerErrorsAreRetriedSoNothingIsDeletedOnAGuess() {
-        for status in [500, 502, 503, 504, 0, 429] {
+        for status in [500, 502, 503, 504, 0] {
             let outcome = UploadClient.outcome(status: status, body: Data(), expecting: item())
             guard case .retry = outcome else {
                 return XCTFail("status \(status) should retry, got \(outcome)")
             }
         }
+    }
+
+    func testTheTwoRetryableClientErrorsAreRetried() {
+        for status in [408, 429] {
+            let outcome = UploadClient.outcome(status: status, body: Data(), expecting: item())
+            guard case .retry = outcome else {
+                return XCTFail("status \(status) should retry, got \(outcome)")
+            }
+        }
+    }
+
+    func testOtherClientErrorsAreVisibleRefusalsRatherThanSilentForeverRetries() {
+        // A build pointed at the wrong host gets 404 and a capture over the cap gets 413. Retrying
+        // those on every connectivity change leaves the operator watching a count that never moves
+        // with nothing saying why.
+        for status in [404, 413, 415, 405] {
+            let outcome = UploadClient.outcome(status: status, body: Data(), expecting: item())
+            guard case .rejected = outcome else {
+                return XCTFail("status \(status) should be rejected, got \(outcome)")
+            }
+        }
+    }
+
+    func testAConflictIsARefusalBecauseSomethingElseHoldsThatId() {
+        let outcome = UploadClient.outcome(status: 409, body: Data(), expecting: item())
+        guard case .rejected = outcome else { return XCTFail("expected rejected, got \(outcome)") }
+    }
+
+    func testAnIdempotentRepeatIsAcceptedAsStored() {
+        // 200 rather than 201: the earlier upload landed and only its acknowledgement was lost.
+        let sha = String(repeating: "a", count: 64)
+        let outcome = UploadClient.outcome(
+            status: 200, body: reply(["stored": true, "sha256": sha, "verified": "read-back"]),
+            expecting: item())
+        XCTAssertEqual(outcome, .stored(verified: "read-back"))
+    }
+
+    func testTheSpooledBodyMatchesTheInMemoryBody() throws {
+        // The streaming path and the in-memory one must produce identical bytes, or the server
+        // sees a different request than every test in this file exercises.
+        let bytes = Data([0x00, 0xFF, 0x10, 0x00, 0x0A])
+        let fileURL = dir.appendingPathComponent("cap-1.jpg")
+        try bytes.write(to: fileURL)
+        let spooled = try UploadClient.spool(item())
+        defer { try? FileManager.default.removeItem(at: spooled) }
+        XCTAssertEqual(try Data(contentsOf: spooled), UploadClient.body(for: item(), bytes: bytes))
     }
 
     // MARK: - the request
@@ -175,7 +223,7 @@ final class UploadQueueTests: XCTestCase {
         XCTAssertEqual(request.url?.path, "/upload")
         XCTAssertEqual(request.value(forHTTPHeaderField: "X-Frontdoor-Upload-Key"), "k")
         let body = String(data: request.httpBody ?? Data(), encoding: .utf8) ?? ""
-        for field in ["kind", "capture_id", "split", "sha256", "bytes"] {
+        for field in ["kind", "capture_id", "entrance_id", "sha256", "bytes"] {
             XCTAssertTrue(body.contains("name=\"\(field)\""), "body is missing \(field)")
         }
         XCTAssertTrue(body.contains("image"), "kind should be the wire spelling")

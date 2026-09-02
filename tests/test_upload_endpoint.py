@@ -44,10 +44,21 @@ def _buckets():
     return s3
 
 
+# The split is DERIVED from entrance_id server-side, never sent. These ids are what the committed
+# seed assigns; if the seed changes these move, which is the point -- the server and the phone
+# cannot disagree about a partition.
+DEV_ENTRANCE = "E-001"
+CALIB_ENTRANCE = "E-004"
+SEALED_ENTRANCE = "E-002"
+
+ENTRANCE_FOR = {"dev": DEV_ENTRANCE, "calib": CALIB_ENTRANCE, "sealed": SEALED_ENTRANCE}
+
+
 def _post(client, payload=b"pretend-jpeg", *, kind="image", capture_id="cap-1",
-          split="dev", sha256=None, key=KEY, omit_bytes=False):
+          split="dev", entrance_id=None, sha256=None, key=KEY, omit_bytes=False):
     digest = sha256 if sha256 is not None else hashlib.sha256(payload).hexdigest()
-    data = {"kind": kind, "capture_id": capture_id, "split": split, "sha256": digest}
+    entrance = entrance_id if entrance_id is not None else ENTRANCE_FOR.get(split, split)
+    data = {"kind": kind, "capture_id": capture_id, "entrance_id": entrance, "sha256": digest}
     if not omit_bytes:
         data["bytes"] = (io.BytesIO(payload), "shot.jpg")
     headers = {"X-Frontdoor-Upload-Key": key} if key is not None else {}
@@ -89,13 +100,40 @@ def test_an_unknown_kind_is_refused(client, kind):
     assert _post(client, kind=kind).status_code == 400
 
 
-@pytest.mark.parametrize("split", ["", "prod", "Dev", "sealed "])
-def test_an_unknown_split_is_refused(client, split):
-    assert _post(client, split=split).status_code == 400
+@pytest.mark.parametrize("entrance", ["", "E-14", "e14", "E-0001", "not-an-id", "E-001 x"])
+def test_a_non_canonical_entrance_id_is_refused(client, entrance):
+    assert _post(client, entrance_id=entrance).status_code == 400
 
 
-def test_a_missing_capture_id_is_refused(client):
-    assert _post(client, capture_id="   ").status_code == 400
+@mock_aws
+def test_the_split_is_derived_from_the_entrance_not_taken_from_the_client(client):
+    """A phone carrying a drifted seed must not be able to place a sealed entrance in open/."""
+    _buckets()
+    # The client sends no split at all; the server works it out.
+    body = _post(client, entrance_id=SEALED_ENTRANCE).get_json()
+    assert body["split"] == "sealed"
+    assert body["key"] == "sealed/cap-1"
+
+
+@mock_aws
+def test_a_client_supplied_split_is_ignored(client):
+    """Even if a future client sends one, it cannot override the derived value."""
+    _buckets()
+    resp = client.post(
+        "/upload",
+        data={"kind": "image", "capture_id": "cap-1", "entrance_id": SEALED_ENTRANCE,
+              "split": "dev", "sha256": hashlib.sha256(b"x").hexdigest(),
+              "bytes": (io.BytesIO(b"x"), "shot.jpg")},
+        headers={"X-Frontdoor-Upload-Key": KEY},
+        content_type="multipart/form-data")
+    assert resp.get_json()["split"] == "sealed"
+
+
+@pytest.mark.parametrize("bad", ["", "   ", "a/b", "../etc/passwd", "cap\u0000", "cap 1",
+                                 "a" * 129, "..", "x/../y"])
+def test_a_capture_id_that_could_confuse_a_key_is_refused(client, bad):
+    """capture_id is interpolated into the object key, so it cannot contain a path."""
+    assert _post(client, capture_id=bad).status_code == 400
 
 
 @pytest.mark.parametrize("bad", ["", "abc", "g" * 64, "A" * 64, "0" * 63, "0" * 65])
@@ -213,3 +251,84 @@ def test_a_storage_failure_is_a_503_so_the_app_retries(client):
     s3 = boto3.client("s3", region_name="us-east-1")
     s3.delete_bucket(Bucket=IMAGES)
     assert _post(client).status_code == 503
+
+
+# --- conditional writes: no silent replacement ---------------------------------------
+
+@mock_aws
+def test_re_uploading_identical_bytes_succeeds_so_a_lost_ack_is_not_fatal(client):
+    """The common field case: the upload landed, the reply did not, the phone retries."""
+    _buckets()
+    assert _post(client, b"same").status_code == 201
+    again = _post(client, b"same")
+    assert again.status_code == 200
+    assert again.get_json()["stored"] is True
+
+
+@mock_aws
+def test_different_bytes_under_the_same_capture_id_are_refused_not_overwritten(client):
+    """The dangerous case. Anyone holding the ingest key must not be able to replace a capture."""
+    s3 = _buckets()
+    assert _post(client, b"original").status_code == 201
+    resp = _post(client, b"substitute")
+    assert resp.status_code == 409
+    assert s3.get_object(Bucket=IMAGES, Key="open/cap-1")["Body"].read() == b"original"
+
+
+@mock_aws
+def test_a_sealed_capture_is_never_overwritten_even_by_identical_bytes(client):
+    """Sealed objects cannot be read to compare, so the answer is a 409 a person looks at.
+
+    The bytes stay on the phone, so refusing costs nothing and a substitution under the seal is
+    exactly the event that must not pass quietly.
+    """
+    s3 = _buckets()
+    assert _post(client, b"sealed-bytes", split="sealed").status_code == 201
+    assert _post(client, b"sealed-bytes", split="sealed").status_code == 409
+    assert s3.get_object(Bucket=IMAGES, Key="sealed/cap-1")["Body"].read() == b"sealed-bytes"
+
+
+@mock_aws
+def test_depth_is_never_overwritten_because_it_cannot_be_compared(client):
+    _buckets()
+    assert _post(client, b"d", kind="depth").status_code == 201
+    assert _post(client, b"d", kind="depth").status_code == 409
+
+
+# --- size ceiling --------------------------------------------------------------------
+
+@mock_aws
+def test_an_upload_over_the_route_ceiling_is_refused_with_413(client, monkeypatch):
+    """One 256 MB machine, one worker, two threads: the app-wide 64 MB cap is too generous here."""
+    from frontdoor_server import upload_view
+
+    monkeypatch.setattr(upload_view, "UPLOAD_MAX_BYTES", 1024)
+    s3 = _buckets()
+    resp = _post(client, b"x" * 4096)
+    assert resp.status_code == 413
+    assert s3.list_objects_v2(Bucket=IMAGES).get("KeyCount", 0) == 0
+
+
+# --- the auth comparison -------------------------------------------------------------
+
+def test_a_non_ascii_key_header_is_a_401_not_a_500(client):
+    """Werkzeug decodes headers as latin-1, and compare_digest raises TypeError on non-ASCII str.
+
+    Left unhandled this is a 500, which the app classifies as retryable and repeats forever.
+    """
+    resp = client.post(
+        "/upload",
+        data={"kind": "image", "capture_id": "cap-1", "entrance_id": DEV_ENTRANCE,
+              "sha256": hashlib.sha256(b"x").hexdigest(),
+              "bytes": (io.BytesIO(b"x"), "shot.jpg")},
+        headers={"X-Frontdoor-Upload-Key": "kéy"},
+        content_type="multipart/form-data")
+    assert resp.status_code == 401
+
+
+def test_a_non_ascii_configured_key_still_authorises_its_own_value(monkeypatch, env):
+    monkeypatch.setenv("FRONTDOOR_UPLOAD_KEY", "kéy")
+    c = create_app().test_client()
+    with mock_aws():
+        _buckets()
+        assert _post(c, key="kéy").status_code == 201

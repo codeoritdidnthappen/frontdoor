@@ -726,9 +726,10 @@ of the server's access is.
 
 **What is now true of each credential:**
 
-    server  / loader   frontdoor-image   read + write
-    server            frontdoor-depth   WRITE ONLY  (this entry)
-    harness           frontdoor-depth   read
+    server / loader    frontdoor-image   read + write
+    server             frontdoor-depth   WRITE ONLY  (this entry)
+    harness            frontdoor-image   read
+    harness            frontdoor-depth   read
     metrology library  neither           no credential at all
 
 **Verification.** `python -m frontdoor.storage verify` must still print `loader-denied-on-depth`.

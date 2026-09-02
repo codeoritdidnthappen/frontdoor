@@ -6,39 +6,61 @@ also READ sealed captures (data/STORAGE.md), so a token in an IPA widens the sea
 anyone holding a build. The server holds read+write on the image bucket and, per D-033,
 **write-only** on the depth bucket.
 
-What this endpoint guarantees, stated precisely because the two halves differ:
+What this endpoint guarantees, stated precisely because the halves differ:
 
 - The bytes it stores hash to the value the client claimed. A mismatch is refused with 422 and
   nothing is written, so the client retries rather than recording a phantom upload (AC4).
-- For **images** it then reads the object back and re-hashes it, so "stored" means verified as
+- **The partition is recomputed here, not trusted.** The client sends `entrance_id`; the split is
+  derived from it with the committed seed. A phone carrying a drifted seed cannot land a sealed
+  entrance in `open/`, which is a mislabelling no downstream artifact could detect.
+- **Writes are conditional.** An object already at that key is not overwritten. Without that,
+  anyone holding the ingest key could replace a sealed capture's bytes and the read-back would
+  then confirm the replacement as correct.
+- For **open images** it re-reads the stored object and hashes it, so "stored" means verified as
   stored, which is what lets the app delete its local copy (AC5).
 - For **depth** that read-back is impossible by construction: D-033 gives the server a write-only
-  token precisely so it cannot read depth. Depth is therefore verified on receipt and trusted to
-  the provider thereafter. This is a real difference in strength and is not papered over -- the
-  response says which check ran, in `verified`.
+  token precisely so it cannot read depth. A **sealed image** cannot be read back either --
+  ObjectStore.get refuses sealed keys, and passing allow_sealed here would write a SEAL_AUDIT line
+  on every upload and make unsealing routine, which is what D-007 and D-017 prevent. Both fall
+  back to verify-on-receipt, and the response says which check ran in `verified`.
 """
 
 import hashlib
 import hmac
 import os
+from tempfile import SpooledTemporaryFile
 
-from flask import Blueprint, current_app, request
+from flask import current_app, request
 
+from frontdoor.split import assign_split, canonical_entrance_id
 from frontdoor.storage import (
-    SPLITS,
+    ObjectExists,
     StorageError,
     depth_write_store,
     image_store,
     storage_key,
 )
 
-upload_page = Blueprint("upload", __name__)
-
 KINDS = ("image", "depth")
 
-#: Hex SHA-256, lowercase. Anchored, so a value with anything around it is rejected rather than
-#: partially matched -- the same anchoring bug TICK-228 fixed in the sidecar schema.
+#: Hex SHA-256, lowercase, exactly this long.
 _SHA256_LEN = 64
+
+#: Per-route ceiling, well under the app-wide MAX_CONTENT_LENGTH.
+#:
+#: #33 scopes this to "single-digit-megabyte files", and the host is one 256 MB machine running a
+#: single gunicorn worker with two threads (Dockerfile). The app-wide 64 MB cap was sized for a
+#: different route; two concurrent uploads at that size would put the process near its memory
+#: limit, and an OOM kill reads to the phones as a dropped connection, which they retry -- a loop
+#: that never drains.
+UPLOAD_MAX_BYTES = 16 * 1024 * 1024
+
+#: Streamed in chunks so neither hashing nor read-back holds a whole capture in memory.
+_CHUNK = 1024 * 1024
+
+#: capture_id goes straight into an object key, so it is constrained to characters that cannot
+#: traverse or confuse one: no "/", no "..", no control characters, no whitespace.
+_ID_ALLOWED = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_.")
 
 
 def _client_key():
@@ -57,15 +79,49 @@ def _authorised(presented):
     expected = _client_key()
     if expected is None or not presented:
         return False
-    # Constant-time: the comparison is against a shared secret, and a timing oracle on it would
-    # hand out write access to the dataset bucket.
-    return hmac.compare_digest(presented, expected)
+    # Compared as bytes: hmac.compare_digest raises TypeError on non-ASCII str, and Werkzeug
+    # decodes headers as latin-1 -- so a single high byte in a header, or a non-ASCII character in
+    # the configured key, would turn every request into a 500 that the app then retries forever.
+    # Constant-time because a timing oracle here hands out write access to the dataset bucket.
+    return hmac.compare_digest(presented.encode("utf-8", "surrogateescape"),
+                               expected.encode("utf-8", "surrogateescape"))
 
 
 def _is_sha256(value):
-    if len(value) != _SHA256_LEN:
-        return False
-    return all(c in "0123456789abcdef" for c in value)
+    return len(value) == _SHA256_LEN and all(c in "0123456789abcdef" for c in value)
+
+
+def _valid_capture_id(value):
+    return (
+        bool(value)
+        and len(value) <= 128
+        and ".." not in value
+        and all(c in _ID_ALLOWED for c in value)
+    )
+
+
+def _spool_and_hash(stream, limit):
+    """Copy the upload into a spooled temp file, hashing as it goes.
+
+    Returns (file, digest, size) with the file rewound, or (None, None, size) past the limit.
+    Spooled rather than `.read()`: small captures stay in memory, large ones go to disk, and the
+    process never holds the whole body plus a second copy for the read-back.
+    """
+    digest = hashlib.sha256()
+    size = 0
+    spool = SpooledTemporaryFile(max_size=2 * 1024 * 1024)
+    while True:
+        chunk = stream.read(_CHUNK)
+        if not chunk:
+            break
+        size += len(chunk)
+        if size > limit:
+            spool.close()
+            return None, None, size
+        digest.update(chunk)
+        spool.write(chunk)
+    spool.seek(0)
+    return spool, digest.hexdigest(), size
 
 
 def register_upload(app, error):
@@ -95,30 +151,35 @@ def register_upload(app, error):
                 field="kind",
             )
 
-        # Nothing below is coerced. Stripping or case-folding a field that decides WHERE bytes
-        # land is a place where the value the client meant and the value stored can differ, and
-        # `split` decides whether a capture is sealed. The client is our own app; sending the
-        # exact spelling is free, so exactness costs nothing and removes the class.
+        # Nothing below is coerced. Stripping or case-folding a field that decides WHERE bytes land
+        # is a place where the value the client meant and the value stored can differ. The client
+        # is our own app; sending the exact spelling is free.
         capture_id = request.form.get("capture_id", "")
-        if not capture_id or capture_id != capture_id.strip():
+        if not _valid_capture_id(capture_id):
             return error(
-                "missing or padded capture_id",
-                "capture_id is required, with no leading or trailing whitespace.",
+                "invalid capture_id",
+                "capture_id must be non-empty, at most 128 characters, contain only letters, "
+                "digits, dash, underscore or dot, and must not contain '..'.",
                 field="capture_id",
             )
 
-        split = request.form.get("split", "")
-        if split not in SPLITS:
+        # The split is DERIVED, not accepted. A build carrying a drifted seed -- the drift
+        # SplitAssignment.swift exists to warn about -- would otherwise land sealed entrances in
+        # the open partition, and nothing downstream could tell.
+        entrance_id = request.form.get("entrance_id", "")
+        try:
+            split = assign_split(canonical_entrance_id(entrance_id))
+        except Exception as exc:
             return error(
-                "unknown split",
-                f"split must be one of {', '.join(SPLITS)}; got {split!r}.",
-                field="split",
+                "entrance_id is not a canonical entrance id",
+                f"{exc}",
+                field="entrance_id",
             )
 
-        # Lowercase required, not lowercased for you: the sidecar schema anchors hashes as
-        # lowercase hex (TICK-228), so there is exactly one spelling of a digest in the system.
         claimed = request.form.get("sha256", "")
         if not _is_sha256(claimed):
+            # Lowercase required, not lowercased for you: the sidecar schema anchors hashes as
+            # lowercase hex (TICK-228), so there is one spelling of a digest in the system.
             return error(
                 "sha256 is not a hex digest",
                 "sha256 must be 64 lowercase hex characters.",
@@ -132,48 +193,52 @@ def register_upload(app, error):
                 field="bytes",
             )
 
-        payload = request.files["bytes"].read()
-        if not payload:
-            return error("empty upload", "The 'bytes' part carried no data.", field="bytes")
-
-        actual = hashlib.sha256(payload).hexdigest()
-        if not hmac.compare_digest(actual, claimed):
-            # Nothing is stored. A truncated or corrupted body must leave the bucket untouched, so
-            # the client's retry is a first attempt rather than an overwrite of bad bytes.
+        spool, actual, size = _spool_and_hash(request.files["bytes"].stream, UPLOAD_MAX_BYTES)
+        if spool is None:
             return error(
-                "sha256 mismatch",
-                f"claimed {claimed}, received bytes hash to {actual}; nothing was stored.",
-                field="sha256",
-                status=422,
+                "upload too large",
+                f"this endpoint accepts at most {UPLOAD_MAX_BYTES} bytes; got at least {size}.",
+                field="bytes",
+                status=413,
             )
-
         try:
-            key = storage_key(capture_id, split)
-        except StorageError as exc:
-            return error("could not build a storage key", str(exc), field="capture_id")
+            if size == 0:
+                return error("empty upload", "The 'bytes' part carried no data.", field="bytes")
 
-        try:
+            if not hmac.compare_digest(actual, claimed):
+                # Nothing is stored. A truncated or corrupted body must leave the bucket untouched,
+                # so the client's retry is a first attempt rather than an overwrite of bad bytes.
+                return error(
+                    "sha256 mismatch",
+                    f"claimed {claimed}, received bytes hash to {actual}; nothing was stored.",
+                    field="sha256",
+                    status=422,
+                )
+
+            try:
+                key = storage_key(capture_id, split)
+            except StorageError as exc:
+                return error("could not build a storage key", str(exc), field="capture_id")
+
             store = image_store() if kind == "image" else depth_write_store()
-            store.put(key, payload)
-        except StorageError as exc:
-            # 503: the bytes were good and the client should retry. Reporting this as a client
-            # error would make the app drop a capture it holds the only copy of.
-            return error("could not store the object", str(exc), status=503)
+            try:
+                store.put(key, spool, if_absent=True)
+            except ObjectExists:
+                return _already_there(error, store, kind, key, split, claimed)
+            except StorageError as exc:
+                # 503: the bytes were good and the client should retry. Reporting this as a client
+                # error would make the app drop a capture it holds the only copy of.
+                return error("could not store the object", str(exc), status=503)
+        finally:
+            spool.close()
 
-        # Read-back is the stronger check, and it is available in exactly one case: an OPEN
-        # image. Depth cannot be read back because D-033 deliberately gives the server a
-        # write-only token. A SEALED image cannot be read back either -- ObjectStore.get refuses
-        # anything under sealed/ without allow_sealed, and passing that flag here would write a
-        # SEAL_AUDIT line for every upload and make unsealing a routine event, which is precisely
-        # what D-007 and D-017 exist to prevent. Both fall back to verify-on-receipt, and the
-        # response says which check ran rather than implying the stronger one.
+        # Read-back is the stronger check and is available in exactly one case: an OPEN image.
         verified = "received"
         if kind == "image" and split != "sealed":
-            try:
-                stored = image_store().get(key)
-            except StorageError as exc:
-                return error("stored object could not be read back", str(exc), status=503)
-            if not hmac.compare_digest(hashlib.sha256(stored).hexdigest(), claimed):
+            confirmed, failure = _read_back_matches(store, key, claimed)
+            if failure is not None:
+                return error(failure[0], failure[1], status=503)
+            if not confirmed:
                 return error(
                     "stored object does not match its hash",
                     "the object was written but reads back with a different digest; retry.",
@@ -186,8 +251,59 @@ def register_upload(app, error):
             "stored": True,
             "kind": kind,
             "key": key,
+            "split": split,
             "sha256": claimed,
             # Which guarantee actually ran. "read-back" means re-read and re-hashed; "received"
             # means verified on receipt only, which is all a write-only depth token permits (D-033).
             "verified": verified,
         }, 201
+
+
+def _read_back_matches(store, key, claimed):
+    """Hash the stored object in chunks. Returns (matched, failure) with one of them meaningful."""
+    digest = hashlib.sha256()
+    try:
+        body = store.get_stream(key)
+        while True:
+            chunk = body.read(_CHUNK)
+            if not chunk:
+                break
+            digest.update(chunk)
+    except StorageError as exc:
+        return False, ("stored object could not be read back", str(exc))
+    return hmac.compare_digest(digest.hexdigest(), claimed), None
+
+
+def _already_there(error, store, kind, key, split, claimed):
+    """Something is already stored under this key. Decide whether that is this same capture.
+
+    A retry after a lost acknowledgement is the common case on a field link, and it must succeed
+    rather than stranding a capture. A different object under the same id is the dangerous case and
+    must not be waved through -- for a sealed capture that would be a substitution.
+
+    Only an open image can be told apart, because only an open image can be read. For depth and for
+    sealed captures the answer is a 409 a person has to look at: the bytes stay on the phone, so
+    nothing is lost by refusing.
+    """
+    if kind == "image" and split != "sealed":
+        matched, failure = _read_back_matches(store, key, claimed)
+        if failure is not None:
+            return error(failure[0], failure[1], status=503)
+        if matched:
+            # Idempotent: the earlier upload landed and only its acknowledgement was lost.
+            return {
+                "stored": True, "kind": kind, "key": key, "split": split,
+                "sha256": claimed, "verified": "read-back",
+            }, 200
+        return error(
+            "a different object is already stored under this capture id",
+            f"{key} exists with a different digest; it was not overwritten.",
+            status=409,
+        )
+    return error(
+        "an object is already stored under this capture id",
+        f"{key} exists and cannot be compared from here "
+        f"({'depth is write-only per D-033' if kind == 'depth' else 'sealed captures are not read'}); "
+        "it was not overwritten.",
+        status=409,
+    )

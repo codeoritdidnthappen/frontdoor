@@ -87,6 +87,15 @@ class StorageDenied(StorageError):
     """The credential was not allowed to read or write the object."""
 
 
+class ObjectExists(StorageError):
+    """A conditional write found an object already at that key.
+
+    Raised only by `put(..., if_absent=True)`. Capture ingest uses it so an upload cannot silently
+    replace bytes already stored under a capture id -- for a sealed capture that would be a
+    substitution no downstream artifact could detect.
+    """
+
+
 class SealedObjectDenied(StorageDenied):
     """THIS CODE refused a sealed key (D-007) -- the provider was never asked.
 
@@ -219,6 +228,16 @@ def _client(creds):
     return boto3.client("s3", **kwargs)
 
 
+def _is_precondition_failed(exc):
+    """True when a conditional write lost the race, across the spellings providers use."""
+    response = getattr(exc, "response", None)
+    if not isinstance(response, dict):
+        return False
+    error = response.get("Error", {})
+    status = response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+    return error.get("Code") in {"PreconditionFailed", "412"} or status == 412
+
+
 def _raise_from_client(exc, action, bucket, key):
     from botocore.exceptions import ClientError
 
@@ -249,17 +268,43 @@ class ObjectStore:
         self.creds = creds
         self._client = _client(creds)
 
-    def put(self, key, body):
+    def put(self, key, body, *, if_absent=False):
         """Write one object. Sealed keys ARE allowed -- capture upload has to store them.
 
         The key is still classified, so an ingest path that forgets `storage_key()`
         fails here rather than writing an object no reader can classify (QA B01).
+
+        `if_absent=True` sends `If-None-Match: *`, so the write fails rather than overwriting and
+        `ObjectExists` is raised. Ingest uses it: without a conditional write, anyone holding the
+        ingest key can replace a stored capture's bytes, and a read-back check would then confirm
+        the replacement as correct.
         """
         _partition_of(key)
+        extra = {"IfNoneMatch": "*"} if if_absent else {}
         try:
-            self._client.put_object(Bucket=self.creds.bucket, Key=key, Body=body)
+            self._client.put_object(
+                Bucket=self.creds.bucket, Key=key, Body=body, **extra)
         except Exception as exc:
+            if if_absent and _is_precondition_failed(exc):
+                raise ObjectExists(
+                    f"an object already exists at s3://{self.creds.bucket}/{key}"
+                ) from exc
             _raise_from_client(exc, "put", self.creds.bucket, key)
+
+    def get_stream(self, key, *, allow_sealed=False):
+        """Read one object as a stream, so a caller can hash it without holding it whole.
+
+        Same seal as `get`: a sealed key is refused unless the audited run asks for it.
+        """
+        if _partition_of(key) == "sealed" and not allow_sealed:
+            raise SealedObjectDenied(
+                f"{key!r} is sealed; it is opened once, by an audited "
+                "`python -m frontdoor.eval --include-sealed` run (D-007, D-017)"
+            )
+        try:
+            return self._client.get_object(Bucket=self.creds.bucket, Key=key)["Body"]
+        except Exception as exc:
+            _raise_from_client(exc, "get", self.creds.bucket, key)
 
     def get(self, key, *, allow_sealed=False):
         """Read one object. Sealed keys are refused (D-007).

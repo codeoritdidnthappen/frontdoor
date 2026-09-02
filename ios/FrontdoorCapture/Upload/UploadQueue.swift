@@ -21,7 +21,10 @@ enum UploadQueue {
         }
 
         var captureId: String
-        var split: String
+        /// The entrance this capture belongs to. Sent instead of a split: the server derives the
+        /// partition from it with the committed seed, so a build carrying a drifted seed cannot
+        /// place a sealed entrance in the open partition.
+        var entranceId: String
         var kind: Kind
         var fileURL: URL
         var sha256: String
@@ -38,7 +41,7 @@ enum UploadQueue {
             let sha256: String
         }
         let capture_id: String
-        let split: String
+        let entrance_id: String
         let image: Ref
         let depth: Ref?
     }
@@ -75,13 +78,13 @@ enum UploadQueue {
 
             let imageURL = directory.appendingPathComponent(head.image.path)
             if fm.fileExists(atPath: imageURL.path) {
-                work.append(Pending(captureId: head.capture_id, split: head.split,
+                work.append(Pending(captureId: head.capture_id, entranceId: head.entrance_id,
                                     kind: .image, fileURL: imageURL, sha256: head.image.sha256))
             }
             if let depth = head.depth {
                 let depthURL = directory.appendingPathComponent(depth.path)
                 if fm.fileExists(atPath: depthURL.path) {
-                    work.append(Pending(captureId: head.capture_id, split: head.split,
+                    work.append(Pending(captureId: head.capture_id, entranceId: head.entrance_id,
                                         kind: .depth, fileURL: depthURL, sha256: depth.sha256))
                 }
             }

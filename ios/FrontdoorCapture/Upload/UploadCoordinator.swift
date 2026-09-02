@@ -9,8 +9,12 @@ final class UploadCoordinator: ObservableObject {
     /// Files still on the phone. What the operator reads before leaving a field session.
     @Published private(set) var pendingCount: Int = 0
     @Published private(set) var isDraining = false
-    /// Set when a file will never upload without a person looking at it.
-    @Published private(set) var blockingError: String?
+    /// Files that will never upload without a person looking at them.
+    ///
+    /// A list rather than one slot: an operator with several blocked captures needs to see all of
+    /// them, not whichever failed last. Cleared at the start of every drain so a problem that has
+    /// since been fixed stops being reported.
+    @Published private(set) var blockingErrors: [String] = []
     @Published private(set) var lastDrainSummary: String?
 
     private let directory: URL
@@ -31,8 +35,14 @@ final class UploadCoordinator: ObservableObject {
 
     var isConfigured: Bool { client != nil }
 
+    /// Re-derive the count from the disk. Off the main actor: the scan decodes every sidecar in
+    /// the directory, which is a day of captures during a field session.
     func refreshCount() {
-        pendingCount = UploadQueue.pendingCount(in: directory)
+        let dir = directory
+        Task {
+            let count = await Task.detached { UploadQueue.pendingCount(in: dir) }.value
+            self.pendingCount = count
+        }
     }
 
     /// Watch for connectivity and drain when it returns.
@@ -56,9 +66,18 @@ final class UploadCoordinator: ObservableObject {
         isDraining = true
         defer { isDraining = false }
 
+        blockingErrors = []
         var stored = 0
         var failed = 0
-        for item in UploadQueue.pending(in: directory) {
+
+        // Scanned once, off the main actor. Re-listing the directory per item made a 300-file
+        // backlog 300 scans and 300 sidecar decodes, all blocking the UI the operator is watching.
+        let dir = directory
+        let work = await Task.detached { UploadQueue.pending(in: dir) }.value
+        var remaining = work.count
+        pendingCount = remaining
+
+        for item in work {
             switch await client.send(item) {
             case .stored:
                 // Only here, and only now: the server confirmed the stored bytes hash to what the
@@ -68,17 +87,20 @@ final class UploadCoordinator: ObservableObject {
             case .rejected(let why):
                 // Kept on the phone deliberately. A refusal the server will repeat means the file
                 // and its recorded hash disagree, and deleting it would destroy the only evidence.
-                blockingError = "\(item.captureId) (\(item.kind.rawValue)): \(why)"
+                blockingErrors.append("\(item.captureId) (\(item.kind.rawValue)): \(why)")
                 failed += 1
             case .retry:
                 failed += 1
             }
-            refreshCount()
+            // Counted down rather than rescanned, so the number moves without touching the disk.
+            remaining -= 1
+            pendingCount = remaining + failed
         }
 
         lastDrainSummary = stored == 0 && failed == 0
             ? "Nothing to upload."
             : "Uploaded \(stored), \(failed) still waiting."
+        // One authoritative rescan at the end, when it costs nothing that anyone is waiting on.
         refreshCount()
     }
 }
