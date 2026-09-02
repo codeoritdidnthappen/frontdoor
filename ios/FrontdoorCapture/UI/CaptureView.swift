@@ -10,6 +10,8 @@ struct CaptureView: View {
     @Environment(\.scenePhase) private var scenePhase
     let onClose: () -> Void
 
+    @State private var editingConditions = false
+
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
@@ -86,6 +88,50 @@ struct CaptureView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .topLeading) { closeButton }
+        .overlay(alignment: .top) { conditionsBar }
+        .sheet(isPresented: $editingConditions) {
+            if let subject = controller.subject {
+                ConditionsSheet(current: subject.conditions) { tags in
+                    controller.subject?.conditions = tags
+                    editingConditions = false
+                } onCancel: {
+                    editingConditions = false
+                }
+            }
+        }
+    }
+
+    /// What the next shot will be tagged with, visible without leaving the camera.
+    ///
+    /// Shown rather than remembered: the operator moves between frames (D-002 wants several
+    /// distances per entrance), and a tag that can only be set before the viewfinder opens would
+    /// let every later frame inherit the first one's distance. Wrong in a stratification variable
+    /// and undetectable afterwards.
+    @ViewBuilder
+    private var conditionsBar: some View {
+        if let subject = controller.subject {
+            Button { editingConditions = true } label: {
+                HStack(spacing: 6) {
+                    Text(subject.entrance.id).fontWeight(.semibold)
+                    Text("·")
+                    Text(String(format: "%.1f m", subject.conditions.distanceM))
+                        .monospacedDigit()
+                    Text("·")
+                    Text(subject.conditions.lighting.label)
+                    Image(systemName: "pencil").font(.caption2)
+                }
+                .font(.footnote)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .background(.black.opacity(0.45), in: Capsule())
+            }
+            .padding(.top, 8)
+            .accessibilityLabel(
+                "Conditions: \(subject.entrance.id), "
+                + "\(String(format: "%.1f", subject.conditions.distanceM)) metres, "
+                + "\(subject.conditions.lighting.label). Tap to change.")
+        }
     }
 
     private var closeButton: some View {

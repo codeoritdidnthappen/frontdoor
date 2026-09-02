@@ -57,20 +57,8 @@ struct EntranceSetupView: View {
                 }
 
                 Section {
-                    HStack {
-                        TextField("Distance", text: $distance)
-                            .keyboardType(.decimalPad)
-                        Text("m").foregroundStyle(.secondary)
-                    }
-                    Picker("Lighting", selection: $lighting) {
-                        ForEach(Lighting.allCases, id: \.self) { Text($0.label).tag($0) }
-                    }
-                    Picker("Surface", selection: $surface) {
-                        ForEach(Surface.allCases, id: \.self) { Text($0.label).tag($0) }
-                    }
-                    Picker("Occlusion", selection: $occlusion) {
-                        ForEach(Occlusion.allCases, id: \.self) { Text($0.label).tag($0) }
-                    }
+                    ConditionsForm(distance: $distance, lighting: $lighting,
+                                   surface: $surface, occlusion: $occlusion)
                 } header: {
                     Text("Conditions for this shot")
                 } footer: {
@@ -105,7 +93,7 @@ struct EntranceSetupView: View {
         }
         .onAppear {
             guard let initialConditions else { return }
-            distance = String(format: "%.1f", initialConditions.distanceM)
+            distance = ConditionsSheet.text(for: initialConditions.distanceM)
             lighting = initialConditions.lighting
             surface = initialConditions.surface
             occlusion = initialConditions.occlusion
@@ -118,28 +106,49 @@ struct EntranceSetupView: View {
 
     private func submit(confirmedRise: Bool = false) {
         confirmingRise = nil
-        let resolved = store.resolve(
+
+        // Conditions first, deliberately. `store.resolve` records the entrance, and recording it
+        // is what hides the reading field behind "already recorded" -- so committing before the
+        // rest of the form is known good would let a distance typo freeze a rise typo in place,
+        // with no way to correct it afterwards (editing a recorded reading is out of scope).
+        // Nothing here touches the store.
+        let checkedConditions = TruthValidation.conditions(
+            distance: distance, lighting: lighting, surface: surface, occlusion: occlusion)
+        guard case .success(let conditions) = checkedConditions else {
+            if case .failure(let error) = checkedConditions { rejection = error }
+            return
+        }
+
+        // Validate the entrance without recording it, so an implausible reading can be queried
+        // before anything is committed.
+        if store.existing(id: entranceId) == nil {
+            let checked = TruthValidation.entrance(
+                id: entranceId, rise: rise, instrument: instrument,
+                confirmedImplausibleRise: confirmedRise)
+            switch checked {
+            case .failure(.riseImplausible(let value)) where !confirmedRise:
+                // Not an error yet: a 7" step is real, and so is a slipped decimal point. Only
+                // the operator standing at the doorway can tell them apart.
+                confirmingRise = value
+                rejection = nil
+                return
+            case .failure(let error):
+                rejection = error
+                return
+            case .success:
+                break
+            }
+        }
+
+        switch store.resolve(
             id: entranceId, rise: rise, instrument: instrument,
-            confirmedImplausibleRise: confirmedRise)
-        switch resolved {
-        case .failure(.riseImplausible(let value)) where !confirmedRise:
-            // Not an error yet: a 7" step is real, and so is a slipped decimal point. Only the
-            // operator standing at the doorway can tell them apart.
-            confirmingRise = value
-            rejection = nil
+            confirmedImplausibleRise: confirmedRise
+        ) {
         case .failure(let error):
             rejection = error
         case .success(let entrance):
-            switch TruthValidation.conditions(
-                distance: distance, lighting: lighting,
-                surface: surface, occlusion: occlusion
-            ) {
-            case .failure(let error):
-                rejection = error
-            case .success(let conditions):
-                rejection = nil
-                onReady(CaptureSubject(entrance: entrance, conditions: conditions))
-            }
+            rejection = nil
+            onReady(CaptureSubject(entrance: entrance, conditions: conditions))
         }
     }
 }

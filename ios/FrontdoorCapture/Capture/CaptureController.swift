@@ -219,14 +219,14 @@ final class CaptureController: ObservableObject {
 
     // MARK: - Capture
 
+    /// The entrance and conditions every capture is bound to. Set before the viewfinder opens and
+    /// editable from it; a shutter press with it missing is refused rather than saved without
+    /// ground truth (TICK-024, D-018).
+    @Published var subject: CaptureSubject?
+
     /// Takes one photo and, if the frame carries everything the method legally needs, publishes a
     /// `CaptureRecord`. A frame missing intrinsics or taken at the wrong zoom is refused rather
     /// than saved: an unusable still that looks saved is worse than a visible failure.
-    /// The entrance and conditions every capture is bound to. Set before the viewfinder opens; a
-    /// shutter press with either missing is refused rather than saved without ground truth
-    /// (TICK-024, D-018).
-    @Published var subject: CaptureSubject?
-
     func capturePhoto() {
         guard state == .running else { return }
         guard let subject else {

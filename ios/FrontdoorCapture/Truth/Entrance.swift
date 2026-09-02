@@ -118,6 +118,26 @@ enum TruthRejected: Error, Equatable {
 /// same shape as CaptureValidation.
 enum TruthValidation {
 
+    /// Parse a number the operator typed on a decimal keypad.
+    ///
+    /// `.decimalPad` shows the *locale's* decimal separator, so on a device set to French or
+    /// German there is no period key at all -- and `Double("0,75")` is nil, which would refuse
+    /// every reading and every distance on that phone. Both separators are accepted.
+    ///
+    /// The character filter is not decoration: `Double` also accepts "0x1p3" (8.0), "nan" and
+    /// "inf", none of which are caliper readings and all of which the schema would take.
+    static func number(from entered: String) -> Double? {
+        let trimmed = entered.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+        guard trimmed.allSatisfy({ $0.isASCII && ($0.isNumber || "+-.,".contains($0)) }) else {
+            return nil
+        }
+        let normalised = trimmed.replacingOccurrences(of: ",", with: ".")
+        guard normalised.filter({ $0 == "." }).count <= 1 else { return nil }
+        guard let value = Double(normalised), value.isFinite else { return nil }
+        return value
+    }
+
     /// Canonicalise an entrance ID the way `frontdoor.split.canonical_entrance_id` does: NFC,
     /// trimmed, upper-cased, then matched whole. Returns nil when it is not an entrance ID.
     ///
@@ -150,7 +170,7 @@ enum TruthValidation {
                 id.trimmingCharacters(in: .whitespacesAndNewlines)))
         }
         let trimmedRise = rise.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let value = Double(trimmedRise), value.isFinite else {
+        guard let value = number(from: trimmedRise) else {
             return .failure(.riseNotANumber(trimmedRise))
         }
         if !plausibleRiseInches.contains(value) && !confirmedImplausibleRise {
@@ -176,7 +196,7 @@ enum TruthValidation {
         occlusion: Occlusion
     ) -> Result<ConditionTags, TruthRejected> {
         let trimmed = distance.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let value = Double(trimmed), value.isFinite else {
+        guard let value = number(from: trimmed) else {
             return .failure(.distanceNotANumber(trimmed))
         }
         guard value > 0 else { return .failure(.distanceNotPositive(value)) }
@@ -189,7 +209,9 @@ enum TruthValidation {
 /// What the viewfinder is pointed at: one entrance, and the conditions of this shot of it.
 ///
 /// The entrance persists across a run of captures; the conditions change between them, which is
-/// the whole point of D-002's depth-per-entrance.
+/// the whole point of D-002's depth-per-entrance. Changing them is done from the viewfinder, so
+/// stepping closer between two frames does not require leaving the camera -- and so the second
+/// frame cannot quietly inherit the first one's distance.
 struct CaptureSubject: Equatable {
     var entrance: Entrance
     var conditions: ConditionTags

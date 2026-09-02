@@ -151,6 +151,42 @@ final class TruthValidationTests: XCTestCase {
         XCTAssertTrue(store.entrances.isEmpty)
     }
 
+    // MARK: decimal separators
+
+    /// .decimalPad shows the locale's separator, so on a French or German phone there is no
+    /// period key at all. Refusing a comma would refuse every reading that device can produce.
+    func testACommaIsAcceptedAsADecimalSeparator() throws {
+        XCTAssertEqual(try entrance(rise: "0,75").get().riseInches, 0.75)
+        XCTAssertEqual(try conditions(distance: "2,5").get().distanceM, 2.5)
+    }
+
+    /// Two separators is a thousands-grouped number, not a caliper reading, and guessing which
+    /// one is the decimal point would invent ground truth.
+    func testAmbiguousGroupedNumbersAreRefused() {
+        XCTAssertEqual(rejection(entrance(rise: "1.234,56")), .riseNotANumber("1.234,56"))
+    }
+
+    /// Double() takes all of these. None is a caliper reading, and the schema would store them.
+    func testDoubleQuirksThatAreNotReadingsAreRefused() {
+        for bad in ["0x1p3", "nan", "inf", "1e2"] {
+            XCTAssertEqual(rejection(entrance(rise: bad)), .riseNotANumber(bad), bad)
+        }
+    }
+
+    // MARK: nothing is recorded until the whole form is good
+
+    /// Recording the entrance is what hides the reading field behind "already recorded". Doing it
+    /// before the conditions are known good would let a distance typo freeze a rise typo in place
+    /// -- and correcting a recorded reading is deliberately impossible.
+    @MainActor
+    func testAnEntranceIsNotRecordedUntilItIsValid() {
+        let store = EntranceStore()
+        _ = store.resolve(id: "E-014", rise: "not a number", instrument: "c")
+        XCTAssertTrue(store.entrances.isEmpty)
+        _ = store.resolve(id: "E-014", rise: "9.0", instrument: "c")
+        XCTAssertTrue(store.entrances.isEmpty, "an unconfirmed implausible rise must not commit")
+    }
+
     // MARK: the field that must not exist
 
     /// Angle is derived from the recovered plane pose (TICK-044). A typed angle would turn the
