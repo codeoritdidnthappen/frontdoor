@@ -152,6 +152,22 @@ calls the core library, returns per-arm measurement, interval, and decision.
 
 It holds no state and owns no metrology. Its only job is to be reachable from a phone on stage.
 
+**Live arms (TICK-062).** The free-tier image serves Arms A and A′ only. Arms B and C need the
+monocular depth model, which does not fit a free instance and is not in the image. The live
+response still includes those keys: each is `{absent_reason: "unavailable", ...}` so a client can
+tell "this deployment does not serve this arm" from "this capture failed". The offline harness
+still scores all four.
+
+**Run.** From the repo root, one image, one command after the build:
+
+```
+docker build -t frontdoor-server .
+docker run --rm -p 8080:8080 -e PORT=8080 frontdoor-server
+```
+
+Storage credentials are environment variables at run time (`data/STORAGE.md`). They are never
+baked into the image. There are no depth-model weights to pin; the image does not carry any.
+
 **Fallback chain**, in order, for a venue where presentations happen in an interior atrium:
 
 1. cellular to the host
@@ -165,6 +181,10 @@ Steps 1–3 run the same container image, so a fallback changes the network path
 
 The harness is the second entrypoint over the core library. It produces every number in the error
 budget, and it is the component that enforces D-007 mechanically rather than by promise.
+
+It does not run on the server VM. TICK-062 put it on a team Mac: the free instance is sized for
+`POST /measure`, not for scoring a few hundred captures through four arms, and the team already
+has the machines. Object storage stays on R2; the Mac reads it over the network.
 
 **Manifest.** `data/manifest.csv`, committed to git, one row per capture: `capture_id`,
 `entrance_id`, `image_sha256`, `depth_sha256`, `split`. Written at capture time, never edited.
@@ -213,8 +233,8 @@ result affordable at this sample size; a contingency table over five variables i
 ## 8. Data architecture
 
 **Bytes in object storage, records in git** (D-018). Images and depth maps live in free-tier
-object storage (D-026) beside whatever host runs evaluation — which may be a team Mac rather than
-the server host; that choice is open and must be logged when taken (#50). The repository holds the manifest, labels, condition tags,
+object storage (D-026). Evaluation reads them from a team Mac (TICK-062), not from the server
+host — the "bucket beside the VM" premise does not describe the system. The repository holds the manifest, labels, condition tags,
 hashes, the seal audit log, and the frozen abstention parameters — everything needed to verify a
 result, and nothing large enough to make the repo unusable.
 

@@ -79,6 +79,15 @@ def test_primary_arm_is_always_present(client, sidecar):
     assert "A" in post_measure(client, sidecar).get_json()["arms"]
 
 
+def test_live_depth_arms_are_unavailable(client, sidecar):
+    """TICK-062: the free-tier image does not carry the depth model, so B and C say so."""
+    arms = post_measure(client, sidecar).get_json()["arms"]
+    for name in ("B", "C"):
+        assert arms[name]["absent_reason"] == "unavailable"
+        assert "TICK-062" in arms[name]["detail"]
+        assert "rise_in" not in arms[name]
+
+
 def test_every_decision_value_is_representable(client, sidecar):
     """TICK-063 needs all three render states, and abstain has to be reachable at both lines."""
     arms = post_measure(client, sidecar).get_json()["arms"]
@@ -153,11 +162,11 @@ def test_missing_sidecar_returns_400(client):
 def test_schema_rejects_an_abstention_encoded_as_a_missing_measurement(client, sidecar):
     """The committed schema, not just the stub, is what forbids the null-measurement encoding."""
     body = post_measure(client, sidecar).get_json()
-    body["arms"]["B"]["rise_in"] = None
+    body["arms"]["A"]["rise_in"] = None
     with pytest.raises(ValidationError):
         Draft202012Validator(RESPONSE_SCHEMA).validate(body)
 
-    body["arms"]["B"].pop("rise_in")
+    body["arms"]["A"].pop("rise_in")
     with pytest.raises(ValidationError):
         Draft202012Validator(RESPONSE_SCHEMA).validate(body)
 
@@ -231,7 +240,7 @@ def test_an_absent_arm_needs_a_reason(client, sidecar):
 
 def test_an_arm_cannot_be_half_result_half_absence(client, sidecar):
     body = post_measure(client, sidecar).get_json()
-    body["arms"]["C"]["absent_reason"] = "cut"
+    body["arms"]["A"]["absent_reason"] = "cut"
     with pytest.raises(ValidationError):
         validate_measure_response(body)
 
@@ -262,7 +271,7 @@ def test_a_negative_rise_is_rejected(client, sidecar):
 
 def test_an_inverted_interval_is_rejected(client, sidecar):
     body = post_measure(client, sidecar).get_json()
-    body["arms"]["B"]["interval_in"] = {"low": 0.57, "high": 0.31}
+    body["arms"]["A"]["interval_in"] = {"low": 0.13, "high": 0.09}
     with pytest.raises(ValidationError) as exc:
         validate_measure_response(body)
     assert "inverted" in str(exc.value)
@@ -273,7 +282,7 @@ def test_a_rise_outside_its_own_interval_is_rejected(client, sidecar, rise):
     """The interval is the project's claim about its own uncertainty; a point estimate outside it
     makes every D-009 decision derived from the pair meaningless."""
     body = post_measure(client, sidecar).get_json()
-    body["arms"]["B"]["rise_in"] = rise
+    body["arms"]["A"]["rise_in"] = rise
     with pytest.raises(ValidationError) as exc:
         validate_measure_response(body)
     assert "outside its own interval" in str(exc.value)
@@ -282,15 +291,15 @@ def test_a_rise_outside_its_own_interval_is_rejected(client, sidecar, rise):
 def test_a_rise_exactly_on_an_interval_bound_is_accepted(client, sidecar):
     """The bounds are inclusive — a rise sitting on its own limit is legitimate, not an error."""
     body = post_measure(client, sidecar).get_json()
-    for rise in (body["arms"]["B"]["interval_in"]["low"], body["arms"]["B"]["interval_in"]["high"]):
-        body["arms"]["B"]["rise_in"] = rise
+    for rise in (body["arms"]["A"]["interval_in"]["low"], body["arms"]["A"]["interval_in"]["high"]):
+        body["arms"]["A"]["rise_in"] = rise
         validate_measure_response(body)
 
 
 def test_cross_field_rules_skip_absent_arms(client, sidecar):
     """An absent arm has no interval to check; the validator must not trip over it."""
     body = post_measure(client, sidecar).get_json()
-    body["arms"]["B"] = {"absent_reason": "failed"}
+    body["arms"]["A"] = {"absent_reason": "failed"}
     validate_measure_response(body)
 
 
@@ -313,16 +322,16 @@ def test_a_whitespace_only_absence_detail_is_rejected(client, sidecar):
 def test_cross_field_errors_name_the_offending_arm(client, sidecar):
     """A caller reporting exc.json_path must locate a cross-field fault as precisely as a schema one."""
     body = post_measure(client, sidecar).get_json()
-    body["arms"]["B"]["rise_in"] = 0.99
+    body["arms"]["A"]["rise_in"] = 0.99
     with pytest.raises(ValidationError) as exc:
         validate_measure_response(body)
-    assert exc.value.json_path == "$.arms.B.rise_in"
+    assert exc.value.json_path == "$.arms.A.rise_in"
 
     body = post_measure(client, sidecar).get_json()
-    body["arms"]["B"]["interval_in"] = {"low": 0.57, "high": 0.31}
+    body["arms"]["A"]["interval_in"] = {"low": 0.13, "high": 0.09}
     with pytest.raises(ValidationError) as exc:
         validate_measure_response(body)
-    assert exc.value.json_path == "$.arms.B.interval_in"
+    assert exc.value.json_path == "$.arms.A.interval_in"
 
 
 def test_a_malformed_arm_names_the_field_that_is_wrong(client, sidecar):

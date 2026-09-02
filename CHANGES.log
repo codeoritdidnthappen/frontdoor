@@ -375,3 +375,28 @@ sections 7 and 8 in the same words.
 (b) Wait for a provider-scoped token -- needs the key change underneath it anyway, and
 waiting means migrating after #66 rather than before. (c) Document the boundary and change
 no code -- honest, but leaves the cheap window closed for nothing.
+
+## 2026-09-01 — Server image, live arms, harness location (TICK-062, issue #50)
+
+Closes the two D-026 items that had to be logged before #50 could close.
+
+- Live endpoint serves Arms A and A′ only. Arms B and C return
+  `absent_reason: "unavailable"` with a TICK-062 detail. Reason: B and C need the
+  monocular depth model, and a free instance has no room for it. The TICK-060
+  contract already had this shape; the stub now matches the deployment rather
+  than pretending all four arms measure. The offline harness still scores all
+  four. Demo Day narrative must say B/C are off this host, not omit them.
+- Evaluation harness runs on a team Mac, against the same R2 buckets, not on
+  the server VM. Reason: a free instance is the wrong shape for a few hundred
+  captures through four arms, and the team has the machines. ARCHITECTURE
+  sections 7 and 8 no longer say the bucket sits beside the VM.
+- Image: `Dockerfile` at the repo root, `python:3.11-slim`, `pip install ".[server]"`,
+  gunicorn on `$PORT`. No credentials, no depth-model weights. One documented
+  command in `README.md` and ARCHITECTURE section 6.
+- Host: not Railway, Fly, or Render. Those attach a payment method so billing
+  can start after a free allowance; D-026 forbids that, same bar as R2. A
+  public `GET /health` from a phone is therefore still open — it waits on a
+  free-tier Docker host whose ceiling hard-stops with no card. The laptop
+  fallback is the same image, loaded from `docker save` / `docker load` so the
+  image id (`docker image inspect -f '{{.Id}}'`) matches; record both ids when
+  the host exists. Cache that tar on the laptop before Demo Day.
