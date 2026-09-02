@@ -169,6 +169,46 @@ enum ROIValidation {
         )
     }
 
+    /// Magnification that puts one image pixel on at least one screen pixel (TICK-135 AC1).
+    ///
+    /// Derived rather than chosen. A 4032-wide still fitted to ~400 points is about ten image
+    /// pixels per point, so a bare tap places a point the operator cannot see -- and the tap error
+    /// goes straight into the rise, which is being measured against a quarter-inch bar. The old
+    /// fixed 4x happened to clear 1:1 on these phones and would not on a wider screen or a larger
+    /// sensor; this cannot drift, because it is computed from both.
+    ///
+    /// Floored at 1 so the loupe never shrinks the image, and capped so a pathological ratio
+    /// cannot magnify to the point of showing nothing but one flat pixel.
+    static func loupeZoom(
+        pixelWidth: Int,
+        displayed: CGRect,
+        orientation: UIImage.Orientation = .up,
+        displayScale: CGFloat
+    ) -> CGFloat {
+        // Across the axis the sensor's width is actually shown on, which the quarter turn swaps.
+        let shownAcross = isQuarterTurned(orientation) ? displayed.height : displayed.width
+        guard pixelWidth > 0, shownAcross > 0, displayScale > 0 else { return 1 }
+        let needed = CGFloat(pixelWidth) / (shownAcross * displayScale)
+        return min(max(needed, 1), 12)
+    }
+
+    /// Move a placed point by whole image pixels, staying inside the frame.
+    ///
+    /// AC3: precision must not depend on landing the tap first time. A finger cannot reliably
+    /// resolve one image pixel even under the loupe, so the last placement is adjustable before it
+    /// is committed.
+    static func nudge(
+        _ point: PixelPoint,
+        dx: Int,
+        dy: Int,
+        pixelWidth: Int,
+        pixelHeight: Int
+    ) -> PixelPoint {
+        PixelPoint(
+            x: min(max(point.x + dx, 0), max(pixelWidth - 1, 0)),
+            y: min(max(point.y + dy, 0), max(pixelHeight - 1, 0)))
+    }
+
     /// Assemble the six collected points, in ROITarget order, into a record.
     static func taps(from marks: [ROITarget: PixelPoint]) -> Result<ROITaps, ROIRejected> {
         // No separate count check: every one of the six is looked up by name below, so a count

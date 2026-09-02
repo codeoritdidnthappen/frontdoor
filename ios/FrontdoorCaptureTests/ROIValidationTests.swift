@@ -152,6 +152,74 @@ final class ROIValidationTests: XCTestCase {
         }
     }
 
+    // MARK: tap precision (TICK-135)
+
+    /// AC1 asks for roughly 1:1 image pixels to screen pixels at the moment of placement. A
+    /// 4032-wide still fitted to ~400 points is ten image pixels per point, so an unmagnified tap
+    /// places a point the operator cannot see -- and that error lands in a rise judged against a
+    /// quarter-inch bar.
+    func testTheLoupeReachesOneToOneOnBothTeamPhones() {
+        let fitted = CGRect(x: 0, y: 0, width: 400, height: 300)
+        let zoom = ROIValidation.loupeZoom(
+            pixelWidth: w, displayed: fitted, displayScale: 3)
+        let screenPixelsPerImagePixel = fitted.width * zoom * 3 / CGFloat(w)
+        XCTAssertGreaterThanOrEqual(screenPixelsPerImagePixel, 1.0)
+    }
+
+    /// The old fixed 4x cleared 1:1 on these phones by luck. On a narrower display of the same
+    /// still it would not, and nothing would have said so.
+    func testTheLoupeGrowsWhenTheStillIsShownSmaller() {
+        let wide = ROIValidation.loupeZoom(
+            pixelWidth: w, displayed: CGRect(x: 0, y: 0, width: 400, height: 300), displayScale: 3)
+        let narrow = ROIValidation.loupeZoom(
+            pixelWidth: w, displayed: CGRect(x: 0, y: 0, width: 200, height: 150), displayScale: 3)
+        XCTAssertGreaterThan(narrow, wide)
+    }
+
+    /// It magnifies or leaves alone; it never shrinks what the operator is aiming at.
+    func testTheLoupeNeverDeMagnifies() {
+        XCTAssertGreaterThanOrEqual(
+            ROIValidation.loupeZoom(
+                pixelWidth: 100, displayed: CGRect(x: 0, y: 0, width: 400, height: 300),
+                displayScale: 3),
+            1.0)
+    }
+
+    /// A quarter-turned still is shown across the view's height, so that is the extent the ratio
+    /// has to be computed against.
+    func testTheLoupeMeasuresAcrossTheAxisTheWidthIsShownOn() {
+        let portrait = CGRect(x: 0, y: 0, width: 300, height: 400)
+        XCTAssertEqual(
+            ROIValidation.loupeZoom(
+                pixelWidth: w, displayed: portrait, orientation: .right, displayScale: 3),
+            ROIValidation.loupeZoom(
+                pixelWidth: w, displayed: CGRect(x: 0, y: 0, width: 400, height: 300),
+                displayScale: 3))
+    }
+
+    /// AC3: precision must not depend on landing the tap first time.
+    func testNudgeMovesAPointByWholeImagePixels() {
+        let point = PixelPoint(x: 2000, y: 1500)
+        XCTAssertEqual(
+            ROIValidation.nudge(point, dx: -1, dy: 0, pixelWidth: w, pixelHeight: h),
+            PixelPoint(x: 1999, y: 1500))
+        XCTAssertEqual(
+            ROIValidation.nudge(point, dx: 0, dy: 1, pixelWidth: w, pixelHeight: h),
+            PixelPoint(x: 2000, y: 1501))
+    }
+
+    /// Nudging off the frame would record a coordinate outside the image the intrinsics describe.
+    func testNudgeStaysInsideTheFrame() {
+        XCTAssertEqual(
+            ROIValidation.nudge(PixelPoint(x: 0, y: 0), dx: -1, dy: -1,
+                                pixelWidth: w, pixelHeight: h),
+            PixelPoint(x: 0, y: 0))
+        XCTAssertEqual(
+            ROIValidation.nudge(PixelPoint(x: w - 1, y: h - 1), dx: 1, dy: 1,
+                                pixelWidth: w, pixelHeight: h),
+            PixelPoint(x: w - 1, y: h - 1))
+    }
+
     // MARK: assembling the six
 
     func testAllSixInOrderProduceTheRecord() throws {
