@@ -126,6 +126,12 @@ corrections the table exists to make.
 
 Three things this shape buys:
 
+> **Amended 2026-09-02 by D-036.** No caliper is used, so there is no instrument reading to bind.
+> What binds at the shutter is the entrance ID and the condition tags; ground truth for the
+> screening study is the operator's **presence labels** (#168), which need no instrument. Capture
+> runs on **one device** — James's iPhone Pro with LiDAR — so `device_model` is a constant rather
+> than a stratification variable.
+
 - **Ground truth binds at the shutter press.** The operator enters the entrance ID and the caliper
   reading in the app. There is no later reconciliation of a spreadsheet against filenames.
 - **Split is assigned when an entrance ID is first created** (D-007), before any image is processed,
@@ -326,8 +332,10 @@ it, it is eventually used to tune, and the comparison stops meaning anything —
 same reasoning as the sealed split. Layout: `data/STORAGE.md`.
 
 LiDAR is a comparison, not ground truth. Commonly reported depth error is around ±1cm, coarser than
-the 0.25" target and comparable to the 1/2" decision line itself. The caliper (±0.01") remains the
-reference (D-003). Whether LiDAR clears your own bar is an open empirical question — see R-10.
+the 0.25" target and comparable to the 1/2" decision line itself. ~~The caliper (±0.01") remains the
+reference (D-003).~~ **D-036 (2026-09-02) supersedes D-003: no caliper is used, so there is no
+reference to compare depth against. Deliverable #5 and R-10's bench test are not delivered in this
+window — the comparison has no subject, which is a stronger statement than "not done yet".** Whether LiDAR clears your own bar is an open empirical question — see R-10.
 
 ## 10. Assumptions
 
@@ -359,5 +367,5 @@ reference (D-003). Whether LiDAR clears your own bar is an open empirical questi
 | R-7 | App signing is on the critical path for the whole dataset; free-provisioning builds expire after 7 days, landing mid-capture | **Accepted, not mitigated by purchase** (D-025). Managed by a committed signing calendar with no gap through Sep 11, including a mandatory re-sign by Sep 6. James runs Windows and holds the only LiDAR device, so each of his installs is a scheduled physical session with a Mac owner |
 | R-8 | Fewer capture devices than parallel field tracks assume | Detected at roster assignment (O-1); response is to cut the entrance target, not the protocol |
 | R-9 | Calibration-data delivery unavailable on target devices | Verified day one; ARKit fallback, accepting the resolution cost in §2 |
-| R-10 | LiDAR is coarser than the 0.25" bar, so the "accuracy ceiling" sits below the success criterion | Bench-test against the caliper in week one; if confirmed, deliverable #5 is reframed as evidence the decision line is below what phone depth sensors deliver |
+| R-10 **(no longer testable — D-036)** | LiDAR is coarser than the 0.25" bar, so the "accuracy ceiling" sits below the success criterion | ~~Bench-test against the caliper in week one~~ — **no caliper is used (D-036), so there is nothing to bench-test against.** The risk is neither confirmed nor refuted; it is recorded as untested. |
 | R-11 | Demo app and capture app drift apart, so Demo Day exhibits uncharacterised behaviour | Demo app is the capture app plus rendering; one capture path, one metrology library |

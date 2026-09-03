@@ -14,6 +14,24 @@ kind of input no matter who captured it.
 Validation note: this is TICK-090; it gets pilot-tested by TICK-092 (#66) before TICK-093 (#67)
 scales up capture. Anything ambiguous in here gets fixed after the pilot, not guessed at now.
 
+## The kit: one phone, and nothing else
+
+**Every entrance in this dataset is shot on the same device** — James's iPhone Pro with LiDAR
+(D-036). Not "a team phone", not whichever is to hand. One device, so `device_model` is a constant
+and the findings can say plainly what hardware the result was measured on.
+
+**No caliper. No reference card. No tape measure.** There is no instrument reading to take at the
+door: ground truth for this study is what you *saw*, recorded as presence labels, not what anything
+measured. If you find yourself wanting to measure a step, that is the earlier version of this
+project and it is not what we are collecting.
+
+**Depth is recorded automatically** on every capture and needs nothing from you. It is stored for a
+later comparison and is never used to produce a verdict.
+
+> If that phone will not launch the app, capture does not happen that day — there is no second
+> device shooting alongside it. That is why the launch check below is the first line of the
+> checklist and not the last.
+
 ## Before you shoot: assign the entrance ID
 
 Every entrance gets a canonical ID before you take a single photo: `E-` plus exactly three digits

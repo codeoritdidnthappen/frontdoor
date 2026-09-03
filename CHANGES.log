@@ -909,3 +909,55 @@ network rather than from a local disk beside the bucket. Egress on R2 is free, s
 costs nothing in money; it costs time on a slow link, and the unsealing run (#63) is the
 one execution where that matters. Whoever runs it should sync the dataset before Sep 7
 rather than streaming it on the day.
+
+## D-036  One capture device, LiDAR on, no caliper
+
+Taken 2026-09-02 by David, in the backlog sync that follows A-3. Three settings that go
+together, recorded as one entry because separating them would hide what each costs.
+
+**1. LiDAR is used.** Confirming D-032 rather than repeating it: depth is captured on every
+entrance. What D-032 says still bounds it -- TICK-020 measured that LiDAR delivers depth
+with NO calibration, and that dual-wide depth is `accuracy=relative`. So depth is a map to
+store and compare against, not a metric ruler, and D-015's method boundary is untouched:
+the method still never consumes device depth.
+
+**2. Capture runs on ONE device: James's iPhone Pro with LiDAR.** Not a pool. Emily's
+iPhone 16 and iPhone 15 Pro Max stop being capture devices for this dataset.
+
+Reasons to record, because both directions have a cost:
+- Depth on every entrance (D-020) is only satisfiable by a device with a depth sensor, and
+  one operator with one phone is the shortest path to a uniform dataset.
+- `device_model` stops being a stratification variable and becomes a CONSTANT. A-1 already
+  needed restating for a two-device pool; with one device the generalisation limit is
+  sharper, not softer, and the findings must say the result is measured on a single phone.
+- **The single point of failure is real and is not waived.** Free-provisioning builds expire
+  after 7 days (D-025, R-7), James runs Windows and cannot re-sign unaided, and that phone
+  has still never been through the capability probe (#24). If it expires, breaks or turns
+  out not to deliver what the probe assumes, capture stops -- there is no second device
+  shooting alongside it. Probing it is now urgent rather than tidy.
+
+**MODEL DISCREPANCY, unresolved and not papered over.** This decision was given as "iPhone
+Pro Max". #203 read James's device with `devicectl` on 2026-09-02 and recorded **iPhone 17
+Pro (`iPhone18,1`)** -- Pro, not Pro Max. The roster has already been wrong about this phone
+once (it said iPhone 16 Pro). One check on the device settles it, and it matters because
+probe rows are keyed by model identifier. Until then the identifier `iPhone18,1` is the
+anchor, since it was measured, and the marketing name is treated as unconfirmed.
+
+**3. No caliper. There is no instrument ground truth.** SUPERSEDES **D-003**, which made a
+digital caliper at +/-0.01" the ground-truth instrument for threshold rise.
+
+What this settles rather than defers: A-3 said the metrology study was deprioritised. This
+says it cannot be run at all in this window, because its ground truth does not exist and
+will not be collected. The pre-registered criterion in PRD section 2 -- MAE <= 0.25" against
+caliper ground truth -- has no measurable subject. It is untested, and reported as untested.
+
+Consequences, each stated so none is discovered later:
+- Deliverable #1 becomes photographs with **operator presence labels**, not caliper truth.
+- Deliverable #5, the monocular-versus-LiDAR comparison, has no reference to compare
+  against and is not delivered in this window. R-10's bench test likewise.
+- The sidecar's `ground_truth` is never populated. D-034 already made it optional and made
+  it FORBIDDEN on a screening capture, so no code change is required -- but the app's
+  metrology mode is now inert for this study, since no reading exists to enter. The mode
+  stays in the app per A-3; nothing this week can exercise it.
+- The screening study's ground truth is unaffected: it is the operator's presence labels
+  (#168), recorded at the door, and needs no instrument.

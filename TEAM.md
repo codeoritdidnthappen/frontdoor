@@ -217,6 +217,18 @@ depend on which capability was scarce.
 
 The response is a **schedule change, not an architecture change** (ARCHITECTURE.md §10, A-3):
 
+> **Amended 2026-09-02 by D-036.** Capture runs on **one device**: James's iPhone Pro with LiDAR.
+> Emily's iPhone 16 and iPhone 15 Pro Max are no longer capture devices for this dataset. **No
+> caliper is used** — ground truth is the operator's presence labels, recorded at the door.
+>
+> Two consequences this section should carry rather than leave implicit. `device_model` becomes a
+> **constant**, so the findings must say the result was measured on a single phone — the
+> generalisation limit A-1 already needed restating for is sharper now, not softer. And that phone
+> is a **single point of failure**: builds expire in 7 days (D-025, R-7), James runs Windows and
+> cannot re-sign unaided, and the device has still never been through the capability probe (#24).
+> If it expires or does not deliver what the probe assumes, capture stops — nothing is shooting
+> alongside it. Probing it is urgent, not tidy.
+
 1. **Cut the entrance target, never the protocol.** Per-entrance shot list, ROI taps, caliper
    ground truth and split-at-capture stay exactly as specified.
    *Superseded in part by the 2026-09-01 pivot to plain-photo screening (#67, #9 thread), recorded
