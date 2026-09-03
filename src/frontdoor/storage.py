@@ -185,7 +185,7 @@ def load_depth_write_creds():
     phone uploads, and must never be able to read one back: D-020's guarantee is that the metrology
     path cannot read depth, because depth it can reach is depth it eventually tunes on. A
     write-only token cannot tune, peek or load, so the invariant holds with the server on the write
-    side of it. The evaluation harness keeps load_depth_creds() and stays the only reader.
+    side of it. The evaluation harness keeps `frontdoor.depth_access` and stays the only reader.
     """
     loc = _shared_location()
     return BucketCreds(
@@ -335,7 +335,30 @@ def image_store():
 def depth_write_store():
     """Store the server uses to accept depth uploads -- write-only (D-033).
 
-    Separate factory rather than a flag on depth_store(), so that a caller wanting to read depth
+    Separate factory rather than a flag on the reader in `frontdoor.depth_access`, so a caller
+    wanting to read depth
     cannot get there by passing an argument. The two credentials are different tokens.
     """
     return ObjectStore(load_depth_write_creds())
+
+
+def main(argv=None):
+    """The credential probe moved to `frontdoor.storage_probe` (TICK-057).
+
+    This exists ONLY so the old command fails loudly. Without a `__main__` here,
+    `python -m frontdoor.storage verify` ran nothing and exited 0 -- an operator following a stale
+    runbook to check the D-033 write-only token would have got a clean exit and concluded it
+    passed. A silent success is the worst possible answer from a verification command.
+    """
+    print(
+        "`python -m frontdoor.storage verify` has moved to:\n"
+        "    python -m frontdoor.storage_probe verify\n"
+        "The probe READS depth, so it cannot live in the module the loader and the server import "
+        "for images (D-020, TICK-057).",
+        file=sys.stderr,
+    )
+    return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main())

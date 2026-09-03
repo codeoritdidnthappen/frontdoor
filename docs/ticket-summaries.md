@@ -300,11 +300,14 @@ PR: [#140](https://github.com/codeoritdidnthappen/frontdoor/pull/140)
 Named Cloudflare R2 as the free-tier provider (10 GB, two buckets because
 tokens scope per bucket) and shipped the S3 client the loader and harness
 will use. Images and depth never share a credential. Live buckets are created
-in the Cloudflare dashboard; `python -m frontdoor.storage verify` is the
+in the Cloudflare dashboard; `python -m frontdoor.storage_probe verify` is the
 check that the loader token is denied on depth.
 
 **Files created / updated**
-- `src/frontdoor/storage.py` — `image_store()`, `depth_store()`, `verify`
+- `src/frontdoor/storage.py` — `image_store()`
+- `src/frontdoor/depth_access.py` — `depth_store()` *(moved by TICK-057: reading depth is a
+  separate import, so the quarantine can be tested)*
+- `src/frontdoor/storage_probe.py` — `verify` *(moved by TICK-057: it reads depth)*
 - `tests/test_storage.py`
 - `data/STORAGE.md` — layout, who may read what, how to create the buckets
 - `.env.example` — the two credential sets; no secrets

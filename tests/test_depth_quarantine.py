@@ -81,42 +81,87 @@ PERMITTED_IMPORTERS = {
 }
 
 
-def _module_name(path):
-    return ".".join(path.relative_to(SRC).with_suffix("").parts).removesuffix(".__init__")
+def _module_name(path, root=None):
+    return ".".join(path.relative_to(root or SRC).with_suffix("").parts).removesuffix(".__init__")
 
 
-def _imports_of(path):
+def _package_of(module_name, is_package):
+    """The package a relative import inside this module resolves against."""
+    parts = module_name.split(".")
+    return parts if is_package else parts[:-1]
+
+
+def _imports_of(path, module_name=None):
     """Every module this file imports, from its AST rather than by running it.
 
     Static on purpose: an import inside a branch that never executes still puts the module within
     reach, and a runtime check would miss it.
+
+    **Relative imports are resolved, not skipped.** An earlier version required `not node.level`,
+    so `from .depth_access import depth_store` inside the loader was invisible while the whole
+    suite stayed green and the loader read depth at runtime. The repo happens to use no relative
+    imports today, which is exactly why nothing else would have warned us.
     """
     tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+    if module_name is None:
+        module_name = _module_name(path)
+    base = _package_of(module_name, path.name == "__init__.py")
+
     found = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Import):
             found.update(a.name for a in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module and not node.level:
-            found.add(node.module)
-            found.update(f"{node.module}.{a.name}" for a in node.names)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level:
+                anchor = base[: len(base) - (node.level - 1)] if node.level > 1 else base
+                prefix = ".".join(anchor + ([node.module] if node.module else []))
+            elif node.module:
+                prefix = node.module
+            else:
+                continue
+            if prefix:
+                found.add(prefix)
+                # `from . import depth_access` carries the name in `names`, not in `module`.
+                found.update(f"{prefix}.{a.name}" for a in node.names)
     return found
 
 
-def _all_modules():
-    return {_module_name(p): p for p in SRC.rglob("*.py") if "__pycache__" not in p.parts}
+def _all_modules(root=None):
+    root = root or SRC
+    return {_module_name(p, root): p for p in root.rglob("*.py")
+            if "__pycache__" not in p.parts}
 
 
-def _reaches(start_prefix, target):
+def _reaches(start_prefix, target, root=None, exact=False):
     """Transitive closure of imports from every module under `start_prefix`.
 
     Returns the chain that reaches `target`, or None. A chain rather than a bool because the
     failure message has to name the import that has to be removed.
     """
-    modules = _all_modules()
-    starts = [m for m in modules if m == start_prefix or m.startswith(start_prefix + ".")]
+    modules = _all_modules(root)
+    if exact:
+        # One module, not a package prefix. Checking a PACKAGE name expands to every module under
+        # it, which for `frontdoor` includes the permitted probe -- so a per-module sweep has to
+        # ask about each module alone. Ancestors are still seeded: importing a module runs its
+        # package __init__.
+        starts = [start_prefix] if start_prefix in modules else []
+    else:
+        starts = [m for m in modules if m == start_prefix or m.startswith(start_prefix + ".")]
     assert starts, f"no modules under {start_prefix}; this guard would pass vacuously"
 
-    seen, queue = set(), [(m, [m]) for m in starts]
+    # Importing `frontdoor.storage` executes `frontdoor/__init__.py` first, so a package's own
+    # __init__ is part of every descendant's reach. Leaving ancestors out let an import placed in
+    # `frontdoor/__init__.py` pass every test while every module under it gained the route.
+    def ancestors(name):
+        parts = name.split(".")
+        return [".".join(parts[:i]) for i in range(1, len(parts))
+                if ".".join(parts[:i]) in modules]
+
+    seeded = list(starts)
+    for m in starts:
+        seeded.extend(ancestors(m))
+
+    seen, queue = set(), [(m, [m]) for m in dict.fromkeys(seeded)]
     while queue:
         name, chain = queue.pop()
         if name in seen:
@@ -125,12 +170,17 @@ def _reaches(start_prefix, target):
         path = modules.get(name)
         if path is None:
             continue
-        for imported in _imports_of(path):
+        for imported in _imports_of(path, name):
             candidate = imported if imported in modules else imported.rsplit(".", 1)[0]
             if imported == target or candidate == target:
                 return chain + [target]
-            if candidate in modules and candidate not in seen:
-                queue.append((candidate, chain + [candidate]))
+            if candidate not in modules:
+                continue
+            for nxt in [candidate] + ancestors(candidate):
+                if nxt == target:
+                    return chain + [nxt]
+                if nxt not in seen:
+                    queue.append((nxt, chain + [nxt]))
     return None
 
 
@@ -207,11 +257,142 @@ def test_the_loader_exposes_no_depth_surface_at_all():
         assert "depth" not in name.lower(), f"loader exposes {name!r}"
 
 
-def test_the_guard_would_notice_an_import_being_added():
-    """The control. A guard that cannot fail is not a guard.
+NL = chr(10)
 
-    Points the same walker at a module the metrology library genuinely does reach, so a broken
-    walker shows up here rather than as a permanent green.
+
+# --- controls: a guard that cannot fail is not a guard --------------------------------------
+#
+# The first version of this control asserted only that the walker found SOMETHING, one hop away.
+# Deleting the walker's transitive traversal entirely left it green. These exercise the parts that
+# do the work, against a synthetic tree so they cannot drift with the real one.
+
+
+def _tree(root, files):
+    for name, text in files.items():
+        path = root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+
+
+def test_the_walker_follows_a_chain_it_cannot_see_in_one_hop(tmp_path):
+    """Transitive traversal. `a` never mentions `d`; it is three hops away."""
+    _tree(tmp_path, {
+        "pkg/__init__.py": "",
+        "pkg/a.py": "from pkg import b" + NL,
+        "pkg/b.py": "from pkg import c" + NL,
+        "pkg/c.py": "from pkg import d" + NL,
+        "pkg/d.py": "",
+    })
+    chain = _reaches("pkg.a", "pkg.d", root=tmp_path)
+    assert chain is not None, "the walker does not traverse transitively"
+    assert len(chain) >= 4, "chain too short to prove traversal: " + str(chain)
+
+
+def test_the_walker_resolves_relative_imports(tmp_path):
+    """The blind spot that let `from .depth_access import depth_store` through the loader."""
+    _tree(tmp_path, {
+        "pkg/__init__.py": "",
+        "pkg/a.py": "from .secret import thing" + NL,
+        "pkg/secret.py": "",
+    })
+    assert _reaches("pkg.a", "pkg.secret", root=tmp_path) is not None, (
+        "relative imports are invisible to the walker")
+
+
+def test_the_walker_resolves_a_bare_relative_package_import(tmp_path):
+    """`from . import secret` carries the name in `names`, not in `module`."""
+    _tree(tmp_path, {
+        "pkg/__init__.py": "",
+        "pkg/a.py": "from . import secret" + NL,
+        "pkg/secret.py": "",
+    })
+    assert _reaches("pkg.a", "pkg.secret", root=tmp_path) is not None
+
+
+def test_the_walker_resolves_a_parent_relative_import(tmp_path):
+    """`from ..secret import thing` climbs a level."""
+    _tree(tmp_path, {
+        "pkg/__init__.py": "",
+        "pkg/secret.py": "",
+        "pkg/sub/__init__.py": "",
+        "pkg/sub/a.py": "from ..secret import thing" + NL,
+    })
+    assert _reaches("pkg.sub.a", "pkg.secret", root=tmp_path) is not None
+
+
+def test_the_walker_counts_a_packages_own_init(tmp_path):
+    """Importing `pkg.a` executes `pkg/__init__.py`, so what it imports is within reach."""
+    _tree(tmp_path, {
+        "pkg/__init__.py": "from pkg import secret" + NL,
+        "pkg/a.py": "",
+        "pkg/secret.py": "",
+    })
+    assert _reaches("pkg.a", "pkg.secret", root=tmp_path) is not None, (
+        "an import in a package __init__ is invisible to the walker")
+
+
+def test_the_walker_does_not_invent_edges(tmp_path):
+    """The other half of the control: no false positives, or every test above is meaningless."""
+    _tree(tmp_path, {
+        "pkg/__init__.py": "",
+        "pkg/a.py": "import os" + NL,
+        "pkg/secret.py": "",
+    })
+    assert _reaches("pkg.a", "pkg.secret", root=tmp_path) is None
+
+
+def test_no_module_outside_the_permitted_set_can_reach_depth():
+    """Generalises the three named guards.
+
+    Those cover the metrology library, the loader and the server. `screening`, `split`, `sidecar`,
+    `manifest`, `precatalogue` and `seal_audit` were unguarded and could have gained a route
+    through the permitted probe with nothing noticing. D-020's wording is about the metrology
+    path; nothing in this repository has a reason to read depth except the harness, so the guard
+    is the wider one.
     """
-    chain = _reaches("frontdoor.metrology", "frontdoor.metrology.result")
-    assert chain is not None, "the import walker found nothing at all; it is broken"
+    modules = _all_modules()
+    exempt = PERMITTED_IMPORTERS | {DEPTH_READER}
+    breaches = {}
+    for name in modules:
+        if name in exempt or any(name.startswith(p + ".") for p in exempt):
+            continue
+        chain = _reaches(name, DEPTH_READER, exact=True)
+        if chain:
+            breaches[name] = " -> ".join(chain)
+    assert not breaches, "modules that can reach depth and should not: " + str(sorted(breaches))
+
+
+def test_a_dynamic_import_of_the_depth_reader_is_flagged():
+    """`importlib.import_module("frontdoor.depth_access")` is invisible to an AST import walk.
+
+    Cheaper than modelling dynamic imports: the module name has to appear as a string somewhere,
+    so look for it. The repo already uses `importlib` in several modules, so the idiom is present.
+    """
+    offenders = []
+    for name, path in _all_modules().items():
+        if name in PERMITTED_IMPORTERS or name == DEPTH_READER:
+            continue
+        text = path.read_text(encoding="utf-8")
+        if '"' + DEPTH_READER + '"' in text or "'" + DEPTH_READER + "'" in text:
+            offenders.append(name)
+    assert not offenders, (
+        "these modules name the depth reader as a string, which an import walk cannot see: "
+        + str(sorted(offenders)))
+
+
+def test_no_document_still_names_the_moved_probe_command():
+    """`python -m frontdoor.storage verify` now refuses loudly rather than running.
+
+    It used to exit 0 in silence, because storage lost its `__main__` when the probe moved --
+    so an operator following a stale runbook to check the D-033 write-only token got a clean exit
+    and concluded it passed. A silent success is the worst answer a verification command can give.
+    This keeps the pointers correct as well as the behaviour.
+    """
+    repo = SRC.parent
+    stale = []
+    for name in ("data/STORAGE.md", "docs/server-deploy.md", "docs/ticket-summaries.md",
+                 ".env.example", "README.md", "ARCHITECTURE.md"):
+        path = repo / name
+        if path.exists() and "frontdoor.storage verify" in path.read_text(encoding="utf-8"):
+            stale.append(name)
+    assert not stale, f"these still name the moved command: {stale}"
