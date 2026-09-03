@@ -13,6 +13,7 @@ from frontdoor_server.depth_ingest import (
     DepthIngestConfig,
     DepthIngestConflict,
     DepthIngestError,
+    DepthIngestRejected,
     put_depth,
 )
 
@@ -89,6 +90,14 @@ def test_ac_2_accepts_the_workers_matching_digest_confirmation(worker):
 def test_ac_3_maps_worker_conflict_to_a_typed_conflict(worker):
     worker.status = 409
     with pytest.raises(DepthIngestConflict):
+        put_depth(io.BytesIO(b"x"), key="open/cap-1", sha256="a" * 64, size=1,
+                  config=_config())
+
+
+def test_tick_254_a_worker_digest_rejection_is_permanent_not_retryable(worker):
+    """422 means the bytes will never match; it must not be reported as a retryable outage."""
+    worker.status = 422
+    with pytest.raises(DepthIngestRejected, match="did not hash"):
         put_depth(io.BytesIO(b"x"), key="open/cap-1", sha256="a" * 64, size=1,
                   config=_config())
 

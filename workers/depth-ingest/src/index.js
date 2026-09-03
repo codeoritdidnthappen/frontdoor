@@ -1,5 +1,6 @@
 const KEY_PATTERN = /^(open|sealed)\/[A-Za-z0-9_.-]{1,128}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 const CONFIGS = new WeakMap();
 
 class RequestError extends Error {
@@ -44,6 +45,12 @@ async function sameSecret(presented, expected) {
   return difference === 0;
 }
 
+// R2 reports a server-side digest rejection as error 10037. Matching the code rather than the
+// prose keeps this working if Cloudflare rewords the message.
+function isDigestMismatch(error) {
+  return typeof error?.message === "string" && error.message.includes("(10037)");
+}
+
 function parseUploadRequest(request) {
   const url = new URL(request.url);
   if (url.pathname !== "/depth" || url.searchParams.size !== 1) {
@@ -59,6 +66,14 @@ function parseUploadRequest(request) {
   }
   if (request.body === null) {
     throw new RequestError("missing body", 400);
+  }
+  // A PUT carrying `Content-Length: 0` arrives with an empty but non-null stream, so the check
+  // above passes it. R2 would store a 0-byte object, and because writes never overwrite it would
+  // hold that capture's key forever -- unrecoverably under `sealed/`, which #187 locked against
+  // deletion. The empty digest is the only one an empty body can satisfy, so refusing it closes
+  // the hole; an empty body under any other digest is already refused by R2.
+  if (sha256 === EMPTY_SHA256) {
+    throw new RequestError("empty body", 400);
   }
   return { body: request.body, key, sha256 };
 }
@@ -83,11 +98,23 @@ export async function handle(request, env) {
     throw error;
   }
 
-  const stored = await configured.bucket.put(upload.key, upload.body, {
-    onlyIf: { etagDoesNotMatch: "*" },
-    sha256: upload.sha256,
-    customMetadata: { sha256: upload.sha256 },
-  });
+  let stored;
+  try {
+    stored = await configured.bucket.put(upload.key, upload.body, {
+      onlyIf: { etagDoesNotMatch: "*" },
+      sha256: upload.sha256,
+      customMetadata: { sha256: upload.sha256 },
+    });
+  } catch (error) {
+    // R2 enforces `sha256` itself and throws when the streamed bytes do not match; nothing is
+    // stored. That failure is permanent -- these bytes will never hash to that digest -- so it
+    // has to be told apart from an outage. Unhandled, it left Cloudflare answering 500, which
+    // the server reported as 503 and the phone retried forever.
+    if (isDigestMismatch(error)) {
+      return json("body does not match the declared sha256", 422);
+    }
+    throw error;
+  }
   if (stored === null) {
     return json("object already exists", 409);
   }

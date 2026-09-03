@@ -13,7 +13,11 @@ import pytest
 from moto import mock_aws
 
 from frontdoor_server.app import create_app
-from frontdoor_server.depth_ingest import DepthIngestConflict, DepthIngestError
+from frontdoor_server.depth_ingest import (
+    DepthIngestConflict,
+    DepthIngestError,
+    DepthIngestRejected,
+)
 
 IMAGES = "frontdoor-image"
 DEPTH = "frontdoor-depth"
@@ -321,6 +325,15 @@ def test_ac_3_worker_failures_are_retryable_and_leave_the_capture_queued(
 
     monkeypatch.setattr("frontdoor_server.upload_view.put_depth", fail)
     assert _post(client, b"d", kind="depth").status_code == 503
+
+
+def test_tick_254_a_worker_digest_rejection_answers_422_not_503(client, monkeypatch):
+    """A permanent rejection must not be dressed as an outage, or the phone requeues forever."""
+    def reject(*args, **kwargs):
+        raise DepthIngestRejected("the bytes did not hash to the declared sha256")
+
+    monkeypatch.setattr("frontdoor_server.upload_view.put_depth", reject)
+    assert _post(client, b"d", kind="depth").status_code == 422
 
 
 @mock_aws
