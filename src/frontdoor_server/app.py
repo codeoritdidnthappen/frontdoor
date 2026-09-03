@@ -182,6 +182,23 @@ def create_app():
                 "missing image",
                 "POST /measure expects multipart/form-data with a file part named 'image'.",
             )
+        # A part that is present but empty is not a lesser version of an image, it is no image:
+        # nothing can be measured from zero bytes. Flask puts an empty FileStorage in
+        # request.files, so the membership test above passes and, while /measure is a stub that
+        # never looks at the pixels, the request returns a confident measurement-shaped 200. Found
+        # on the #51 device round trip. The failure it produces on stage is the one D-009 exists to
+        # prevent: the image part fails to attach, and the phone renders a rise for a photo the
+        # server never had. Reported as "missing image" rather than a new token because that is
+        # what happened, and the committed enum in measure_error.schema.json is what TICK-063
+        # branches on -- an unrecognised token decodes to nil on the client and loses the
+        # not-worth-retrying advice that tells the operator to re-take the shot.
+        if not request.files["image"].read():
+            return _error(
+                "missing image",
+                "The 'image' part of this request carried no bytes, so there is nothing to "
+                "measure.",
+            )
+
         if "sidecar" not in request.form:
             return _error(
                 "missing sidecar",

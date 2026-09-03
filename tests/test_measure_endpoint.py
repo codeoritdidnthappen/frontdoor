@@ -172,6 +172,27 @@ def test_missing_image_returns_400(client, sidecar):
     assert response.get_json()["error"] == "missing image"
 
 
+def test_an_empty_image_part_returns_400(client, sidecar):
+    """A present-but-empty part is no image at all (found on the #51 device round trip).
+
+    The stub never reads the pixels, so without this the request that lost its image on a venue
+    network comes back 200 with a rise in it -- a confident answer about a photo the server never
+    received, which is the failure D-009 exists to prevent.
+    """
+    response = post_measure(client, sidecar, image=b"")
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "missing image"
+
+
+def test_an_empty_image_is_told_apart_from_an_absent_one(client, sidecar):
+    """Same token, because both mean the same thing to the measurer; different detail, because
+    they mean very different things to whoever has to fix the client."""
+    empty = post_measure(client, sidecar, image=b"").get_json()
+    absent = post_measure(client, sidecar, omit=("image",)).get_json()
+    assert empty["detail"] != absent["detail"]
+    Draft202012Validator(ERROR_SCHEMA).validate(empty)
+
+
 def test_missing_sidecar_returns_400(client):
     response = post_measure(client, omit=("sidecar",))
     assert response.status_code == 400
