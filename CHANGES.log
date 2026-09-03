@@ -211,12 +211,11 @@ land an entrance in a different split (D-007, D-017).
   and by the sidecar schema `entrance_id` pattern. The capture app (TICK-024, #28) must
   create IDs in this form; it does not yet specify one.
 
-## Decision-log gap — D-021 to D-024 and Amendment A-2 reconstructed, NOT original text
+## Decision-log gap — D-021 to D-024 reconstructed; Amendment A-2 recovered
 
-These four decision IDs are referenced throughout the ticket backlog but were never written into
-this log. The statements below are RECONSTRUCTED from how each ID is used in tickets, and need
-confirmation by whoever took the original decisions. They are recorded so the IDs resolve to
-something rather than dangling; they are not claimed to be the original wording.
+These four decision IDs were restored from how each ID is used in tickets. D-021, D-023 and D-024
+remain reconstructions needing confirmation by whoever took the original decisions. Repository
+history later supplied the original D-022 and A-2 text; their status is resolved below.
 
 2026-09-01 (#183): each entry was checked against the tickets that cite it, and each now names the
 line it rests on. D-024 was WRONG and is corrected below -- see its entry. D-021 and D-023 track
@@ -233,8 +232,13 @@ dated status line: D-023 and the corrected D-024 match the code; D-021 has no en
 to check, so its ticket remains the only referent; D-022's attribution question is unchanged and
 still needs a human (#132). Where the pivot retires an entry's subject matter the status line says
 so -- the pre-pivot text stands as history of what was decided, not as current protocol. The
-(reconstructed) labels stay, for the reason in the paragraph above; A-2's date and wording remain
-with #132.
+At that point, the reconstructed labels stayed and A-2's date and wording remained with #132.
+
+2026-09-03 (#132): repository history resolves A-2. Commit 13e735a, authored by David on
+2026-08-29, contains the original D-022 and A-2 entries and states that A-2 was committed before
+first capture and before any image was processed. A-2 is the formal pre-registration amendment;
+D-022 records the same decision in the decision register and points to A-2. The original text is
+restored below.
 
 - D-021  (reconstructed) Per-entrance shot plan is enforced by the instrument: the app tells the
          operator which card placement, angle bucket and distance bucket remain outstanding and
@@ -251,27 +255,11 @@ with #132.
          AMENDED IN PRACTICE by the 2026-09-01 pivot (#67, #9 thread): capture is plain photos,
          the A-prime ground-card subset is retired (#68 closed), and the per-entrance plan is now
          #64's 5-6-view protocol. Pre-pivot text kept as the record of what was decided.
-- D-022  (reconstructed) Compliance verdicts are reported for Arm A ONLY. No pass/fail bar or
-         threshold line is attached to Arms A-prime, B or C; those arms report measurement error
-         alone. Referenced by: #91, #93, #95, #72.
-         GROUNDED IN, each quoted as its ticket writes it (emphasis markers kept, since #72 uses
-         the inch mark and quoting it inside quotes would be unreadable):
-           #91  **no** pass/fail verdict is attached to any arm but A (D-022)
-           #93  the pass/fail bar appears on **Arm A only** (D-022)
-           #95  Arm A is the only arm with a threshold line drawn (D-022)
-           #72  The 0.25" bar is drawn against **Arm A only** (D-022)
-         UNRESOLVED, AND THE REASON THIS BLOCK IS STILL OPEN: this is the same rule as Amendment
-         A-2 below. A decision and an amendment cannot both be the origin of one rule -- either A-2
-         amended the pre-registration to name Arm A and D-022 is being cited for something it never
-         said, or D-022 fixed it from the start and A-2 is not an amendment at all. That distinction
-         is not recoverable from the tickets, and it matters: A-2 must be REPORTED AS AN AMENDMENT
-         AT DEMO DAY (PRD section 2), and D-022 carries no such obligation. See TICK-231 and #132.
-         2026-09-02 (#183): text re-confirmed against the four citing tickets as quoted; the
-         D-022-vs-A-2 attribution stays UNRESOLVED and still needs whoever took the decision
-         (#132, TICK-231). The 2026-09-01 pivot (#67, #9 thread) moves verdicts to visible-
-         feature-presence screening, so the Arm-A pass/fail bar this rule governs belongs to the
-         pre-pivot metrology study; the formal amendment ask for the pivot itself is A-3 (#67
-         thread), separate from this attribution question.
+- D-022  The pre-registered success criterion applies to ARM A ONLY. Other arms are reported
+         without a pass/fail bar. Reason: the criterion named no arm, which would have allowed the
+         hypothesis to be scored against whichever of four arms looked best after unsealing.
+         See Amendment A-2. Original text recovered from commit 13e735a. Referenced by: #91, #93,
+         #95, #72.
 - D-023  (reconstructed) Three-way split -- dev, calib, sealed -- assigned deterministically from a
          committed seed at entrance creation and immutable thereafter, with calib reserved for
          interval calibration so conformal intervals are never calibrated on dev or on sealed data.
@@ -318,20 +306,13 @@ with #132.
          description line still says the sidecar is "written by the capture app at the shutter
          press" -- loose in the same way the old D-024 text was; noted here, not yet fixed.
 
-- A-2    (reconstructed) AMENDMENT TO THE PRE-REGISTRATION. The pre-registered success criterion
-         -- MAE <= 0.25" on threshold rise, on the sealed test split (PRD section 2, D-008) -- is
-         judged against ARM A ONLY. Arms A-prime, B and C are reported without any pass/fail bar.
-         Reason, as stated in the tickets that cite it: leaving the arm unnamed would let the
-         hypothesis be scored against whichever arm looked best once results were seen, which is
-         the exact failure D-007 exists to prevent. Referenced by: #7, #10, #37, #56, #63, #71,
+- A-2    The success criterion names its arm. "MAE <= 0.25 inch on the sealed test split" did not
+         say which of four arms it judged; it is fixed to Arm A. Reason: an unnamed arm lets the
+         hypothesis be scored against whichever arm looks best once results are seen, which is the
+         exact failure pre-registration exists to prevent. Committed 2026-08-29, before first
+         capture and before any image was processed. To be reported as an amendment at Demo Day.
+         Original text recovered from commit 13e735a. Referenced by: #7, #10, #37, #56, #63, #71,
          #73, #90, #93.
-         RECONSTRUCTED FROM TICKET USAGE, and more urgently in need of confirmation than the four
-         above: PRD section 2 states that nothing in it changes after 2026-08-28 and that
-         amendments are logged here with a reason AND REPORTED AS SUCH AT DEMO DAY. Recorded here
-         so the amendment is not silently absent from the log, but the DATE it was taken and its
-         original wording are not recoverable from the tickets and must be supplied by whoever
-         took the decision. Until then this entry establishes that A-2 exists and what it does,
-         not when it was agreed. See TICK-231.
 
 ## 2026-09-01 — Predicted rise-error budget for Arm A (TICK-041, issue #35)
 
@@ -875,8 +856,8 @@ qualifies as well -- and it is the device TICK-020 actually ran `builtInLiDARDep
 on. So the target device for this product is held by two people, one of whom has a Mac and
 a probed phone. Corrected in TEAM.md by this entry.
 
-**Not decided here:** whether A-2's Arm-A-only rule originates in A-2 or D-022 (#132, #183)
-is a separate attribution question and is untouched.
+**A-2 attribution:** resolved by #132 from commit 13e735a. A-2 is the pre-registration amendment;
+D-022 is its decision-register cross-reference.
 
 ## D-035  The evaluation harness runs on a team Mac, not on the server host
 
