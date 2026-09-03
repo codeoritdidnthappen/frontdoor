@@ -192,12 +192,18 @@ def create_app():
         # what happened, and the committed enum in measure_error.schema.json is what TICK-063
         # branches on -- an unrecognised token decodes to nil on the client and loses the
         # not-worth-retrying advice that tells the operator to re-take the shot.
-        if not request.files["image"].read():
+        image = request.files["image"]
+        if not image.read(1):
             return _error(
                 "missing image",
                 "The 'image' part of this request carried no bytes, so there is nothing to "
                 "measure.",
             )
+        # Reading to test the part CONSUMED it: a second read returns b"". One byte rather than
+        # the whole file, and rewound, because the next thing to touch these bytes is TICK-061's
+        # real metrology -- which would otherwise decode an empty image on every well-formed
+        # request, with this guard passing. That is the failure above, one layer down.
+        image.stream.seek(0)
 
         if "sidecar" not in request.form:
             return _error(

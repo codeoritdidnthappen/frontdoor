@@ -11,6 +11,7 @@ import re
 from pathlib import Path
 
 import pytest
+from flask import request
 from jsonschema import Draft202012Validator, ValidationError
 
 from frontdoor_server.app import (
@@ -191,6 +192,28 @@ def test_an_empty_image_is_told_apart_from_an_absent_one(client, sidecar):
     absent = post_measure(client, sidecar, omit=("image",)).get_json()
     assert empty["detail"] != absent["detail"]
     Draft202012Validator(ERROR_SCHEMA).validate(empty)
+
+
+def test_the_image_stream_is_left_readable_for_the_next_reader(sidecar):
+    """The emptiness check must not consume the part it is checking.
+
+    `FileStorage.read()` advances the stream, so a guard that reads to test the bytes leaves
+    `b""` for everything after it. Nothing reads the image today; TICK-061 is the declared next
+    step for this endpoint, and the obvious implementation would decode an empty image on every
+    well-formed request -- with this guard passing, because it ran first. That is the same
+    failure the guard exists to prevent, one layer down and harder to see.
+    """
+    app = create_app()
+    seen = {}
+
+    @app.after_request
+    def _what_is_left(response):
+        seen["remaining"] = request.files["image"].read()
+        return response
+
+    pixels = b"a real jpeg would go here"
+    post_measure(app.test_client(), sidecar, image=pixels)
+    assert seen["remaining"] == pixels
 
 
 def test_missing_sidecar_returns_400(client):
