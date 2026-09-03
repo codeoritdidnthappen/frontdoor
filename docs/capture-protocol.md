@@ -88,6 +88,11 @@ Across the view set (not necessarily every single shot), the set as a whole must
 - The full entrance
 - The approach path leading up to it
 - The door hardware, clearly, at least in the close-up
+- **The ground at the threshold** — at least one view (the far view is the natural one) must show
+  where the approach meets the doorway at ground level, with the base of the door frame and the
+  surface in front of it in frame. Pilot finding (TICK-092): when no view covers the ground plane,
+  the ramp/bevel and handrail criteria come back "not visible" or flip between "not visible" and
+  "absent" across views — the engine is answering honestly about framing, not about the entrance.
 
 ## What to skip — and what gets reshot on the spot
 
@@ -96,6 +101,11 @@ Across the view set (not necessarily every single shot), the set as a whole must
 - **No identifiable people.** If a person is identifiable in a shot — face visible, recognizable —
   that shot is retaken immediately. It is never kept "just in case" and never fixed later. If you
   can't get a clean retake in a reasonable wait, treat the entrance as a skip (see below).
+- **Check the glass.** Storefront doors are mirrors: the pilot (TICK-092) lost 3 of 65 shots to
+  identifiable faces that were *in the door glass* — reflections of passers-by, people inside seen
+  through the pane, and the photographer's own reflection — none noticed at capture. Before leaving
+  an entrance, flick through the set once looking specifically at the glass. Your own reflection
+  counts; shooting from a slight angle keeps you out of it.
 
 ## Record at capture — not from memory later
 
@@ -117,6 +127,17 @@ vocabulary; the notes are where the honest detail goes.
 
 **Surface** is not asked for on a screening capture. It is a metrology-mode field, and guessing at
 it here would put a value in the record that nobody looked at.
+
+### Imported photos (capture_mode "imported")
+
+Photos taken outside the app and imported later (#31, D-034) are legitimate captures, but tags
+that this protocol says to record *at the entrance* cannot be reconstructed afterward. Pilot
+finding (TICK-092): the pilot set came off a camera roll, so per-shot distance did not exist and
+was backfilled as a nominal 2.5 m. For imported captures: lighting and occlusion may be recorded
+from the photos themselves (they are visible in them); **distance is recorded only if it was
+actually noted in the field — otherwise it is entered as the nominal 2.5 m, and the entrance
+notes must say the distance is nominal.** Depth is null on imported captures; that costs nothing
+(TICK-023 AC5) but means the later depth comparison excludes them.
 
 ## You don't need permission — but don't make it a fight
 

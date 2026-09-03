@@ -1,0 +1,21 @@
+{
+ "capture_id": "E-008-3259",
+ "entrance_id": "E-008",
+ "captured_at": "2026-08-31T21:11:08Z",
+ "device_model": "iPhone 17 Pro",
+ "image": {
+  "path": "E-008/IMG_3259.JPEG",
+  "sha256": "5c074a0893df7c54b0317a4096fa4400d11ce97e806ff33d774f8023d0d9c96b",
+  "width": 1536,
+  "height": 2048,
+  "exif_orientation": 1
+ },
+ "depth": null,
+ "conditions": {
+  "distance_m": 2.5,
+  "lighting": "direct sun",
+  "occlusion": "none"
+ },
+ "split": "calib",
+ "capture_mode": "imported"
+}
