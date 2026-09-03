@@ -78,3 +78,19 @@ def test_the_server_is_configured_in_exactly_one_place():
     assert re.search(r'MeasureClient\(baseURL: URL\(string: "', source) is None, (
         "no hardcoded server URL"
     )
+
+
+def test_a_new_capture_retires_the_last_drain_verdict():
+    """A queue that just grew is not described by the drain that ran before it grew.
+
+    `lastDrainMessage` is rendered whenever it is non-nil, deliberately -- a successful drain used
+    to set the count to zero and hide its own confirmation. The cost of that fix is that a verdict
+    from an empty-queue drain outlives the emptiness: observed on the 15 Pro Max on 2026-09-02,
+    Home showing "3 captures on this phone only" directly above "Nothing to upload. Everything
+    here is already safe." Whichever way the render is written, the state must not say that.
+    """
+    body = code().split("case .success(let written):", 1)[1].split("case .failure", 1)[0]
+    assert "lastDrainMessage = nil" in body, (
+        "a written capture must retire the previous drain's verdict; without this the app tells "
+        "an operator their unsent captures are safe"
+    )

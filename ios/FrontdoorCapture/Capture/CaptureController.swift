@@ -542,6 +542,11 @@ final class CaptureController: ObservableObject {
         case .success(let written):
             photosTaken += 1
             refreshPendingUploads()
+            // The last drain's verdict described a queue this capture just changed. Left standing,
+            // "Nothing to upload. Everything here is already safe." sits under a nonzero count --
+            // observed on the 15 Pro Max, three captures on the phone, the app calling them safe.
+            // That is the one sentence an operator reads before wiping a day's work.
+            lastDrainMessage = nil
             lastThumbnail = pending.image
             lastRecord = record
             lastCaptureError = nil
