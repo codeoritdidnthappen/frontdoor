@@ -8,7 +8,8 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from frontdoor import storage
+from frontdoor import storage, storage_probe
+from frontdoor.depth_access import depth_store, load_depth_creds
 from frontdoor.storage import (
     OPEN_PREFIX,
     PROBE_KEY,
@@ -17,15 +18,15 @@ from frontdoor.storage import (
     SealedObjectDenied,
     StorageDenied,
     StorageError,
-    depth_store,
     image_store,
-    load_depth_creds,
     load_image_creds,
-    main,
-    probe_loader_denied_depth,
     storage_key,
-    verify,
 )
+
+# The credential probe moved to its own module (TICK-057): it READS depth, and `frontdoor.storage`
+# is imported by the loader and the server for images, so a route to depth from there is a route
+# they inherit. tests/test_depth_quarantine.py enforces the separation.
+from frontdoor.storage_probe import main, probe_loader_denied_depth, verify
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -85,7 +86,7 @@ def test_storage_layout_doc_names_two_buckets():
     assert "frontdoor-image" in text
     assert "frontdoor-depth" in text
     assert "10 GB" in text
-    assert "python -m frontdoor.storage verify" in text
+    assert "python -m frontdoor.storage_probe verify" in text
 
 
 def test_changes_log_records_the_provider():
@@ -310,7 +311,11 @@ def _scoped_stub(monkeypatch):
     account = _StubS3()
     account.buckets = {IMAGES, DEPTH}
     account.acl = {"img-key": {IMAGES}, "dep-key": {DEPTH}}
+    # Patched in BOTH modules. `_client` is resolved in whichever module's namespace the caller
+    # lives in, and the probe moved to `storage_probe` (TICK-057) while `ObjectStore` stayed in
+    # `storage` -- patching only one leaves the other talking to the real client.
     monkeypatch.setattr(storage, "_client", account.client)
+    monkeypatch.setattr(storage_probe, "_client", account.client)
     return account
 
 
@@ -335,6 +340,7 @@ def test_verify_fails_when_both_buckets_are_the_same_bucket(monkeypatch):
     account.buckets = {IMAGES}
     account.acl = {"img-key": {IMAGES}, "dep-key": {IMAGES}}
     monkeypatch.setattr(storage, "_client", account.client)
+    monkeypatch.setattr(storage_probe, "_client", account.client)
     with pytest.raises(StorageError, match="not denied on the depth bucket"):
         verify()
 
@@ -348,6 +354,7 @@ def test_verify_fails_when_one_token_is_used_for_both_credential_sets(monkeypatc
     account.buckets = {IMAGES, DEPTH}
     account.acl = {"img-key": {IMAGES, DEPTH}}
     monkeypatch.setattr(storage, "_client", account.client)
+    monkeypatch.setattr(storage_probe, "_client", account.client)
     with pytest.raises(StorageError, match="not denied on the depth bucket"):
         verify()
 
@@ -523,7 +530,7 @@ def test_depth_write_creds_are_a_different_token_from_the_harness_read_token(mon
     """
     _both_env(monkeypatch)
     _depth_write_env(monkeypatch)
-    assert storage.load_depth_write_creds().access_key != storage.load_depth_creds().access_key
+    assert storage.load_depth_write_creds().access_key != load_depth_creds().access_key
 
 
 def test_depth_write_creds_report_which_variable_is_missing(monkeypatch):
@@ -544,7 +551,7 @@ def test_the_write_probe_fails_loudly_when_the_token_can_read(monkeypatch):
     _depth_write_env(monkeypatch)
     _create_buckets()
     with pytest.raises(StorageError, match="not write-only"):
-        storage.probe_depth_write_is_write_only(storage.load_depth_write_creds())
+        storage_probe.probe_depth_write_is_write_only(storage.load_depth_write_creds())
 
 
 @mock_aws
@@ -560,5 +567,5 @@ def test_the_write_probe_passes_when_reads_are_denied(monkeypatch):
         def get(self, key, *, allow_sealed=False):
             raise denied
 
-    monkeypatch.setattr(storage, "ObjectStore", WriteOnly)
-    storage.probe_depth_write_is_write_only(storage.load_depth_write_creds())
+    monkeypatch.setattr(storage_probe, "ObjectStore", WriteOnly)
+    storage_probe.probe_depth_write_is_write_only(storage.load_depth_write_creds())

@@ -93,7 +93,7 @@ Create the write-only token in the Cloudflare dashboard as a third R2 API token,
 Write** on `frontdoor-depth` alone. Then prove the scope rather than trusting the dashboard:
 
 ```
-python -m frontdoor.storage verify
+python -m frontdoor.storage_probe verify
 ```
 
 It must print `loader-denied-on-depth` **and** `depth-write-denied-on-read`. If the second is
