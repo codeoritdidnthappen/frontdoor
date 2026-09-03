@@ -959,6 +959,23 @@ which the findings would have to state -- but that is a far smaller cost than a 
 that stops. Deciding to switch is a call for the day it is needed; recording that the option
 exists is this entry's job.
 
+CORRECTION 2026-09-02, confirmed by Emily: **the Pro Max is borrowed and has already been
+returned.** It is not hers, it comes back only intermittently by arrangement with its owner,
+and there is no fixed schedule. The paragraph above is left standing as written, because the
+capability half of it is right -- that handset is the probed one, LiDAR is present, and Emily
+has the Mac. What is wrong is "owned by", and availability is the half a mitigation needs.
+
+So the option this entry records **cannot be exercised on demand**. Invoking it means asking
+someone outside the team for a phone on the day James's build expires or his device
+disappoints the probe. Emily's other handset, the iPhone 16, is non-Pro with no LiDAR and does
+not satisfy clause 1 of this decision.
+
+The single point of failure should therefore be read as **unmitigated until the borrow is
+arranged for a defined window**. That is a call for whoever owns the schedule, not something a
+correction settles. What it does change today: the capability probe on James's phone (#24) is
+no longer merely urgent -- it is the only check standing in front of a capture week with no
+working instrument, and it is the one thing on this list that costs nothing but an appointment.
+
 **3. No caliper. There is no instrument ground truth.** SUPERSEDES **D-003**, which made a
 digital caliper at +/-0.01" the ground-truth instrument for threshold rise.
 

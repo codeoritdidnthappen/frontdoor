@@ -44,9 +44,29 @@ Measured 2026-09-02 with the in-app capability probe (TICK-020, #24); see
 |--------|--------|----------------------|---------------------|-------|-------------|
 | David | Samsung Galaxy S25 | **No** — Android | — | — | Cannot capture |
 | Emily | iPhone 16 (non-Pro) | Yes | **Yes**, verified | Relative (stereo) | **Full capture** |
-| Emily | iPhone 15 **Pro Max** | Yes | **Yes**, verified | **LiDAR**, and the probed one — TICK-020 ran `builtInLiDARDepthCamera` here | **Qualifies as the target device.** Not carrying capture (D-036), but the standby if James's phone expires or fails |
+| Emily *(**borrowed**, returned — see §2.1)* | iPhone 15 **Pro Max** | Yes | **Yes**, verified | **LiDAR**, and the probed one — TICK-020 ran `builtInLiDARDepthCamera` here | **Qualifies as the target device on capability.** Not carrying capture (D-036). **Not a standby that can be relied on** — the handset is not Emily's and is not on call |
 | James | iPhone 17 **Pro** (`iPhone18,1`) | **Yes**, build installed and launched 2026-09-02 | Probe not yet run | **LiDAR — the depth device (D-032, D-036)** | **Carries all capture.** Signing proven; capability unmeasured, so run the probe (#24) before it carries a capture day |
 | Ruben | Google Pixel 9 | **No** — Android | — | — | Cannot capture |
+
+### 2.1 The iPhone 15 Pro Max is borrowed
+
+**Confirmed by Emily 2026-09-02.** The handset is not hers. It was borrowed, has already been
+returned to its owner, and comes back only intermittently by arrangement — she has described the
+access as limited use time with no fixed schedule.
+
+Its *capability* rows above stand: the probe ran on this phone and the readings are real. What does
+not stand is availability. D-036's mitigation for its single point of failure reads "Emily's Pro Max
+takes over", which assumes a phone that can be picked up on the day James's build expires or his
+device fails. That phone would have to be requested from someone outside the team first.
+
+So the honest position is that **D-036's single point of failure is closer to unmitigated than the
+decision reads.** Two things follow, neither of them decided here:
+
+- The capability probe on James's phone (#24) stops being urgent and becomes the only check
+  standing between the project and a capture week with no working instrument.
+- If a real standby is wanted, it has to be arranged — borrowing the Pro Max for a defined window,
+  or accepting Emily's iPhone 16, which is non-Pro and has no LiDAR and so does not satisfy D-036's
+  depth-on-every-entrance clause.
 
 Three things the probe changed. **Intrinsics arrive on both tested phones, including the non-Pro**,
 which the row above used to deny — but only through `builtInDualWideCamera`, never through the
@@ -108,11 +128,12 @@ None of that is resolved here. It is recorded so the next person does not re-der
 Free-provisioning builds still expire every seven days (R-7), which is what TICK-001 (#13)
 schedules; see [docs/signing-calendar.md](docs/signing-calendar.md).
 
-- **Verified capture devices: 2**, both Emily's (iPhone 16, iPhone 15 Pro Max) — against A-3's
+- **Verified capture devices: 2** — Emily's iPhone 16, and the borrowed iPhone 15 Pro Max
+  (§2.1), only one of which the team can count on having. Against A-3's
   assumed three. James's iPhone 17 Pro now runs a build but has never had the probe run on it, so
   it is not counted as verified until it has a measured row.
-- **LiDAR-capable devices: 2** — James's iPhone **Pro** and Emily's iPhone **Pro Max**, confirmed
-  2026-09-02. This line once said 1. The Pro Max is the device TICK-020 actually ran
+- **LiDAR-capable devices: 2** — James's iPhone **Pro** and the borrowed iPhone **Pro Max**,
+  confirmed 2026-09-02. Only James's is available to the team without asking an outsider (§2.1). This line once said 1. The Pro Max is the device TICK-020 actually ran
   `builtInLiDARDepthCamera` on, making it the *probed* one of the two, while the phone carrying
   capture is the unprobed one. LiDAR is not a route to intrinsics on any device, so
   it does not gate capture the way A-1 assumed. **A-3 makes an iPhone Pro with LiDAR the product's
@@ -228,14 +249,20 @@ The response is a **schedule change, not an architecture change** (ARCHITECTURE.
 > (D-025, R-7), James runs Windows and cannot re-sign unaided, and the device has still never been
 > through the capability probe (#24). Probing it is urgent, not tidy.
 >
-> **There is a standby, and it should be used rather than admired.** James holds an iPhone **Pro**
-> and Emily an iPhone **Pro Max** — *both carry LiDAR*, so both qualify as the target device, and
-> Emily's is the one TICK-020 actually probed. Single-device capture is therefore a **deliberate
-> constraint, not a hardware limit**: one operator with one phone gives a uniform dataset and a
-> constant `device_model`. If James's build expires or his phone does not deliver what the probe
-> assumes, Emily's Pro Max takes over — same class, LiDAR present, already probed, and owned by
-> someone who can re-sign unaided. Switching mid-dataset makes `device_model` a two-level variable
-> the findings must state, which is a far smaller cost than a capture week that stops.
+> **The standby is thinner than it was written.** James holds an iPhone **Pro** and a second
+> qualifying handset exists — an iPhone **Pro Max**, LiDAR present, and the one TICK-020 actually
+> probed. On capability, single-device capture is a **deliberate constraint, not a hardware
+> limit**: one operator with one phone gives a uniform dataset and a constant `device_model`.
+>
+> **On availability it is not a standby at all.** Emily confirmed 2026-09-02 that the Pro Max is
+> **borrowed and already returned** (§2.1). Taking it over means asking its owner, on their
+> timetable, on the day James's build expires or his phone disappoints the probe. Emily's other
+> phone, the iPhone 16, is non-Pro with no LiDAR and does not satisfy D-036's depth clause.
+>
+> Switching would still cost only a two-level `device_model` the findings must state — cheap, if
+> the phone is there. **Nothing currently guarantees it is.** Either the borrow is arranged in
+> advance for a defined window, or the single point of failure is recorded as unmitigated and #24
+> becomes the only thing standing in front of it.
 
 1. **Cut the entrance target, never the protocol.** Per-entrance shot list, ROI taps, caliper
    ground truth and split-at-capture stay exactly as specified.
