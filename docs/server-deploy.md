@@ -201,7 +201,7 @@ comparing the file to itself reports success in exactly the case worth catching.
 `verify --recorded-only` does that weaker file-only comparison, for a machine without `flyctl` or
 `docker`. It prints a warning saying so, because it proves nothing about what is deployed.
 
-Currently recorded, both verified on 2026-09-02:
+Currently recorded, both verified on 2026-09-03:
 
 **Host digest:** `sha256:d1d3e6f594983ac4c44a213d6dc2c164aa3b408e312c0b0e3863d2503c5e75c6`
 (release `deployment-01M1MFVVXFFMPFN9XJKD49QZ8P`)
@@ -240,8 +240,13 @@ docker run --rm -p 8080:8080 -e PORT=8080 \
 curl http://127.0.0.1:8080/health
 ```
 
-Verified 2026-09-02 on the pulled image: `/health` 200, `POST /upload` 401 (closed, no key set),
-**87.6 MiB** resident.
+Verified 2026-09-03 on the pulled image for release
+`deployment-01M1MFVVXFFMPFN9XJKD49QZ8P`: `/health` 200, `GET /screen` 200 (the demo page),
+`POST /upload` 401 (closed, no key set), **92.2 MiB** resident.
+
+> Re-measure this after every deploy rather than carrying the previous release's numbers
+> forward. The digests above prove the laptop HOLDS the deployed image; only running it
+> proves the laptop can SERVE it, and those are the two different claims D-016 step 3 needs.
 
 That is **not** the 69 MiB recorded for the host above, and the difference is worth a sentence
 rather than being presented as one measurement. Same image, different measurement: the host figure
