@@ -38,6 +38,60 @@ def _base_names(node):
             yield b.attr
 
 
+def _arm_family():
+    """Every class in `frontdoor.metrology` whose base chain reaches `Arm`, by name.
+
+    Matching only the literal name `Arm` was not enough: a class extending `PendingArm` is an
+    arm and evaded every check here. That is a plausible accident -- "extend the pending stub for
+    a quick demo" -- not only an adversarial one. Collected by fixpoint so a new base class added
+    to the package is covered without anyone remembering to add it to a list.
+    """
+    definitions = {
+        node.name: set(_base_names(node))
+        for _, tree in _modules(METROLOGY)
+        for node in ast.walk(tree) if isinstance(node, ast.ClassDef)
+    }
+    family = {"Arm"}
+    while True:
+        grown = {n for n, bases in definitions.items() if bases & family} | family
+        if grown == family:
+            return family
+        family = grown
+
+
+def _arm_names_in(tree, family):
+    """The names THIS module can spell an arm base with, aliases included.
+
+    `from frontdoor.metrology import Arm as Base` is the other way a name-based match is evaded,
+    and it looks entirely innocent at the class definition.
+    """
+    local = set()
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("frontdoor.metrology"):
+            local |= {a.asname or a.name for a in node.names if a.name in family}
+    # Subclasses defined in this module become arm bases themselves, so a two-step chain inside
+    # one file is caught as well.
+    classes = [n for n in ast.walk(tree) if isinstance(n, ast.ClassDef)]
+    reachable = family | local
+    while True:
+        grown = {c.name for c in classes if set(_base_names(c)) & reachable} | reachable
+        if grown == reachable:
+            return reachable
+        reachable = grown
+
+
+def _arm_definitions(root):
+    """(class name, path) for every arm implementation under `root`."""
+    family = _arm_family()
+    found = []
+    for path, tree in _modules(root):
+        reachable = _arm_names_in(tree, family)
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ClassDef) and set(_base_names(node)) & reachable:
+                found.append((node.name, path))
+    return found
+
+
 def _called_name(node):
     f = node.func
     return f.id if isinstance(f, ast.Name) else getattr(f, "attr", "")
@@ -49,12 +103,7 @@ def test_every_arm_implementation_lives_in_the_metrology_package():
     An arm defined anywhere else is a second measurement path by construction, whatever it is
     called and however thin it looks.
     """
-    found = []
-    for path, tree in _modules(SRC):
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef) and "Arm" in set(_base_names(node)):
-                found.append((node.name, path))
-
+    found = _arm_definitions(SRC)
     assert found, "no Arm subclass found anywhere; the scan is not looking at the right thing"
     outside = [(n, p) for n, p in found if METROLOGY not in p.parents]
     assert not outside, f"Arm implementations outside frontdoor.metrology: {outside}"
@@ -75,11 +124,7 @@ def test_nothing_outside_the_metrology_package_registers_an_arm():
 def test_the_server_defines_no_arm_of_its_own():
     """The server is a thin entrypoint (ARCHITECTURE section 6). An arm living here would be
     reachable on stage and invisible to the harness -- R-11 exactly."""
-    server_arms = [
-        (node.name, path) for path, tree in _modules(SERVER)
-        for node in ast.walk(tree)
-        if isinstance(node, ast.ClassDef) and "Arm" in set(_base_names(node))
-    ]
+    server_arms = _arm_definitions(SERVER)
     assert not server_arms, f"the server defines its own arm(s): {server_arms}"
 
 
@@ -152,3 +197,39 @@ def test_the_stub_guard_would_notice_a_computed_value():
     constants = _module_constants(tree)
     with pytest.raises(AssertionError, match="derives a value"):
         _assert_literal_only(constants["STUB_ARMS"], constants)
+
+
+# --- the scanner's own reach --------------------------------------------------------------
+#
+# The guards above pass on a repo nobody has attacked, so what actually protects them is that
+# the matching is wide enough. A first version matched only the literal name `Arm` and a class
+# extending `PendingArm` sailed past all of it (found in review on #225). These pin the reach
+# so a later simplification cannot quietly narrow it again.
+
+
+def test_the_arm_family_includes_subclasses_not_just_the_base():
+    family = _arm_family()
+    assert "Arm" in family
+    assert {"CutArm", "PendingArm"} <= family, (
+        f"the family is {sorted(family)}; a class extending one of these IS an arm, and matching "
+        "only the base name lets it through"
+    )
+
+
+def test_an_aliased_import_still_counts_as_an_arm_base():
+    """`from frontdoor.metrology import Arm as Base` looks innocent at the class definition."""
+    tree = ast.parse(
+        "from frontdoor.metrology import Arm as Base\n"
+        "class Quiet(Base):\n    pass\n"
+    )
+    assert "Base" in _arm_names_in(tree, _arm_family())
+
+
+def test_a_subclass_chain_inside_one_module_is_followed():
+    tree = ast.parse(
+        "from frontdoor.metrology import Arm\n"
+        "class Mid(Arm):\n    pass\n"
+        "class Leaf(Mid):\n    pass\n"
+    )
+    reachable = _arm_names_in(tree, _arm_family())
+    assert {"Mid", "Leaf"} <= reachable
