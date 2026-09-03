@@ -116,8 +116,10 @@ be cleaned up.
 **Call it with `http.client`, not `urllib`.** `frontdoor_server.depth_ingest.put_depth` already
 does. Cloudflare's edge answers `urllib`'s `Python-urllib/3.x` User-Agent with `403 error code:
 1010` before the Worker runs at all, which reads as a Worker rejection and is not one. Sending no
-User-Agent, as `http.client` does, is fine. The Worker's `wrangler.jsonc` binds `DEPTH_BUCKET` directly, so
-there is no R2 access key to copy to Fly or into the Worker environment.
+User-Agent, as `http.client` does, is fine.
+
+The Worker's `wrangler.jsonc` binds `DEPTH_BUCKET` directly, so there is no R2 access key to copy
+to Fly or into the Worker environment.
 
 `FRONTDOOR_UPLOAD_KEY` is the shared secret for `POST /upload`, the capture-ingest endpoint
 (TICK-029, #33). The capture app sends it as `X-Frontdoor-Upload-Key`; the same value goes into the
