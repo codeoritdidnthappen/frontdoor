@@ -1062,3 +1062,40 @@ image runs, these record how it behaves once it is there.
 The container's response is also now validated against the frozen schema, rather than
 checked with a few ad-hoc assertions -- what the ticket's Testing section asked for, since
 the flask-client tests validate the source tree and not what the image puts on the wire.
+
+## D-037  AMENDMENT TO #187: R2 has no object versioning; the sealed partition is LOCKED instead
+
+Taken 2026-09-02 while implementing #187, which asked for object versioning on
+`frontdoor-image` and `frontdoor-depth` so that deleting a sealed object would be
+recoverable rather than merely detectable.
+
+**Versioning cannot be had.** `PutBucketVersioning` and `GetBucketVersioning` are on R2's
+unimplemented list and there is no `ListObjectVersions`. A delete against these buckets is
+final and there is nothing to restore from, so #187's premise -- and its delete-then-restore
+check -- do not survive contact with the provider.
+
+**What replaces it.** R2 bucket locks refuse deletes AND overwrites under a key prefix, for a
+period or indefinitely, and apply to objects already stored as well as to new ones. That makes
+losing a sealed object impossible rather than recoverable, which is the stronger property and
+the one D-007 actually needs: the sealed split is opened once, on 2026-09-07, and there is no
+second attempt.
+
+**Scoped to `sealed/`, not the bucket.** A bucket-wide rule breaks `python -m
+frontdoor.storage verify`, which writes and deletes `open/_frontdoor_probe` on every run.
+Locking the whole bucket would trade the D-020 and D-033 denials for a probe key nobody needs
+kept.
+
+**The check changes shape.** There being no restore, the confirmation is not
+delete-then-restore but delete-then-still-there: put a throwaway key under `sealed/`, delete
+it, read it back. The delete's return value proves nothing; the read-back does.
+
+**Consequence.** `ObjectStore.delete()` stays deliberately unguarded. A refusal in our own code
+does not stop a console click, an SDK script holding the images token, or a token that outlives
+the sprint, which is most of the ways the split actually gets lost -- the control belongs at the
+provider. Note also that locked bytes cannot be deleted, so `sealed/` becomes one-way against
+D-026's 10 GB cap; projected volume is 2-5 GB and only that prefix is locked.
+
+Not yet applied: the rule needs Cloudflare dashboard access. `data/STORAGE.md` carries the
+procedure and a marked placeholder for the transcript. #187's title and its versioning criteria
+need rewriting to match this entry.
+
