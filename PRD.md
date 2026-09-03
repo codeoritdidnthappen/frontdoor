@@ -234,6 +234,12 @@ Live measurement of an entrance in the venue, compared against a caliper reading
 including — if it occurs — an honest abstention. A pre-recorded backup of the same measurement is
 captured on Sep 8 and shown only if the live attempt fails.
 
+What the live endpoint serves is A and A′. Say so on stage rather than letting the screen imply
+four arms ran: Arm C is cut (D-030), and Arm B needs the monocular depth model, which the deployed
+256 MB machine does not carry (D-031), so it returns `unavailable`. Both amendments are reported
+in their own right under §2; this is the note that keeps the demo itself from overstating what the
+phone just did.
+
 Presentation maps to the Track 2 rubric: research question → approach → technical demo → what we
 learned and where it goes next → slide deck.
 

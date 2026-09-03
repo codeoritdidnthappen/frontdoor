@@ -12,4 +12,6 @@ RUN pip install --no-cache-dir ".[server]"
 ENV PORT=8080
 EXPOSE 8080
 
-CMD gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 2 --timeout 30 frontdoor_server.wsgi:app
+# exec, so gunicorn is PID 1 and a stop signal reaches it instead of the shell. The shell
+# stays in the picture only to expand $PORT, which the host assigns at run time.
+CMD ["sh", "-c", "exec gunicorn --bind 0.0.0.0:${PORT} --workers 1 --threads 2 --timeout 30 frontdoor_server.wsgi:app"]

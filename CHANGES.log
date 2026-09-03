@@ -1039,3 +1039,26 @@ transforming the intrinsics to match, by hand, which is the same class of error 
 The depth map does not carry the field. Depth is `{path, sha256}` and nothing else; it has no
 EXIF, and that object is `additionalProperties: false` -- a field riding along on a shared type
 is the shape QA B01 already caught once.
+## 2026-09-02 — Signals, credentials and the memory floor (TICK-062, issue #50)
+
+Three properties of the image itself, none of which D-031 covers: it records where the
+image runs, these record how it behaves once it is there.
+
+- gunicorn now runs as PID 1. The shell-form `CMD` left `sh` holding PID 1, so a stop
+  signal killed the shell and the container went down with in-flight requests still open.
+  D-016's fallback chain stops and starts this container while a phone may be uploading.
+  Now `CMD ["sh", "-c", "exec gunicorn …"]`, with the shell kept only to expand `$PORT`.
+- The absence of credentials in the image is asserted, not assumed: no `FRONTDOOR_*` in the
+  image config and no `.env` in any layer. A real `.env` sits in the working tree and
+  python-dotenv is a runtime dependency, so a loosened `.dockerignore` would have shipped
+  live R2 keys into an image on a public host. Verified against a deliberately leaky build.
+- The memory floor is far below the machine we bought. D-031 measured 69 MiB at the 256 MB
+  cap; below that, the server still serves four concurrent 12 MB uploads on `-m 24m` and is
+  OOM-killed at `-m 16m`. Werkzeug spools a large file part to disk rather than holding it
+  in memory, so upload size barely moves the resident set. The committed test runs the
+  four-way case at the deployed machine's 256 MB, which makes it a fit check against the
+  real instance rather than a measurement of the ceiling.
+
+The container's response is also now validated against the frozen schema, rather than
+checked with a few ad-hoc assertions -- what the ticket's Testing section asked for, since
+the flask-client tests validate the source tree and not what the image puts on the wire.
