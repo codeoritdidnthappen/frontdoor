@@ -10,7 +10,7 @@ import pytest
 
 from frontdoor.screening import CRITERIA_KEYS, ImageAssessment, ScreeningConfig
 from frontdoor_server.app import create_app
-from frontdoor_server.screen_view import ENGINE_KEY, MAX_IMAGES
+from frontdoor_server.screen_view import ENGINE_KEY, MAX_IMAGES, WORDING
 
 # Known assignments under the committed seed (pinned in test_split.py):
 DEV_ID = "E-001"
@@ -251,6 +251,86 @@ def test_server_boots_and_serves_health_without_an_api_key(monkeypatch):
 
 
 def test_wrong_method_on_screen_is_json_405():
-    response = make_client(FakeEngine()).get("/screen")
+    """GET used to be the wrong method here; it now serves the demo page, so this asserts
+    the same thing against a method that is still wrong.
+
+    What it has always guarded is that a wrong method answers with the JSON error contract
+    rather than Werkzeug's HTML page -- the consumer is a client parsing JSON over a venue
+    network, and HTML where it expects JSON turns a clear message into a parse failure.
+    """
+    response = make_client(FakeEngine()).put("/screen")
     assert response.status_code == 405
     assert response.headers["Content-Type"].startswith("application/json")
+
+
+# --- the laptop demo page (GET /screen) ---------------------------------------------------
+#
+# The demo surface, chosen over an in-app client because the phone route lands behind a
+# signing session with no agreed date (#214) on a build that expires on Demo Day itself.
+# These are contract tests on what the page must not do, not a rendering test: the page has
+# no logic worth testing in a browser, and the things that would ruin a demo are structural.
+
+
+def page():
+    return create_app().test_client().get("/screen")
+
+
+def test_the_page_is_served_as_html():
+    response = page()
+    assert response.status_code == 200
+    assert response.mimetype == "text/html"
+
+
+def test_the_page_is_served_without_an_api_key():
+    """The page must render on a laptop that cannot reach the model.
+
+    `create_app()` here has no injected engine and the suite sets no key, so this is the
+    keyless case. If serving the page ever required the engine, a missing key would turn
+    the demo surface itself into a 503 instead of a page that says why screening failed.
+    """
+    assert page().status_code == 200
+
+
+def test_get_and_post_share_the_path():
+    """One path, two methods -- so the page posts to itself and there is no second URL to
+    get wrong on stage."""
+    client = create_app().test_client()
+    assert client.get("/screen").status_code == 200
+    assert client.post("/screen").status_code == 400
+
+
+def test_the_page_makes_no_external_requests():
+    """D-016's fallback runs this container on a laptop with no working venue network.
+
+    A font, script or stylesheet pulled from a CDN renders blank at exactly the moment
+    the fallback exists for. Everything is inline; nothing is fetched but the page's own
+    POST back to /screen.
+    """
+    html = page().get_data(as_text=True)
+    for scheme in ("http://", "https://", "//cdn", "//fonts"):
+        assert scheme not in html, f"page references an external resource: {scheme}"
+
+
+def test_the_page_does_not_hardcode_the_honesty_wording():
+    """The wording is printed from the response, not copied into the page.
+
+    A second copy in HTML is a copy that drifts: `frontdoor.screening` could tighten the
+    disclaimer and the page would keep showing the old one, which is the failure mode the
+    honesty rule exists to prevent.
+    """
+    html = page().get_data(as_text=True)
+    assert WORDING not in html
+    assert "body.wording" in html
+
+
+def test_the_page_carries_a_provenance_tag():
+    """#73's added AC: every demo moment is tagged live or canned as it is displayed.
+
+    This page can only show a result it just fetched, so the tag is LIVE and there is no
+    canned branch that could mislabel a recording as live.
+    """
+    html = page().get_data(as_text=True)
+    assert "LIVE " in html
+    # Only in the comment explaining why there is no canned branch -- never in anything
+    # the page can render.
+    assert html.count("CANNED") == 1

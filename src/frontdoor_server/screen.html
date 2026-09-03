@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>frontdoor — screen an entrance</title>
+<!--
+  The laptop surface for the Demo Day technical demo (deck-outline.md section 6).
+
+  Everything is inline on purpose. D-016's fallback chain has steps that run this
+  container on a laptop with no working venue network, and a page that pulls a font or
+  a script from a CDN is a page that renders blank at exactly the moment it matters.
+  No external requests, no build step: it is served by the same image that answers
+  POST /screen, so what is on stage is what was tested.
+
+  This page decides nothing. Verdicts, the aggregate and the flip rate are all computed
+  server-side by frontdoor.screening; the page renders what came back and says where it
+  came from. The honesty wording is printed verbatim from the response rather than
+  copied into this file, so it cannot drift from what the API says.
+-->
+<style>
+  :root {
+    --ink: #111827; --muted: #6b7280; --line: #e5e7eb; --bg: #f9fafb;
+    --present: #047857; --present-bg: #ecfdf5;
+    --absent: #374151; --absent-bg: #f3f4f6;
+    --unseen: #92400e; --unseen-bg: #fffbeb;
+    --bad: #b91c1c; --bad-bg: #fef2f2;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px; font-family: system-ui, -apple-system, sans-serif;
+    color: var(--ink); background: var(--bg); line-height: 1.45;
+  }
+  main { max-width: 900px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+
+  form, .panel {
+    background: #fff; border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  input[type=file], input[type=text] {
+    width: 100%; padding: 8px; border: 1px solid var(--line); border-radius: 6px;
+    font: inherit; margin-bottom: 12px; background: #fff;
+  }
+  button {
+    font: inherit; font-weight: 600; padding: 9px 18px; border-radius: 6px;
+    border: 1px solid var(--ink); background: var(--ink); color: #fff; cursor: pointer;
+  }
+  button[disabled] { opacity: .5; cursor: default; }
+  .hint { font-size: 12px; color: var(--muted); margin: -6px 0 12px; }
+
+  /* Every displayed moment carries its own provenance tag, per #73's added AC on the
+     deck: shown at the moment it is displayed, not narrated afterwards. This page can
+     only ever show a result it just fetched, so the tag is LIVE and carries the wall
+     clock time the response arrived. There is deliberately no CANNED mode here -- the
+     recorded backup is TICK-104 and lives outside this page, so this tag cannot lie. */
+  .tag {
+    display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+    padding: 3px 8px; border-radius: 4px; background: var(--bad); color: #fff;
+    vertical-align: middle;
+  }
+
+  .verdict {
+    display: inline-block; font-size: 12px; font-weight: 700; padding: 3px 9px;
+    border-radius: 999px; white-space: nowrap;
+  }
+  .present { color: var(--present); background: var(--present-bg); }
+  .absent  { color: var(--absent);  background: var(--absent-bg); }
+  .not_visible { color: var(--unseen); background: var(--unseen-bg); }
+  .invalid { color: var(--bad); background: var(--bad-bg); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  td.crit { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+  .flip { color: var(--muted); font-size: 12px; }
+
+  .wording {
+    border-left: 3px solid var(--ink); background: #fff; padding: 10px 14px;
+    font-size: 13px; margin: 16px 0 0;
+  }
+  .meta { font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .error { border-color: var(--bad); background: var(--bad-bg); }
+  .error h2 { font-size: 15px; margin: 0 0 6px; color: var(--bad); }
+  .error p { margin: 0; font-size: 14px; }
+  .imgname { font-weight: 600; font-size: 14px; margin: 18px 0 6px; }
+  .imgerr { color: var(--bad); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Screen an entrance</h1>
+  <p class="sub">
+    One to six photos of the same entrance. Verdicts come from the screening engine on the
+    server; nothing is computed in this page.
+  </p>
+
+  <form id="f">
+    <label for="images">Entrance photos (1–6)</label>
+    <input id="images" type="file" name="images" accept="image/jpeg,image/png,image/webp" multiple required>
+    <p class="hint">JPEG, PNG or WebP. More views give a majority verdict and a flip rate.</p>
+
+    <label for="entrance">Entrance ID (optional)</label>
+    <input id="entrance" type="text" placeholder="E-001">
+    <p class="hint">Supplying one enforces the split: a sealed entrance is refused, not screened.</p>
+
+    <button id="go" type="submit">Screen</button>
+  </form>
+
+  <div id="out"></div>
+</main>
+
+<script>
+const CRITERION_LABELS = {
+  ramp_or_bevel: "Ramp or bevelled threshold",
+  handrails: "Handrails",
+  accessible_door_hardware: "Accessible door hardware",
+  accessibility_signage: "Accessibility signage",
+};
+
+const el = (tag, cls, text) => {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text !== undefined) n.textContent = text;
+  return n;
+};
+
+// Any verdict the server sends that this page does not recognise is rendered as-is and
+// styled as invalid, never silently mapped to something legible. An out-of-vocabulary
+// verdict arrives as "INVALID:<what the model said>" and the operator should see that.
+function verdictCell(verdict) {
+  const known = ["present", "absent", "not_visible"];
+  const cls = known.includes(verdict) ? verdict : "invalid";
+  const label = verdict === null || verdict === undefined ? "no verdict" : verdict;
+  return el("span", "verdict " + cls, label);
+}
+
+function criteriaTable(criteria) {
+  const table = el("table");
+  const head = el("tr");
+  ["Criterion", "Verdict", "Confidence", "Evidence"].forEach(h => head.appendChild(el("th", null, h)));
+  table.appendChild(head);
+  Object.keys(CRITERION_LABELS).forEach(key => {
+    const entry = (criteria || {})[key] || {};
+    const row = el("tr");
+    const name = el("td", "crit");
+    name.appendChild(document.createTextNode(CRITERION_LABELS[key]));
+    row.appendChild(name);
+    const v = el("td");
+    v.appendChild(verdictCell(entry.verdict));
+    row.appendChild(v);
+    row.appendChild(el("td", null, entry.confidence === undefined ? "—" : String(entry.confidence)));
+    row.appendChild(el("td", null, entry.evidence || "—"));
+    table.appendChild(row);
+  });
+  return table;
+}
+
+function aggregateTable(aggregate) {
+  const table = el("table");
+  const head = el("tr");
+  ["Criterion", "Majority", "Flip rate", "Views"].forEach(h => head.appendChild(el("th", null, h)));
+  table.appendChild(head);
+  Object.keys(CRITERION_LABELS).forEach(key => {
+    const s = aggregate[key] || {};
+    const row = el("tr");
+    row.appendChild(el("td", "crit", CRITERION_LABELS[key]));
+    const v = el("td");
+    v.appendChild(verdictCell(s.verdict));
+    row.appendChild(v);
+    // Reported, never hidden: a majority that half the views disagree with is a weak
+    // majority, and the number is the only thing that says so.
+    row.appendChild(el("td", "flip",
+      s.flip_rate === null || s.flip_rate === undefined ? "—" : (s.flip_rate * 100).toFixed(0) + "%"));
+    row.appendChild(el("td", "flip",
+      Object.entries(s.counts || {}).map(([k, n]) => k + " " + n).join(", ") || "—"));
+    table.appendChild(row);
+  });
+  return table;
+}
+
+function renderError(body, status) {
+  const panel = el("div", "panel error");
+  panel.appendChild(el("h2", null, (body && body.error) || "request failed"));
+  panel.appendChild(el("p", null,
+    (body && body.detail) || ("The server returned status " + status + " with no detail.")));
+  return panel;
+}
+
+function renderResult(body) {
+  const frag = document.createDocumentFragment();
+  const panel = el("div", "panel");
+
+  const header = el("h2");
+  header.style.cssText = "font-size:16px;margin:0 0 4px";
+  header.appendChild(document.createTextNode(
+    body.entrance_id ? "Entrance " + body.entrance_id + " " : "Screening result "));
+  const tag = el("span", "tag", "LIVE " + new Date().toLocaleTimeString());
+  header.appendChild(tag);
+  panel.appendChild(header);
+
+  if (body.aggregate) {
+    panel.appendChild(el("p", "sub", "Majority across " + body.images.length + " views."));
+    panel.appendChild(aggregateTable(body.aggregate));
+  }
+
+  body.images.forEach(img => {
+    panel.appendChild(el("p", "imgname", img.filename || "(unnamed image)"));
+    if (img.criteria) {
+      panel.appendChild(criteriaTable(img.criteria));
+    } else {
+      // A view the engine could not assess is shown as a failed view, not dropped. A
+      // silently missing image would make the aggregate look better supported than it is.
+      panel.appendChild(el("p", "imgerr", "Not assessed — " + (img.error || "unknown error")));
+    }
+  });
+
+  // Printed from the response, not hardcoded here, so this page cannot drift from the
+  // wording the API commits to.
+  panel.appendChild(el("p", "wording", body.wording || ""));
+  panel.appendChild(el("p", "meta",
+    "status " + body.status + " · model " + body.model + " · " + body.latency_ms + " ms"));
+
+  frag.appendChild(panel);
+  return frag;
+}
+
+document.getElementById("f").addEventListener("submit", async ev => {
+  ev.preventDefault();
+  const out = document.getElementById("out");
+  const button = document.getElementById("go");
+  const files = document.getElementById("images").files;
+
+  out.replaceChildren();
+  // Said plainly rather than shown as a spinner: the server assesses every view in one
+  // request and answers once, so nothing resolves progressively and the page must not
+  // imply that it does.
+  const waiting = el("div", "panel", "Screening " + files.length +
+    (files.length === 1 ? " view. All views are assessed in one request; results arrive together."
+                        : " views. All views are assessed in one request; results arrive together."));
+  out.appendChild(waiting);
+  button.disabled = true;
+
+  const data = new FormData();
+  for (const file of files) data.append("images", file);
+  const entrance = document.getElementById("entrance").value.trim();
+  if (entrance) data.append("entrance_id", entrance);
+
+  try {
+    const response = await fetch("/screen", { method: "POST", body: data });
+    let body = null;
+    try { body = await response.json(); } catch (_) { /* handled as a null body below */ }
+    out.replaceChildren(response.ok && body ? renderResult(body) : renderError(body, response.status));
+  } catch (err) {
+    // A dead network is the expected failure in this room, not an exceptional one.
+    out.replaceChildren(renderError(
+      { error: "could not reach the server", detail: String(err) }, 0));
+  } finally {
+    button.disabled = false;
+  }
+});
+</script>
+</body>
+</html>

@@ -17,8 +17,9 @@ clear 503 rather than a crash. Tests inject a fake engine via app.config.
 
 import os
 import time
+from importlib import resources
 
-from flask import Blueprint, current_app, request
+from flask import Blueprint, Response, current_app, request
 
 from frontdoor.screening import ScreeningEngine, aggregate_assessments
 from frontdoor.split import InvalidEntranceId, assign_split, canonical_entrance_id
@@ -61,6 +62,23 @@ def _get_engine():
     if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
         return None
     return ScreeningEngine()
+
+
+@screen_page.get("/screen")
+def screen_html():
+    """The laptop surface for the Demo Day technical demo (deck-outline.md section 6).
+
+    Served by the same image that answers the POST, so the page on stage is the page
+    that was tested -- and so D-016's fallback steps, which run this container on a
+    laptop, carry the demo UI with them. The page holds no logic: verdicts, the
+    aggregate and the flip rate are computed here in Python and rendered there.
+    """
+    html = (
+        resources.files("frontdoor_server")
+        .joinpath("screen.html")
+        .read_text(encoding="utf-8")
+    )
+    return Response(html, mimetype="text/html")
 
 
 @screen_page.post("/screen")
