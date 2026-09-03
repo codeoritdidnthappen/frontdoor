@@ -134,7 +134,7 @@ someone who means it.
 
 ## Lock the sealed partition
 
-Not done yet — see the placeholder below. In the Cloudflare dashboard (R2), for **both**
+Applied 2026-09-03 on both buckets — see the recorded result below. In the Cloudflare dashboard (R2), for **both**
 buckets:
 
 1. Open the bucket → **Settings** → **Bucket lock rules** → **Add rule**.
@@ -184,13 +184,28 @@ if you hold the harness token -- the depth reader lives there, not in `frontdoor
 (TICK-057). The probe object is then undeletable for as long as the rule stands — that is the
 proof, and it costs ten bytes.
 
-> **NOT RUN YET (#187).** Whoever has dashboard access: paste the `bucket lock list` output
-> for both buckets and the transcript above in here, then tick the boxes on #187.
->
-> ```
-> TODO  lock rules on frontdoor-image and frontdoor-depth
-> TODO  delete-then-still-there transcript
-> ```
+**Applied and verified, 2026-09-03 (#187).** Rule `lock-sealed-indefinite`, prefix
+`sealed/`, retention indefinite, on `frontdoor-image` and `frontdoor-depth` both. Created
+through the dashboard; the buckets are on our own Cloudflare account.
+
+The delete-then-still-there check, run against the locked prefix on each bucket:
+
+```
+=== frontdoor-image ===
+  put    sealed/_frontdoor_lock_probe  -> ok
+  delete -> refused: ObjectLockedByBucketPolicy
+  get    -> b'lock probe'   ==> LOCK HELD
+
+=== frontdoor-depth ===
+  put    sealed/_frontdoor_lock_probe  -> ok
+  delete -> refused: ObjectLockedByBucketPolicy
+  get    -> b'lock probe'   ==> LOCK HELD
+```
+
+R2 refused the delete loudly rather than returning quietly, which is more than the check
+required -- the read-back is what proves it, and the refusal only makes it legible. Both
+probe objects are now permanently undeletable and stay where they are: that is the standing
+evidence the rule is on, and it costs twenty bytes.
 
 **Against the free tier.** A lock rule stores no bytes and costs no operations, and a
 locked object is billed as ordinary storage against the same 10 GB in **Provider** above
