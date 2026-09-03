@@ -800,7 +800,6 @@ final class CaptureController: ObservableObject {
     }
 }
 
-/// What one finished exposure yielded, before any judgement about whether it is usable.
 /// UIImage.Orientation to EXIF tag 274. UIKit offers no initialiser for this direction, and the
 /// two enums are NOT in the same order -- `.down` is 3 while `CGImagePropertyOrientation` counts
 /// mirrored variants at 2 and 4 -- so the mapping is written out rather than bridged by rawValue.
@@ -818,6 +817,7 @@ func exifOrientation(of orientation: UIImage.Orientation) -> Int {
     }
 }
 
+/// What one finished exposure yielded, before any judgement about whether it is usable.
 private struct CapturedPhoto {
     var image: UIImage
     /// The camera's OWN encoded bytes. Held because AC2 hashes what is written, and a

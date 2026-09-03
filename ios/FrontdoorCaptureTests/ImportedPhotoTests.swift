@@ -206,3 +206,24 @@ extension ImportedPhotoTests {
         XCTAssertEqual(d.exifOrientation, 1)
     }
 }
+
+extension ImportedPhotoTests {
+
+    /// Why `read` does not range-check the orientation.
+    ///
+    /// The schema constrains `exif_orientation` to 1-8, and this is the only reader whose input
+    /// this app did not write -- so a guard looks obviously right. It would be unreachable:
+    /// ImageIO normalises an impossible tag before it reaches the properties dictionary. This
+    /// pins that, because the guard's absence is only safe while it holds. If a future OS starts
+    /// passing 9 through, this fails, and the check has to be written after all -- rather than a
+    /// capture being written to disk with an orientation the server rejects at upload, from a 422
+    /// the client treats as not worth retrying.
+    func testAnImpossibleOrientationIsNormalisedBeforeWeSeeIt() throws {
+        let data = jpeg(exif: [kCGImagePropertyExifDateTimeOriginal: "2026:09:01 14:22:31"],
+                        tiff: [kCGImagePropertyTIFFModel: "iPhone 17 Pro"],
+                        orientation: 9)
+        let d = try XCTUnwrap(details(data))
+        XCTAssertTrue((1...8).contains(d.exifOrientation),
+                      "ImageIO no longer normalises tag 274; read() now needs a range check")
+    }
+}

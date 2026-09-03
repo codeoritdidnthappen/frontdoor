@@ -68,6 +68,14 @@ enum ImportedPhoto {
 
         // Absent means 1 by the EXIF specification -- top-left, nothing to rotate -- so this is
         // the one default here that is not a guess. Every other missing field is a refusal.
+        //
+        // NOT range-checked against the schema's 1-8, though this is the only reader whose input
+        // this app did not write. ImageIO normalises the tag before it reaches this dictionary:
+        // a file carrying 9 reads back as 1. A guard here would be unreachable, and an
+        // unreachable refusal is a message nobody can ever see and an enum case no switch can
+        // exercise. `testAnImpossibleOrientationIsNormalisedBeforeWeSeeIt` pins that assumption,
+        // so if a future OS stops normalising, the guard's absence fails loudly rather than
+        // writing a sidecar the schema will reject at upload.
         let orientation = props[kCGImagePropertyOrientation] as? Int ?? 1
 
         let exif = props[kCGImagePropertyExifDictionary] as? [CFString: Any]
