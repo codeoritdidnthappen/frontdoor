@@ -69,6 +69,13 @@ def test_an_arm_set_that_drifts_from_the_library_fails_at_import(monkeypatch):
         importlib.reload(app_module)
 
 
+def test_ac_1_ac_2_duplicate_library_arm_fails_at_import(monkeypatch):
+    """Set equality must not hide an extra harness run under an existing name."""
+    monkeypatch.setattr(metrology, "ARM_NAMES", (*ARM_NAMES, "C"))
+    with pytest.raises(RuntimeError, match="disagree"):
+        importlib.reload(app_module)
+
+
 @pytest.fixture(autouse=True)
 def _restore_the_module():
     """Reloading app_module in one test must not leave a patched module behind for the rest of

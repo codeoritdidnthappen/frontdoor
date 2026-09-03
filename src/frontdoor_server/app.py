@@ -138,7 +138,7 @@ STUB_ARMS = {
 #
 # `raise` rather than `assert`: assertions vanish under `python -O`, and this must hold in the
 # container.
-if set(STUB_ARMS) != set(ARM_NAMES):
+if len(STUB_ARMS) != len(ARM_NAMES) or set(STUB_ARMS) != set(ARM_NAMES):
     raise RuntimeError(
         "the server's arms and frontdoor.metrology.ARM_NAMES disagree: "
         f"server {sorted(STUB_ARMS)} vs library {sorted(ARM_NAMES)}. "
