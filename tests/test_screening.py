@@ -3,6 +3,7 @@
 No live API calls: every test injects a fake anthropic client.
 """
 
+import base64
 import json
 import logging
 import threading
@@ -21,6 +22,7 @@ from frontdoor.screening import (
     SealedSplitError,
     SpendCapError,
     aggregate_assessments,
+    build_integrated_prompt,
     build_prompt,
     validate_verdicts,
 )
@@ -228,7 +230,10 @@ def test_model_call_carries_the_honest_criteria_contract():
     client = FakeClient([_Response(_payload())])
     ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
     call = client.calls[0]
-    assert call["model"] == "claude-opus-5"
+    assert call["model"] == "claude-sonnet-5"
+    # Offline eval: 2000 tokens truncates sonnet's JSON on hard entrances once
+    # adaptive thinking has eaten the budget; the default must stay >= 4000.
+    assert call["max_tokens"] >= 4000
     assert call["system"] == SYSTEM_PROMPT
     assert "not_visible" in call["system"]
     assert "never guess measurements" in call["system"]
@@ -243,6 +248,122 @@ def test_model_is_overridable_via_config():
     config = ScreeningConfig(model="claude-haiku-x")
     ScreeningEngine(client=client, config=config).assess_image(b"jpeg-bytes")
     assert client.calls[0]["model"] == "claude-haiku-x"
+
+
+# --- integrated multi-view mode ----------------------------------------------
+#
+# Offline eval on the 12-entrance pilot set: per-image majority voting amplifies
+# shared camera-position blind spots, so the integrated mode sends every view of
+# an entrance in ONE model call. These tests pin the call structure, the split
+# discipline, the n-image spend booking, and that refusal/truncation are
+# recorded, never silent. Same rule as above: no live API calls.
+
+
+def test_integrated_sends_all_views_in_one_call_with_image_blocks():
+    client = FakeClient([_Response(_payload())])
+    engine = ScreeningEngine(client=client)
+    engine.screen_entrance_integrated(DEV_ID, [b"a", b"b", b"c"])
+    assert len(client.calls) == 1
+    content = client.calls[0]["messages"][0]["content"]
+    assert [block["type"] for block in content] == ["image", "image", "image", "text"]
+    sent = [base64.b64decode(block["source"]["data"]) for block in content[:3]]
+    assert sent == [b"a", b"b", b"c"]
+    assert content[3]["text"] == build_integrated_prompt(3)
+
+
+def test_integrated_prompt_instructs_cross_view_integration():
+    prompt = build_integrated_prompt(4)
+    assert "4 photos" in prompt
+    assert "SAME entrance" in prompt
+    assert "ANY view" in prompt
+    assert "trust the view that actually shows the relevant area" in prompt
+    for key in CRITERIA_KEYS:
+        assert key in prompt
+
+
+def test_criteria_text_carries_the_validated_decision_rules():
+    prompt = build_prompt()
+    # camera-position bias: commit on the ground plane, not the frontal frame
+    assert "ground plane" in prompt
+    assert "side of the entrance" in prompt
+    # look-alike confusion: closed-fist rule, with the confusables excluded
+    assert "closed fist" in prompt
+    assert "push plates" in prompt and "latch brackets" in prompt
+
+
+def test_integrated_summary_is_the_integrated_verdicts_with_zero_flip_rate():
+    client = FakeClient([_Response(_payload("present", handrails={
+        "verdict": "absent", "confidence": 90, "evidence": "no rails in any view",
+    }))])
+    engine = ScreeningEngine(client=client)
+    result = engine.screen_entrance_integrated(DEV_ID, [b"a", b"b"])
+    assert isinstance(result, EntranceScreening)
+    assert result.entrance_id == DEV_ID and result.split == "dev"
+    assert len(result.assessments) == 1
+    assert result.summary["ramp_or_bevel"].verdict == "present"
+    assert result.summary["handrails"].verdict == "absent"
+    for key in CRITERIA_KEYS:
+        assert result.summary[key].flip_rate == 0.0
+
+
+def test_integrated_sealed_entrance_is_refused_before_any_model_call():
+    client = FakeClient([_Response(_payload())])
+    engine = ScreeningEngine(client=client)
+    with pytest.raises(SealedSplitError, match=SEALED_ID):
+        engine.screen_entrance_integrated(SEALED_ID, [b"a", b"b"])
+    assert client.calls == []
+
+
+def test_integrated_books_spend_for_every_image_in_the_call():
+    client = FakeClient([_Response(_payload())])
+    engine = ScreeningEngine(client=client)
+    engine.screen_entrance_integrated(DEV_ID, [b"a", b"b", b"c"])
+    assert engine.spent_usd == pytest.approx(3 * engine.config.usd_per_image)
+
+
+def test_integrated_spend_cap_refuses_the_call_before_spending():
+    client = FakeClient([_Response(_payload())])
+    config = ScreeningConfig(max_usd_per_run=0.10, usd_per_image=0.05)
+    engine = ScreeningEngine(client=client, config=config)
+    with pytest.raises(SpendCapError, match=r"\$0\.10"):
+        engine.screen_entrance_integrated(DEV_ID, [b"a", b"b", b"c"])
+    assert client.calls == []
+    assert engine.spent_usd == 0.0
+
+
+def test_integrated_refusal_is_a_recorded_error_never_silent():
+    client = FakeClient([_Response(_payload(), stop_reason="refusal")])
+    engine = ScreeningEngine(client=client)
+    result = engine.screen_entrance_integrated(DEV_ID, [b"a"])
+    (assessment,) = result.assessments
+    assert assessment.criteria is None
+    assert "refused" in assessment.error
+    assert result.summary["ramp_or_bevel"].verdict is None
+
+
+def test_integrated_truncation_is_a_recorded_error_never_silent():
+    client = FakeClient([_Response('{"criteria": {"ramp', stop_reason="max_tokens")])
+    engine = ScreeningEngine(client=client)
+    result = engine.screen_entrance_integrated(DEV_ID, [b"a"])
+    (assessment,) = result.assessments
+    assert assessment.criteria is None
+    assert "truncated" in assessment.error
+    assert "max_tokens" in assessment.error
+
+
+def test_integrated_media_types_default_to_jpeg_and_are_overridable():
+    client = FakeClient([_Response(_payload()), _Response(_payload())])
+    engine = ScreeningEngine(client=client)
+    engine.assess_images_integrated([b"a", b"b"])
+    engine.assess_images_integrated(
+        [b"a", b"b"], media_types=["image/png", "image/webp"]
+    )
+    first = client.calls[0]["messages"][0]["content"]
+    assert [b["source"]["media_type"] for b in first[:2]] == ["image/jpeg"] * 2
+    second = client.calls[1]["messages"][0]["content"]
+    assert [b["source"]["media_type"] for b in second[:2]] == [
+        "image/png", "image/webp",
+    ]
 
 
 def test_the_spend_cap_is_checked_and_reserved_atomically():
