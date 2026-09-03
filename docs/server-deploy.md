@@ -190,12 +190,41 @@ worker would have been killed and a six-view entrance could never have been scre
 machine at all. The concurrency change is what brings it inside the timeout, and it is also what
 puts six base64 payloads in memory at once instead of one.
 
-> **Unmeasured, and the next thing to settle: two `/screen` requests at once.** The container runs
-> `--workers 1 --threads 2`, so two can be in flight. At ~117 MiB each that is roughly
-> **69 + 234 = 303 MiB against a 256 MB cap** — over it, and the kernel kills the worker rather
-> than returning an error. That arithmetic is an estimate, not a measurement: allocator reuse may
-> make the second request cheaper. Either measure it or take `--threads 1` for the demo, and
-> record which. One presenter and one curious onlooker is enough to reach it.
+### Two `/screen` requests at once kill the worker — measured 2026-09-03
+
+The container runs `--workers 1 --threads 2`, so two requests can be in flight. Two 6-photo
+uploads fired together on the 256 MB cap:
+
+```
+[ERROR] Worker (pid:7) was sent SIGKILL! Perhaps out of memory?
+[INFO]  Booting worker with pid: 23
+```
+
+`docker inspect` confirms `OOMKilled: true`. **Both requests are lost with no error response** —
+curl sees the 100-continue and then the connection dies, so there is no status code and nothing
+in the JSON error contract. The gunicorn master survives and boots a replacement worker, and the
+service is healthy again seconds later: `/health` 200, and a single 6-photo request still returns
+200 in 17.5 s.
+
+**It died 0.8 s in, while the uploads were still being buffered — before the vision calls
+finished.** So this is not about the model at all. Two 17 MB multipart bodies plus their base64
+copies exceed the cap on their own, and `MAX_REQUEST_BYTES` allows 64 MB *per request*, four
+times what six real captures need.
+
+On stage this reads as the demo hanging and then failing with no message, and recovering by
+itself just after someone has started apologising. One presenter and one curious onlooker in the
+audience is enough to cause it.
+
+**Pick one before Demo Day and record it here:**
+
+| Option | Effect | Cost |
+|---|---|---|
+| `--threads 1` in the Dockerfile CMD | the second request queues instead of racing | a concurrent request waits ~17 s |
+| Lower `MAX_REQUEST_BYTES` toward what six captures actually need (~20 MB) | bounds the buffering that causes this | rejects uploads the API would refuse anyway |
+| A 512 MB machine | headroom | money, and it only moves the threshold |
+
+`--threads 1` is the smallest change that turns a silent crash into a slow answer, which is the
+right trade for a demo with one operator.
 
 **The offline-laptop fallback cannot serve `/screen` at all** — with the venue offline there is no
 route to the model API. D-016's step 3 ("same image, phone tethered to the laptop") covers
