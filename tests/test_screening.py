@@ -5,6 +5,8 @@ No live API calls: every test injects a fake anthropic client.
 
 import json
 import logging
+import threading
+import time
 
 import pytest
 
@@ -241,3 +243,52 @@ def test_model_is_overridable_via_config():
     config = ScreeningConfig(model="claude-haiku-x")
     ScreeningEngine(client=client, config=config).assess_image(b"jpeg-bytes")
     assert client.calls[0]["model"] == "claude-haiku-x"
+
+
+def test_the_spend_cap_is_checked_and_reserved_atomically():
+    """The cap is a check followed by an increment, and /screen now assesses an entrance's
+    views in parallel. If another thread can land between the two, every thread reads the
+    same `spent_usd`, every thread passes the check, and every thread spends -- the cap
+    holds on paper while the run goes over it.
+
+    Racing threads and hoping they interleave does NOT test this: the check and the
+    increment are a few bytecodes apart and the window is almost never hit, so that version
+    of this test passed with the lock removed. This parks a thread INSIDE the critical
+    section and asks whether a second one can get in, which is the property itself rather
+    than a symptom of it.
+    """
+    inside = threading.Event()
+    may_leave = threading.Event()
+    second_got_in = threading.Event()
+
+    class Parking(ScreeningEngine):
+        def _check_spend_cap(self):
+            if not inside.is_set():
+                inside.set()
+                # Hold the section open. With the lock this is the only thread in here.
+                may_leave.wait(timeout=2)
+            else:
+                second_got_in.set()
+            super()._check_spend_cap()
+
+    client = FakeClient([_Response(_payload())] * 4)
+    engine = Parking(client=client, config=ScreeningConfig(
+        max_usd_per_run=10.0, usd_per_image=0.05))
+
+    first = threading.Thread(target=lambda: engine.assess_image(b"a"))
+    first.start()
+    assert inside.wait(timeout=2), "first thread never reached the spend check"
+
+    second = threading.Thread(target=lambda: engine.assess_image(b"b"))
+    second.start()
+    entered = second_got_in.wait(timeout=0.3)
+
+    may_leave.set()
+    first.join(timeout=2)
+    second.join(timeout=2)
+
+    assert not entered, (
+        "a second thread entered the spend check while the first was still inside it; "
+        "the check and the reservation are not atomic and the cap can be exceeded"
+    )
+    assert engine.spent_usd == pytest.approx(0.10)

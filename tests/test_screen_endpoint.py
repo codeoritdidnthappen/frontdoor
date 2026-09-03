@@ -5,6 +5,8 @@ constructs an anthropic client or needs an API key.
 """
 
 import io
+import threading
+import time
 
 import pytest
 
@@ -32,20 +34,38 @@ def errored_assessment(error="ScreeningError: no JSON object in response"):
 
 
 class FakeEngine:
-    """Stands in for ScreeningEngine as the view uses it: .config, .assess_image."""
+    """Stands in for ScreeningEngine as the view uses it: .config, .assess_image.
 
-    def __init__(self, assessments=None, raises=None):
-        self._assessments = None if assessments is None else list(assessments)
+    Keyed by image BYTES rather than by call order. The view assesses views concurrently,
+    so "the third call gets the third assessment" is not a property any fake can rely on --
+    and a fake that popped a list would make these tests pass or fail on thread scheduling.
+    Keying on the bytes asserts the thing that actually matters: the assessment reported for
+    an image is the assessment OF that image, whichever thread got to it first.
+    """
+
+    def __init__(self, assessments=None, raises=None, delay=0.0):
+        # bytes -> assessment. `assessments` may be a dict, or a list paired positionally
+        # with the images the test is about to post (which must then have distinct bytes).
+        self._by_bytes = dict(assessments) if isinstance(assessments, dict) else None
+        self._ordered = None if assessments is None or self._by_bytes else list(assessments)
         self._raises = raises
+        self._delay = delay
         self.config = ScreeningConfig()
         self.calls = []
+        self._lock = threading.Lock()
 
     def assess_image(self, image, *, media_type="image/jpeg"):
-        self.calls.append((image, media_type))
+        if self._delay:
+            time.sleep(self._delay)
+        with self._lock:
+            self.calls.append((image, media_type))
+            n = len(self.calls)
         if self._raises is not None:
             raise self._raises
-        if self._assessments is not None:
-            return self._assessments.pop(0)
+        if self._by_bytes is not None:
+            return self._by_bytes[image]
+        if self._ordered is not None:
+            return self._ordered[n - 1]
         return ok_assessment()
 
 
@@ -113,14 +133,12 @@ def test_single_image_has_no_aggregate():
 
 
 def test_multi_image_aggregates_majority_and_flip_rate():
-    engine = FakeEngine(
-        assessments=[
-            ok_assessment("present"),
-            ok_assessment("present"),
-            ok_assessment("not_visible"),
-        ]
-    )
-    parts = [image_part(f"v{i}.jpg") for i in range(3)]
+    engine = FakeEngine(assessments={
+        b"v0": ok_assessment("present"),
+        b"v1": ok_assessment("present"),
+        b"v2": ok_assessment("not_visible"),
+    })
+    parts = [image_part(f"v{i}.jpg", data=f"v{i}".encode()) for i in range(3)]
     body = post_screen(make_client(engine), parts).get_json()
     assert len(body["images"]) == 3
     for key in CRITERIA_KEYS:
@@ -153,8 +171,10 @@ def test_valid_entrance_id_is_echoed_in_canonical_form():
 
 
 def test_a_partially_failed_batch_still_returns_200_with_the_error_recorded():
-    engine = FakeEngine(assessments=[ok_assessment(), errored_assessment("boom")])
-    parts = [image_part("a.jpg"), image_part("b.jpg")]
+    engine = FakeEngine(assessments={
+        b"good": ok_assessment(), b"bad": errored_assessment("boom"),
+    })
+    parts = [image_part("a.jpg", data=b"good"), image_part("b.jpg", data=b"bad")]
     response = post_screen(make_client(engine), parts)
     assert response.status_code == 200
     images = response.get_json()["images"]
@@ -334,3 +354,49 @@ def test_the_page_carries_a_provenance_tag():
     # Only in the comment explaining why there is no canned branch -- never in anything
     # the page can render.
     assert html.count("CANNED") == 1
+
+
+# --- concurrent assessment ----------------------------------------------------------------
+#
+# One view took 13.5s against the live model on 2026-09-03, so a six-view entrance in series
+# is over a minute against the 2.5-minute technical-demo budget in docs/deck-outline.md.
+# Assessing views concurrently only overlaps the waiting -- these three tests pin the things
+# that overlap could plausibly break.
+
+
+def test_each_image_gets_its_own_assessment_whichever_thread_ran_first():
+    """images[i] must be files[i]. Positional pairing is how the response is built, and a
+    pool that returned results out of order would silently attribute one view's verdicts to
+    another -- wrong per-image evidence, and an aggregate built from it."""
+    engine = FakeEngine(assessments={
+        b"first": ok_assessment("present"),
+        b"second": ok_assessment("absent"),
+        b"third": ok_assessment("not_visible"),
+    })
+    parts = [
+        image_part("first.jpg", data=b"first"),
+        image_part("second.jpg", data=b"second"),
+        image_part("third.jpg", data=b"third"),
+    ]
+    images = post_screen(make_client(engine), parts).get_json()["images"]
+    assert [i["filename"] for i in images] == ["first.jpg", "second.jpg", "third.jpg"]
+    got = [i["criteria"]["ramp_or_bevel"]["verdict"] for i in images]
+    assert got == ["present", "absent", "not_visible"]
+
+
+def test_views_are_assessed_concurrently_not_one_after_another():
+    """The point of the change. Six views that each take 0.2s serially take 1.2s; overlapped
+    they take about 0.2s. The bound is deliberately loose -- this asserts that the calls
+    overlap at all, not a particular speed, so it does not become a timing flake on a loaded
+    CI box."""
+    engine = FakeEngine(delay=0.2)
+    parts = [image_part(f"v{i}.jpg", data=f"v{i}".encode()) for i in range(MAX_IMAGES)]
+
+    started = time.perf_counter()
+    response = post_screen(make_client(engine), parts)
+    elapsed = time.perf_counter() - started
+
+    assert response.status_code == 200
+    assert len(engine.calls) == MAX_IMAGES
+    serial = 0.2 * MAX_IMAGES
+    assert elapsed < serial / 2, f"took {elapsed:.2f}s; serial would be {serial:.2f}s"

@@ -22,6 +22,7 @@ constructed on first use, and tests inject a fake client.
 import base64
 import json
 import logging
+import threading
 import time
 from collections import Counter
 from dataclasses import dataclass
@@ -192,11 +193,18 @@ class ScreeningEngine:
         self._client = client
         self.config = config if config is not None else ScreeningConfig()
         self.spent_usd = 0.0
+        # The cap is a check followed by an increment, which is only a cap if no other
+        # thread can land between the two. /screen assesses an entrance's views
+        # concurrently, so without this N concurrent calls could all read the same
+        # spent_usd, all pass, and all spend -- the cap would hold on paper and be
+        # exceeded in fact. Also guards lazy client construction.
+        self._lock = threading.Lock()
 
     def _get_client(self):
-        if self._client is None:
-            self._client = anthropic.Anthropic()
-        return self._client
+        with self._lock:
+            if self._client is None:
+                self._client = anthropic.Anthropic()
+            return self._client
 
     def _check_spend_cap(self):
         projected = self.spent_usd + self.config.usd_per_image
@@ -210,8 +218,12 @@ class ScreeningEngine:
     def assess_image(self, image, *, media_type="image/jpeg"):
         """One model call over one image; refusals and parse failures are
         recorded errors, never silent. Only the spend cap aborts the run."""
-        self._check_spend_cap()
-        self.spent_usd += self.config.usd_per_image
+        # Checked and reserved together: the spend is booked before the call is made, so a
+        # caller that would take the run over the cap is refused rather than discovering it
+        # afterwards.
+        with self._lock:
+            self._check_spend_cap()
+            self.spent_usd += self.config.usd_per_image
         t0 = time.perf_counter()
         try:
             response = self._get_client().messages.create(

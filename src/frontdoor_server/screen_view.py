@@ -17,6 +17,7 @@ clear 503 rather than a crash. Tests inject a fake engine via app.config.
 
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 from importlib import resources
 
 from flask import Blueprint, Response, current_app, request
@@ -129,12 +130,26 @@ def screen():
             status=503,
         )
 
+    # Read on this thread, before dispatching: the bytes are what the model call needs, and
+    # pulling them here keeps the worker threads to one job each.
+    payloads = [(part.read(), part.mimetype) for part in files]
+
     t0 = time.perf_counter()
     try:
-        assessments = [
-            engine.assess_image(part.read(), media_type=part.mimetype)
-            for part in files
-        ]
+        # Concurrently, because these are independent network calls and the demo is timed.
+        # One view took 13.5s against the live model, so a six-view entrance run in series is
+        # over a minute of dead air against the 2.5-minute technical-demo budget in
+        # docs/deck-outline.md. Nothing about the verdicts or the aggregate changes; only the
+        # waiting overlaps.
+        #
+        # `.map` preserves input order, which the response depends on: `images[i]` must be
+        # `files[i]`, and zip below pairs them positionally. The engine books its spend under
+        # a lock so the cap still holds with several calls in flight.
+        with ThreadPoolExecutor(max_workers=min(len(payloads), MAX_IMAGES)) as pool:
+            assessments = list(pool.map(
+                lambda payload: engine.assess_image(payload[0], media_type=payload[1]),
+                payloads,
+            ))
     except Exception as exc:
         # assess_image records per-image failures itself; anything that still
         # escapes (spend cap, an injected engine blowing up) is an upstream
