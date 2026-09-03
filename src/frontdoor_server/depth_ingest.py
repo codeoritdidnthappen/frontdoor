@@ -16,6 +16,10 @@ class DepthIngestConflict(DepthIngestError):
     """The Worker refused to overwrite an existing depth object."""
 
 
+class DepthIngestRejected(DepthIngestError):
+    """The Worker refused these bytes for good; sending them again cannot succeed."""
+
+
 @dataclass(frozen=True)
 class DepthIngestResponse:
     sha256: str
@@ -90,6 +94,10 @@ def put_depth(
 
     if response.status == 409:
         raise DepthIngestConflict("depth object already exists")
+    if response.status == 422:
+        raise DepthIngestRejected(
+            "the bytes did not hash to the declared sha256; nothing was stored"
+        )
     if response.status != 201:
         raise DepthIngestError(f"depth-ingest Worker returned HTTP {response.status}")
     if len(response_body) > 4096:

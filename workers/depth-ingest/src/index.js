@@ -44,6 +44,12 @@ async function sameSecret(presented, expected) {
   return difference === 0;
 }
 
+// R2 reports a server-side digest rejection as error 10037. Matching the code rather than the
+// prose keeps this working if Cloudflare rewords the message.
+function isDigestMismatch(error) {
+  return typeof error?.message === "string" && error.message.includes("(10037)");
+}
+
 function parseUploadRequest(request) {
   const url = new URL(request.url);
   if (url.pathname !== "/depth" || url.searchParams.size !== 1) {
@@ -83,11 +89,23 @@ export async function handle(request, env) {
     throw error;
   }
 
-  const stored = await configured.bucket.put(upload.key, upload.body, {
-    onlyIf: { etagDoesNotMatch: "*" },
-    sha256: upload.sha256,
-    customMetadata: { sha256: upload.sha256 },
-  });
+  let stored;
+  try {
+    stored = await configured.bucket.put(upload.key, upload.body, {
+      onlyIf: { etagDoesNotMatch: "*" },
+      sha256: upload.sha256,
+      customMetadata: { sha256: upload.sha256 },
+    });
+  } catch (error) {
+    // R2 enforces `sha256` itself and throws when the streamed bytes do not match; nothing is
+    // stored. That failure is permanent -- these bytes will never hash to that digest -- so it
+    // has to be told apart from an outage. Unhandled, it left Cloudflare answering 500, which
+    // the server reported as 503 and the phone retried forever.
+    if (isDigestMismatch(error)) {
+      return json("body does not match the declared sha256", 422);
+    }
+    throw error;
+  }
   if (stored === null) {
     return json("object already exists", 409);
   }
