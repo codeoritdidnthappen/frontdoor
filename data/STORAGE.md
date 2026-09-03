@@ -77,6 +77,17 @@ Three tokens, never one (D-020, D-033):
 3. **Harness** — Object Read on both buckets. This is the images token
    plus `FRONTDOOR_DEPTH_*`. The harness is the only reader of depth.
 
+**Reading depth means importing `frontdoor.depth_access`** (TICK-057). That module exists so the
+question "who can read depth" has an answer you can check: while `depth_store()` sat beside
+`image_store()`, every module that imported `frontdoor.storage` for an image carried a route to
+depth, and nothing could tell the two apart. `tests/test_depth_quarantine.py` walks the real import
+graph and fails the build if the metrology library, the dataset loader or the server ever reaches
+it. The credential probe lives in `frontdoor.storage_probe` for the same reason — it reads depth,
+so it cannot live in the module the server imports.
+
+That is the second of the two barriers D-020 asks for. The first is the credential itself: the
+loader's token is denied on the depth bucket by the provider, which `verify` proves.
+
 The core metrology library gets neither. Copy `.env.example` to `.env`
 and fill in the values; `.env` is gitignored and is read automatically by
 `frontdoor.storage` (real environment variables take precedence, so CI and `export` still
@@ -94,7 +105,7 @@ In the Cloudflare dashboard (R2):
 5. From a team laptop:
 
 ```
-python -m frontdoor.storage verify
+python -m frontdoor.storage_probe verify
 ```
 
 That command must print `loader-denied-on-depth`. Run it again from the
