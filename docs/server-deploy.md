@@ -197,12 +197,16 @@ is then stale — which is exactly the state that looks fine until the fallback 
 fly image show --app frontdoor-measure             # the host's digest and release
 fly auth docker
 docker pull registry.fly.io/frontdoor-measure:<release>
-docker inspect --format='{{index .RepoDigests 0}}' \
-  registry.fly.io/frontdoor-measure:<release> | cut -d@ -f2
+docker inspect --format='{{json .RepoDigests}}' \
+  registry.fly.io/frontdoor-measure:<release>
 ```
 
-The `cut` matters: `docker inspect` prints `registry.fly.io/frontdoor-measure@sha256:...`, and
-pasting that whole string into `data/deployment.json` is rejected as not a digest. Then run
+**Read the `registry.fly.io/...` entry, not the first one.** An image tagged for more than
+one repository carries several `RepoDigests`, and position 0 is not guaranteed to be the Fly
+one -- `deployment.py` scans for the `registry.fly.io/frontdoor-measure@` prefix rather than
+indexing, and this command now prints the same list it reads. Take the part after `@`:
+pasting the whole `registry.fly.io/frontdoor-measure@sha256:...` string into
+`data/deployment.json` is rejected as not a digest. Then run
 `verify` — it re-reads both systems itself, so the paste is a record, not the check.
 
 A local `docker build` does **not** reproduce the host digest and is not expected to — Fly builds

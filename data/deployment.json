@@ -8,7 +8,7 @@
     "recorded_at": "2026-09-02"
   },
   "laptop": {
-    "_how": "docker pull registry.fly.io/frontdoor-measure:<release>, then docker inspect --format '{{index .RepoDigests 0}}'. Do NOT docker build: a local build is a different image.",
+    "_how": "docker pull registry.fly.io/frontdoor-measure:<release>, then docker inspect --format '{{json .RepoDigests}}' and take the registry.fly.io entry -- position 0 is not guaranteed to be it. Do NOT docker build: a local build is a different image.",
     "digest": "sha256:6c3e21b3559c5bb9028f7569f941f253820d5d4530366d7d29c4d228f042ff03",
     "recorded_at": "2026-09-02"
   }
