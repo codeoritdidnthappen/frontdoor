@@ -7,7 +7,9 @@ name = "frontdoor"
 version = "0.1.0"
 description = "Monocular measurement of storefront accessibility"
 requires-python = ">=3.11"
-dependencies = ["jsonschema>=4.21", "rfc3339-validator>=0.1.1", "boto3>=1.34", "python-dotenv>=1.0", "anthropic>=1.3"]
+# opencv capped below 5: the 5.x wheels stopped bundling the Haar cascade files
+# that frontdoor.faceblur loads from cv2.data.haarcascades.
+dependencies = ["jsonschema>=4.21", "rfc3339-validator>=0.1.1", "boto3>=1.34", "python-dotenv>=1.0", "anthropic>=1.3", "opencv-python-headless>=4.9,<5"]
 
 [project.optional-dependencies]
 server = ["flask>=3", "gunicorn>=22"]

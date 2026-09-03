@@ -98,14 +98,19 @@ Across the view set (not necessarily every single shot), the set as a whole must
 
 - **No interiors.** Stop at the threshold. Don't shoot through an open door into the space beyond
   it.
-- **No identifiable people.** If a person is identifiable in a shot — face visible, recognizable —
-  that shot is retaken immediately. It is never kept "just in case" and never fixed later. If you
-  can't get a clean retake in a reasonable wait, treat the entrance as a skip (see below).
-- **Check the glass.** Storefront doors are mirrors: the pilot (TICK-092) lost 3 of 65 shots to
-  identifiable faces that were *in the door glass* — reflections of passers-by, people inside seen
-  through the pane, and the photographer's own reflection — none noticed at capture. Before leaving
-  an entrance, flick through the set once looking specifically at the glass. Your own reflection
-  counts; shooting from a slight angle keeps you out of it.
+- **Identifiable people: blur-first (TICK-257).** Ingest now detects faces and irreversibly
+  blurs them automatically, so a face in a shot is a blur problem the pipeline handles, not a
+  reshoot. Reshoot only when a person **physically occludes the entrance** — that is an occlusion
+  problem, not a privacy one, and no amount of blurring puts the doorway back in frame. If the
+  occlusion won't clear in a reasonable wait, treat the entrance as a skip (see below).
+- **Check the glass — now a verification, not the only line of defense.** Storefront doors are
+  mirrors: the pilot (TICK-092) lost 17 of 65 shots to identifiable faces, mostly *in the door
+  glass* — reflections of passers-by, people inside seen through the pane, and the photographer's
+  own reflection — none noticed at capture. The blur step exists because that rule did not survive
+  contact with glass; but reflected and through-glass faces are exactly where automatic detection
+  is weakest, so the human check stays. Before leaving an entrance, flick through the set once
+  looking specifically at the glass, and after ingest confirm the blur output actually covered
+  what you saw. Your own reflection counts; shooting from a slight angle keeps you out of it.
 
 ## Record at capture — not from memory later
 
@@ -182,6 +187,6 @@ entrances, and there are not many left. Schedule and steps: [signing-calendar.md
 - [ ] 5-6 views captured: head-on, both obliques, near (~1.5 m), far (~3-4 m), hardware close-up
 - [ ] 1× lens, no zoom, no crop, on every shot
 - [ ] Full entrance + approach path + hardware covered across the set
-- [ ] No interiors, no identifiable people (any violation reshot on the spot)
+- [ ] No interiors; people occluding the entrance reshot (faces are blurred at ingest, TICK-257)
 - [ ] Condition tags (lighting, occlusion) recorded now, at the entrance
 - [ ] If skipped: entrance and reason recorded before moving on

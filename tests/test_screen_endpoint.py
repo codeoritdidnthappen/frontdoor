@@ -358,6 +358,72 @@ def test_the_page_carries_a_provenance_tag():
     assert html.count("CANNED") == 1
 
 
+# --- face-blur ingest (TICK-257, #232) ----------------------------------------------------
+#
+# Every upload passes through frontdoor.faceblur.process_upload before the engine sees it,
+# and the response totals the blurred faces. The blur pipeline itself is contract-tested in
+# test_faceblur.py; here the wiring is what's under test, so process_upload is mocked the
+# same way the engine is.
+
+
+def real_jpeg(shade=128):
+    import cv2
+    import numpy as np
+
+    ok, buf = cv2.imencode(
+        ".jpg", np.full((32, 32, 3), shade, dtype=np.uint8), [cv2.IMWRITE_JPEG_QUALITY, 95]
+    )
+    assert ok
+    return buf.tobytes()
+
+
+def test_response_reports_faces_blurred_even_when_zero():
+    body = post_screen(make_client(FakeEngine()), [image_part()]).get_json()
+    assert body["faces_blurred"] == 0
+
+
+def test_uploads_are_processed_before_the_engine_sees_them(monkeypatch):
+    from frontdoor.faceblur import ProcessedImage
+    from frontdoor_server import screen_view
+
+    monkeypatch.setattr(
+        screen_view,
+        "process_upload",
+        lambda raw: ProcessedImage(b"blurred:" + raw, face_count=2, gps_stripped=True),
+    )
+    engine = FakeEngine(assessments={
+        b"blurred:v0": ok_assessment(), b"blurred:v1": ok_assessment(),
+    })
+    parts = [image_part(f"v{i}.jpg", data=f"v{i}".encode()) for i in range(2)]
+
+    body = post_screen(make_client(engine), parts).get_json()
+
+    # The engine only ever saw processed bytes, re-typed as the JPEG they now are...
+    assert sorted(engine.calls) == [
+        (b"blurred:v0", "image/jpeg"), (b"blurred:v1", "image/jpeg"),
+    ]
+    # ...and the response totals the blurred faces across images.
+    assert body["faces_blurred"] == 4
+
+
+def test_a_real_image_reaches_the_engine_reencoded():
+    engine = FakeEngine()
+    post_screen(make_client(engine), [image_part(data=real_jpeg())])
+    (sent, media_type), = engine.calls
+    assert media_type == "image/jpeg"
+    assert sent[:2] == b"\xff\xd8"
+    assert sent != real_jpeg()  # processed, not the raw upload
+
+
+def test_undecodable_bytes_pass_through_to_the_engine_unchanged():
+    # Covered positionally by test_engine_receives_bytes_and_the_declared_media_type
+    # too; this states the ingest rule on its own: bytes no decoder accepts hold no
+    # renderable face, so they go through untouched for the engine to fail on by name.
+    engine = FakeEngine()
+    post_screen(make_client(engine), [image_part("a.png", "image/png", b"not-an-image")])
+    assert engine.calls == [(b"not-an-image", "image/png")]
+
+
 # --- concurrent assessment ----------------------------------------------------------------
 #
 # One view took 13.5s against the live model on 2026-09-03, so a six-view entrance in series

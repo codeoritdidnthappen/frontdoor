@@ -13,6 +13,10 @@ sealed-split entrance is refused with 403, the HTTP twin of SealedSplitError.
 The engine is constructed lazily on first use, so the server boots (and every
 other endpoint works) without an API key; a keyless /screen request gets a
 clear 503 rather than a crash. Tests inject a fake engine via app.config.
+
+Uploads pass through the face-blur ingest step (frontdoor.faceblur, TICK-257)
+before the engine sees them: faces irreversibly blurred, EXIF GPS stripped,
+and the response reports the total under "faces_blurred".
 """
 
 import os
@@ -22,6 +26,7 @@ from importlib import resources
 
 from flask import Blueprint, Response, current_app, request
 
+from frontdoor.faceblur import process_upload
 from frontdoor.screening import ScreeningEngine, aggregate_assessments
 from frontdoor.split import InvalidEntranceId, assign_split, canonical_entrance_id
 
@@ -132,7 +137,24 @@ def screen():
 
     # Read on this thread, before dispatching: the bytes are what the model call needs, and
     # pulling them here keeps the worker threads to one job each.
-    payloads = [(part.read(), part.mimetype) for part in files]
+    #
+    # Every image passes through the face-blur ingest step (TICK-257, #232) BEFORE anything
+    # sees it - faces irreversibly blurred, EXIF/GPS stripped - so the model call and any
+    # later storage only ever handle the processed bytes; the raw upload is dropped here.
+    # Processed images are re-encoded JPEG, so their media type is image/jpeg regardless of
+    # what was posted. Bytes no decoder accepts pass through unchanged: they hold no
+    # renderable face, and the engine will name the failure on that image itself.
+    payloads = []
+    faces_blurred = 0
+    for part in files:
+        raw = part.read()
+        try:
+            processed = process_upload(raw)
+        except ValueError:
+            payloads.append((raw, part.mimetype))
+        else:
+            payloads.append((processed.image_bytes, "image/jpeg"))
+            faces_blurred += processed.face_count
 
     t0 = time.perf_counter()
     try:
@@ -179,6 +201,7 @@ def screen():
             for part, a in zip(files, assessments)
         ],
         "latency_ms": latency_ms,
+        "faces_blurred": faces_blurred,
         "model": engine.config.model,
         "status": "ai_estimated",
         "wording": WORDING,
