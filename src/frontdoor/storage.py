@@ -189,25 +189,6 @@ def load_image_creds():
     )
 
 
-def load_depth_write_creds():
-    """Write-only credentials for the depth bucket, held by the server (D-033).
-
-    Object Write only -- no read, no list. The server has to be able to STORE a depth map that a
-    phone uploads, and must never be able to read one back: D-020's guarantee is that the metrology
-    path cannot read depth, because depth it can reach is depth it eventually tunes on. A
-    write-only token cannot tune, peek or load, so the invariant holds with the server on the write
-    side of it. The evaluation harness keeps `frontdoor.depth_access` and stays the only reader.
-    """
-    loc = _shared_location()
-    return BucketCreds(
-        bucket=_env("FRONTDOOR_DEPTH_BUCKET"),
-        access_key=_env("FRONTDOOR_DEPTH_WRITE_ACCESS_KEY"),
-        secret_key=_env("FRONTDOOR_DEPTH_WRITE_SECRET_KEY"),
-        region=loc["region"],
-        endpoint=loc["endpoint"],
-    )
-
-
 def _client(creds):
     try:
         import boto3
@@ -341,16 +322,6 @@ class ObjectStore:
 def image_store():
     """Store used by the dataset loader and the server — images only."""
     return ObjectStore(load_image_creds())
-
-
-def depth_write_store():
-    """Store the server uses to accept depth uploads -- write-only (D-033).
-
-    Separate factory rather than a flag on the reader in `frontdoor.depth_access`, so a caller
-    wanting to read depth
-    cannot get there by passing an argument. The two credentials are different tokens.
-    """
-    return ObjectStore(load_depth_write_creds())
 
 
 def main(argv=None):

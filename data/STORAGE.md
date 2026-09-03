@@ -26,11 +26,13 @@ therefore the D-020 layout, not a prefix inside one bucket.
 | Bucket | Who may read | Who may write |
 |---|---|---|
 | `frontdoor-image` | loader, server, harness | server, on behalf of capture upload |
-| `frontdoor-depth` | **harness only** | server, on behalf of capture upload (**write-only token**, D-033) |
+| `frontdoor-depth` | **harness only** | dedicated ingest Worker through an R2 binding (D-039) |
 
 Capture uploads go **through the server** (TICK-029, #33), not straight from the phone: no R2
-credential ships inside the app. The server holds read+write on `frontdoor-image` and
-**write-only** on `frontdoor-depth`, so it can store a depth map and can never read one back.
+credential ships inside the app. The server holds read+write on `frontdoor-image`. It forwards
+validated depth bytes to the dedicated ingest Worker, whose R2 binding never enters the Fly
+process. Cloudflare does not offer a permanent write-only R2 API token; D-039 replaces D-033's
+unprovisionable token with this service boundary.
 
 Both buckets are private. Do not enable public access.
 
@@ -66,15 +68,13 @@ it to be, but it is worth stating in the words that are actually true.
 
 ## Credentials
 
-Three tokens, never one (D-020, D-033):
+Two R2 tokens and one isolated binding, never one shared credential (D-020, D-039):
 
 1. **Loader / server** — Object Read and Write on `frontdoor-image` only.
    This is `FRONTDOOR_IMAGES_*`.
-2. **Server, depth ingest** — Object **Write only** on `frontdoor-depth`.
-   No read, no list. This is `FRONTDOOR_DEPTH_WRITE_*`, and it is the only
-   depth credential the server ever gets (D-033). A write-only token cannot
-   be used to peek or to tune, which is the guarantee D-020 actually makes.
-3. **Harness** — Object Read on both buckets. This is the images token
+2. **Depth-ingest Worker** — an R2 binding on `frontdoor-depth`. The Worker exposes only an
+   authenticated conditional PUT surface; no R2 key exists in its environment or on Fly.
+3. **Harness** — Object Read & Write on `frontdoor-depth`. This is the images token
    plus `FRONTDOOR_DEPTH_*`. The harness is the only reader of depth.
 
 **Reading depth means importing `frontdoor.depth_access`** (TICK-057). That module exists so the
@@ -100,9 +100,10 @@ In the Cloudflare dashboard (R2):
 1. Create buckets `frontdoor-image` and `frontdoor-depth` in WNAM.
 2. Create an API token with Object Read & Write on `frontdoor-image` only.
 3. Create a second API token with Object Read & Write on `frontdoor-depth` only.
-4. Put the account endpoint (`https://<accountid>.r2.cloudflarestorage.com`)
-   and both tokens in `.env`.
-5. From a team laptop:
+4. Deploy `workers/depth-ingest`, bind `DEPTH_BUCKET` to `frontdoor-depth`, and set its
+   `FRONTDOOR_DEPTH_INGEST_KEY` secret.
+5. Put the account endpoint, the two R2 token pairs, Worker URL and service key in `.env`.
+6. From a team laptop:
 
 ```
 python -m frontdoor.storage_probe verify

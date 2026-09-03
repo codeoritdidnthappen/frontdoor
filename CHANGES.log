@@ -1122,3 +1122,23 @@ by reading the files are asserted alongside them and run everywhere:
 Also recorded, unfixed: D-031 still names a Fly "spend limit" that Fly does not offer, and no
 prepaid credit block has been bought -- so D-026's "billing cannot start silently" clause is
 currently satisfied by nothing. `docs/server-deploy.md` carries the procedure.
+## 2026-09-03 — Correct the depth-ingest boundary (TICK-249/TICK-250, #216/#217)
+
+## D-039  Depth ingest is isolated behind an authenticated Worker
+
+Taken 2026-09-03 after checking D-033 against Cloudflare's actual R2 permissions.
+**Supersedes D-033's mechanism, not D-020's quarantine requirement.**
+
+Cloudflare R2 permanent API tokens offer Object Read & Write or Object Read only. There is no
+permanent Object Write-only token to provision, so D-033 described a provider control that did
+not exist. Reusing the harness's read/write credential on Fly would make the metrology request
+path capable of reading depth and would silently void the reason for the quarantine.
+
+The replacement is a service boundary. Fly continues to authenticate the phone, derive the
+partition, enforce the size ceiling, and verify the received SHA-256. It then forwards depth to
+an authenticated PUT-only Cloudflare Worker. The Worker writes through an R2 binding and exposes
+no read route. Fly receives no R2 depth credential; the evaluation harness retains the only R2
+credential used to read depth.
+
+This is a correction rather than a relaxation: the original no-read outcome remains, while the
+unprovisionable `FRONTDOOR_DEPTH_WRITE_*` pair and its misleading probe are removed.

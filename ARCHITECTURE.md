@@ -320,10 +320,10 @@ empty (TICK-023).
 
 > **Amended 2026-09-02.** **D-032** puts depth capture on James's iPhone 17 Pro (`iPhone18,1`) — one LiDAR
 > device shooting every entrance satisfies "every entrance", and that phone has not yet run a
-> build, so probing it is a prerequisite. **D-033** lets depth reach its bucket without crossing
-> the quarantine: uploads route through the server (TICK-029), which holds a **write-only** token
-> on `frontdoor-depth`. It can store depth and can never read it back, so the metrology path still
-> cannot see depth — the guarantee this section makes. The harness keeps the only read token.
+> build, so probing it is a prerequisite. **D-039 supersedes D-033's mechanism:** Cloudflare does
+> not issue a permanent write-only R2 token. Uploads still pass through the server for validation,
+> but depth is forwarded to a dedicated authenticated Worker with the R2 binding. Fly has no depth
+> credential or read route; the harness keeps the only credential that can read depth.
 
 Depth maps are stored in a **separate bucket** (D-026) that the image-only loader
 credential cannot read. A prefix inside one bucket is not enough where the provider

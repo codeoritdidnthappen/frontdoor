@@ -201,10 +201,10 @@ def test_the_metrology_library_cannot_reach_the_depth_reader():
 
 
 def test_the_server_cannot_reach_the_depth_reader():
-    """D-033 gives the server a WRITE-ONLY depth token so the request path cannot read depth.
+    """D-039 gives the server no R2 depth credential, so the request path cannot read depth.
 
-    That guarantee is hollow if the server's import graph reaches the reader anyway -- the token
-    is one barrier, this is the other, and #55 asks for two independent ones.
+    That guarantee is hollow if the server's import graph reaches the reader anyway -- the Worker
+    boundary is one barrier, this is the other, and #55 asks for two independent ones.
     """
     chain = _reaches("frontdoor_server", DEPTH_READER)
     assert chain is None, "the server now reaches depth: " + " -> ".join(chain or [])

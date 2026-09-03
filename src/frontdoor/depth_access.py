@@ -13,8 +13,8 @@ can enumerate exactly who performs it and fail the build when that set grows.
 
 **Who may import this:** the evaluation harness, and the storage self-test that proves the loader
 credential is denied. **Not** the metrology library (TICK-040 gives it no I/O at all), and **not**
-the server — D-033 gives the server a WRITE-ONLY depth token precisely so the request path cannot
-read depth, and that guarantee would be hollow if the server's import graph reached this module.
+the server — D-039 keeps the depth R2 binding behind a separate PUT-only Worker, and that boundary
+would be hollow if the server's import graph reached this module.
 """
 
 from frontdoor.storage import BucketCreds, ObjectStore, _env, _shared_location

@@ -75,30 +75,31 @@ fly secrets set \
   FRONTDOOR_IMAGES_SECRET_KEY=... \
   FRONTDOOR_S3_ENDPOINT=https://<accountid>.r2.cloudflarestorage.com \
   FRONTDOOR_S3_REGION=auto \
-  FRONTDOOR_DEPTH_BUCKET=frontdoor-depth \
-  FRONTDOOR_DEPTH_WRITE_ACCESS_KEY=... \
-  FRONTDOOR_DEPTH_WRITE_SECRET_KEY=... \
+  FRONTDOOR_DEPTH_INGEST_URL=https://frontdoor-depth-ingest.<account>.workers.dev \
+  FRONTDOOR_DEPTH_INGEST_KEY=... \
   FRONTDOOR_UPLOAD_KEY=... \
   ANTHROPIC_API_KEY=...
 ```
 
-Take the values from `.env` (gitignored). **The server never gets a depth credential that can
-read.** It holds read+write on the image bucket and, per **D-033**, a **write-only** token on the
-depth bucket — Object Write only, no read, no list — so it can store a depth map a phone uploads
-and can never read one back. `FRONTDOOR_DEPTH_ACCESS_KEY` / `FRONTDOOR_DEPTH_SECRET_KEY` are the
-harness's *read* token and must **not** be set on the server. That is D-020: nothing on the
-metrology path may read depth.
+Take the values from `.env` (gitignored). **The server gets no R2 depth credential.** Cloudflare
+R2 permanent API tokens offer Object Read & Write or Object Read only, not Object Write only, so
+D-039 replaces D-033's impossible permanent token with an isolated Worker. The Worker receives a
+validated stream over its authenticated PUT-only HTTP surface and writes through its R2 binding.
+`FRONTDOOR_DEPTH_ACCESS_KEY` / `FRONTDOOR_DEPTH_SECRET_KEY` remain on the harness and must **not**
+be set on Fly.
 
-Create the write-only token in the Cloudflare dashboard as a third R2 API token, scoped **Object
-Write** on `frontdoor-depth` alone. Then prove the scope rather than trusting the dashboard:
+Deploy the Worker first:
 
 ```
-python -m frontdoor.storage_probe verify
+cd workers/depth-ingest
+npx wrangler secret put FRONTDOOR_DEPTH_INGEST_KEY
+npx wrangler deploy
 ```
 
-It must print `loader-denied-on-depth` **and** `depth-write-denied-on-read`. If the second is
-missing, the token can read and D-033's guarantee does not hold — fix the token before capture,
-not after.
+Use the same independently generated service key on the Worker and Fly; it is not the phone's
+`FRONTDOOR_UPLOAD_KEY`. Record the deployed `workers.dev` URL in
+`FRONTDOOR_DEPTH_INGEST_URL`. The Worker's `wrangler.jsonc` binds `DEPTH_BUCKET` directly, so
+there is no R2 access key to copy to Fly or into the Worker environment.
 
 `FRONTDOOR_UPLOAD_KEY` is the shared secret for `POST /upload`, the capture-ingest endpoint
 (TICK-029, #33). The capture app sends it as `X-Frontdoor-Upload-Key`; the same value goes into the

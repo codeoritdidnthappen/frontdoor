@@ -13,6 +13,7 @@ import pytest
 from moto import mock_aws
 
 from frontdoor_server.app import create_app
+from frontdoor_server.depth_ingest import DepthIngestConflict, DepthIngestError
 
 IMAGES = "frontdoor-image"
 DEPTH = "frontdoor-depth"
@@ -27,9 +28,18 @@ def env(monkeypatch):
     monkeypatch.setenv("FRONTDOOR_IMAGES_ACCESS_KEY", "img-key")
     monkeypatch.setenv("FRONTDOOR_IMAGES_SECRET_KEY", "img-secret")
     monkeypatch.setenv("FRONTDOOR_DEPTH_BUCKET", DEPTH)
-    monkeypatch.setenv("FRONTDOOR_DEPTH_WRITE_ACCESS_KEY", "dep-write-key")
-    monkeypatch.setenv("FRONTDOOR_DEPTH_WRITE_SECRET_KEY", "dep-write-secret")
+    monkeypatch.setenv("FRONTDOOR_DEPTH_INGEST_URL", "https://depth.example")
+    monkeypatch.setenv("FRONTDOOR_DEPTH_INGEST_KEY", "depth-service-key")
     monkeypatch.setenv("FRONTDOOR_UPLOAD_KEY", KEY)
+    calls = []
+
+    def put(stream, *, key, sha256, size, config):
+        if any(call["key"] == key for call in calls):
+            raise DepthIngestConflict("already exists")
+        calls.append({"key": key, "sha256": sha256, "size": size, "body": stream.read()})
+
+    monkeypatch.setattr("frontdoor_server.upload_view.put_depth", put)
+    return calls
 
 
 @pytest.fixture
@@ -187,18 +197,23 @@ def test_an_image_is_stored_and_read_back(client):
 
 
 @mock_aws
-def test_depth_goes_to_the_depth_bucket_and_never_the_image_bucket(client):
+def test_ac_1_depth_goes_to_the_ingest_worker_and_never_the_image_bucket(client, env):
     """AC3, and the D-020 quarantine: a depth map in the image bucket is the silent failure."""
     s3 = _buckets()
     resp = _post(client, b"pretend-depth", kind="depth")
     assert resp.status_code == 201
-    assert s3.get_object(Bucket=DEPTH, Key="open/cap-1")["Body"].read() == b"pretend-depth"
+    assert env == [{
+        "key": "open/cap-1",
+        "sha256": hashlib.sha256(b"pretend-depth").hexdigest(),
+        "size": len(b"pretend-depth"),
+        "body": b"pretend-depth",
+    }]
     assert s3.list_objects_v2(Bucket=IMAGES).get("KeyCount", 0) == 0
 
 
 @mock_aws
-def test_depth_is_verified_on_receipt_not_read_back(client):
-    """D-033 gives the server a write-only depth token, so read-back is impossible by design.
+def test_ac_2_depth_is_verified_on_receipt_not_read_back(client):
+    """D-039 gives Fly no R2 depth credential, so read-back is impossible by design.
 
     The response has to say so rather than claim a check it did not run.
     """
@@ -293,6 +308,30 @@ def test_depth_is_never_overwritten_because_it_cannot_be_compared(client):
     _buckets()
     assert _post(client, b"d", kind="depth").status_code == 201
     assert _post(client, b"d", kind="depth").status_code == 409
+
+
+@pytest.mark.parametrize("failure", [
+    DepthIngestError("unavailable"),
+    DepthIngestError("authentication refused"),
+])
+def test_ac_3_worker_failures_are_retryable_and_leave_the_capture_queued(
+        client, monkeypatch, failure):
+    def fail(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setattr("frontdoor_server.upload_view.put_depth", fail)
+    assert _post(client, b"d", kind="depth").status_code == 503
+
+
+@mock_aws
+def test_ac_4_image_upload_does_not_call_the_depth_worker(client, monkeypatch):
+    _buckets()
+
+    def fail(*args, **kwargs):
+        raise AssertionError("image upload reached the depth Worker")
+
+    monkeypatch.setattr("frontdoor_server.upload_view.put_depth", fail)
+    assert _post(client, b"image", kind="image").status_code == 201
 
 
 # --- size ceiling --------------------------------------------------------------------

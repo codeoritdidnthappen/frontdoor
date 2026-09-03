@@ -7,8 +7,8 @@ import Foundation
 /// images key to the loader and server, and that key can also READ sealed captures, so a copy
 /// inside a free-provisioning build would widen the seal's exposure to anyone holding the build.
 /// What travels in the app instead is an ingest key, which grants `POST /upload` and nothing else:
-/// it cannot read any bucket. The server holds read+write on images and, per D-033, a write-only
-/// token on depth.
+/// it cannot read any bucket. The server holds read+write on images and, per D-039, forwards depth
+/// to the isolated ingest Worker without holding an R2 depth credential.
 ///
 /// The contract this promises is the one `CaptureUploader` asks for: success means the bytes are
 /// stored AND their hash was checked at the far end, not that a request returned 200.

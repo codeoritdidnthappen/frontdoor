@@ -1,10 +1,10 @@
 """POST /upload -- capture ingest from the phone (TICK-029, #33).
 
-Bytes go phone -> server -> bucket, never phone -> bucket. No R2 credential ships inside the
+Bytes go phone -> server -> storage, never phone -> bucket. No R2 credential ships inside the
 capture app: a free-provisioning build is installed on several phones, and the images token can
 also READ sealed captures (data/STORAGE.md), so a token in an IPA widens the seal's exposure to
-anyone holding a build. The server holds read+write on the image bucket and, per D-033,
-**write-only** on the depth bucket.
+anyone holding a build. The server holds read+write on the image bucket. Depth crosses a separate
+authenticated Worker whose R2 binding never enters this process (TICK-250).
 
 What this endpoint guarantees, stated precisely because the halves differ:
 
@@ -18,8 +18,8 @@ What this endpoint guarantees, stated precisely because the halves differ:
   then confirm the replacement as correct.
 - For **open images** it re-reads the stored object and hashes it, so "stored" means verified as
   stored, which is what lets the app delete its local copy (AC5).
-- For **depth** that read-back is impossible by construction: D-033 gives the server a write-only
-  token precisely so it cannot read depth. A **sealed image** cannot be read back either --
+- For **depth** that read-back is impossible by construction: D-039 keeps the R2 binding inside a
+  PUT-only Worker boundary. A **sealed image** cannot be read back either --
   ObjectStore.get refuses sealed keys, and passing allow_sealed here would write a SEAL_AUDIT line
   on every upload and make unsealing routine, which is what D-007 and D-017 prevent. Both fall
   back to verify-on-receipt, and the response says which check ran in `verified`.
@@ -36,9 +36,14 @@ from frontdoor.split import assign_split, canonical_entrance_id
 from frontdoor.storage import (
     ObjectExists,
     StorageError,
-    depth_write_store,
     image_store,
     storage_key,
+)
+from frontdoor_server.depth_ingest import (
+    DepthIngestConfig,
+    DepthIngestConflict,
+    DepthIngestError,
+    put_depth,
 )
 
 KINDS = ("image", "depth")
@@ -75,8 +80,7 @@ def _client_key():
     return value or None
 
 
-def _authorised(presented):
-    expected = _client_key()
+def _authorised(presented, expected):
     if expected is None or not presented:
         return False
     # Compared as bytes: hmac.compare_digest raises TypeError on non-ASCII str, and Werkzeug
@@ -131,9 +135,12 @@ def register_upload(app, error):
     make app.py and this module import each other.
     """
 
+    client_key = _client_key()
+    depth_config = DepthIngestConfig.from_environment() if client_key is not None else None
+
     @app.post("/upload")
     def upload():
-        if not _authorised(request.headers.get("X-Frontdoor-Upload-Key", "")):
+        if not _authorised(request.headers.get("X-Frontdoor-Upload-Key", ""), client_key):
             # Deliberately does not distinguish "no key configured" from "wrong key": the client
             # can do nothing useful with the difference, and the distinction tells a stranger
             # whether they found a live-but-misconfigured deployment.
@@ -220,21 +227,38 @@ def register_upload(app, error):
             except StorageError as exc:
                 return error("could not build a storage key", str(exc), field="capture_id")
 
-            store = image_store() if kind == "image" else depth_write_store()
-            try:
-                store.put(key, spool, if_absent=True)
-            except ObjectExists:
-                return _already_there(error, store, kind, key, split, claimed)
-            except StorageError as exc:
-                # 503: the bytes were good and the client should retry. Reporting this as a client
-                # error would make the app drop a capture it holds the only copy of.
-                return error("could not store the object", str(exc), status=503)
+            if kind == "depth":
+                assert depth_config is not None
+                try:
+                    put_depth(spool, key=key, sha256=claimed, size=size, config=depth_config)
+                except DepthIngestConflict:
+                    return error(
+                        "an object is already stored under this capture id",
+                        f"{key} exists and cannot be compared from here; it was not overwritten.",
+                        status=409,
+                    )
+                except DepthIngestError as exc:
+                    # 503 keeps the only copy queued on the phone while an internal credential or
+                    # Worker outage is repaired; its details expose no service credential.
+                    return error("could not store the object", str(exc), status=503)
+                store = None
+            else:
+                store = image_store()
+                try:
+                    store.put(key, spool, if_absent=True)
+                except ObjectExists:
+                    return _already_there(error, store, kind, key, split, claimed)
+                except StorageError as exc:
+                    # 503: the bytes were good and the client should retry. Reporting this as a client
+                    # error would make the app drop a capture it holds the only copy of.
+                    return error("could not store the object", str(exc), status=503)
         finally:
             spool.close()
 
         # Read-back is the stronger check and is available in exactly one case: an OPEN image.
         verified = "received"
         if kind == "image" and split != "sealed":
+            assert store is not None
             confirmed, failure = _read_back_matches(store, key, claimed)
             if failure is not None:
                 return error(failure[0], failure[1], status=503)
@@ -254,7 +278,7 @@ def register_upload(app, error):
             "split": split,
             "sha256": claimed,
             # Which guarantee actually ran. "read-back" means re-read and re-hashed; "received"
-            # means verified on receipt only, which is all a write-only depth token permits (D-033).
+            # means verified on receipt and by the Worker/R2 checksum, without a read path on Fly.
             "verified": verified,
         }, 201
 
@@ -285,7 +309,7 @@ def _already_there(error, store, kind, key, split, claimed):
     sealed captures the answer is a 409 a person has to look at: the bytes stay on the phone, so
     nothing is lost by refusing.
     """
-    if kind == "image" and split != "sealed":
+    if split != "sealed":
         matched, failure = _read_back_matches(store, key, claimed)
         if failure is not None:
             return error(failure[0], failure[1], status=503)
@@ -302,8 +326,7 @@ def _already_there(error, store, kind, key, split, claimed):
         )
     return error(
         "an object is already stored under this capture id",
-        f"{key} exists and cannot be compared from here "
-        f"({'depth is write-only per D-033' if kind == 'depth' else 'sealed captures are not read'}); "
+        f"{key} exists and cannot be compared from here (sealed captures are not read); "
         "it was not overwritten.",
         status=409,
     )
