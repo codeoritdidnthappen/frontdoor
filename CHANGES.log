@@ -1142,3 +1142,33 @@ credential used to read depth.
 
 This is a correction rather than a relaxation: the original no-read outcome remains, while the
 unprovisionable `FRONTDOOR_DEPTH_WRITE_*` pair and its misleading probe are removed.
+
+## 2026-09-03 — The depth-ingest Worker is deployed and verified against production R2 (TICK-251, issue #218)
+
+TICK-249 built the Worker and TICK-250 routed the server through it; both were verified against
+stubs. This is the same code against the real bucket, which is the only place the R2 binding, the
+encrypted secret and Cloudflare's edge behaviour actually exist.
+
+`frontdoor-depth-ingest` is deployed on the account that owns the buckets, bound to
+`frontdoor-depth` through `DEPTH_BUCKET`, with `FRONTDOOR_DEPTH_INGEST_KEY` set as an encrypted
+Worker secret. The server still holds no R2 depth credential: it has a URL and a service key, and
+the capability to write depth lives entirely inside the Worker. D-020's quarantine is unchanged.
+
+Verified live rather than assumed. An authenticated PUT of an `open/` probe returned 201; the bytes
+read back through `frontdoor.depth_access` with a matching SHA-256; repeating the PUT returned 409
+and left the stored object untouched; a bad credential returned 401 and created no object; `GET`
+returned 405. The probe was deleted afterwards and the bucket's `open/` prefix left empty.
+
+The probe key is under `open/` deliberately. #187 locked `sealed/` against deletion indefinitely,
+so a sealed probe object could never have been cleaned up -- the two tickets constrain each other
+and the ordering only works one way.
+
+**A trap worth recording, because it costs an hour and reads as a Worker bug.** Calling the Worker
+with `urllib.request` returns `403 error code: 1010` -- Cloudflare's edge refusing the
+`Python-urllib/3.x` User-Agent before the Worker runs. Nothing reaches the code, so the Worker logs
+show nothing and the response looks like a rejected credential. `frontdoor_server.depth_ingest`
+uses `http.client`, which sends no User-Agent and is not blocked; the production path was never
+affected. `docs/server-deploy.md` now says so next to the deploy steps.
+
+The runbook's command order was also wrong: it had `wrangler secret put` before `wrangler deploy`,
+and the secret attaches to a Worker that already exists. Corrected to deploy first.
