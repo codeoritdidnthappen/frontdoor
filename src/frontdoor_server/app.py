@@ -13,6 +13,7 @@ from flask import Flask, jsonify, request
 from jsonschema import Draft202012Validator, ValidationError
 from werkzeug.exceptions import HTTPException
 
+from frontdoor.metrology import ARM_NAMES
 from frontdoor.sidecar import validate_sidecar
 from frontdoor_server.map_view import map_page
 from frontdoor_server.screen_view import screen_page
@@ -123,6 +124,26 @@ STUB_ARMS = {
     "B": dict(_UNAVAILABLE_DEPTH_ARM),
     "C": dict(_CUT_ARM),
 }
+
+# EPIC-06 AC4: removing the core library must break this server at IMPORT time rather than
+# silently changing a number. Until this line, nothing here imported `frontdoor.metrology` at
+# all -- the four arm names were spelled out independently in three places (the library, the
+# stub above, and the frozen response schema), and deleting the entire metrology package left
+# the server serving four arms as though nothing had happened.
+#
+# Checked rather than derived, because the response schema is FROZEN (TICK-060) and the stub is
+# literal data by design; generating the keys from ARM_NAMES would make the server's output
+# follow the library silently, which is the opposite of what a frozen contract is for. This way
+# a divergence is a loud failure at startup, in the process that is about to serve it.
+#
+# `raise` rather than `assert`: assertions vanish under `python -O`, and this must hold in the
+# container.
+if set(STUB_ARMS) != set(ARM_NAMES):
+    raise RuntimeError(
+        "the server's arms and frontdoor.metrology.ARM_NAMES disagree: "
+        f"server {sorted(STUB_ARMS)} vs library {sorted(ARM_NAMES)}. "
+        "One of them has drifted; the demo and the error budget must run the same arms (R-11)."
+    )
 
 
 def validate_measure_response(body):
