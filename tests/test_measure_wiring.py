@@ -20,8 +20,19 @@ def code() -> str:
     )
 
 
+def body_of(signature: str) -> str:
+    """One function body, by signature.
+
+    Targeted at `commit(` rather than `confirmReview(`: main split the write path in #31 so
+    screening and metrology share it, leaving confirmReview a two-line delegator. A guard left
+    pointing at the delegator asserts nothing about the code that actually writes -- it raised
+    here on rebase rather than passing quietly, which is the only reason it was caught.
+    """
+    return code().split(signature, 1)[1].split("\n    }", 1)[0]
+
+
 def confirm_review_body() -> str:
-    return code().split("func confirmReview(", 1)[1].split("\n    }", 1)[0]
+    return body_of("private func commit(")
 
 
 def test_the_capture_is_written_and_queued_before_it_is_measured():
@@ -80,17 +91,56 @@ def test_the_server_is_configured_in_exactly_one_place():
     )
 
 
-def test_a_new_capture_retires_the_last_drain_verdict():
+def test_every_path_that_enqueues_a_capture_retires_the_last_drain_verdict():
     """A queue that just grew is not described by the drain that ran before it grew.
 
     `lastDrainMessage` is rendered whenever it is non-nil, deliberately -- a successful drain used
     to set the count to zero and hide its own confirmation. The cost of that fix is that a verdict
     from an empty-queue drain outlives the emptiness: observed on the 15 Pro Max on 2026-09-02,
     Home showing "3 captures on this phone only" directly above "Nothing to upload. Everything
-    here is already safe." Whichever way the render is written, the state must not say that.
+    here is already safe."
+
+    Asserted over BOTH writers rather than the shutter alone. #31 added photo import, which
+    enqueues a capture by a second path and carried the same bug -- found only because this rebase
+    put the two side by side. A guard naming one of them would go on passing while the other lied.
     """
-    body = code().split("case .success(let written):", 1)[1].split("case .failure", 1)[0]
-    assert "lastDrainMessage = nil" in body, (
-        "a written capture must retire the previous drain's verdict; without this the app tells "
-        "an operator their unsent captures are safe"
+    for signature in ("private func commit(", "func importPhoto("):
+        body = body_of(signature)
+        assert "CaptureWriter.write(" in body, f"{signature} is no longer a write path"
+        # Anchored past the write. importPhoto matches `case .success(let read)` first, for the
+        # file it is reading in -- asserting against that branch would pass while the branch that
+        # actually enqueues went unchecked.
+        after_write = body.split("CaptureWriter.write(", 1)[1]
+        success = after_write.split("case .success", 1)[1].split("case .failure", 1)[0]
+        assert "lastDrainMessage = nil" in success, (
+            f"{signature} enqueues a capture without retiring the previous drain's verdict; "
+            "the app then tells an operator their unsent captures are safe"
+        )
+
+
+RESULT_VIEW = ROOT / "ios" / "FrontdoorCapture" / "UI" / "ResultView.swift"
+
+
+def test_an_absent_instrument_reading_renders_as_nothing_not_as_zero():
+    """D-036 superseded D-003: no caliper, so there is no reading to show beside the result.
+
+    The failure this forbids is silent and lands on a projector. If the reading defaults to zero,
+    ResultView prints "caliper 0.00 in - difference 0.11 in" and the room reads a fabricated
+    agreement between a measurement and an instrument nobody used. Absent truth must render as
+    nothing at all.
+    """
+    controller = CONTROLLER.read_text(encoding="utf-8")
+    assert re.search(r"var measurementCaliperInches: Double\?", controller), (
+        "the caliper reading must be optional; a non-optional one has to invent a value for "
+        "every capture in this study, none of which has an instrument reading"
+    )
+    assert not re.search(r"measurementCaliperInches: Double\s*=", controller), (
+        "a default reading is a reading nobody took"
+    )
+
+    view = RESULT_VIEW.read_text(encoding="utf-8")
+    assert "let caliperInches: Double?" in view, "ResultView must accept an absent reading"
+    comparison = view.split("private func caliperComparison(", 1)[1].split("\n    }", 1)[0]
+    assert "if let caliperInches" in comparison, (
+        "the comparison must be withheld when there is no reading, not rendered against zero"
     )

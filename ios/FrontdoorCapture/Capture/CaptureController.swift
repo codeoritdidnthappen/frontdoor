@@ -499,6 +499,9 @@ final class CaptureController: ObservableObject {
         case .success:
             photosTaken += 1
             refreshPendingUploads()
+            // An imported photo joins the queue like any other capture, so it retires the last
+            // drain's verdict for the same reason a shutter press does.
+            lastDrainMessage = nil
             // The same evidence any other capture leaves. Without it the home screen keeps
             // showing the previous capture as the most recent one, which is the state an operator
             // reads to decide whether the last thing they did worked.
@@ -571,7 +574,12 @@ final class CaptureController: ObservableObject {
 
     /// The server's answer for the last capture, and the reason if it could not be obtained.
     @Published var measurement: MeasureResponse?
-    @Published private(set) var measurementCaliperInches: Double = 0
+    /// The instrument reading the result is shown beside, when one exists.
+    ///
+    /// Nil since D-036 superseded D-003: no caliper, so `Entrance.riseInches` is nil on every
+    /// capture this study takes. Defaulting to 0 would render a comparison against a reading
+    /// nobody took.
+    @Published private(set) var measurementCaliperInches: Double?
     @Published private(set) var isMeasuring = false
     @Published private(set) var measurementError: String?
 
@@ -586,7 +594,7 @@ final class CaptureController: ObservableObject {
     /// Deliberately not awaited by `confirmReview`. A measurement that hangs on a venue network
     /// must not hold the shutter: the operator has to be able to take the next frame, and the
     /// capture is already written and queued whatever this returns (AC4).
-    private func measure(_ written: CaptureWriter.Written, caliperInches: Double) {
+    private func measure(_ written: CaptureWriter.Written, caliperInches: Double?) {
         guard let measureClient else { return }
         let image: Data
         do {
