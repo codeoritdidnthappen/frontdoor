@@ -11,7 +11,9 @@ struct MeasureClient {
     /// key. The token is the stable class of failure -- the schema says explicitly that TICK-063
     /// branches on it, not on the wording of `detail` -- and it is what separates a capture worth
     /// retrying from one that never will be.
-    enum ServerError: String, Decodable, Equatable {
+    // CaseIterable so the advice tests are exhaustive: a token added later is covered
+    // without anyone remembering to add it to a list.
+    enum ServerError: String, Decodable, Equatable, CaseIterable {
         case missingImage = "missing image"
         case missingSidecar = "missing sidecar"
         case sidecarNotJSON = "sidecar is not valid JSON"
@@ -34,6 +36,37 @@ struct MeasureClient {
                 return false
             }
         }
+
+        /// What to tell someone standing at an entrance -- deliberately NOT derived from
+        /// `isWorthRetrying`.
+        ///
+        /// That flag is a fact about the request; this is advice about the capture, and the two
+        /// were the same sentence until it gave the wrong one. "Not worth retrying" was rendered
+        /// as "this capture needs re-taking", and on 2026-09-03 a phone in the field was told
+        /// exactly that for a capture that was perfectly good: D-037 added a required sidecar
+        /// field, the deployed server was still running the image built before it, and every
+        /// capture came back `sidecar failed validation`. Re-taking produced an identical
+        /// rejection and would have cost the entrance.
+        ///
+        /// Nothing this endpoint returns can prove the CAPTURE is at fault, so nothing here tells
+        /// the operator to discard one. The capture is already on the phone; it can be measured
+        /// after the mismatch is fixed.
+        var operatorAdvice: String {
+            switch self {
+            case .internalError, .noSuchEndpoint, .wrongMethod:
+                return "It is worth sending again."
+            case .sidecarInvalid:
+                // Named because it is the likely cause in the field and the one the operator can
+                // act on. A capture this app wrote satisfies the schema this app was built
+                // against; a server refusing it usually has a different one.
+                return "It will not be accepted as it stands \u{2014} most often because the app "
+                    + "and the server are on different versions of the sidecar contract. Check "
+                    + "that before re-taking anything."
+            case .missingImage, .missingSidecar, .sidecarNotJSON, .bodyTooLarge,
+                 .unsupportedContentType:
+                return "It will not be accepted as it stands."
+            }
+        }
     }
 
     enum Failure: Error, Equatable {
@@ -53,10 +86,8 @@ struct MeasureClient {
                 guard let error else {
                     return "The server refused this capture: \(detail) The capture is saved."
                 }
-                let next = error.isWorthRetrying
-                    ? "It is worth sending again."
-                    : "Sending it again will not help; this capture needs re-taking."
-                return "The server refused this capture — \(error.rawValue): \(detail) \(next) The capture is saved."
+                return "The server refused this capture — \(error.rawValue): \(detail) "
+                    + "\(error.operatorAdvice) The capture is saved."
             case .unreadable(let detail):
                 return "The server's reply could not be read (\(detail)). The capture is saved."
             }

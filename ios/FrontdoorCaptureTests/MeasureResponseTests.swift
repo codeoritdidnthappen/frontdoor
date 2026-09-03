@@ -190,6 +190,37 @@ final class MeasureResponseTests: XCTestCase {
         XCTAssertTrue(MeasureClient.ServerError.internalError.isWorthRetrying)
     }
 
+    /// The advice is separate from the retry flag, because they are different questions.
+    ///
+    /// On 2026-09-03 a phone in the field was told "this capture needs re-taking" for a capture
+    /// that was perfectly good: D-037 added a required sidecar field, the deployed server was
+    /// still on the image built before it, and every capture came back `sidecar failed
+    /// validation`. Re-taking produced an identical rejection and would have cost the entrance.
+    func testNoRefusalTellsTheOperatorToDiscardACapture() {
+        for error in MeasureClient.ServerError.allCases {
+            let failure = MeasureClient.Failure.rejected(
+                status: 422, error: error, detail: "detail.")
+            XCTAssertFalse(failure.message.lowercased().contains("needs re-taking"),
+                           "\(error.rawValue) tells the operator to discard a capture")
+            XCTAssertTrue(failure.message.contains("The capture is saved."),
+                          "\(error.rawValue) does not say the capture is kept: \(failure.message)")
+        }
+    }
+
+    /// The one an operator can actually act on, so it is named rather than left as "invalid".
+    func testASidecarRefusalPointsAtAVersionMismatchBeforeReTaking() {
+        let advice = MeasureClient.ServerError.sidecarInvalid.operatorAdvice
+        XCTAssertTrue(advice.contains("different versions"), advice)
+        XCTAssertTrue(advice.contains("before re-taking"), advice)
+    }
+
+    /// The retry classification itself is unchanged -- the queue still must not spin on a
+    /// capture the server will never accept.
+    func testAdviceDidNotQuietlyChangeTheRetryClassification() {
+        XCTAssertFalse(MeasureClient.ServerError.sidecarInvalid.isWorthRetrying)
+        XCTAssertTrue(MeasureClient.ServerError.internalError.isWorthRetrying)
+    }
+
     /// A proxy or captive portal answering HTML must still produce a sentence, not a crash.
     func testAnUnreadableErrorBodyStillProducesAnActionableMessage() {
         let failure = MeasureClient.Failure.rejected(

@@ -48,9 +48,23 @@ def _depth_env(monkeypatch):
     monkeypatch.setenv("FRONTDOOR_DEPTH_SECRET_KEY", "dep-secret")
 
 
+def _write_only_env(monkeypatch):
+    """The server's depth token: writes depth, can never read it back (D-033)."""
+    monkeypatch.setenv("FRONTDOOR_DEPTH_WRITE_ACCESS_KEY", "depw-key")
+    monkeypatch.setenv("FRONTDOOR_DEPTH_WRITE_SECRET_KEY", "depw-secret")
+
+
 def _both_env(monkeypatch):
     _image_env(monkeypatch)
     _depth_env(monkeypatch)
+    # Cleared, not merely unset by omission. `storage` loads the repo-root .env, so on a machine
+    # where the operator has filled in the depth-write credentials -- which is every machine that
+    # has followed data/STORAGE.md -- verify() stopped skipping the write-only probe and ran it
+    # with a REAL access key against this stub account, which does not know it. The suite passed
+    # on CI and failed on a configured laptop, which is the worst way for a test to be wrong.
+    # A test that reaches the network is a test whose result is not about the code.
+    for name in ("FRONTDOOR_DEPTH_WRITE_ACCESS_KEY", "FRONTDOOR_DEPTH_WRITE_SECRET_KEY"):
+        monkeypatch.delenv(name, raising=False)
 
 
 def _create_buckets():
@@ -330,6 +344,38 @@ def test_verify_passes_when_the_loader_is_denied_on_depth(monkeypatch, capsys):
     _scoped_stub(monkeypatch)
     verify()
     assert "loader-denied-on-depth" in capsys.readouterr().out
+
+
+def test_verify_passes_when_the_depth_write_token_is_write_only(monkeypatch, capsys):
+    """The D-033 success path: the server's depth token writes and is denied on read.
+
+    Nothing covered this offline, because until the credentials existed anywhere the branch was
+    skipped -- so the check that matters could only ever be exercised against live R2.
+    """
+    account = _scoped_stub(monkeypatch)
+    _write_only_env(monkeypatch)
+    account.acl["depw-key"] = {DEPTH}
+    account.get_error[("depw-key", DEPTH)] = _client_error("AccessDenied", 403)
+
+    verify()
+    assert "loader-denied-on-depth" in capsys.readouterr().out
+
+
+def test_verify_fails_when_the_depth_write_token_can_also_read(monkeypatch):
+    """The live misconfiguration on 2026-09-03: the harness READ token was pasted into the
+    server's write slot.
+
+    Uploads would work, so nothing downstream complains -- and the server can read depth, which
+    voids D-020's quarantine from the server outward. It has to fail loudly here or it is found
+    only after the comparison has been tuned on data it should never have reached.
+    """
+    account = _scoped_stub(monkeypatch)
+    _write_only_env(monkeypatch)
+    account.acl["depw-key"] = {DEPTH}
+    # No get_error: the token reads back happily, which is the whole problem.
+
+    with pytest.raises(StorageError, match="not write-only"):
+        verify()
 
 
 def test_verify_fails_when_both_buckets_are_the_same_bucket(monkeypatch):
