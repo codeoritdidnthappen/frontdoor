@@ -59,25 +59,23 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## 5. Git Workflow
 
-**Every change starts with a ticket and lands on `main` directly. Fix forward.**
-*(Amended 2026-09-01 by team decision: the PR-per-change workflow is retired — no new PRs
-for review; fixes are made directly and pushed. The previous rule text is in git history.)*
+**Every change starts with a ticket and lands through a pull request. Never push directly to `main`.**
 
-1. **Trace.** Work begins from an up-to-date `main` and traces to a ticket. Short-lived
-   branches are fine as a working convenience, but the destination is `main`, same day.
+1. **Trace.** Work begins from an up-to-date `main` and traces to a ticket. Create a short-lived
+   branch for the change and open a pull request back to `main`.
 2. **Code.** Keep commits small and scoped to the ticket. Each commit message says what
    changed and why, and references the ticket. Never credit an AI tool anywhere — no
    `Co-Authored-By` trailers, "generated with" notes, or any other credit for Claude, Codex,
    Cursor, or any other AI assistant, in the commit message or anywhere else. Crediting a
    human teammate with a `Co-Authored-By` trailer is fine (clarified 2026-09-02; this was
    always the rule's intent).
-3. **Test.** Before pushing to `main`, run the project's tests and checks locally. New
-   behavior gets new tests. Never push a state you haven't seen pass (the Windows-only
+3. **Test.** Before opening or updating a pull request, run the project's tests and checks locally.
+   New behavior gets new tests. Never merge a state you haven't seen pass (the Windows-only
    shell-exec cases in test_ios_no_arkit.py are a known local exception; CI runs them).
-4. **Fix forward.** Review findings — your own or a teammate's — are fixed directly and
-   pushed, not filed as new tickets or new PRs. Comment threads on old PRs/issues remain
-   fine for discussion.
-5. **Sync.** Pull before pushing; resolve conflicts locally, rerun the suite, then push.
+4. **Review.** Address review findings on the same branch and update the pull request. Changes
+   discovered after merge start from a ticket and land through a new pull request.
+5. **Sync.** Update the branch from `main` before merge, resolve conflicts locally, and rerun the
+   suite. Merge only through the pull request; never push directly to `main`.
 6. **Land the whole ticket, or split it.** Don't land work that leaves its ticket
    incomplete. The moment an acceptance criterion turns out to need something the change
    cannot supply — hardware, a venue, another person, or work that is deliberately paused —
