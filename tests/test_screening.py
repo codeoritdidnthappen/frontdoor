@@ -291,7 +291,10 @@ def test_criteria_text_carries_the_validated_decision_rules():
     assert "push plates" in prompt and "latch brackets" in prompt
 
 
-def test_integrated_summary_is_the_integrated_verdicts_with_zero_flip_rate():
+def test_integrated_summary_is_the_integrated_verdicts_without_flip_stats():
+    """The verdicts carry through; flip_rate and counts are None because no
+    cross-view comparison was made - a fabricated 0.0 would turn the honesty
+    signal about view disagreement into false confidence."""
     client = FakeClient([_Response(_payload("present", handrails={
         "verdict": "absent", "confidence": 90, "evidence": "no rails in any view",
     }))])
@@ -299,11 +302,24 @@ def test_integrated_summary_is_the_integrated_verdicts_with_zero_flip_rate():
     result = engine.screen_entrance_integrated(DEV_ID, [b"a", b"b"])
     assert isinstance(result, EntranceScreening)
     assert result.entrance_id == DEV_ID and result.split == "dev"
+    assert result.mode == "integrated"
     assert len(result.assessments) == 1
     assert result.summary["ramp_or_bevel"].verdict == "present"
     assert result.summary["handrails"].verdict == "absent"
     for key in CRITERIA_KEYS:
-        assert result.summary[key].flip_rate == 0.0
+        assert result.summary[key].flip_rate is None
+        assert result.summary[key].counts is None
+
+
+def test_per_image_mode_keeps_real_flip_stats_and_says_so():
+    client = FakeClient([_Response(_payload("present")),
+                         _Response(_payload("absent"))])
+    engine = ScreeningEngine(client=client)
+    result = engine.screen_entrance(DEV_ID, [b"a", b"b"])
+    assert result.mode == "per_image"
+    summary = result.summary["ramp_or_bevel"]
+    assert summary.flip_rate == pytest.approx(0.5)
+    assert summary.counts == {"present": 1, "absent": 1}
 
 
 def test_integrated_sealed_entrance_is_refused_before_any_model_call():

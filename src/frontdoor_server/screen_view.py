@@ -28,7 +28,7 @@ from importlib import resources
 from flask import Blueprint, Response, current_app, request
 
 from frontdoor.faceblur import process_upload
-from frontdoor.screening import ScreeningEngine, aggregate_assessments
+from frontdoor.screening import ScreeningEngine, integrated_summary
 from frontdoor.split import InvalidEntranceId, assign_split, canonical_entrance_id
 
 ALLOWED_IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp")
@@ -77,8 +77,8 @@ def screen_html():
 
     Served by the same image that answers the POST, so the page on stage is the page
     that was tested -- and so D-016's fallback steps, which run this container on a
-    laptop, carry the demo UI with them. The page holds no logic: verdicts, the
-    aggregate and the flip rate are computed here in Python and rendered there.
+    laptop, carry the demo UI with them. The page holds no logic: the integrated
+    verdicts are computed here in Python and rendered there.
     """
     html = (
         resources.files("frontdoor_server")
@@ -186,6 +186,9 @@ def screen():
 
     body = {
         "entrance_id": entrance_id,
+        # The mode is stated so a consumer can tell "the views agreed" from "no
+        # cross-view comparison was made".
+        "mode": "integrated",
         # Filenames only: the assessment is integrated across the views, so there are no
         # per-image verdicts to attach here.
         "images": [{"filename": part.filename} for part in files],
@@ -203,14 +206,16 @@ def screen():
     }
     if len(files) > 1:
         # Kept for consumers that read the entrance-level verdict here: the integrated
-        # verdicts, with flip_rate 0.0 -- one integrated result has nothing to disagree
-        # with itself.
+        # verdicts. flip_rate and counts are null in integrated mode -- one call over
+        # all views makes no cross-view comparison, and reporting a fabricated 0.0 (or
+        # counts of 1 for a 6-view entrance) would dress up "no measurement was made"
+        # as "all views agreed".
         body["aggregate"] = {
             key: {
                 "verdict": summary.verdict,
                 "flip_rate": summary.flip_rate,
                 "counts": summary.counts,
             }
-            for key, summary in aggregate_assessments([assessment]).items()
+            for key, summary in integrated_summary(assessment).items()
         }
     return body, 200

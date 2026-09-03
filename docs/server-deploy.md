@@ -171,8 +171,8 @@ Either way, verify with `curl https://frontdoor-measure.fly.dev/map/data` and co
 
 The **69 MiB** footprint in the table was measured serving `GET /health`. It says nothing about
 `/screen`'s worst case: up to **64 MB of multipart upload buffered in memory**, base64-encoded
-(+33%) and carried through **up to 6 vision calls**, on a **256 MB** machine — with gunicorn's
-30 s timeout in front of multi-call model latency.
+(+33%) and sent as **one integrated vision call carrying up to 6 image blocks**, on a **256 MB**
+machine — with gunicorn's 30 s timeout in front of the model call.
 
 **Measured 2026-09-03** on release `deployment-01M1MFVVXFFMPFN9XJKD49QZ8P`, in a container capped
 at 256 MB exactly as the host is, with six real captures (2.7–2.8 MB each, 17.2 MB of multipart):
@@ -184,11 +184,15 @@ at 256 MB exactly as the host is, with six real captures (2.7–2.8 MB each, 17.
 | Cost of one in-flight request | **~117 MiB above idle** |
 | End-to-end | **17.3 s**, HTTP 200 |
 
-**It fits, with about 70 MiB to spare, and only because the calls now overlap.** Assessed
-sequentially, six views at ~13 s each is ~78 s — well past gunicorn's `--timeout 30`, so the
-worker would have been killed and a six-view entrance could never have been screened on this
-machine at all. The concurrency change is what brings it inside the timeout, and it is also what
-puts six base64 payloads in memory at once instead of one.
+**Those numbers were measured on the previous build, which fanned the six views out into
+overlapping per-view model calls.** `/screen` now sends all views in **one integrated call**
+(TICK-245): there is no thread fan-out — the memory profile is the N buffered uploads plus their
+base64 copies alive at once inside a single request body. Peak memory should land near the
+186 MiB above, since the same six payloads are in memory either way (held by one request body
+instead of six concurrent calls), but the latency changes shape: one call replaces six
+overlapping ~13 s calls, and the offline eval's median was **~7.2 s per entrance** on the new
+default model — inside gunicorn's `--timeout 30` with no reliance on call overlap. Re-measure
+both numbers on the first deploy of the integrated build and update this table.
 
 ### Two `/screen` requests at once kill the worker — measured 2026-09-03
 

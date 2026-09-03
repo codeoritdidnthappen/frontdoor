@@ -119,8 +119,12 @@ class ImageAssessment:
 @dataclass(frozen=True)
 class CriterionSummary:
     verdict: str | None  # None when no view produced a valid verdict
+    # Cross-view statistics. Both are None in integrated mode: one integrated
+    # call makes no cross-view comparison, so there is no flip rate or vote
+    # count to report -- and reporting a fabricated 0.0 would turn the honesty
+    # signal about view disagreement into false confidence.
     flip_rate: float | None  # fraction of valid views disagreeing with verdict
-    counts: dict  # valid verdict -> number of views
+    counts: dict | None  # valid verdict -> number of voting views
 
 
 @dataclass(frozen=True)
@@ -129,6 +133,10 @@ class EntranceScreening:
     split: str
     assessments: tuple
     summary: dict  # criterion key -> CriterionSummary
+    # "per_image": one model call per view, summary holds real cross-view
+    # statistics. "integrated": one call over all views, summary carries the
+    # integrated verdicts with flip_rate/counts None.
+    mode: str = "per_image"
 
 
 def build_prompt():
@@ -237,6 +245,27 @@ def aggregate_assessments(assessments):
             flip_rate=(total - counts[majority]) / total,
             counts=dict(counts),
         )
+    return summary
+
+
+def integrated_summary(assessment):
+    """Per-criterion summary for ONE integrated assessment.
+
+    The verdicts are the integrated verdicts; flip_rate and counts are None
+    because no cross-view comparison was made. A constant flip_rate of 0.0
+    here would read as "all views agreed" -- a measurement that never
+    happened -- and counts of {verdict: 1} would read as one view voting when
+    several were submitted. None is the stronger signal: a consumer branching
+    on the number notices, one reading 0.0 does not.
+    """
+    summary = {}
+    for key in CRITERIA_KEYS:
+        verdict = None
+        if assessment.criteria is not None:
+            candidate = assessment.criteria[key]["verdict"]
+            if candidate in ALLOWED_VERDICTS:
+                verdict = candidate
+        summary[key] = CriterionSummary(verdict=verdict, flip_rate=None, counts=None)
     return summary
 
 
@@ -374,15 +403,16 @@ class ScreeningEngine:
             split=split,
             assessments=assessments,
             summary=aggregate_assessments(assessments),
+            mode="per_image",
         )
 
     def screen_entrance_integrated(self, entrance_id, images):
         """Screen one entrance by assessing ALL its views in ONE model call.
 
         Same split discipline and result shape as screen_entrance: one
-        assessment carrying the integrated verdicts, and a summary whose
-        verdicts are those verdicts with flip_rate 0.0 (a single integrated
-        result has nothing to disagree with itself).
+        assessment carrying the integrated verdicts, and a summary carrying
+        those verdicts with flip_rate and counts None -- no cross-view
+        comparison was made, and the mode field says so.
         """
         entrance_id, split = self._resolve_split_or_refuse(entrance_id)
         assessments = (self.assess_images_integrated(images),)
@@ -390,5 +420,6 @@ class ScreeningEngine:
             entrance_id=entrance_id,
             split=split,
             assessments=assessments,
-            summary=aggregate_assessments(assessments),
+            summary=integrated_summary(assessments[0]),
+            mode="integrated",
         )

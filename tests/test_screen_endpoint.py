@@ -118,8 +118,9 @@ def test_single_image_has_no_aggregate():
 
 def test_multi_image_gets_one_integrated_assessment_and_aggregate():
     """N views are ONE engine call now, and the aggregate carries the
-    integrated verdicts with flip_rate 0.0 - one integrated result has nothing
-    to disagree with itself."""
+    integrated verdicts with flip_rate and counts null - no cross-view
+    comparison was made, so there is no flip rate to report, and a fabricated
+    0.0 would read as "all views agreed"."""
     engine = FakeEngine(assessment=ok_assessment("present"))
     parts = [image_part(f"v{i}.jpg", data=f"v{i}".encode()) for i in range(3)]
     body = post_screen(make_client(engine), parts).get_json()
@@ -131,8 +132,18 @@ def test_multi_image_gets_one_integrated_assessment_and_aggregate():
         assert body["assessment"]["criteria"][key]["verdict"] == "present"
         summary = body["aggregate"][key]
         assert summary["verdict"] == "present"
-        assert summary["flip_rate"] == 0.0
-        assert summary["counts"] == {"present": 1}
+        assert summary["flip_rate"] is None
+        assert summary["counts"] is None
+
+
+def test_response_declares_integrated_mode():
+    """A consumer must be able to tell "the views agreed" from "no cross-view
+    comparison was made"; the response says which mode produced it."""
+    body = post_screen(make_client(FakeEngine()), [image_part()]).get_json()
+    assert body["mode"] == "integrated"
+    parts = [image_part(f"v{i}.jpg", data=f"v{i}".encode()) for i in range(3)]
+    body = post_screen(make_client(FakeEngine()), parts).get_json()
+    assert body["mode"] == "integrated"
 
 
 def test_engine_receives_all_bytes_and_media_types_in_one_call_in_order():
