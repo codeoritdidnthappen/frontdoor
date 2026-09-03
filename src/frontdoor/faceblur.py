@@ -10,10 +10,14 @@ entrance, never about people.
 
 Detection is tuned for recall over precision. A false positive costs a blurred
 patch of door glass, which no criterion reads; a false negative is the failure
-mode this ticket exists for. Both the frontal and profile Haar cascades run,
-the profile cascade also runs on the mirrored image (it only knows one
-profile), and everything runs again on a contrast-boosted (CLAHE) copy to help
-with ghosted reflections in glass. All boxes are unioned.
+mode this ticket exists for. The primary detector is YuNet
+(cv2.FaceDetectorYN, model committed under models/ - see models/README.md),
+run at a deliberately low score threshold: on the pilot photos it finds the
+small through-glass and reflected faces the Haar cascades measurably missed.
+The Haar pass from the first cut is kept as a cheap supplementary net - both
+frontal and profile cascades, the profile cascade also on the mirrored image
+(it only knows one profile), everything again on a contrast-boosted (CLAHE)
+copy for ghosted reflections. All boxes from both detectors are unioned.
 
 EXIF policy - deliberate, read before "fixing":
     Re-encoding through OpenCV drops the entire EXIF block, GPS included -
@@ -27,7 +31,9 @@ EXIF policy - deliberate, read before "fixing":
     reads image metadata.
 """
 
+import threading
 from dataclasses import dataclass
+from importlib import resources
 
 import cv2
 import numpy as np
@@ -51,7 +57,40 @@ BOX_MARGIN = 0.30
 #: kernel-size tuning.
 PIXELATE_WIDTH = 12
 
+#: YuNet score threshold. The model default is 0.9; this is set far below it
+#: on purpose - recall over precision, same reasoning as the Haar tuning. On
+#: the pilot photos the small through-glass faces score in the 0.4-0.8 range.
+YUNET_SCORE_THRESHOLD = 0.35
+
+#: Two-tier acceptance: below YUNET_SCORE_THRESHOLD a detection is kept only
+#: when it is SMALL (longest side at most YUNET_SMALL_FACE_FRACTION of the
+#: image's long side) and still scores at least this. Measured rationale: the
+#: pilot's dim through-glass faces (~15-20px) score 0.15-0.25 - systematically
+#: under-scored for lack of pixels - and a small false positive blurs a
+#: hand-sized patch of glass, costing nothing. A LOW-score LARGE box is the
+#: opposite on both counts: almost never a face, and blurring half the door
+#: can destroy the hardware evidence a criterion actually reads - so large
+#: boxes stay held to the full threshold. 0.15 is set from the worst real
+#: face in the pilot set (0.196 contrast-boosted), with headroom.
+YUNET_SMALL_SCORE_THRESHOLD = 0.15
+YUNET_SMALL_FACE_FRACTION = 0.05
+
+#: YuNet detects on its own copy, downscaled to at most this long side -
+#: larger than DETECT_MAX_SIDE because the DNN, unlike the cascades, keeps
+#: finding faces as they get small IF the pixels are there: measured on the
+#: pilot photos, ~20px through-glass faces score ~0.6 at 2048 and ~0.2 at
+#: 1600. One YuNet pass at 2048 is still far cheaper than the Haar stack.
+YUNET_MAX_SIDE = 2048
+
+#: The YuNet model committed with the package; see models/README.md for
+#: source and license. Committed so runtime needs no download.
+YUNET_MODEL = "models/face_detection_yunet_2023mar.onnx"
+
 _cascades = None
+_yunet = None
+#: FaceDetectorYN is stateful (setInputSize before each detect), so the shared
+#: instance is guarded; concurrent /screen requests must not interleave it.
+_yunet_lock = threading.Lock()
 
 
 def _get_cascades():
@@ -64,6 +103,62 @@ def _get_cascades():
             cv2.CascadeClassifier(base + "haarcascade_profileface.xml"),
         )
     return _cascades
+
+
+def _get_yunet():
+    """Load the committed YuNet model, once. Callers hold _yunet_lock.
+
+    Created at the LOW threshold; the two-tier score/size rule is applied in
+    _detect_yunet, where the box size is known.
+    """
+    global _yunet
+    if _yunet is None:
+        model = resources.files("frontdoor").joinpath(YUNET_MODEL)
+        with resources.as_file(model) as path:
+            _yunet = cv2.FaceDetectorYN.create(
+                str(path), "", (320, 320),
+                score_threshold=YUNET_SMALL_SCORE_THRESHOLD,
+            )
+    return _yunet
+
+
+def _boost_luma(img):
+    """CLAHE on the luminance channel: same trick the Haar pass uses, in
+    color. The pilot's dim behind-glass faces score ~0.1 higher on it."""
+    ycrcb = cv2.cvtColor(img, cv2.COLOR_BGR2YCrCb)
+    ycrcb[:, :, 0] = cv2.createCLAHE(
+        clipLimit=3.0, tileGridSize=(8, 8)
+    ).apply(ycrcb[:, :, 0])
+    return cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2BGR)
+
+
+def _detect_yunet(small):
+    """YuNet boxes as (x, y, w, h) in the (downscaled) image's coordinates.
+
+    Runs on the image and on a contrast-boosted copy, unioned. Each detection
+    passes the two-tier rule: full YUNET_SCORE_THRESHOLD for any size, or
+    YUNET_SMALL_SCORE_THRESHOLD for small boxes (see the constants above).
+    """
+    height, width = small.shape[:2]
+    small_limit = YUNET_SMALL_FACE_FRACTION * max(height, width)
+    boxes = []
+    with _yunet_lock:
+        detector = _get_yunet()
+        detector.setInputSize((width, height))
+        for variant in (small, _boost_luma(small)):
+            _, faces = detector.detect(variant)
+            if faces is None:
+                continue
+            # Rows are [x, y, w, h, 10 landmark floats, score]; boxes can poke
+            # past the frame edge - _blur clamps, so only rounding happens here.
+            for row in faces:
+                x, y, w, h, score = *row[:4], row[14]
+                if score >= YUNET_SCORE_THRESHOLD or max(w, h) <= small_limit:
+                    boxes.append(
+                        (round(float(x)), round(float(y)),
+                         round(float(w)), round(float(h)))
+                    )
+    return boxes
 
 
 def _decode(image_bytes):
@@ -143,6 +238,21 @@ def _apply_orientation(img, orientation):
 
 def _detect(img):
     """Detect faces in a BGR array; boxes as (x, y, w, h) in its coordinates."""
+    # Primary pass: YuNet at a low threshold, on its own larger copy
+    # (YUNET_MAX_SIDE) so the small through-glass faces keep enough pixels
+    # to score above threshold.
+    yscale = min(1.0, YUNET_MAX_SIDE / max(img.shape[:2]))
+    ysmall = img if yscale == 1.0 else cv2.resize(
+        img, None, fx=yscale, fy=yscale, interpolation=cv2.INTER_AREA
+    )
+    boxes = [
+        (round(x / yscale), round(y / yscale), round(w / yscale), round(h / yscale))
+        for x, y, w, h in _detect_yunet(ysmall)
+    ]
+
+    # Supplementary pass: the Haar union from the first cut. Cheap, and its
+    # CLAHE and mirrored variants still add recall on ghosted reflections
+    # that YuNet scores under even the low threshold.
     frontal, profile = _get_cascades()
     scale = min(1.0, DETECT_MAX_SIDE / max(img.shape[:2]))
     small = img if scale == 1.0 else cv2.resize(
@@ -151,22 +261,23 @@ def _detect(img):
     gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
     boosted = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(gray)
 
-    boxes = []
+    haar_boxes = []
     for variant in (gray, boosted):
         width = variant.shape[1]
         mirrored = cv2.flip(variant, 1)
         # Recall-tuned: small scale step, few required neighbors, small floor.
         kwargs = {"scaleFactor": 1.06, "minNeighbors": 3, "minSize": (20, 20)}
-        boxes.extend(frontal.detectMultiScale(variant, **kwargs))
-        boxes.extend(profile.detectMultiScale(variant, **kwargs))
+        haar_boxes.extend(frontal.detectMultiScale(variant, **kwargs))
+        haar_boxes.extend(profile.detectMultiScale(variant, **kwargs))
         # The profile cascade only knows one facing; the mirror catches the other.
         for x, y, w, h in profile.detectMultiScale(mirrored, **kwargs):
-            boxes.append((width - x - w, y, w, h))
+            haar_boxes.append((width - x - w, y, w, h))
 
-    return [
+    boxes.extend(
         (round(x / scale), round(y / scale), round(w / scale), round(h / scale))
-        for x, y, w, h in boxes
-    ]
+        for x, y, w, h in haar_boxes
+    )
+    return boxes
 
 
 def _blur(img, boxes):

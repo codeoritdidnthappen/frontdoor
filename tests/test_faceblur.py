@@ -1,12 +1,13 @@
 """Contract tests for the face-blur ingest step (TICK-257, #232).
 
-Haar cascades will not fire on a programmatically drawn face, so these do not
-try to make the detector find one. They pin the contract instead: blurring
-destroys the region it is given (detection mocked), detection stays quiet on a
-featureless image, EXIF orientation is physically applied, EXIF (GPS included)
-does not survive re-encode, and process_upload's output is always a valid
-JPEG. Measured recall on real photos is reported on the ticket, not asserted
-here - it depends on the photos.
+Blurring destroys the region it is given (detection mocked), detection stays
+quiet on a featureless image, EXIF orientation is physically applied, EXIF
+(GPS included) does not survive re-encode, and process_upload's output is
+always a valid JPEG. The YuNet primary detector (TICK-257 follow-up) is real
+enough that a programmatically drawn face triggers it, so its tests use one -
+no committed photo of a person, which would defeat the module's purpose.
+Measured recall on real photos is reported on the ticket, not asserted here -
+it depends on the photos.
 """
 
 import cv2
@@ -112,6 +113,75 @@ def test_no_faces_means_zero_count_and_valid_jpeg(monkeypatch):
     assert count == 0
     assert processed_bytes[:2] == b"\xff\xd8"
     decode(processed_bytes)
+
+
+# --- YuNet primary detector (TICK-257 follow-up) ------------------------------
+
+
+class _EmptyCascade:
+    def detectMultiScale(self, img, **kwargs):
+        return []
+
+
+def drawn_face(size=200):
+    """A face drawn with cv2 primitives. YuNet, unlike the Haar cascades,
+    detects it (score ~0.88 at 200px) - so the DNN path is exercised on an
+    image the repo can commit-free regenerate, not on a real person."""
+    img = np.full((size, size, 3), 200, dtype=np.uint8)
+    c = size // 2
+    cv2.ellipse(img, (c, c), (int(size * 0.28), int(size * 0.38)), 0, 0, 360,
+                (140, 170, 210), -1)  # head
+    cv2.ellipse(img, (c, int(c - size * 0.22)), (int(size * 0.29), int(size * 0.20)),
+                0, 180, 360, (40, 50, 60), -1)  # hair
+    for ex in (int(c - size * 0.11), int(c + size * 0.11)):  # eyes and brows
+        ey = int(c - size * 0.08)
+        cv2.ellipse(img, (ex, ey), (int(size * 0.06), int(size * 0.035)), 0, 0, 360,
+                    (245, 245, 245), -1)
+        cv2.circle(img, (ex, ey), int(size * 0.025), (90, 60, 40), -1)
+        cv2.circle(img, (ex, ey), int(size * 0.012), (10, 10, 10), -1)
+        cv2.ellipse(img, (ex, ey - int(size * 0.05)), (int(size * 0.06), int(size * 0.015)),
+                    0, 180, 360, (60, 70, 90), -1)
+    cv2.line(img, (c, int(c - size * 0.04)), (int(c - size * 0.02), int(c + size * 0.08)),
+             (110, 140, 180), 2)  # nose
+    cv2.ellipse(img, (c, int(c + size * 0.09)), (int(size * 0.035), int(size * 0.02)),
+                0, 0, 180, (100, 130, 170), 2)
+    cv2.ellipse(img, (c, int(c + size * 0.20)), (int(size * 0.09), int(size * 0.035)),
+                0, 0, 180, (80, 80, 170), -1)  # mouth
+    cv2.ellipse(img, (c, int(c + size * 0.30)), (int(size * 0.10), int(size * 0.03)),
+                0, 0, 180, (120, 150, 190), 2)  # chin shading
+    return img
+
+
+def test_yunet_loads_from_the_committed_model_file():
+    # The model ships in the package: no download, no network, no cache dir.
+    assert faceblur._get_yunet() is not None
+
+
+def test_yunet_detects_a_face_without_the_cascades(monkeypatch):
+    # Haar disabled: any box must come from the YuNet path.
+    monkeypatch.setattr(
+        faceblur, "_get_cascades", lambda: (_EmptyCascade(), _EmptyCascade())
+    )
+    boxes = detect_faces(encode(drawn_face()))
+    assert boxes, "YuNet found no face in the drawn-face fixture"
+    # At least one box covers the face's center.
+    assert any(
+        x <= 100 <= x + w and y <= 100 <= y + h for x, y, w, h in boxes
+    ), f"no box covers the face center: {boxes}"
+
+
+def test_yunet_boxes_come_back_in_full_resolution_coordinates(monkeypatch):
+    # Detection runs downscaled (DETECT_MAX_SIDE=1600); a face drawn on a
+    # 3200px-wide canvas must come back in that canvas's coordinates.
+    monkeypatch.setattr(
+        faceblur, "_get_cascades", lambda: (_EmptyCascade(), _EmptyCascade())
+    )
+    big = np.full((2400, 3200, 3), 200, dtype=np.uint8)
+    big[1000:1400, 1400:1800] = drawn_face(400)  # face center at (1600, 1200)
+    boxes = detect_faces(encode(big))
+    assert any(
+        x <= 1600 <= x + w and y <= 1200 <= y + h for x, y, w, h in boxes
+    ), f"no box covers the face center at full resolution: {boxes}"
 
 
 # --- detect_faces ------------------------------------------------------------
