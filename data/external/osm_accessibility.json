@@ -1,0 +1,42 @@
+{
+  "source": "openstreetmap",
+  "license": "ODbL-1.0",
+  "attribution": "Contains data from OpenStreetMap (\u00a9 OpenStreetMap contributors), licensed under the Open Database License (ODbL) 1.0. https://www.openstreetmap.org/copyright",
+  "segregation": "ODbL-licensed data stored as a segregated side table per the ODbL Collective Database Guideline. Do not merge these records into any proprietary dataset.",
+  "fetched_at": "2026-09-03T23:45:13Z",
+  "record_count": 1,
+  "records": [
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:45:13Z",
+      "osm_type": "way",
+      "osm_id": 312337842,
+      "name": "Guero's Taco Bar",
+      "lat": 30.2491529,
+      "lon": -97.7502861,
+      "tags": {
+        "addr:city": "Austin",
+        "addr:housenumber": "1412",
+        "addr:postcode": "78704",
+        "addr:state": "TX",
+        "addr:street": "South Congress Avenue",
+        "amenity": "restaurant",
+        "bar": "yes",
+        "building": "yes",
+        "building:levels": "1",
+        "check_date": "2025-02-15",
+        "cuisine": "mexican",
+        "diet:gluten_free": "yes",
+        "diet:vegan": "yes",
+        "diet:vegetarian": "yes",
+        "indoor_seating": "yes",
+        "name": "Guero's Taco Bar",
+        "opening_hours": "Fr-Sa 11:00-22:00; Su-Th 11:00-21:00",
+        "outdoor_seating": "yes",
+        "phone": "+1-512-447-7688",
+        "website": "https://gueros.com",
+        "wheelchair": "yes"
+      }
+    }
+  ]
+}
