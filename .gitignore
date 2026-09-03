@@ -88,6 +88,7 @@ web_modules/
 
 # dotenv environment variable files
 .env
+.wrangler/
 .env.*
 !.env.example
 
