@@ -1,12 +1,16 @@
 """Build and run the TICK-062 image, then hit it as a client would.
 
-Skipped when the Docker daemon is not running. CI does not start Docker, so the
-flask test client in test_measure_endpoint.py is what always runs.
+The tests that build are skipped when the Docker daemon is not running, and CI does not
+start one. So the properties that must not regress unwatched -- nothing in the build
+context that could carry a credential, and a fit check against the size we actually
+deploy -- are also asserted at the bottom of this file by reading the files themselves.
 """
 
 import contextlib
 import json
 import os
+import sys
+import re
 import shutil
 import subprocess
 import threading
@@ -14,10 +18,12 @@ import time
 import urllib.error
 import urllib.request
 import uuid
+from pathlib import PurePosixPath
 
 import pytest
 
 from frontdoor_server.app import validate_measure_response
+from tests.conftest import REPO_ROOT
 from tests.test_measure_endpoint import architecture_example
 
 IMAGE = "frontdoor-server:tick062"
@@ -55,7 +61,7 @@ def _docker_running():
 # CI's pytest job is a 5-minute runner without a warm build cache. The flask
 # client tests already cover the contract; this module is the local proof the
 # image builds and answers.
-pytestmark = pytest.mark.skipif(
+requires_docker = pytest.mark.skipif(
     bool(os.environ.get("CI")) or not _docker_running(),
     reason="docker image tests run locally, not on the 5-minute CI job",
 )
@@ -75,8 +81,6 @@ def _run(args, **kwargs):
 
 @pytest.fixture(scope="module")
 def built_image():
-    from tests.conftest import REPO_ROOT
-
     _run(["docker", "build", "-t", IMAGE, str(REPO_ROOT)], timeout=600)
     return IMAGE
 
@@ -156,12 +160,14 @@ def _post_measure(url, sidecar, image=b"not-a-real-jpeg"):
         return response.status, json.loads(response.read())
 
 
+@requires_docker
 def test_container_health(container_url):
     with urllib.request.urlopen(f"{container_url}/health", timeout=5) as response:
         assert response.status == 200
         assert json.loads(response.read()) == {"status": "ok"}
 
 
+@requires_docker
 def test_container_measure_matches_live_contract(container_url):
     status, body = _post_measure(container_url, architecture_example())
     assert status == 200
@@ -178,12 +184,14 @@ def test_container_measure_matches_live_contract(container_url):
     assert "rise_in" in body["arms"]["A_prime"]
 
 
+@requires_docker
 def test_image_id_is_content_addressed(built_image):
     image_id = _run(["docker", "image", "inspect", "-f", "{{.Id}}", IMAGE]).stdout.strip()
     assert image_id.startswith("sha256:")
     assert len(image_id) > len("sha256:") + 16
 
 
+@requires_docker
 def test_serves_a_full_resolution_still_under_the_memory_cap(capped_container_url):
     """The deployed machine has to hold a real capture, not a token one."""
     status, body = _post_measure(
@@ -197,6 +205,7 @@ def test_serves_a_full_resolution_still_under_the_memory_cap(capped_container_ur
         assert response.status == 200
 
 
+@requires_docker
 def test_the_memory_cap_holds_under_concurrent_uploads(capped_container_url):
     """Four clients uploading full-resolution stills at once, against two worker threads.
 
@@ -227,6 +236,7 @@ def test_the_memory_cap_holds_under_concurrent_uploads(capped_container_url):
         assert response.status == 200
 
 
+@requires_docker
 def test_the_server_runs_as_pid_one(built_image):
     """A stop signal has to reach gunicorn, not a shell that dies holding the door.
 
@@ -240,6 +250,7 @@ def test_the_server_runs_as_pid_one(built_image):
     assert pid_one.startswith("gunicorn")
 
 
+@requires_docker
 def test_image_carries_no_credentials(built_image):
     """R2 keys reach the container from the environment at run time, never in the layers.
 
@@ -266,3 +277,106 @@ def test_image_carries_no_credentials(built_image):
         ]
     ).stdout
     assert found.strip() == ""
+
+
+# --- the same properties, without a docker daemon -----------------------------------------
+#
+# Everything above is skipped on CI, which is where a pull request is actually checked. These
+# read the files the image is built from, so a change that would ship a credential -- or that
+# would quietly stop testing the machine we deploy -- fails there too.
+
+DOCKERIGNORE = REPO_ROOT / ".dockerignore"
+DOCKERFILE = REPO_ROOT / "Dockerfile"
+FLY_TOML = REPO_ROOT / "fly.toml"
+
+# Names that would put a secret in a layer. Broader than the FRONTDOOR_ prefix the run-time
+# check uses, because a build-time ARG is as likely to be called API_KEY as anything.
+_CREDENTIAL_NAME = re.compile(r"KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL", re.IGNORECASE)
+
+
+def _context_leaks(dockerignore_text):
+    """Reasons the build context could carry a `.env`, or [] if it cannot.
+
+    A real `.env` sits in the working tree and python-dotenv is a runtime dependency, so one
+    in a layer would be read and believed. What stands between that and an image on a public
+    registry is this file denying everything and re-admitting the package by name.
+    """
+    rules = [
+        line.strip()
+        for line in dockerignore_text.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+    reasons = []
+    if not rules or rules[0] != "*":
+        reasons.append("the context is not deny-by-default: the first rule is not `*`")
+    reasons += [
+        f"`{rule}` re-admits a dotfile"
+        for rule in rules
+        if rule.startswith("!") and PurePosixPath(rule[1:]).name.startswith(".")
+    ]
+    # A rule ending in a wildcard re-admits whatever is under it, dotfiles included: `!src/**`
+    # would ship `src/.env` while naming no dotfile itself. Reading the rules cannot settle
+    # that, so ask the tree what is actually there.
+    for rule in rules:
+        if not rule.startswith("!") or not PurePosixPath(rule[1:]).name.endswith("*"):
+            continue
+        root = REPO_ROOT / PurePosixPath(rule[1:]).parent
+        if not root.is_dir():
+            continue
+        reasons += [
+            f"`{rule}` re-admits {found.relative_to(REPO_ROOT).as_posix()}"
+            for found in sorted(root.rglob(".env*"))
+        ]
+    return reasons
+
+
+def test_the_build_context_cannot_carry_a_credential_file():
+    assert _context_leaks(DOCKERIGNORE.read_text(encoding="utf-8")) == []
+
+
+@pytest.mark.parametrize(
+    "leaky",
+    [
+        "# the allowlist is gone, so everything not named here is in\n.git\n__pycache__\n",
+        "*\n!pyproject.toml\n!src\n!src/**\n!.env\n",
+    ],
+)
+def test_a_loosened_ignore_file_is_caught(leaky):
+    """The check above passes against a file nobody has touched; this is what makes it one."""
+    assert _context_leaks(leaky)
+
+
+def test_a_wildcard_negation_over_a_tree_holding_a_dotenv_is_caught(tmp_path, monkeypatch):
+    """`!src/**` names no dotfile of its own, and would still ship one sitting under `src/`."""
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / ".env").write_text("FRONTDOOR_IMAGE_SECRET_KEY=live", encoding="utf-8")
+    monkeypatch.setattr(sys.modules[__name__], "REPO_ROOT", tmp_path)
+    assert _context_leaks("*\n!src\n!src/**\n")
+
+
+def test_the_dockerfile_bakes_in_no_credential():
+    """R2 keys reach the container as Fly secrets at run time, never through the build."""
+    declared = re.findall(
+        r"^\s*(?:ENV|ARG)\s+([A-Za-z_][A-Za-z0-9_]*)",
+        DOCKERFILE.read_text(encoding="utf-8"),
+        re.MULTILINE,
+    )
+    # PORT is declared, so an empty list means the pattern stopped matching rather than that
+    # the Dockerfile stopped declaring secrets.
+    assert declared
+    assert [name for name in declared if _CREDENTIAL_NAME.search(name)] == []
+
+
+def test_the_memory_cap_under_test_is_the_deployed_machines_size():
+    """MEMORY_CAP is a copy of fly.toml's number, and a copy goes stale silently.
+
+    Resize the machine without resizing this and the fit check above keeps passing while
+    holding the image to a machine we no longer run.
+    """
+    declared = re.search(
+        r'^\s*memory\s*=\s*"(\d+)mb"',
+        FLY_TOML.read_text(encoding="utf-8"),
+        re.MULTILINE | re.IGNORECASE,
+    )
+    assert declared, "fly.toml declares no machine memory size"
+    assert MEMORY_CAP == f"{declared.group(1)}m"
