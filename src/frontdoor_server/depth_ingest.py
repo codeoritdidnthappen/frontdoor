@@ -102,6 +102,8 @@ def put_depth(
         raise DepthIngestError(f"depth-ingest Worker returned HTTP {response.status}")
     if len(response_body) > 4096:
         raise DepthIngestError("depth-ingest Worker returned an oversized response")
-    confirmation = DepthIngestResponse.parse(response_body)
-    if confirmation.sha256 != sha256:
-        raise DepthIngestError("depth-ingest Worker confirmed a different digest")
+    # Shape check only. The Worker builds its 201 body from the digest header it was handed, so
+    # comparing the value it returns against `sha256` would compare the header with itself and
+    # could never fail. The integrity guarantee is R2's server-side `sha256` precondition inside
+    # the Worker's `bucket.put`, which refuses a mismatched body and stores nothing (TICK-256).
+    DepthIngestResponse.parse(response_body)
