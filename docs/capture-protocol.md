@@ -103,14 +103,17 @@ Across the view set (not necessarily every single shot), the set as a whole must
   reshoot. Reshoot only when a person **physically occludes the entrance** — that is an occlusion
   problem, not a privacy one, and no amount of blurring puts the doorway back in frame. If the
   occlusion won't clear in a reasonable wait, treat the entrance as a skip (see below).
-- **Check the glass — now a verification, not the only line of defense.** Storefront doors are
-  mirrors: the pilot (TICK-092) lost 17 of 65 shots to identifiable faces, mostly *in the door
-  glass* — reflections of passers-by, people inside seen through the pane, and the photographer's
-  own reflection — none noticed at capture. The blur step exists because that rule did not survive
-  contact with glass; but reflected and through-glass faces are exactly where automatic detection
-  is weakest, so the human check stays. Before leaving an entrance, flick through the set once
-  looking specifically at the glass, and after ingest confirm the blur output actually covered
-  what you saw. Your own reflection counts; shooting from a slight angle keeps you out of it.
+- **The glass is not your problem anymore — capture has no manual privacy step.** Storefront
+  doors are mirrors: the pilot (TICK-092) lost 17 of 65 shots to identifiable faces, mostly *in
+  the door glass* — reflections of passers-by, people inside seen through the pane, and the
+  photographer's own reflection — none noticed at capture, which is exactly why a human check was
+  never going to be the fix. Two automatic layers handle it now: ingest detects and irreversibly
+  blurs faces (reflections and through-glass included), and the screening model then audits its
+  own input — any image where a face is still recognizable after blurring is quarantined and
+  never retained. Don't flick through the set looking at the glass; don't verify the blur output.
+  A periodic QA sample of blurred output during dataset review replaces the field check.
+  (Shooting from a slight angle still keeps your own reflection out of the shot, which is good
+  craft — just not a required check.)
 
 ## Record at capture — not from memory later
 
