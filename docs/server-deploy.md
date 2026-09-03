@@ -88,17 +88,35 @@ validated stream over its authenticated PUT-only HTTP surface and writes through
 `FRONTDOOR_DEPTH_ACCESS_KEY` / `FRONTDOOR_DEPTH_SECRET_KEY` remain on the harness and must **not**
 be set on Fly.
 
-Deploy the Worker first:
+Deploy the Worker first. **Deploy, then set the secret** -- `wrangler secret put` attaches to a
+Worker that already exists, so the reverse order has nothing to attach to:
 
 ```
 cd workers/depth-ingest
-npx wrangler secret put FRONTDOOR_DEPTH_INGEST_KEY
 npx wrangler deploy
+npx wrangler secret put FRONTDOOR_DEPTH_INGEST_KEY   # reads the value from stdin
 ```
 
 Use the same independently generated service key on the Worker and Fly; it is not the phone's
-`FRONTDOOR_UPLOAD_KEY`. Record the deployed `workers.dev` URL in
-`FRONTDOOR_DEPTH_INGEST_URL`. The Worker's `wrangler.jsonc` binds `DEPTH_BUCKET` directly, so
+`FRONTDOOR_UPLOAD_KEY`. Record the deployed `workers.dev` URL in `FRONTDOOR_DEPTH_INGEST_URL`.
+
+**Deployed 2026-09-03 (TICK-251, #218):**
+
+```
+FRONTDOOR_DEPTH_INGEST_URL=https://frontdoor-depth-ingest.frontdoor-depth-ingest.workers.dev
+```
+
+Verified live against the real bucket, not against a stub: an authenticated PUT of an `open/`
+probe returned 201 and the bytes read back through `frontdoor.depth_access` with a matching
+SHA-256; repeating it returned 409 without overwriting; a bad credential returned 401 and created
+no object; `GET` returned 405. The probe object was deleted afterwards, which is why it is an
+`open/` key -- #187 locked `sealed/` against deletion indefinitely, so a sealed probe could never
+be cleaned up.
+
+**Call it with `http.client`, not `urllib`.** `frontdoor_server.depth_ingest.put_depth` already
+does. Cloudflare's edge answers `urllib`'s `Python-urllib/3.x` User-Agent with `403 error code:
+1010` before the Worker runs at all, which reads as a Worker rejection and is not one. Sending no
+User-Agent, as `http.client` does, is fine. The Worker's `wrangler.jsonc` binds `DEPTH_BUCKET` directly, so
 there is no R2 access key to copy to Fly or into the Worker environment.
 
 `FRONTDOOR_UPLOAD_KEY` is the shared secret for `POST /upload`, the capture-ingest endpoint
