@@ -13,35 +13,35 @@ Not project totals. Four people, four separate scorecards.
 
 ---
 
-## The problem this tracker exists to surface, found on day one
+## What the plan actually provides — corrected 2026-09-03
 
-**F3 cannot be met by the current plan, and the gap is 14 posts.**
+**An earlier version of this file said F3 was short by 14 posts. That was wrong, and the error is
+recorded here rather than quietly deleted, because it was acted on.**
 
-PRD §11 plans six posts for the *project*, and #76–#81 give each one a single owner. F3 asks for
-five posts from *each person*. So the plan tops out at two posts for the busiest person against a
-floor of five, and it is arithmetically impossible for all four:
+The mistake was reading the assignee of each post ticket as the only person who publishes it.
+Every one of #76–#81 says otherwise, in its own acceptance criteria:
 
-| Person | X handle | Posts owned in the plan | F3 floor | Short by |
-|--------|----------|------------------------|----------|----------|
-| David | @codehappened | 2 — #78, #79 | 5 | **3** |
-| James | @JamesMerithew | 2 — #76, #77 | 5 | **3** |
-| Emily | @EmilyLiangwx | 1 — #81 | 5 | **4** |
-| Ruben | @rubanikov | 1 — #80 *(closed)* | 5 | **4** |
-| | | **6 planned** | **20 needed** | **14** |
+> **All four** team members publish from their own accounts and every URL is in the tracker.
 
-The ticket's own wording — "the six planned posts leave exactly one spare" — reads the six as one
-person's set. Against per-person grading with one owner per post, they are not a spare; they are a
-quarter of what is required.
+and EPIC-08 (#11) states it directly: *"each of the four team members posts on their own account.
+Each ticket below is therefore completed four times, once per person."*
 
-**Five of the six are still unpublished with seven days left.** Only #80 is closed.
+So the assignee owns the **content** of a post — writing it, and the number or chart in it — and
+all four then publish their own version. Six planned posts is therefore:
 
-This is not a tracking gap to be filled in later. Either every person publishes ~5 posts of their
-own, or the requirement is not met, and the remedy costs days — which is exactly why #82 asks for
-tracking *from Aug 30* rather than a count on Demo Day.
+| | |
+|---|---|
+| Posts planned | 6 |
+| Published by each person | **6** |
+| F3 floor, per person | 5 |
+| Margin | **one spare each** — which is exactly what #82's own wording said |
 
-**Owed to the team, not decided here:** whether the plan becomes "each person writes their own five"
-or the floor is knowingly missed. Raise it before Sep 5, which is the date #82 sets for scheduling
-extra posts.
+There is no structural shortfall, and nothing needs deciding before Sep 5. What remains is
+ordinary execution: the posts have to actually go out, from four accounts.
+
+**What is true, and is the real risk:** five of the six are still unpublished, and post 6 cannot go
+out before Demo Day itself. Anyone who publishes only the posts that remain, and misses one, drops
+below five. The margin is one.
 
 ---
 
@@ -61,7 +61,7 @@ number moves.
 |---|---|---|
 | F1 engagements ≥150 | `not recorded` | — |
 | F2 followers +25 | `not recorded` (start: `not recorded`) | — |
-| F3 posts ≥5 | **1 published / 5** ⚠️ *(owns #78, #79)* | — |
+| F3 posts ≥5 | **0 published / 5** ⚠️ *(6 planned: #76–#81; owns the content of #78, #79)* | — |
 | F4 outside repost | `not recorded` | — |
 
 | # | Post | Ticket | URL | Published | Engagements |
@@ -75,7 +75,7 @@ number moves.
 |---|---|---|
 | F1 engagements ≥150 | `not recorded` | — |
 | F2 followers +25 | `not recorded` (start: `not recorded`) | — |
-| F3 posts ≥5 | **0 published / 5** ⚠️ *(owns #76, #77)* | — |
+| F3 posts ≥5 | **0 published / 5** ⚠️ *(6 planned: #76–#81; owns the content of #76, #77)* | — |
 | F4 outside repost | `not recorded` | — |
 
 | # | Post | Ticket | URL | Published | Engagements |
@@ -89,15 +89,15 @@ number moves.
 |---|---|---|
 | F1 engagements ≥150 | `not recorded` | — |
 | F2 followers +25 | `not recorded` (start: `not recorded`) | — |
-| F3 posts ≥5 | **0 published / 5** ⚠️ *(owns #81)* | — |
+| F3 posts ≥5 | **0 published / 5** ⚠️ *(6 planned: #76–#81; owns the content of #81)* | — |
 | F4 outside repost | `not recorded` | — |
 
 | # | Post | Ticket | URL | Published | Engagements |
 |---|------|--------|-----|-----------|-------------|
 | 6 | Demo Day measurement clip | #81 | — | not yet — needs Demo Day | — |
 
-**#81 cannot be published before Sep 9**, so Emily's only planned post lands on or after the
-deadline. Her F3 count from the plan is effectively zero.
+**#81 cannot be published before Sep 9**, so one of the six lands on the deadline itself. That is
+true for everyone, not just Emily — it is the reason the margin is one post rather than two.
 
 ### Ruben — @rubanikov
 
@@ -105,7 +105,7 @@ deadline. Her F3 count from the plan is effectively zero.
 |---|---|---|
 | F1 engagements ≥150 | `not recorded` | — |
 | F2 followers +25 | `not recorded` (start: `not recorded`) | — |
-| F3 posts ≥5 | **1 published / 5** ⚠️ *(owns #80, closed)* | URL not recorded |
+| F3 posts ≥5 | **? published / 5** ⚠️ *(6 planned: #76–#81; owns the content of #80, closed)* | URL not recorded |
 | F4 outside repost | `not recorded` | — |
 
 | # | Post | Ticket | URL | Published | Engagements |
