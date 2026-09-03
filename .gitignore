@@ -162,3 +162,7 @@ dist
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# Local git worktrees. Kept inside the repo so every path stays within the project
+# directory; never committed.
+.worktrees/
