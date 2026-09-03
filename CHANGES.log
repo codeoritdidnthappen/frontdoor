@@ -407,7 +407,7 @@ shipping the two-bucket client the loader and harness will use.
   superseded by D-028 below, which puts the partition in the key.
 - Credentials via environment variables, documented in `.env.example` and
   `data/STORAGE.md`. Nothing in this commit is a secret.
-- `python -m frontdoor.storage verify` uploads a probe, reads the image back with
+- `python -m frontdoor.storage verify` *(moved by TICK-057; see D-033)* uploads a probe, reads the image back with
   the loader credential, and fails unless that same credential is denied on the
   depth bucket. That check is the DoD for the quarantine; TICK-072 (library-level
   refusal) is a later defence, not a substitute.
@@ -494,7 +494,7 @@ this records the provisioning.
 Cloudflare R2, free tier, account `b121ca93…`. Buckets `frontdoor-image` and
 `frontdoor-depth`, two API tokens with distinct access keys.
 
-    $ python -m frontdoor.storage verify
+    $ python -m frontdoor.storage verify        # moved by TICK-057 to frontdoor.storage_probe
     ok  images=frontdoor-image  depth=frontdoor-depth  loader-denied-on-depth
 
 That is the acceptance criterion that says "verified by actually running it, not by reading
@@ -737,7 +737,10 @@ of the server's access is.
     harness            frontdoor-depth   read
     metrology library  neither           no credential at all
 
-**Verification.** `python -m frontdoor.storage verify` must still print `loader-denied-on-depth`.
+**Verification.** `python -m frontdoor.storage verify` *(TICK-057)* must still print `loader-denied-on-depth`.
+*(Command moved 2026-09-02 by TICK-057 to `python -m frontdoor.storage_probe verify` -- the
+probe reads depth, so it cannot live in the module the loader and the server import for
+images. The old spelling now refuses loudly instead of exiting 0 in silence.)*
 A new check asserts the server's depth token can PUT and is REFUSED on GET; if a read succeeds,
 the write-only scope leaked and this entry's guarantee is void.
 

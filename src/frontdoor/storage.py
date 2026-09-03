@@ -345,13 +345,13 @@ def depth_write_store():
 def main(argv=None):
     """The credential probe moved to `frontdoor.storage_probe` (TICK-057).
 
-    This exists ONLY so the old command fails loudly. Without a `__main__` here,
-    `python -m frontdoor.storage verify` ran nothing and exited 0 -- an operator following a stale
-    runbook to check the D-033 write-only token would have got a clean exit and concluded it
+    This exists ONLY so the old command fails loudly (TICK-057). Without a `__main__`
+    here, `python -m frontdoor.storage verify` (TICK-057) ran nothing and exited 0 -- an
+    operator following a stale runbook to check the D-033 write-only token would have got a clean exit and concluded it
     passed. A silent success is the worst possible answer from a verification command.
     """
     print(
-        "`python -m frontdoor.storage verify` has moved to:\n"
+        "`python -m frontdoor.storage verify` has moved (TICK-057) to:\n"
         "    python -m frontdoor.storage_probe verify\n"
         "The probe READS depth, so it cannot live in the module the loader and the server import "
         "for images (D-020, TICK-057).",

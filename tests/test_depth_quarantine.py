@@ -66,6 +66,7 @@ def test_no_depth_pixel_access_outside_the_writer(source):
 # real import graph and fail the build the moment someone adds the import.
 
 import ast
+import pathlib
 from pathlib import Path as _Path
 
 SRC = _Path(__file__).resolve().parents[1] / "src"
@@ -113,6 +114,15 @@ def _imports_of(path, module_name=None):
             found.update(a.name for a in node.names)
         elif isinstance(node, ast.ImportFrom):
             if node.level:
+                # Climbing past the root is an ImportError at runtime. Resolving it anyway
+                # produced a bogus BARE name -- `from ...secret import x` three levels up from
+                # `pkg/sub/a.py` yielded plain `secret` -- which with two top-level packages under
+                # src/ could land on a real module and mis-attribute an edge, or silently drop one.
+                if node.level > len(base):
+                    raise AssertionError(
+                        f"{module_name}: `from {'.' * node.level}{node.module or ''}` climbs past "
+                        "the package root; that is an ImportError at runtime, and the walker will "
+                        "not guess what was meant")
                 anchor = base[: len(base) - (node.level - 1)] if node.level > 1 else base
                 prefix = ".".join(anchor + ([node.module] if node.module else []))
             elif node.module:
@@ -374,7 +384,21 @@ def test_a_dynamic_import_of_the_depth_reader_is_flagged():
             continue
         text = path.read_text(encoding="utf-8")
         if '"' + DEPTH_READER + '"' in text or "'" + DEPTH_READER + "'" in text:
-            offenders.append(name)
+            offenders.append(name + " (names it as a literal)")
+            continue
+        # One concatenation defeated the literal check: `import_module("frontdoor.depth" +
+        # "_access")` passed the whole suite while the module read depth at runtime. A computed
+        # argument to a dynamic import is not something this repo needs, so it is refused
+        # outright rather than modelled.
+        tree = ast.parse(text, filename=str(path))
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            fn = node.func
+            called = (getattr(fn, "attr", None) or getattr(fn, "id", None))
+            if called in {"import_module", "__import__"} and node.args:
+                if not isinstance(node.args[0], ast.Constant):
+                    offenders.append(name + " (dynamic import with a computed name)")
     assert not offenders, (
         "these modules name the depth reader as a string, which an import walk cannot see: "
         + str(sorted(offenders)))
@@ -383,16 +407,112 @@ def test_a_dynamic_import_of_the_depth_reader_is_flagged():
 def test_no_document_still_names_the_moved_probe_command():
     """`python -m frontdoor.storage verify` now refuses loudly rather than running.
 
-    It used to exit 0 in silence, because storage lost its `__main__` when the probe moved --
-    so an operator following a stale runbook to check the D-033 write-only token got a clean exit
-    and concluded it passed. A silent success is the worst answer a verification command can give.
-    This keeps the pointers correct as well as the behaviour.
+    It used to exit 0 in silence, because storage lost its `__main__` when the probe moved -- so
+    an operator following a stale runbook to check the D-033 write-only token got a clean exit and
+    concluded it passed. A silent success is the worst answer a verification command can give.
+
+    **Swept, not listed.** The first version checked six named files, so a seventh document could
+    name the old command freely and a rename would skip the check silently. It missed a live one:
+    D-033's own verification line. Every mention must now carry `TICK-057`, which is how a
+    historical record of what was run then stays readable without reading as instruction now.
     """
     repo = SRC.parent
-    stale = []
-    for name in ("data/STORAGE.md", "docs/server-deploy.md", "docs/ticket-summaries.md",
-                 ".env.example", "README.md", "ARCHITECTURE.md"):
-        path = repo / name
-        if path.exists() and "frontdoor.storage verify" in path.read_text(encoding="utf-8"):
-            stale.append(name)
-    assert not stale, f"these still name the moved command: {stale}"
+    skip = {".git", ".venv", "__pycache__", "node_modules", ".pytest_cache", "DerivedData"}
+    unmarked = []
+    for path in repo.rglob("*"):
+        if not path.is_file() or set(path.parts) & skip:
+            continue
+        if path.suffix not in {".md", ".log", ".py", ".txt", ".yml", ".yaml", ".example", ""}:
+            continue
+        if path == pathlib.Path(__file__):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8")
+        except (UnicodeDecodeError, OSError):
+            continue
+        for i, line in enumerate(text.splitlines(), 1):
+            if "frontdoor.storage verify" in line and "TICK-057" not in line:
+                unmarked.append(f"{path.relative_to(repo)}:{i}")
+    assert not unmarked, (
+        "these name the moved command without marking it as moved: " + str(unmarked))
+
+
+def test_the_walker_expands_ancestors_on_the_TRAVERSAL_side_too(tmp_path):
+    """The seeding side had a control; the traversal side had none.
+
+    Verified by mutation: reducing the expansion to `for nxt in [candidate]` left all 45 tests
+    green. `a` imports `pkg2.b`, and importing `pkg2.b` executes `pkg2/__init__.py`, which reads
+    the secret -- an edge reachable only by expanding ancestors of a module found mid-walk.
+    """
+    _tree(tmp_path, {
+        "pkg/__init__.py": "",
+        # `import pkg2.b`, NOT `from pkg2 import b`: the from-form adds `pkg2` to the found set
+        # on its own, so it never exercises the ancestor expansion this test exists for.
+        "pkg/a.py": "import pkg2.b" + NL,
+        "pkg2/__init__.py": "from pkg2 import secret" + NL,
+        "pkg2/b.py": "",
+        "pkg2/secret.py": "",
+    })
+    assert _reaches("pkg.a", "pkg2.secret", root=tmp_path) is not None, (
+        "an import in the __init__ of a package reached mid-walk is invisible")
+
+
+def test_the_walker_refuses_to_guess_at_an_over_climbing_relative_import(tmp_path):
+    """`from ...x import y` from two levels down is an ImportError at runtime.
+
+    Resolving it anyway produced a bogus bare name, which with two top-level packages under src/
+    could attach an edge to the wrong module -- or drop a real one.
+    """
+    _tree(tmp_path, {
+        "pkg/__init__.py": "",
+        "pkg/sub/__init__.py": "",
+        "pkg/sub/a.py": "from ...secret import x" + NL,
+        "pkg/secret.py": "",
+    })
+    with pytest.raises(AssertionError, match="climbs past the package root"):
+        _reaches("pkg.sub.a", "pkg.secret", root=tmp_path)
+
+
+def test_a_dynamic_import_with_a_computed_name_is_refused():
+    """The literal check was defeated by one concatenation.
+
+    `import_module("frontdoor.depth" + "_access")` passed the whole suite while the module read
+    depth at runtime. A computed argument to a dynamic import is not something this repo needs.
+    """
+    offenders = []
+    for name, path in _all_modules().items():
+        if name in PERMITTED_IMPORTERS or name == DEPTH_READER:
+            continue
+        for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
+            if isinstance(node, ast.Call):
+                called = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
+                if called in {"import_module", "__import__"} and node.args:
+                    if not isinstance(node.args[0], ast.Constant):
+                        offenders.append(name)
+    assert not offenders, "dynamic imports with computed names: " + str(sorted(set(offenders)))
+
+
+# --- the refusal that replaced a silent success -------------------------------------------
+
+
+def test_the_moved_command_refuses_loudly(capsys):
+    """`storage.main()` exists only to stop `python -m frontdoor.storage verify` exiting 0.
+
+    It had no test: the suite would have stayed green if the refusal regressed to `return 0`, or
+    if the message moved to stdout where a piped runbook check would swallow it. That is precisely
+    the silent-success failure the function was added to prevent.
+    """
+    from frontdoor import storage
+
+    assert storage.main([]) == 2, "the moved command must not report success"
+    captured = capsys.readouterr()
+    assert captured.out == "", "the refusal must not go to stdout"
+    assert "frontdoor.storage_probe" in captured.err, "it must name where the command went"
+
+
+def test_the_moved_command_refuses_whatever_it_is_given():
+    """It takes no arguments and means the same thing for all of them."""
+    from frontdoor import storage
+
+    for argv in ([], ["verify"], ["anything", "--at", "all"], None):
+        assert storage.main(argv) == 2
