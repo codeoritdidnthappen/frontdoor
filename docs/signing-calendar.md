@@ -19,23 +19,34 @@ out on stage.
 
 ## Schedule
 
-Both verified capture devices (iPhone 16, iPhone 15 Pro Max) and the build Mac are held by **Emily**,
-so sessions 1 and 2 are one person at one desk. No co-location to arrange, which is what made this
-a scheduling risk in the original ticket.
+**D-036 changed which session matters, and this document had it backwards.** An earlier version
+called the session covering Emily's two phones "the one that cannot be missed" and filed James's as
+*before he next captures*, with no date. Under D-036 capture runs on **one device — James's iPhone
+Pro** — so his is the build whose expiry stops the dataset, and Emily's phones are a standby that
+nothing is waiting on.
 
-James's phone is the exception, and the exception is now proven rather than assumed: a build was
-installed and launched on it on 2026-09-02. That is the AC1 criterion met on a third device, and it
-means a re-sign for his handset is a real session with two people in it, not a hypothetical.
+His sessions are also the only expensive ones. Emily holds the Mac, James runs Windows and cannot
+re-sign unaided, so every install on his handset is two people in one room. That is now the
+scheduling risk in this ticket rather than a footnote to it.
 
 | # | Date | Mac owner | Devices | Purpose |
 |---|------|-----------|---------|---------|
-| 1 | 2026-09-02 ✅ | Emily | iPhone 16, iPhone 15 Pro Max | Done. Both launched and ran the capability probe. |
-| 2 | **2026-09-06** | Emily | iPhone 16, iPhone 15 Pro Max | **Required.** Covers Demo Day and the Showcase to Sep 13. |
-| 3 | **before he next captures** | Emily | James's iPhone 17 Pro | **Requires both people present.** His build was signed 2026-09-02 and expires with the others. |
-| 4 | 2026-09-08 *(optional)* | Emily | whichever device demos | Top-up only if session 2 slipped. Expires Sep 15. |
+| 1 | 2026-09-02 ✅ | Emily | iPhone 16, iPhone 15 Pro Max, James's iPhone 17 Pro | Done. All three installed and launched; the two Emily had in hand also ran the capability probe. |
+| 2 | **by 2026-09-06 — NO DATE AGREED** | Emily | **James's iPhone 17 Pro** | **The session that cannot be missed.** Signed 2026-09-02, so it expires 2026-09-09 — Demo Day itself. Needs co-location, which AC3 requires be agreed in advance. It is not. |
+| 3 | by 2026-09-06 | Emily | iPhone 15 Pro Max | Standby only (D-036). Costs nothing alongside session 2, but gates no capture. See the availability note below. |
+| 4 | 2026-09-08 *(optional)* | Emily | whichever device demos | Top-up if session 2 slipped. Expires Sep 15. |
 
-Session 2 is the one that cannot be missed. **D-025 fixes the deadline at 2026-09-06 and this
-document does not move it.**
+**Session 2 is the open item on this ticket.** Every other session is one person at one desk and
+can happen whenever. This one needs James and Emily in the same place before Sep 6, and no date has
+been agreed. **D-025 fixes the deadline at 2026-09-06 and this document does not move it.**
+
+**Availability note on the standby (session 3).** D-036's mitigation for James's phone failing is
+that Emily's iPhone 15 Pro Max takes over, and `TEAM.md` lists Emily as its holder. Emily reports
+that the handset is **borrowed, already returned, and available only intermittently** — not owned
+and not on call. If that is right, the standby cannot be assumed present on the day it would be
+needed, and the single point of failure in D-036 is closer to unmitigated than the decision reads.
+Flagged here rather than corrected in `TEAM.md`, because the fix belongs with whoever confirms the
+ownership.
 
 An earlier draft of this paragraph said Sep 5–8 all produce valid coverage. Sep 7 and Sep 8 do cover
 Demo Day arithmetically — a build signed Sep 8 expires Sep 15 — but they leave the app **dead on Sep
@@ -45,9 +56,15 @@ to close, and it falls inside the capture window rather than after it. Sep 5 or 
 Widening a locked decision's mandatory date is a decision, not a scheduling detail. If Sep 8 is
 genuinely wanted, it needs an amendment in `CHANGES.log` with the two dead days stated.
 
-James's handset is an **iPhone 17 Pro** (`iPhone18,1`), not the iPhone 16 Pro the team audit
-recorded. Session 3 covers it. Its capability probe has still not been run, so it is signed but
-unproven as a capture device -- see TICK-020 (#24).
+James's handset is an **iPhone 17 Pro** (`iPhone18,1`); session 2 covers it. The roster's earlier
+"iPhone 16 Pro" was stale and the apparent Pro / Pro Max conflict was two phones being read as one,
+settled on 2026-09-02.
+
+**It is signed but unproven.** Its capability probe has still never been run (TICK-020, #24), so
+the one device carrying every capture under D-036 is also the one device whose depth and
+calibration delivery are assumed rather than measured. Session 2 puts James and a Mac in the same
+room before Sep 6 — which is the only thing #24 has ever been waiting for, and the reason to run
+the probe in that session rather than schedule a second one.
 
 ## Start of every capture day
 
