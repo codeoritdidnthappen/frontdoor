@@ -171,10 +171,60 @@ Either way, verify with `curl https://frontdoor-measure.fly.dev/map/data` and co
 
 The **69 MiB** footprint in the table was measured serving `GET /health`. It says nothing about
 `/screen`'s worst case: up to **64 MB of multipart upload buffered in memory**, base64-encoded
-(+33%) and carried through **up to 6 sequential vision calls**, on a **256 MB** machine — with
-gunicorn's 30 s timeout in front of multi-call model latency. Neither the peak memory nor the
-end-to-end latency of a real worst-case `/screen` request has been measured. **Measure both
-before Demo Day**, with a full 6-photo upload at the size cap, and record the numbers here.
+(+33%) and carried through **up to 6 vision calls**, on a **256 MB** machine — with gunicorn's
+30 s timeout in front of multi-call model latency.
+
+**Measured 2026-09-03** on release `deployment-01M1MFVVXFFMPFN9XJKD49QZ8P`, in a container capped
+at 256 MB exactly as the host is, with six real captures (2.7–2.8 MB each, 17.2 MB of multipart):
+
+| | |
+|---|---|
+| Idle, serving `/health` | **69.3 MiB** — the table's 69 MiB still holds |
+| Peak during a 6-photo `/screen` | **186.3 MiB of 256 MB (73%)** |
+| Cost of one in-flight request | **~117 MiB above idle** |
+| End-to-end | **17.3 s**, HTTP 200 |
+
+**It fits, with about 70 MiB to spare, and only because the calls now overlap.** Assessed
+sequentially, six views at ~13 s each is ~78 s — well past gunicorn's `--timeout 30`, so the
+worker would have been killed and a six-view entrance could never have been screened on this
+machine at all. The concurrency change is what brings it inside the timeout, and it is also what
+puts six base64 payloads in memory at once instead of one.
+
+### Two `/screen` requests at once kill the worker — measured 2026-09-03
+
+The container runs `--workers 1 --threads 2`, so two requests can be in flight. Two 6-photo
+uploads fired together on the 256 MB cap:
+
+```
+[ERROR] Worker (pid:7) was sent SIGKILL! Perhaps out of memory?
+[INFO]  Booting worker with pid: 23
+```
+
+`docker inspect` confirms `OOMKilled: true`. **Both requests are lost with no error response** —
+curl sees the 100-continue and then the connection dies, so there is no status code and nothing
+in the JSON error contract. The gunicorn master survives and boots a replacement worker, and the
+service is healthy again seconds later: `/health` 200, and a single 6-photo request still returns
+200 in 17.5 s.
+
+**It died 0.8 s in, while the uploads were still being buffered — before the vision calls
+finished.** So this is not about the model at all. Two 17 MB multipart bodies plus their base64
+copies exceed the cap on their own, and `MAX_REQUEST_BYTES` allows 64 MB *per request*, four
+times what six real captures need.
+
+On stage this reads as the demo hanging and then failing with no message, and recovering by
+itself just after someone has started apologising. One presenter and one curious onlooker in the
+audience is enough to cause it.
+
+**Pick one before Demo Day and record it here:**
+
+| Option | Effect | Cost |
+|---|---|---|
+| `--threads 1` in the Dockerfile CMD | the second request queues instead of racing | a concurrent request waits ~17 s |
+| Lower `MAX_REQUEST_BYTES` toward what six captures actually need (~20 MB) | bounds the buffering that causes this | rejects uploads the API would refuse anyway |
+| A 512 MB machine | headroom | money, and it only moves the threshold |
+
+`--threads 1` is the smallest change that turns a silent crash into a slow answer, which is the
+right trade for a demo with one operator.
 
 **The offline-laptop fallback cannot serve `/screen` at all** — with the venue offline there is no
 route to the model API. D-016's step 3 ("same image, phone tethered to the laptop") covers
@@ -272,9 +322,8 @@ That is **not** the 69 MiB recorded for the host above, and the difference is wo
 rather than being presented as one measurement. Same image, different measurement: the host figure
 is Fly's own reading of a 256 MB machine, this one is `docker stats` on a Mac with 7.7 GB, where
 the allocator has no reason to be frugal. Both are well under the cap and neither is a regression —
-but the number that governs the cap is the host's, and **`/screen`'s worst case is still
-unmeasured** (see the sizing note above). Measure that before Demo Day rather than inferring it
-from either figure.
+but the number that governs the cap is the host's, and `/screen`'s worst case is **now measured**:
+186.3 MiB peak on a 256 MB machine, in the sizing note above.
 
 Pull and cache the image on the laptop **before** Demo Day (#50 AC). Do not fetch it on venue wifi.
 
