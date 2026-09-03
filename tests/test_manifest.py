@@ -46,9 +46,43 @@ def _append(manifest, tmp_path, capture_id="cap-1", entrance_id="E-001", **blobs
 
 
 def test_committed_manifest_has_exact_header():
+    """The committed manifest's FIRST LINE is the header, byte for byte.
+
+    This asserted the whole file equalled the header, which quietly also asserted the manifest
+    was empty. That held only while the dataset had no captures, so ingesting the first real ones
+    (TICK-092, 48 rows) turned a green suite red on main and took every open PR with it -- for a
+    change that was correct and that this test was never about.
+
+    The invariant worth keeping is the header itself: `frontdoor.manifest` appends positionally,
+    so a renamed or reordered column silently rewrites what every existing row MEANS. The row
+    count is not an invariant; it is the point of the file.
+    """
     repo = Path(__file__).resolve().parents[1]
     raw = (repo / "data" / "manifest.csv").read_bytes()
-    assert raw == HEADER.encode("utf-8")
+    assert raw.split(b"\n", 1)[0] == HEADER.encode("utf-8").rstrip(b"\n")
+
+
+def test_the_committed_manifest_is_readable_as_rows():
+    """What the old assertion was really standing in for: the file is well formed.
+
+    An empty file trivially satisfied "starts with the header". Now that rows exist, check they
+    parse and carry the columns the loader indexes by, so a truncated or half-written manifest
+    fails here rather than in the middle of an evaluation run.
+    """
+    import csv
+
+    repo = Path(__file__).resolve().parents[1]
+    with (repo / "data" / "manifest.csv").open(encoding="utf-8", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    for row in rows:
+        assert set(row) == set(COLUMNS), f"row has columns {sorted(row)}"
+        # DictReader keys off the HEADER, so a short row still has every key -- with None for
+        # the fields it never supplied, and extras collected under the None key. Checking the
+        # keys alone therefore catches nothing; the values are where a truncated row shows.
+        assert None not in row, f"row has more fields than the header: {row.get(None)}"
+        assert all(v is not None for v in row.values()), f"row is short: {row}"
+        assert row["capture_id"], "a row with no capture_id cannot be resolved to bytes"
+        assert row["entrance_id"], "a row with no entrance_id cannot be split-checked"
 
 
 def test_column_order_is_exact(tmp_path):
