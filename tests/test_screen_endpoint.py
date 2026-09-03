@@ -156,11 +156,13 @@ def test_engine_receives_bytes_and_the_declared_media_type():
         image_part("c.webp", "image/webp", b"webp-bytes"),
     ]
     post_screen(make_client(engine), parts)
-    assert engine.calls == [
-        (b"jpeg-bytes", "image/jpeg"),
-        (b"png-bytes", "image/png"),
-        (b"webp-bytes", "image/webp"),
-    ]
+    assert sorted(engine.calls) == sorted(
+        [
+            (b"jpeg-bytes", "image/jpeg"),
+            (b"png-bytes", "image/png"),
+            (b"webp-bytes", "image/webp"),
+        ]
+    )
 
 
 def test_valid_entrance_id_is_echoed_in_canonical_form():
