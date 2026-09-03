@@ -997,3 +997,45 @@ Consequences, each stated so none is discovered later:
   stays in the app per A-3; nothing this week can exercise it.
 - The screening study's ground truth is unaffected: it is the operator's presence labels
   (#168), recorded at the door, and needs no instrument.
+
+## D-037  The sidecar records how its pixels are stored
+
+Taken 2026-09-02 by Emily, fixing forward from the #51 device round trip. Additive to the
+capture sidecar contract: `image.exif_orientation`, an integer 1-8, required.
+
+**What was wrong.** The app writes the camera's own encoded bytes (D-018, TICK-028 AC2). On a
+portrait-held phone those bytes are a LANDSCAPE sensor buffer carrying EXIF tag 274 = 6, which
+tells a viewer to turn it a quarter turn. Confirmed on the three captures pulled off the
+borrowed iPhone 15 Pro Max: 4032x3024 stored, tagged 6.
+
+Every pixel quantity in the sidecar -- `image.width`/`height`, `intrinsics` fx/fy/cx/cy,
+`distortion_center`, and the `roi` points -- is expressed in that stored grid, with the rotation
+NOT applied. The sidecar never said so, and never recorded the tag.
+
+**Why that matters more than it looks.** The metrology package is handed a DECODED image
+(`metrology/arm.py`); the loader returns bytes (`loader.py`) and nothing in between fixes a
+frame. So the decode happens outside every test that exists. `cv2.imread` applies EXIF
+orientation by default. A consumer using it gets a 3024x4032 array while `cx`/`cy` still
+describe the 4032x3024 one -- and the result is not an exception, it is a plausible rise, wrong
+in the same direction on every capture. That is R-11's failure exactly: the demo and the error
+budget would agree with each other and both be wrong.
+
+Nothing in the record made it detectable. `image.width`/`height` could have, but no rule said
+which frame was authoritative, so a mismatch read as a bug in the check.
+
+**Required rather than optional**, which is the whole point: an absent field would be read as
+"upright", and upright is precisely the value that is wrong for the case that actually occurs.
+Costless today -- `data/manifest.csv` is empty, so no committed capture is invalidated.
+
+**Rejected alternative: strip the tag at write time** so no reader can rotate. Simpler, and it
+removes the ambiguity instead of describing it. Rejected because it makes every capture display
+sideways to the humans reviewing the dataset (#66's foldered photo sets, the Demo Day deck) and
+discards which way was up, which the gravity vector only partly recovers. Recording is
+reversible; stripping is not.
+
+Baking the rotation into the pixels was rejected for a stronger reason: it would require
+transforming the intrinsics to match, by hand, which is the same class of error one layer down.
+
+The depth map does not carry the field. Depth is `{path, sha256}` and nothing else; it has no
+EXIF, and that object is `additionalProperties: false` -- a field riding along on a shared type
+is the shape QA B01 already caught once.

@@ -134,7 +134,8 @@ enum CaptureWriter {
             captureMode: record.captureMode,
             image: Sidecar.FileRef(
                 path: imagePath, sha256: imageSHA256,
-                width: record.pixelWidth, height: record.pixelHeight),
+                width: record.pixelWidth, height: record.pixelHeight,
+                exifOrientation: record.imageExifOrientation),
             depth: depth,
             intrinsics: intrinsics,
             gravity: gravity,

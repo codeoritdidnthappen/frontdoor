@@ -46,13 +46,20 @@
         "height": {
           "type": "integer",
           "minimum": 1
+        },
+        "exif_orientation": {
+          "description": "EXIF/TIFF orientation (tag 274) of the stored image, 1-8. Every other pixel quantity in this sidecar -- width, height, intrinsics fx/fy/cx/cy, distortion_center and the roi points -- is expressed in the grid the file's pixels are STORED in, with this rotation NOT applied. It is recorded because a phone held portrait writes a landscape sensor buffer tagged 6, so a reader that honours EXIF (cv2.imread does by default; PIL's exif_transpose does on request) decodes a transposed array while the intrinsics still describe the untransposed one. Nothing in the record made that detectable: the mistake produces a plausible measurement rather than an error, on every capture, in the same direction. The alternative -- stripping the tag at write time so no reader can rotate -- was rejected because it makes every capture display sideways to the humans reviewing the dataset and discards which way was up.",
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 8
         }
       },
       "required": [
         "path",
         "sha256",
         "width",
-        "height"
+        "height",
+        "exif_orientation"
       ],
       "additionalProperties": false
     },

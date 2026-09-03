@@ -435,6 +435,7 @@ final class CaptureController: ObservableObject {
             captureId: captureId,
             pixelWidth: captured.pixelWidth,
             pixelHeight: captured.pixelHeight,
+            imageExifOrientation: captured.exifOrientation,
             intrinsics: intrinsics,
             hadCalibrationData: calibration != nil,
             gravity: gravity,
@@ -495,6 +496,7 @@ final class CaptureController: ObservableObject {
             captureMode: .imported,
             pixelWidth: details.pixelWidth,
             pixelHeight: details.pixelHeight,
+            imageExifOrientation: details.exifOrientation,
             intrinsics: nil,
             gravity: nil,
             deviceModel: details.deviceModel,
@@ -799,6 +801,23 @@ final class CaptureController: ObservableObject {
 }
 
 /// What one finished exposure yielded, before any judgement about whether it is usable.
+/// UIImage.Orientation to EXIF tag 274. UIKit offers no initialiser for this direction, and the
+/// two enums are NOT in the same order -- `.down` is 3 while `CGImagePropertyOrientation` counts
+/// mirrored variants at 2 and 4 -- so the mapping is written out rather than bridged by rawValue.
+func exifOrientation(of orientation: UIImage.Orientation) -> Int {
+    switch orientation {
+    case .up: return 1
+    case .upMirrored: return 2
+    case .down: return 3
+    case .downMirrored: return 4
+    case .leftMirrored: return 5
+    case .right: return 6
+    case .rightMirrored: return 7
+    case .left: return 8
+    @unknown default: return 1
+    }
+}
+
 private struct CapturedPhoto {
     var image: UIImage
     /// The camera's OWN encoded bytes. Held because AC2 hashes what is written, and a
@@ -806,6 +825,9 @@ private struct CapturedPhoto {
     var imageData: Data
     var pixelWidth: Int
     var pixelHeight: Int
+    /// EXIF tag 274 of `imageData`, taken from the UIImage decoded from those same bytes rather
+    /// than from `photo.metadata`: one source, and it provably describes the file being written.
+    var exifOrientation: Int
     var calibration: AVCameraCalibrationData?
     var depthData: AVDepthData?
 }
@@ -845,6 +867,7 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
             imageData: imageData,
             pixelWidth: Int(dimensions.width),
             pixelHeight: Int(dimensions.height),
+            exifOrientation: exifOrientation(of: image.imageOrientation),
             calibration: photo.cameraCalibrationData,
             depthData: photo.depthData
         )))

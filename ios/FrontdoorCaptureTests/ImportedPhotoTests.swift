@@ -13,6 +13,7 @@ final class ImportedPhotoTests: XCTestCase {
     /// A real JPEG with whatever EXIF/TIFF the test asks for, built through ImageIO so the
     /// reader is exercised against the same encoding a camera produces.
     private func jpeg(exif: [CFString: Any]? = nil, tiff: [CFString: Any]? = nil,
+                      orientation: Int? = nil,
                       width: Int = 8, height: Int = 6) -> Data {
         let bytes = [UInt8](repeating: 200, count: width * height * 4)
         let provider = CGDataProvider(data: Data(bytes) as CFData)!
@@ -28,6 +29,7 @@ final class ImportedPhotoTests: XCTestCase {
         var props: [CFString: Any] = [:]
         if let exif { props[kCGImagePropertyExifDictionary] = exif }
         if let tiff { props[kCGImagePropertyTIFFDictionary] = tiff }
+        if let orientation { props[kCGImagePropertyOrientation] = orientation }
         CGImageDestinationAddImage(dest, image, props as CFDictionary)
         CGImageDestinationFinalize(dest)
         return out as Data
@@ -177,5 +179,30 @@ extension ImportedPhotoTests {
         CGImageDestinationAddImage(dest, image, props as CFDictionary)
         CGImageDestinationFinalize(dest)
         return out as Data
+    }
+}
+
+extension ImportedPhotoTests {
+
+    // MARK: - which way the pixels are stored
+
+    /// An imported photo carries its own orientation, and the record must not invent one: the
+    /// sidecar's width, height and ROI points are all in the stored grid, so a reader needs to be
+    /// told whether that grid is a quarter turn from upright.
+    func testTheStoredOrientationIsRead() throws {
+        let data = jpeg(exif: [kCGImagePropertyExifDateTimeOriginal: "2026:09:01 14:22:31"],
+                        tiff: [kCGImagePropertyTIFFModel: "iPhone 17 Pro"],
+                        orientation: 6)
+        let d = try XCTUnwrap(details(data))
+        XCTAssertEqual(d.exifOrientation, 6)
+    }
+
+    /// The one default in this reader that is not a guess: EXIF defines an absent tag as 1.
+    /// Every other missing field is a refusal, so this is stated rather than assumed.
+    func testAPhotoWithNoOrientationTagReadsAsUpright() throws {
+        let data = jpeg(exif: [kCGImagePropertyExifDateTimeOriginal: "2026:09:01 14:22:31"],
+                        tiff: [kCGImagePropertyTIFFModel: "iPhone 17 Pro"])
+        let d = try XCTUnwrap(details(data))
+        XCTAssertEqual(d.exifOrientation, 1)
     }
 }

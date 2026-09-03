@@ -29,6 +29,7 @@ final class CaptureWriterTests: XCTestCase {
         CaptureRecord(
             captureId: "3F2504E0-4F89-11D3-9A0C-0305E82C3301",
             pixelWidth: 4032, pixelHeight: 3024,
+            imageExifOrientation: 6,
             intrinsics: CameraIntrinsics(
                 fx: 2792.0, fy: 2792.0, cx: 2037.2, cy: 1499.0,
                 lensDistortionLookupTable: table,
@@ -88,6 +89,9 @@ final class CaptureWriterTests: XCTestCase {
         let image_ = sidecar["image"] as! [String: Any]
         XCTAssertEqual(image_["sha256"] as? String, CaptureWriter.sha256(onDisk))
         XCTAssertEqual(image_["width"] as? Int, 4032)
+        // Without this the sidecar describes a 4032x3024 grid and says nothing about the quarter
+        // turn a reader will apply to it, which is how the intrinsics and the pixels come apart.
+        XCTAssertEqual(image_["exif_orientation"] as? Int, 6)
         XCTAssertEqual(image_["path"] as? String, written.imageURL.lastPathComponent)
     }
 
