@@ -466,3 +466,46 @@ def test_a_screening_capture_may_omit_the_camera_model_but_not_lie_about_it():
     for optional in ("intrinsics", "gravity", "lens", "capture_device", "zoom_factor"):
         thinner = {k: v for k, v in record.items() if k != optional}
         validate_sidecar(thinner)
+
+
+# --- how the pixels are stored (found on the #51 device round trip) -------------------------
+
+
+def test_a_capture_must_say_which_way_its_pixels_are_stored(record):
+    """Every pixel quantity in the sidecar -- width, height, fx/fy/cx/cy, distortion_center and
+    the roi points -- is in the grid the file's bytes are STORED in. A phone held portrait writes
+    a landscape sensor buffer tagged EXIF 6, so a reader that honours the tag (cv2.imread does by
+    default) decodes a transposed array while the intrinsics still describe the untransposed one.
+
+    Nothing made that detectable, because the mistake produces a plausible measurement rather than
+    an error -- on every capture, in the same direction. Required, not optional: an absent field
+    would be read as "upright", which is exactly the wrong guess for the orientation that actually
+    occurs.
+    """
+    del record["image"]["exif_orientation"]
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+@pytest.mark.parametrize("value", [0, 9, -1, 1.5, "6", None])
+def test_only_the_eight_exif_orientations_are_accepted(record, value):
+    record["image"]["exif_orientation"] = value
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)
+
+
+@pytest.mark.parametrize("value", [1, 2, 3, 4, 5, 6, 7, 8])
+def test_every_exif_orientation_is_accepted(record, value):
+    record["image"]["exif_orientation"] = value
+    validate_sidecar(record)
+
+
+def test_the_depth_map_carries_no_orientation(record):
+    """Depth is `{path, sha256}` and nothing else. The orientation belongs to the image because it
+    describes the JPEG's EXIF tag; a depth map has no EXIF, and the schema declares that object
+    additionalProperties: false, so a field that rode along on a shared type would fail every
+    depth capture (the shape QA B01 caught once already).
+    """
+    record["depth"] = {"path": "x.depth", "sha256": "0" * 64, "exif_orientation": 6}
+    with pytest.raises(ValidationError):
+        validate_sidecar(record)

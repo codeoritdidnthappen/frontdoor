@@ -19,6 +19,10 @@ struct CaptureRecord: Equatable {
     var captureMode: CaptureMode = .metrology
     var pixelWidth: Int
     var pixelHeight: Int
+    /// EXIF tag 274 for the image as it is stored, 1-8. Part of the record rather than derived at
+    /// write time because it is a property of the frame, and `pixelWidth`/`pixelHeight` -- which
+    /// it qualifies -- are already here. A portrait-held capture is landscape pixels tagged 6.
+    var imageExifOrientation: Int
     /// Absent only for an imported photo, which this app's camera did not take. Every capture
     /// the camera produces has all of these, and `CaptureValidation.record` still refuses one
     /// that does not (D-034).
@@ -187,6 +191,7 @@ enum CaptureValidation {
         captureId: String,
         pixelWidth: Int,
         pixelHeight: Int,
+        imageExifOrientation: Int,
         intrinsics: CameraIntrinsics?,
         hadCalibrationData: Bool,
         gravity: GravitySample?,
@@ -270,6 +275,7 @@ enum CaptureValidation {
             captureId: captureId,
             pixelWidth: pixelWidth,
             pixelHeight: pixelHeight,
+            imageExifOrientation: imageExifOrientation,
             intrinsics: intrinsics,
             gravity: gravity,
             deviceModel: deviceModel,

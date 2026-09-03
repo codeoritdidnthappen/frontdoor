@@ -13,6 +13,22 @@ struct Sidecar: Encodable, Equatable {
         var sha256: String
         var width: Int?
         var height: Int?
+        /// EXIF tag 274 for the bytes on disk, 1-8. Recorded because `width`, `height`, the
+        /// intrinsics and the ROI points are all in the STORED pixel grid with this rotation
+        /// unapplied -- and a phone held portrait writes a landscape buffer tagged 6, so a reader
+        /// that honours EXIF silently disagrees with every one of them.
+        ///
+        /// NOT optional, unlike `width`/`height`: the schema requires `exif_orientation`, and
+        /// Swift's synthesized encoding omits a nil Optional rather than writing null -- so a
+        /// caller who left it out would write a sidecar to disk, queue it, and only learn at
+        /// upload, from a 422 the client treats as not worth retrying. Same argument as
+        /// `DepthRef` below: make the invalid state unrepresentable (QA B01).
+        var exifOrientation: Int
+
+        enum CodingKeys: String, CodingKey {
+            case path, sha256, width, height
+            case exifOrientation = "exif_orientation"
+        }
     }
 
     /// A card is a rectangle, so the homography needs all four of its corners.

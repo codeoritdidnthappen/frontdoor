@@ -50,6 +50,7 @@ enum ImportedPhoto {
         var deviceModel: String
         var pixelWidth: Int
         var pixelHeight: Int
+        var exifOrientation: Int
     }
 
     /// EXIF writes local time with no zone, so the zone has to come from somewhere. `OffsetTime`
@@ -64,6 +65,10 @@ enum ImportedPhoto {
               let height = props[kCGImagePropertyPixelHeight] as? Int,
               width > 0, height > 0
         else { return .failure(.notAnImage) }
+
+        // Absent means 1 by the EXIF specification -- top-left, nothing to rotate -- so this is
+        // the one default here that is not a guess. Every other missing field is a refusal.
+        let orientation = props[kCGImagePropertyOrientation] as? Int ?? 1
 
         let exif = props[kCGImagePropertyExifDictionary] as? [CFString: Any]
         let tiff = props[kCGImagePropertyTIFFDictionary] as? [CFString: Any]
@@ -88,7 +93,8 @@ enum ImportedPhoto {
         return .success(Details(
             fileExtension: Self.extension(for: uti),
             capturedAt: stamp, deviceModel: model,
-            pixelWidth: width, pixelHeight: height))
+            pixelWidth: width, pixelHeight: height,
+            exifOrientation: orientation))
     }
 
     /// The extension for a UTI, defaulting to `jpg` only when the type is genuinely unknown.

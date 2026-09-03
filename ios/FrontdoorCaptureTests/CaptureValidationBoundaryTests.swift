@@ -36,6 +36,7 @@ final class CaptureValidationBoundaryTests: XCTestCase {
         CaptureValidation.record(
             captureId: "test-capture",
             pixelWidth: width, pixelHeight: height,
+            imageExifOrientation: 6,
             intrinsics: intrinsics ?? goodIntrinsics,
             hadCalibrationData: hadCalibration,
             gravity: gravity ?? goodGravity,

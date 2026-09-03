@@ -186,3 +186,48 @@ def test_the_failure_branch_reports_and_keeps_the_frame():
     assert "pendingReview = nil" not in failure, (
         "the frame must stay under review, or the operator loses it with no capture on disk"
     )
+
+
+# --- the stored orientation reaches the sidecar (found on the #51 device round trip) ---------
+
+
+def test_the_sidecar_records_the_stored_orientation():
+    """The writer must carry the record's EXIF orientation into the image object.
+
+    A source scan because CI is Linux and never builds Swift: the committed golden fixtures pin
+    the field, but a writer that stopped emitting it would leave those fixtures stale and green
+    here while every capture in the field lost the one fact that says whether the pixel grid the
+    intrinsics describe is the grid a reader will decode.
+    """
+    source = _strip_comments(
+        (APP / "Persistence" / "CaptureWriter.swift").read_text(encoding="utf-8"))
+    assert "exifOrientation: record.imageExifOrientation" in source
+
+
+@pytest.mark.parametrize(
+    "site,needle",
+    [
+        ("Capture/CaptureController.swift", "imageExifOrientation: captured.exifOrientation"),
+        ("Capture/CaptureController.swift", "imageExifOrientation: details.exifOrientation"),
+    ],
+)
+def test_both_capture_routes_supply_an_orientation(site, needle):
+    """Camera and import both. The import path is the one that would silently default: an
+    imported photo's orientation comes from a file this app did not write.
+    """
+    source = _strip_comments((APP / site).read_text(encoding="utf-8"))
+    assert needle in source
+
+
+def test_the_orientation_map_covers_all_eight_exif_values():
+    """UIImage.Orientation and CGImagePropertyOrientation are not in the same order, so bridging
+    by rawValue is wrong for six of the eight. The table is written out; this checks it stayed
+    written out, and that nothing was dropped from it.
+    """
+    source = _strip_comments(
+        (APP / "Capture" / "CaptureController.swift").read_text(encoding="utf-8"))
+    body = _body_of(source, "func exifOrientation(of orientation: UIImage.Orientation) -> Int")
+    for case in ("up", "upMirrored", "down", "downMirrored",
+                 "leftMirrored", "right", "rightMirrored", "left"):
+        assert f"case .{case}:" in body, f"{case} is not mapped"
+    assert "rawValue" not in body, "the mapping must not be derived from rawValue"

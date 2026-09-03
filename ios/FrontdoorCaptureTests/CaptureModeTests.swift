@@ -100,6 +100,7 @@ final class CaptureModeTests: XCTestCase {
             captureId: "cap-1",
             captureMode: mode,
             pixelWidth: 4032, pixelHeight: 3024,
+            imageExifOrientation: 6,
             intrinsics: mode.isOurCamera ? CameraIntrinsics(
                 fx: 2792, fy: 2792, cx: 2037.2, cy: 1499,
                 lensDistortionLookupTable: Data(repeating: 0, count: 168),
