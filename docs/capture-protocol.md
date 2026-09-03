@@ -28,9 +28,13 @@ project and it is not what we are collecting.
 **Depth is recorded automatically** on every capture and needs nothing from you. It is stored for a
 later comparison and is never used to produce a verdict.
 
-> If that phone will not launch the app, capture does not happen that day — there is no second
-> device shooting alongside it. That is why the launch check below is the first line of the
-> checklist and not the last.
+> If that phone will not launch the app, capture does not happen that day — nothing is shooting
+> alongside it. That is why the launch check below is the first line of the checklist and not the
+> last.
+>
+> There **is** a standby if it comes to that: Emily's iPhone Pro Max is the same target class and
+> also has LiDAR. Switching is a decision for the day it is needed, not something to do casually —
+> it makes the device a variable in the findings rather than a constant.
 
 ## Before you shoot: assign the entrance ID
 

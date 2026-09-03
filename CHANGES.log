@@ -936,12 +936,28 @@ Reasons to record, because both directions have a cost:
   out not to deliver what the probe assumes, capture stops -- there is no second device
   shooting alongside it. Probing it is now urgent rather than tidy.
 
-**MODEL DISCREPANCY, unresolved and not papered over.** This decision was given as "iPhone
-Pro Max". #203 read James's device with `devicectl` on 2026-09-02 and recorded **iPhone 17
-Pro (`iPhone18,1`)** -- Pro, not Pro Max. The roster has already been wrong about this phone
-once (it said iPhone 16 Pro). One check on the device settles it, and it matters because
-probe rows are keyed by model identifier. Until then the identifier `iPhone18,1` is the
-anchor, since it was measured, and the marketing name is treated as unconfirmed.
+**MODEL, RESOLVED 2026-09-02.** This entry was first written flagging a discrepancy: the
+decision was given as "iPhone Pro Max" while #203 had measured James's device as **iPhone 17
+Pro (`iPhone18,1`)**. There was no discrepancy -- the two names are two different phones.
+**James holds an iPhone Pro; Emily holds an iPhone Pro Max. Both carry LiDAR.** The measured
+identifier was right, and treating it as the anchor over the marketing name was the correct
+call.
+
+**This changes what the single-device choice IS.** A-3's correction had already established
+that two devices qualify as the target hardware, and this confirms it: Emily's Pro Max has
+a LiDAR scanner, and it is the device TICK-020 actually ran `builtInLiDARDepthCamera` on --
+so it is the PROBED one of the two. Capture on James's phone alone is therefore a
+**deliberate constraint, not a hardware limit**. One operator with one phone gives a uniform
+dataset and a constant `device_model`, which is the reason to keep it.
+
+**The single point of failure now has a mitigation, and it should be used rather than
+admired.** If James's build expires (D-025, 7 days), or his phone turns out not to deliver
+what the probe assumes, **Emily's Pro Max is a qualifying second device**: same target class,
+LiDAR present, already probed, and owned by someone with a Mac who can re-sign unaided.
+Switching mid-dataset would make `device_model` a two-level variable rather than a constant,
+which the findings would have to state -- but that is a far smaller cost than a capture week
+that stops. Deciding to switch is a call for the day it is needed; recording that the option
+exists is this entry's job.
 
 **3. No caliper. There is no instrument ground truth.** SUPERSEDES **D-003**, which made a
 digital caliper at +/-0.01" the ground-truth instrument for threshold rise.

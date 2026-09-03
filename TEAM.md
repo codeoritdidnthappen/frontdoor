@@ -44,8 +44,8 @@ Measured 2026-09-02 with the in-app capability probe (TICK-020, #24); see
 |--------|--------|----------------------|---------------------|-------|-------------|
 | David | Samsung Galaxy S25 | **No** — Android | — | — | Cannot capture |
 | Emily | iPhone 16 (non-Pro) | Yes | **Yes**, verified | Relative (stereo) | **Full capture** |
-| Emily *(unconfirmed — see §5)* | iPhone 15 Pro Max | Yes | **Yes**, verified | Relative | **Full capture** |
-| James | iPhone 17 Pro (`iPhone18,1`) | **Yes**, build installed and launched 2026-09-02 | Probe not yet run | **LiDAR — the depth device (D-032)** | **Carries LiDAR capture.** Signing proven; capability unmeasured, so run the probe before it carries a capture day |
+| Emily | iPhone 15 **Pro Max** | Yes | **Yes**, verified | **LiDAR**, and the probed one — TICK-020 ran `builtInLiDARDepthCamera` here | **Qualifies as the target device.** Not carrying capture (D-036), but the standby if James's phone expires or fails |
+| James | iPhone 17 **Pro** (`iPhone18,1`) | **Yes**, build installed and launched 2026-09-02 | Probe not yet run | **LiDAR — the depth device (D-032, D-036)** | **Carries all capture.** Signing proven; capability unmeasured, so run the probe (#24) before it carries a capture day |
 | Ruben | Google Pixel 9 | **No** — Android | — | — | Cannot capture |
 
 Three things the probe changed. **Intrinsics arrive on both tested phones, including the non-Pro**,
@@ -111,10 +111,10 @@ schedules; see [docs/signing-calendar.md](docs/signing-calendar.md).
 - **Verified capture devices: 2**, both Emily's (iPhone 16, iPhone 15 Pro Max) — against A-3's
   assumed three. James's iPhone 17 Pro now runs a build but has never had the probe run on it, so
   it is not counted as verified until it has a measured row.
-- **LiDAR-capable devices: 2**, corrected by A-3 (2026-09-02). This line said 1. Every iPhone 15
-  Pro carries a LiDAR scanner, so Emily's **iPhone 15 Pro Max** qualifies alongside James's
-  iPhone 17 Pro — and the Pro Max is the device TICK-020 actually ran `builtInLiDARDepthCamera`
-  on, making it the *probed* one of the two. LiDAR is not a route to intrinsics on any device, so
+- **LiDAR-capable devices: 2** — James's iPhone **Pro** and Emily's iPhone **Pro Max**, confirmed
+  2026-09-02. This line once said 1. The Pro Max is the device TICK-020 actually ran
+  `builtInLiDARDepthCamera` on, making it the *probed* one of the two, while the phone carrying
+  capture is the unprobed one. LiDAR is not a route to intrinsics on any device, so
   it does not gate capture the way A-1 assumed. **A-3 makes an iPhone Pro with LiDAR the product's
   target device**, so this count is now the capture pool for the product itself: two devices, one
   of them probed and held by a Mac owner.
@@ -224,10 +224,18 @@ The response is a **schedule change, not an architecture change** (ARCHITECTURE.
 > Two consequences this section should carry rather than leave implicit. `device_model` becomes a
 > **constant**, so the findings must say the result was measured on a single phone — the
 > generalisation limit A-1 already needed restating for is sharper now, not softer. And that phone
-> is a **single point of failure**: builds expire in 7 days (D-025, R-7), James runs Windows and
-> cannot re-sign unaided, and the device has still never been through the capability probe (#24).
-> If it expires or does not deliver what the probe assumes, capture stops — nothing is shooting
-> alongside it. Probing it is urgent, not tidy.
+> is a **single point of failure while it is the only one shooting**: builds expire in 7 days
+> (D-025, R-7), James runs Windows and cannot re-sign unaided, and the device has still never been
+> through the capability probe (#24). Probing it is urgent, not tidy.
+>
+> **There is a standby, and it should be used rather than admired.** James holds an iPhone **Pro**
+> and Emily an iPhone **Pro Max** — *both carry LiDAR*, so both qualify as the target device, and
+> Emily's is the one TICK-020 actually probed. Single-device capture is therefore a **deliberate
+> constraint, not a hardware limit**: one operator with one phone gives a uniform dataset and a
+> constant `device_model`. If James's build expires or his phone does not deliver what the probe
+> assumes, Emily's Pro Max takes over — same class, LiDAR present, already probed, and owned by
+> someone who can re-sign unaided. Switching mid-dataset makes `device_model` a two-level variable
+> the findings must state, which is a far smaller cost than a capture week that stops.
 
 1. **Cut the entrance target, never the protocol.** Per-entrance shot list, ROI taps, caliper
    ground truth and split-at-capture stay exactly as specified.
