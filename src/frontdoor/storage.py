@@ -142,6 +142,17 @@ def _load_dotenv_once():
         load_dotenv(env_path, override=False)
 
 
+def load_local_env():
+    """Public name for the .env load, for entrypoints outside this module.
+
+    The server needs it too: `/screen` reads ANTHROPIC_API_KEY straight from the
+    environment, and without this a key sitting correctly in .env looks exactly like a bad
+    key -- a 503 from the endpoint and a 400 from the model. Same failure as #158, one
+    layer up.
+    """
+    _load_dotenv_once()
+
+
 def _env(name):
     _load_dotenv_once()
     value = os.environ.get(name, "").strip()

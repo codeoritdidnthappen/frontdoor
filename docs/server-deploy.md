@@ -113,6 +113,22 @@ when neither `ANTHROPIC_API_KEY` nor `ANTHROPIC_AUTH_TOKEN` is set, by design, s
 server still boots and serves. The key was missing from earlier revisions of this block, which is
 why the live host 503s on `/screen` (PR #200 review F3).
 
+**Running the server locally reads `.env`.** `frontdoor_server/wsgi.py` calls
+`frontdoor.storage.load_local_env()` before building the app, so the variables above can sit in
+the gitignored `.env` and be picked up by `gunicorn frontdoor_server:app` or
+`flask --app frontdoor_server.wsgi run`. Real environment variables still win, so the container
+is unaffected. Two caveats worth knowing before debugging a key:
+
+- It happens **on import of the entrypoint**. Building the app yourself with
+  `create_app()` — as the tests do — does not load `.env`, deliberately: several tests delete a
+  variable to assert the keyless behaviour, and loading `.env` there would hand it back and make
+  them pass or fail depending on the developer's machine. Running `create_app().run(...)`
+  directly in a REPL will therefore 503 on `/screen` with a perfectly good key in `.env`.
+- A key that is present but of the wrong **type** fails differently. An *identity-linked* API key
+  returns 400 `anthropic-workspace-id is required...`, surfacing as a 502
+  `screening engine failure`, not a 503. Use a standard workspace key from
+  console.anthropic.com; the engine sends no workspace header.
+
 ### The map dataset
 
 `GET /map/data` reads the pre-catalogue dataset from the path in the **`FRONTDOOR_MAP_DATASET`**
