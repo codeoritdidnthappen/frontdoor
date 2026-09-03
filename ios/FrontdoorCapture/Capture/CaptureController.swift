@@ -284,6 +284,20 @@ final class CaptureController: ObservableObject {
 
     @Published var subject: CaptureSubject?
 
+    /// Photos already taken of the entrance in hand, shown on the viewfinder.
+    ///
+    /// Refreshed when the subject changes and after every capture, rather than computed on
+    /// demand: reading a file on each SwiftUI body evaluation would put disk IO in the render
+    /// path of a live camera preview.
+    @Published private(set) var capturesForSubject = 0
+
+    let tally = EntranceTally.inDocuments()
+
+    /// Re-read the count for the entrance in hand. Zero when there is no subject.
+    func refreshSubjectTally() {
+        capturesForSubject = subject.map { tally.count(for: $0.entrance.id) } ?? 0
+    }
+
     /// A frame that passed validation and is waiting for its six ROI points (TICK-026).
     ///
     /// It is not a capture yet. `photosTaken` does not count it and `lastRecord` does not hold it:
@@ -499,6 +513,10 @@ final class CaptureController: ObservableObject {
         case .success:
             photosTaken += 1
             refreshPendingUploads()
+            // Counted like any other capture: an imported photo is a view of that entrance, and
+            // an operator checking coverage should not have to remember which arrived how.
+            tally.increment(record.entrance.id)
+            refreshSubjectTally()
             // An imported photo joins the queue like any other capture, so it retires the last
             // drain's verdict for the same reason a shutter press does.
             lastDrainMessage = nil
@@ -545,6 +563,7 @@ final class CaptureController: ObservableObject {
         case .success(let written):
             photosTaken += 1
             refreshPendingUploads()
+            capturesForSubject = tally.increment(record.entrance.id)
             // The last drain's verdict described a queue this capture just changed. Left standing,
             // "Nothing to upload. Everything here is already safe." sits under a nonzero count --
             // observed on the 15 Pro Max, three captures on the phone, the app calling them safe.

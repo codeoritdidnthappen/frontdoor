@@ -144,3 +144,42 @@ def test_an_absent_instrument_reading_renders_as_nothing_not_as_zero():
     assert "if let caliperInches" in comparison, (
         "the comparison must be withheld when there is no reading, not rendered against zero"
     )
+
+
+CAPTURE_VIEW = ROOT / "ios" / "FrontdoorCapture" / "UI" / "CaptureView.swift"
+
+
+def test_every_path_that_writes_a_capture_counts_it_against_its_entrance():
+    """#4 AC5: the operator has to be able to see an under-shot entrance at the door.
+
+    `docs/capture-protocol.md` asks for 5-6 views of every entrance, and nothing enforces it --
+    D-021 put the plan in the instrument and the 2026-09-01 pivot moved it to the document. Under
+    D-036 one operator shoots 40-60 entrances with no second phone covering the same doorway, so a
+    view missed at the door is found during analysis, a drive away.
+
+    Both writers must count, for the reason the import path already broke once here: a photo
+    imported for E-014 is a view of E-014, and a count that ignores it under-reports coverage.
+    EntranceTally's own behaviour is covered by XCTest; what needs asserting from here is that the
+    capture paths actually call it, which needs a camera.
+    """
+    for signature in ("private func commit(", "func importPhoto("):
+        after_write = body_of(signature).split("CaptureWriter.write(", 1)[1]
+        success = after_write.split("case .success", 1)[1].split("case .failure", 1)[0]
+        assert "tally.increment(" in success, (
+            f"{signature} writes a capture without counting it against its entrance"
+        )
+
+
+def test_the_count_is_on_the_viewfinder_where_it_can_still_be_acted_on():
+    """A coverage number on the home screen is read after walking away from the doorway."""
+    view = CAPTURE_VIEW.read_text(encoding="utf-8")
+    bar = view.split("private var conditionsBar", 1)[1].split("\n    }", 1)[0]
+    # Split at the accessibility label and assert against what is DRAWN. Checking the whole bar
+    # passed with the visible count deleted, because the label mentions it too -- a guard that
+    # would have let the number vanish from the screen while still reading it to VoiceOver.
+    drawn, _, spoken = bar.partition(".accessibilityLabel")
+    assert "capturesForSubject" in drawn, (
+        "the per-entrance count must be drawn on the viewfinder's conditions bar, beside the "
+        "entrance id it belongs to"
+    )
+    assert "capturesForSubject" in spoken, "and spoken, so the bar reads the same either way"

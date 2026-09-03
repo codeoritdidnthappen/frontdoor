@@ -35,6 +35,9 @@ struct RootView: View {
                 initialConditions: controller.subject?.conditions
             ) { subject in
                 controller.subject = subject
+                // Before the viewfinder opens, so the count on the conditions bar is right on the
+                // first frame rather than after the first shutter press.
+                controller.refreshSubjectTally()
                 settingUpEntrance = false
                 isCapturing = true
             } onCancel: {

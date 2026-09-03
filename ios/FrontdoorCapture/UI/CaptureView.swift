@@ -143,6 +143,13 @@ struct CaptureView: View {
                 HStack(spacing: 6) {
                     Text(subject.entrance.id).fontWeight(.semibold)
                     Text("·")
+                    // Coverage for this doorway, at the doorway. The protocol asks for 5-6 views
+                    // per entrance and the app does not enforce that (D-021 moved to
+                    // capture-protocol.md in the 2026-09-01 pivot), so this is the only place an
+                    // under-shot entrance is visible while it can still be fixed.
+                    Text("^[\(controller.capturesForSubject) photo](inflect: true)")
+                        .monospacedDigit()
+                    Text("·")
                     Text(String(format: "%.1f m", subject.conditions.distanceM))
                         .monospacedDigit()
                     Text("·")
@@ -158,6 +165,7 @@ struct CaptureView: View {
             .padding(.top, 8)
             .accessibilityLabel(
                 "Conditions: \(subject.entrance.id), "
+                + "\(controller.capturesForSubject) photos so far, "
                 + "\(String(format: "%.1f", subject.conditions.distanceM)) metres, "
                 + "\(subject.conditions.lighting.label). Tap to change.")
         }
