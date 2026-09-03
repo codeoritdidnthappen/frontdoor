@@ -158,7 +158,7 @@ Bucket locks are a Cloudflare API, not part of the S3 surface `frontdoor.storage
 so this is dashboard or wrangler — `python -m frontdoor.storage` cannot set one.
 
 **The prefix is `sealed/`, not empty.** A bucket-wide rule breaks `python -m
-frontdoor.storage verify`: it writes `open/_frontdoor_probe` and deletes it on every run,
+frontdoor.storage_probe verify`: it writes `open/_frontdoor_probe` and deletes it on every run,
 so under a bucket-wide lock the cleanup fails silently the first time and the overwrite
 fails loudly the second. That trades the D-020 and D-033 denials for a probe key nobody
 needs kept.
@@ -179,9 +179,9 @@ python
 ```
 
 `allow_sealed=True` because `get` refuses a `sealed/` key otherwise; storage writes no
-audit line, that is `eval`'s job. Repeat with `from frontdoor.eval_depth import depth_store`
+audit line, that is `eval`'s job. Repeat with `from frontdoor.depth_access import depth_store`
 if you hold the harness token -- the depth reader lives there, not in `frontdoor.storage`
-(TICK-072). The probe object is then undeletable for as long as the rule stands — that is the
+(TICK-057). The probe object is then undeletable for as long as the rule stands — that is the
 proof, and it costs ten bytes.
 
 > **NOT RUN YET (#187).** Whoever has dashboard access: paste the `bucket lock list` output

@@ -1063,7 +1063,7 @@ The container's response is also now validated against the frozen schema, rather
 checked with a few ad-hoc assertions -- what the ticket's Testing section asked for, since
 the flask-client tests validate the source tree and not what the image puts on the wire.
 
-## D-037  AMENDMENT TO #187: R2 has no object versioning; the sealed partition is LOCKED instead
+## D-038  AMENDMENT TO #187: R2 has no object versioning; the sealed partition is LOCKED instead
 
 Taken 2026-09-02 while implementing #187, which asked for object versioning on
 `frontdoor-image` and `frontdoor-depth` so that deleting a sealed object would be
@@ -1080,8 +1080,9 @@ losing a sealed object impossible rather than recoverable, which is the stronger
 the one D-007 actually needs: the sealed split is opened once, on 2026-09-07, and there is no
 second attempt.
 
-**Scoped to `sealed/`, not the bucket.** A bucket-wide rule breaks `python -m
-frontdoor.storage verify`, which writes and deletes `open/_frontdoor_probe` on every run.
+**Scoped to `sealed/`, not the bucket.** A bucket-wide rule breaks the credential probe
+(`python -m frontdoor.storage_probe verify`, moved there by TICK-057), which writes and
+deletes `open/_frontdoor_probe` on every run.
 Locking the whole bucket would trade the D-020 and D-033 denials for a probe key nobody needs
 kept.
 
@@ -1098,32 +1099,6 @@ D-026's 10 GB cap; projected volume is 2-5 GB and only that prefix is locked.
 Not yet applied: the rule needs Cloudflare dashboard access. `data/STORAGE.md` carries the
 procedure and a marked placeholder for the transcript. #187's title and its versioning criteria
 need rewriting to match this entry.
-
-## 2026-09-02 — The depth READ credential leaves frontdoor.storage (TICK-072, issue #55)
-
-AC-2 of #55 asks that only the evaluation harness hold a depth-loading function, and that it
-live in a module the library does not import. `load_depth_creds()` and `depth_store()` were in
-`frontdoor.storage`, which the dataset loader and the server both import -- so the depth reader
-sat one import line away from the metrology path, which is the thing D-020 quarantines against.
-
-They now live in `src/frontdoor/eval_depth.py` and nowhere else. The server keeps
-`load_depth_write_creds()` and `depth_write_store()` in `frontdoor.storage`, because that token
-is write-only under D-033: it can store an upload and can never read one back, so the invariant
-holds with the server on the write side of it.
-
-The module name carries the guard. `test_metrology_scaffold.py` already fails any import in the
-core library whose module name mentions depth, so calling the file `eval_depth` means the
-library cannot reach it without failing the build -- no second allow-list to keep in sync. Two
-further guards in `test_storage.py` assert that only that module names
-`FRONTDOOR_DEPTH_ACCESS_KEY` / `FRONTDOOR_DEPTH_SECRET_KEY`, and that nothing under
-`src/frontdoor_server/` imports it.
-
-`storage.verify()` imports the harness store inside the function rather than at module scope: it
-is the one caller that legitimately holds every credential at once, and a module-scope import
-would hand a depth reader to everything that imports `storage`.
-
-AC-5 of #55 is not addressed, and is recorded on the issue as stale: it names Arm C, cut by
-D-030, and the three live arms are still stubs (#37, #39, #41).
 
 ## 2026-09-02 — The image's guards now run where the branch is checked (TICK-062, issue #50)
 
