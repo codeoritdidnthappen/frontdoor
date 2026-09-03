@@ -1,5 +1,6 @@
 const KEY_PATTERN = /^(open|sealed)\/[A-Za-z0-9_.-]{1,128}$/;
 const SHA256_PATTERN = /^[0-9a-f]{64}$/;
+const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 const CONFIGS = new WeakMap();
 
 class RequestError extends Error {
@@ -65,6 +66,14 @@ function parseUploadRequest(request) {
   }
   if (request.body === null) {
     throw new RequestError("missing body", 400);
+  }
+  // A PUT carrying `Content-Length: 0` arrives with an empty but non-null stream, so the check
+  // above passes it. R2 would store a 0-byte object, and because writes never overwrite it would
+  // hold that capture's key forever -- unrecoverably under `sealed/`, which #187 locked against
+  // deletion. The empty digest is the only one an empty body can satisfy, so refusing it closes
+  // the hole; an empty body under any other digest is already refused by R2.
+  if (sha256 === EMPTY_SHA256) {
+    throw new RequestError("empty body", 400);
   }
   return { body: request.body, key, sha256 };
 }

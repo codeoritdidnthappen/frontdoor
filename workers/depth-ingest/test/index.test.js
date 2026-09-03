@@ -6,6 +6,7 @@ import { handle } from "../src/index.js";
 
 const SECRET = "test-depth-service-key";
 const DIGEST = "a".repeat(64);
+const EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
 // The message R2 actually returns for a server-side digest rejection, error 10037.
 function digestRejection() {
@@ -137,5 +138,17 @@ describe("depth ingest Worker", () => {
     };
 
     await assert.rejects(() => handle(request(), env(bucket)), /internal error/);
+  });
+
+  test("TICK-255 refuses an empty body without touching R2", async () => {
+    const bucket = new Bucket();
+    const response = await handle(
+      request(undefined, { headers: { "X-Frontdoor-SHA256": EMPTY_SHA256 } }),
+      env(bucket),
+    );
+
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), { detail: "empty body" });
+    assert.equal(bucket.puts.length, 0);
   });
 });
