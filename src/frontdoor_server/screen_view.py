@@ -1,10 +1,12 @@
 """POST /screen: photo-upload ADA feature screening (TICK-245).
 
-A thin entrypoint over frontdoor.screening: upload 1-6 entrance photos, get
-back per-image, per-criterion screening verdicts and (for multiple views) the
-majority aggregate with its flip-rate. The honesty rule carries through to the
-response wording: verdicts are statements about what is visible in the photos,
-never measurements and never compliance determinations.
+A thin entrypoint over frontdoor.screening: upload 1-6 photos of one
+entrance, get back one integrated per-criterion screening result. All views
+go into a single model call that weighs them together (offline eval on the
+12-entrance pilot set: more accurate than per-image majority voting, and one
+call is faster than N). The honesty rule carries through to the response
+wording: verdicts are statements about what is visible in the photos, never
+measurements and never compliance determinations.
 
 Split discipline (D-007) is mirrored here: an entrance_id, when supplied, is
 canonicalized and its split resolved before the engine is touched; a
@@ -21,7 +23,6 @@ and the response reports the total under "faces_blurred".
 
 import os
 import time
-from concurrent.futures import ThreadPoolExecutor
 from importlib import resources
 
 from flask import Blueprint, Response, current_app, request
@@ -158,61 +159,58 @@ def screen():
 
     t0 = time.perf_counter()
     try:
-        # Concurrently, because these are independent network calls and the demo is timed.
-        # One view took 13.5s against the live model, so a six-view entrance run in series is
-        # over a minute of dead air against the 2.5-minute technical-demo budget in
-        # docs/deck-outline.md. Nothing about the verdicts or the aggregate changes; only the
-        # waiting overlaps.
-        #
-        # `.map` preserves input order, which the response depends on: `images[i]` must be
-        # `files[i]`, and zip below pairs them positionally. The engine books its spend under
-        # a lock so the cap still holds with several calls in flight.
-        with ThreadPoolExecutor(max_workers=min(len(payloads), MAX_IMAGES)) as pool:
-            assessments = list(pool.map(
-                lambda payload: engine.assess_image(payload[0], media_type=payload[1]),
-                payloads,
-            ))
+        # One integrated model call over ALL views of the entrance, replacing one call per
+        # view. Offline eval on the 12-entrance pilot set showed per-image majority voting
+        # amplifies shared camera-position blind spots (a frontal frame hides the ground
+        # plane), while the integrated call lets the one view that shows the relevant area
+        # settle the verdict -- and it is faster than N calls, which the timed demo cares
+        # about. `assess_images_integrated` records refusals and parse failures in the
+        # returned assessment itself; anything that still escapes (spend cap, an injected
+        # engine blowing up) is an upstream engine failure, named, not a bare 500.
+        assessment = engine.assess_images_integrated(
+            [image for image, _ in payloads],
+            media_types=[media_type for _, media_type in payloads],
+        )
     except Exception as exc:
-        # assess_image records per-image failures itself; anything that still
-        # escapes (spend cap, an injected engine blowing up) is an upstream
-        # engine failure, named, not a bare 500.
         return _error(
             "screening engine failure", f"{type(exc).__name__}: {exc}", status=502
         )
     latency_ms = round((time.perf_counter() - t0) * 1000)
 
-    if all(a.criteria is None for a in assessments):
-        named = "; ".join(a.error or "unknown error" for a in assessments)
+    if assessment.criteria is None:
         return _error(
             "screening engine failure",
-            f"every image assessment failed: {named}",
+            f"the integrated assessment failed: {assessment.error or 'unknown error'}",
             status=502,
         )
 
     body = {
         "entrance_id": entrance_id,
-        "images": [
-            {
-                "filename": part.filename,
-                "criteria": a.criteria,
-                "latency_ms": None if a.latency_s is None else round(a.latency_s * 1000),
-                "error": a.error,
-            }
-            for part, a in zip(files, assessments)
-        ],
+        # Filenames only: the assessment is integrated across the views, so there are no
+        # per-image verdicts to attach here.
+        "images": [{"filename": part.filename} for part in files],
+        "assessment": {
+            "criteria": assessment.criteria,
+            "latency_ms": None if assessment.latency_s is None
+            else round(assessment.latency_s * 1000),
+            "error": assessment.error,
+        },
         "latency_ms": latency_ms,
         "faces_blurred": faces_blurred,
         "model": engine.config.model,
         "status": "ai_estimated",
         "wording": WORDING,
     }
-    if len(assessments) > 1:
+    if len(files) > 1:
+        # Kept for consumers that read the entrance-level verdict here: the integrated
+        # verdicts, with flip_rate 0.0 -- one integrated result has nothing to disagree
+        # with itself.
         body["aggregate"] = {
             key: {
                 "verdict": summary.verdict,
                 "flip_rate": summary.flip_rate,
                 "counts": summary.counts,
             }
-            for key, summary in aggregate_assessments(assessments).items()
+            for key, summary in aggregate_assessments([assessment]).items()
         }
     return body, 200

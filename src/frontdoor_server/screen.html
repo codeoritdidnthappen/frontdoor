@@ -13,10 +13,10 @@
   No external requests, no build step: it is served by the same image that answers
   POST /screen, so what is on stage is what was tested.
 
-  This page decides nothing. Verdicts, the aggregate and the flip rate are all computed
-  server-side by frontdoor.screening; the page renders what came back and says where it
-  came from. The honesty wording is printed verbatim from the response rather than
-  copied into this file, so it cannot drift from what the API says.
+  This page decides nothing. The integrated verdicts are computed server-side by
+  frontdoor.screening from every submitted view at once; the page renders what came
+  back and says where it came from. The honesty wording is printed verbatim from the
+  response rather than copied into this file, so it cannot drift from what the API says.
 -->
 <style>
   :root {
@@ -85,8 +85,6 @@
   .error { border-color: var(--bad); background: var(--bad-bg); }
   .error h2 { font-size: 15px; margin: 0 0 6px; color: var(--bad); }
   .error p { margin: 0; font-size: 14px; }
-  .imgname { font-weight: 600; font-size: 14px; margin: 18px 0 6px; }
-  .imgerr { color: var(--bad); font-size: 13px; }
 </style>
 </head>
 <body>
@@ -100,7 +98,8 @@
   <form id="f">
     <label for="images">Entrance photos (1–6)</label>
     <input id="images" type="file" name="images" accept="image/jpeg,image/png,image/webp" multiple required>
-    <p class="hint">JPEG, PNG or WebP. More views give a majority verdict and a flip rate.</p>
+    <p class="hint">JPEG, PNG or WebP. All views are weighed together in one integrated
+    assessment, so a feature only one angle can show still counts.</p>
 
     <label for="entrance">Entrance ID (optional)</label>
     <input id="entrance" type="text" placeholder="E-001">
@@ -158,29 +157,6 @@ function criteriaTable(criteria) {
   return table;
 }
 
-function aggregateTable(aggregate) {
-  const table = el("table");
-  const head = el("tr");
-  ["Criterion", "Majority", "Flip rate", "Views"].forEach(h => head.appendChild(el("th", null, h)));
-  table.appendChild(head);
-  Object.keys(CRITERION_LABELS).forEach(key => {
-    const s = aggregate[key] || {};
-    const row = el("tr");
-    row.appendChild(el("td", "crit", CRITERION_LABELS[key]));
-    const v = el("td");
-    v.appendChild(verdictCell(s.verdict));
-    row.appendChild(v);
-    // Reported, never hidden: a majority that half the views disagree with is a weak
-    // majority, and the number is the only thing that says so.
-    row.appendChild(el("td", "flip",
-      s.flip_rate === null || s.flip_rate === undefined ? "—" : (s.flip_rate * 100).toFixed(0) + "%"));
-    row.appendChild(el("td", "flip",
-      Object.entries(s.counts || {}).map(([k, n]) => k + " " + n).join(", ") || "—"));
-    table.appendChild(row);
-  });
-  return table;
-}
-
 function renderError(body, status) {
   const panel = el("div", "panel error");
   panel.appendChild(el("h2", null, (body && body.error) || "request failed"));
@@ -201,21 +177,13 @@ function renderResult(body) {
   header.appendChild(tag);
   panel.appendChild(header);
 
-  if (body.aggregate) {
-    panel.appendChild(el("p", "sub", "Majority across " + body.images.length + " views."));
-    panel.appendChild(aggregateTable(body.aggregate));
-  }
-
-  body.images.forEach(img => {
-    panel.appendChild(el("p", "imgname", img.filename || "(unnamed image)"));
-    if (img.criteria) {
-      panel.appendChild(criteriaTable(img.criteria));
-    } else {
-      // A view the engine could not assess is shown as a failed view, not dropped. A
-      // silently missing image would make the aggregate look better supported than it is.
-      panel.appendChild(el("p", "imgerr", "Not assessed — " + (img.error || "unknown error")));
-    }
-  });
+  // One integrated assessment across every submitted view: the server weighs all the
+  // photos together in a single model call, so there is one table, not one per image.
+  const names = body.images.map(img => img.filename || "(unnamed image)").join(", ");
+  panel.appendChild(el("p", "sub",
+    "One integrated assessment across " + body.images.length +
+    (body.images.length === 1 ? " view: " : " views: ") + names));
+  panel.appendChild(criteriaTable((body.assessment || {}).criteria));
 
   // Printed from the response, not hardcoded here, so this page cannot drift from the
   // wording the API commits to.
