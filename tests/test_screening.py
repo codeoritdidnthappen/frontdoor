@@ -13,6 +13,8 @@ import pytest
 from frontdoor.screening import (
     ALLOWED_VERDICTS,
     CRITERIA_KEYS,
+    FACE_CHECK_KEY,
+    FACE_CHECK_QUESTION,
     SYSTEM_PROMPT,
     EntranceScreening,
     ImageAssessment,
@@ -22,6 +24,7 @@ from frontdoor.screening import (
     SpendCapError,
     aggregate_assessments,
     build_prompt,
+    validate_face_check,
     validate_verdicts,
 )
 
@@ -59,14 +62,17 @@ class FakeClient:
         return response
 
 
-def _payload(verdict="present", **overrides):
+def _payload(verdict="present", face_check="clear", **overrides):
     criteria = {
         key: {"verdict": verdict, "confidence": 80, "evidence": f"{key} seen"}
         for key in CRITERIA_KEYS
     }
     for key, entry in overrides.items():
         criteria[key] = entry
-    return json.dumps({"criteria": criteria})
+    body = {"criteria": criteria}
+    if face_check is not None:
+        body[FACE_CHECK_KEY] = face_check
+    return json.dumps(body)
 
 
 def _assessment(verdicts):
@@ -132,6 +138,65 @@ def test_api_exception_is_a_recorded_error():
     result = engine.assess_image(b"jpeg-bytes")
     assert result.criteria is None
     assert "connection reset" in result.error
+
+
+# --- face_check: the automatic privacy audit (TICK-257 follow-up, #232) ------
+
+
+def test_prompt_carries_the_face_check_question_as_a_fifth_item():
+    prompt = build_prompt()
+    assert FACE_CHECK_KEY in prompt
+    assert FACE_CHECK_QUESTION in prompt
+    assert "reflections in glass" in prompt
+
+
+def test_face_check_is_not_an_accessibility_criterion():
+    # It never joins CRITERIA (so it never votes in the aggregate) and never
+    # appears in the criteria block validate_verdicts returns.
+    assert FACE_CHECK_KEY not in CRITERIA_KEYS
+    out = validate_verdicts(json.loads(_payload(face_check="face_visible")))
+    assert FACE_CHECK_KEY not in out
+
+
+def test_assess_image_carries_face_visible_through():
+    engine = ScreeningEngine(
+        client=FakeClient([_Response(_payload(face_check="face_visible"))])
+    )
+    result = engine.assess_image(b"jpeg-bytes")
+    assert result.face_check == "face_visible"
+    assert result.error is None
+    # The audit answer does not disturb the accessibility verdicts.
+    assert result.criteria["ramp_or_bevel"]["verdict"] == "present"
+
+
+def test_a_clear_face_check_is_carried_through():
+    engine = ScreeningEngine(client=FakeClient([_Response(_payload())]))
+    assert engine.assess_image(b"jpeg-bytes").face_check == "clear"
+
+
+def test_missing_face_check_is_clear_with_a_logged_warning_never_a_crash(caplog):
+    engine = ScreeningEngine(
+        client=FakeClient([_Response(_payload(face_check=None))])
+    )
+    with caplog.at_level(logging.WARNING, logger="frontdoor.screening"):
+        result = engine.assess_image(b"jpeg-bytes")
+    assert result.error is None
+    assert result.face_check == "clear"
+    assert "face_check missing or invalid" in caplog.text
+
+
+def test_out_of_vocabulary_face_check_is_clear_with_a_logged_warning(caplog):
+    with caplog.at_level(logging.WARNING, logger="frontdoor.screening"):
+        assert validate_face_check({FACE_CHECK_KEY: "maybe"}) == "clear"
+    assert "face_check missing or invalid" in caplog.text
+    assert validate_face_check({FACE_CHECK_KEY: " FACE_VISIBLE "}) == "face_visible"
+
+
+def test_errored_assessment_defaults_face_check_to_clear():
+    # Nothing was retained for an errored view, so there is nothing to
+    # quarantine; the default must not invent a face_visible.
+    engine = ScreeningEngine(client=FakeClient([RuntimeError("boom")]))
+    assert engine.assess_image(b"jpeg-bytes").face_check == "clear"
 
 
 def test_aggregation_majority_verdict_and_flip_rate():

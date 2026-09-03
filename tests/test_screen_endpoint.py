@@ -19,13 +19,14 @@ DEV_ID = "E-001"
 SEALED_ID = "E-014"
 
 
-def ok_assessment(verdict="present"):
+def ok_assessment(verdict="present", face_check="clear"):
     return ImageAssessment(
         criteria={
             key: {"verdict": verdict, "confidence": 80, "evidence": f"{key} seen"}
             for key in CRITERIA_KEYS
         },
         latency_s=1.234,
+        face_check=face_check,
     )
 
 
@@ -422,6 +423,77 @@ def test_undecodable_bytes_pass_through_to_the_engine_unchanged():
     engine = FakeEngine()
     post_screen(make_client(engine), [image_part("a.png", "image/png", b"not-an-image")])
     assert engine.calls == [(b"not-an-image", "image/png")]
+
+
+# --- face_check quarantine (TICK-257 follow-up, #232) -------------------------------------
+#
+# The model audits its own (already blurred) input; a face_visible answer quarantines the
+# image. Its verdicts still aggregate - the model has already seen it, so the privacy issue
+# is retention, not assessment - and because the endpoint never persists image bytes,
+# marking the image in the response IS the quarantine.
+
+
+def test_face_visible_image_is_quarantined_but_still_votes():
+    engine = FakeEngine(assessments={
+        b"v0": ok_assessment("present"),
+        b"v1": ok_assessment("present", face_check="face_visible"),
+        b"v2": ok_assessment("not_visible"),
+    })
+    parts = [image_part(f"v{i}.jpg", data=f"v{i}".encode()) for i in range(3)]
+    body = post_screen(make_client(engine), parts).get_json()
+
+    assert body["quarantined_views"] == 1
+    assert body["images"][0]["quarantined"] is False
+    assert "reason" not in body["images"][0]
+    assert body["images"][1]["quarantined"] is True
+    assert body["images"][1]["reason"] == "face_check"
+    # The quarantined view still voted: 2 present + 1 not_visible, not 1 + 1.
+    for key in CRITERIA_KEYS:
+        assert body["aggregate"][key]["counts"] == {"present": 2, "not_visible": 1}
+    # Its verdicts are also still reported per-image.
+    assert body["images"][1]["criteria"][CRITERIA_KEYS[0]]["verdict"] == "present"
+
+
+def test_quarantined_views_is_zero_when_every_view_is_clear():
+    body = post_screen(make_client(FakeEngine()), [image_part()]).get_json()
+    assert body["quarantined_views"] == 0
+    assert body["images"][0]["quarantined"] is False
+
+
+def test_an_assessment_without_face_check_defaults_to_clear_not_a_crash():
+    # An injected/legacy assessment built without the field: the dataclass
+    # default ("clear") applies, the response still carries the quarantine
+    # fields, and nothing 500s.
+    engine = FakeEngine(assessments=[ImageAssessment(
+        criteria={key: {"verdict": "present", "confidence": 80, "evidence": ""}
+                  for key in CRITERIA_KEYS},
+        latency_s=1.0,
+    )])
+    response = post_screen(make_client(engine), [image_part()])
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["quarantined_views"] == 0
+    assert body["images"][0]["quarantined"] is False
+
+
+def test_the_endpoint_has_no_persistence_path_for_image_bytes():
+    """The quarantine guarantee is structural: /screen never writes an upload
+    anywhere, so a face_visible image needs no deletion step. This pins that
+    no persistence facility is even reachable from the module - if one is ever
+    added, this fails and the quarantine design has to be revisited."""
+    import inspect
+
+    from frontdoor_server import screen_view
+
+    source = inspect.getsource(screen_view)
+    for facility in (
+        "import storage", "frontdoor.storage", "boto3", "open(",
+        "write_bytes", "NamedTemporaryFile", "tempfile", ".save(",
+    ):
+        assert facility not in source, (
+            f"screen_view references a persistence facility ({facility!r}); "
+            "the face_check quarantine relies on this endpoint retaining nothing"
+        )
 
 
 # --- concurrent assessment ----------------------------------------------------------------

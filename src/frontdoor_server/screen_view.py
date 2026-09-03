@@ -17,6 +17,16 @@ clear 503 rather than a crash. Tests inject a fake engine via app.config.
 Uploads pass through the face-blur ingest step (frontdoor.faceblur, TICK-257)
 before the engine sees them: faces irreversibly blurred, EXIF GPS stripped,
 and the response reports the total under "faces_blurred".
+
+The model then audits the blur itself (face_check, the TICK-257 follow-up):
+an image the model says still shows an identifiable face is QUARANTINED. Its
+verdicts still count toward the aggregate - the model has already seen the
+blurred image, so the privacy issue is retention, not assessment - but the
+response marks it {"quarantined": true, "reason": "face_check"} and reports
+the total under "quarantined_views". Retention guarantee: this endpoint holds
+image bytes in request-scoped locals only. Nothing here writes them to disk,
+object storage, or any other store (pinned by test_screen_endpoint), so a
+quarantined image needs no deletion step - its bytes die with the request.
 """
 
 import os
@@ -189,19 +199,30 @@ def screen():
             status=502,
         )
 
+    # face_check quarantine (TICK-257 follow-up, #232): the model has audited its
+    # own (already blurred) input. A face_visible image is marked quarantined; its
+    # verdicts still aggregate (assessment already happened - retention is the
+    # privacy issue), and because this endpoint never persists image bytes anywhere
+    # (see the module docstring), marking it is the whole quarantine.
+    images = []
+    for part, a in zip(files, assessments):
+        entry = {
+            "filename": part.filename,
+            "criteria": a.criteria,
+            "latency_ms": None if a.latency_s is None else round(a.latency_s * 1000),
+            "error": a.error,
+            "quarantined": a.face_check == "face_visible",
+        }
+        if entry["quarantined"]:
+            entry["reason"] = "face_check"
+        images.append(entry)
+
     body = {
         "entrance_id": entrance_id,
-        "images": [
-            {
-                "filename": part.filename,
-                "criteria": a.criteria,
-                "latency_ms": None if a.latency_s is None else round(a.latency_s * 1000),
-                "error": a.error,
-            }
-            for part, a in zip(files, assessments)
-        ],
+        "images": images,
         "latency_ms": latency_ms,
         "faces_blurred": faces_blurred,
+        "quarantined_views": sum(1 for entry in images if entry["quarantined"]),
         "model": engine.config.model,
         "status": "ai_estimated",
         "wording": WORDING,

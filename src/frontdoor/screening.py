@@ -5,6 +5,11 @@ ramp or beveled threshold, handrails, accessible door hardware, accessibility
 signage. Per entrance, verdicts from the 5-6 views are aggregated into a
 majority verdict per criterion with the flip-rate reported alongside.
 
+The same call also answers a fifth checklist item, face_check (TICK-257
+follow-up, #232): whether any identifiable face survived the automatic blur
+pass. It is a privacy audit, not an accessibility criterion - it never joins
+CRITERIA or the aggregate, and callers use it to quarantine the image.
+
 Honesty rule (load-bearing, do not relax): verdicts are screening statements
 about what is visible in the photos. Never measurements, never compliance or
 legal conclusions. When a feature cannot be confidently seen the verdict is
@@ -50,6 +55,20 @@ CRITERIA_KEYS = tuple(key for key, _ in CRITERIA)
 
 ALLOWED_VERDICTS = ("present", "absent", "not_visible")
 
+# The automatic privacy audit (TICK-257 follow-up, #232). NOT an accessibility
+# criterion: it never joins CRITERIA, never votes in aggregate_assessments,
+# and is carried separately on ImageAssessment. The model has already seen
+# the blurred image by the time it answers, so a face_visible answer is a
+# retention decision (quarantine the image), never an assessment one.
+FACE_CHECK_KEY = "face_check"
+FACE_CHECK_VALUES = ("clear", "face_visible")
+FACE_CHECK_QUESTION = (
+    "After the automatic blurring already applied to this image, is any "
+    "identifiable human face still visible anywhere - including reflections "
+    "in glass and people seen through windows? Answer face_visible if any "
+    "face could be recognized, clear otherwise."
+)
+
 # Tie-break order for the majority verdict: most conservative first. A tie
 # never invents certainty, and not_visible stays distinct from absent.
 _CONSERVATIVE_ORDER = ("not_visible", "absent", "present")
@@ -92,6 +111,11 @@ class ImageAssessment:
     criteria: dict | None
     latency_s: float | None
     error: str | None = None
+    #: The privacy audit answer ("clear" or "face_visible"), separate from the
+    #: accessibility criteria. Defaults to "clear": an errored assessment has
+    #: no image retained anywhere to quarantine, and a reply missing the key
+    #: is normalized (with a logged warning) rather than crashed on.
+    face_check: str = "clear"
 
 
 @dataclass(frozen=True)
@@ -120,8 +144,14 @@ def build_prompt():
     for key, desc in CRITERIA:
         lines.append(f"- {key}: {desc}")
     lines.append(
+        "Additionally answer one privacy check, which is not an "
+        "accessibility criterion:"
+    )
+    lines.append(f"- {FACE_CHECK_KEY}: {FACE_CHECK_QUESTION}")
+    lines.append(
         'Return exactly this JSON shape: {"criteria": {"<key>": '
-        '{"verdict": "...", "confidence": 0, "evidence": "..."}}}'
+        '{"verdict": "...", "confidence": 0, "evidence": "..."}}, '
+        '"face_check": "clear" or "face_visible"}'
     )
     return "\n".join(lines)
 
@@ -154,6 +184,24 @@ def validate_verdicts(parsed):
             "evidence": str(entry.get("evidence", ""))[:200],
         }
     return out
+
+
+def validate_face_check(parsed):
+    """Normalize the privacy-audit answer to "clear" or "face_visible".
+
+    A missing or out-of-vocabulary answer is treated as "clear" with a logged
+    warning, never a crash: the audit is an extra net over the blur pass, and
+    a model that skips the key must not take the whole assessment down with
+    it. (The blur pass has already run regardless.)
+    """
+    value = str(parsed.get(FACE_CHECK_KEY, "")).strip().lower()
+    if value in FACE_CHECK_VALUES:
+        return value
+    logger.warning(
+        "face_check missing or invalid in model reply (%r); treating as clear",
+        value or None,
+    )
+    return "clear"
 
 
 def aggregate_assessments(assessments):
@@ -244,14 +292,17 @@ class ScreeningEngine:
             if response.stop_reason == "refusal":
                 raise ScreeningError("model refused the request")
             text = next((b.text for b in response.content if b.type == "text"), "")
-            criteria = validate_verdicts(parse_json_response(text))
+            parsed = parse_json_response(text)
+            criteria = validate_verdicts(parsed)
+            face_check = validate_face_check(parsed)
         except Exception as exc:
             latency = time.perf_counter() - t0
             error = f"{type(exc).__name__}: {exc}"
             logger.warning("image assessment failed: %s", error)
             return ImageAssessment(criteria=None, latency_s=round(latency, 3),
                                    error=error)
-        return ImageAssessment(criteria=criteria, latency_s=round(latency, 3))
+        return ImageAssessment(criteria=criteria, latency_s=round(latency, 3),
+                               face_check=face_check)
 
     def screen_entrance(self, entrance_id, images):
         """Screen one entrance from its captured views (image bytes).
