@@ -59,10 +59,11 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 ## 5. Git Workflow
 
-**Every change starts with a ticket and lands through a pull request. Never push directly to `main`.**
+**Never work directly on `main`. Every change uses an appropriately named branch and a pull
+request. Do not automatically merge the pull request.**
 
-1. **Trace.** Work begins from an up-to-date `main` and traces to a ticket. Create a short-lived
-   branch for the change and open a pull request back to `main`.
+1. **Trace.** Start from an up-to-date `main` and a ticket. Create a short-lived branch whose prefix
+   matches the work, such as `feat/`, `fix/`, `docs/`, or `chore/`.
 2. **Code.** Keep commits small and scoped to the ticket. Each commit message says what
    changed and why, and references the ticket. Never credit an AI tool anywhere — no
    `Co-Authored-By` trailers, "generated with" notes, or any other credit for Claude, Codex,
@@ -74,8 +75,8 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
    shell-exec cases in test_ios_no_arkit.py are a known local exception; CI runs them).
 4. **Review.** Address review findings on the same branch and update the pull request. Changes
    discovered after merge start from a ticket and land through a new pull request.
-5. **Sync.** Update the branch from `main` before merge, resolve conflicts locally, and rerun the
-   suite. Merge only through the pull request; never push directly to `main`.
+5. **Open the PR.** Update the branch from `main`, resolve conflicts, rerun the suite, and open a
+   pull request. Leave the PR open for human review and merge; never auto-merge it.
 
 If a change can't be traced to a ticket, ask before starting.
 
