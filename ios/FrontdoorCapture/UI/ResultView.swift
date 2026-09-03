@@ -8,7 +8,7 @@ import SwiftUI
 /// an error, because "the interval straddles the line" is a finding this project is proud of.
 struct ResultView: View {
     let response: MeasureResponse
-    let caliperInches: Double
+    let caliperInches: Double?
     let onDone: () -> Void
 
     /// Large enough to read at 3 m on a 1080p projection (AC5).
@@ -113,13 +113,21 @@ struct ResultView: View {
         }
     }
 
-    /// The comparison the demo exists to make.
+    /// The comparison the demo exists to make -- when there is something to compare against.
+    ///
+    /// Optional since D-036 superseded D-003: no caliper, no instrument ground truth, and
+    /// `Entrance.riseInches` is nil on every capture this study will take. Rendering a reading of
+    /// zero would put "caliper 0.00 in - difference 0.11 in" on a projector and invite the room to
+    /// read a fabricated agreement as a result. Absent truth shows as nothing, not as zero.
+    @ViewBuilder
     private func caliperComparison(measured: Double) -> some View {
-        VStack(spacing: 4) {
-            Text("caliper \(inches(caliperInches))  ·  difference \(inches(abs(measured - caliperInches)))")
-                .font(.title3.weight(.medium))
+        if let caliperInches {
+            VStack(spacing: 4) {
+                Text("caliper \(inches(caliperInches))  ·  difference \(inches(abs(measured - caliperInches)))")
+                    .font(.title3.weight(.medium))
+            }
+            .padding(.top, 4)
         }
-        .padding(.top, 4)
     }
 
     private func secondary(_ name: ArmName, _ arm: Arm) -> some View {
