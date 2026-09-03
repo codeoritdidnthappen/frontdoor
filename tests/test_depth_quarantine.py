@@ -417,7 +417,13 @@ def test_no_document_still_names_the_moved_probe_command():
     historical record of what was run then stays readable without reading as instruction now.
     """
     repo = SRC.parent
-    skip = {".git", ".venv", "__pycache__", "node_modules", ".pytest_cache", "DerivedData"}
+    # `.worktrees` holds git worktrees, which are whole checkouts of this repository at other
+    # commits -- so an unswept one reports every mention the old revision made, as though the
+    # working tree still carried them. `rglob` does not read `.gitignore`, so being ignored is not
+    # enough. Observed 2026-09-02: a worktree left behind after its branch merged failed this test
+    # with ten hits, all of them in files that no longer exist at HEAD.
+    skip = {".git", ".venv", "__pycache__", "node_modules", ".pytest_cache", "DerivedData",
+            ".worktrees"}
     unmarked = []
     for path in repo.rglob("*"):
         if not path.is_file() or set(path.parts) & skip:
