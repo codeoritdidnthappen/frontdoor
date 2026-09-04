@@ -1223,3 +1223,23 @@ screening study's evidence.
 Demo rehearsal does not preserve a smaller version of the requirement. TICK-104 (#74) rehearses
 the same handheld capture-to-verdict flow and verifies its offline recording fallback; it neither
 requires nor creates a ticket to buy a pose aid. O-3 is closed rather than restated.
+
+## 2026-09-04 — Make the ground-truth workflow executable (TICK-246, #168)
+
+## D-042  Presence labels are retrospective, entrance-level, and separate from upload
+
+The capture dataset closed before a human-label entry workflow existed. James therefore records
+the four screening presence labels retrospectively from his own original photos and recollection.
+They must not be described as capture-time or same-day labels. When the evidence cannot establish
+present or absent, the answer stays blank rather than being guessed.
+
+Labels remain one row per eligible entrance and criterion, not one row per image. The frozen #69
+closeout supplies the 53 eligible entrance IDs; all 300 eligible capture views are shown together
+by entrance. `data/labels.csv` is the versioned reference artifact. It is not embedded in a photo,
+sidecar, upload request, or database, and image upload never waits for it.
+
+James enters the labels through a loopback-only button interface on this Mac. It reads and
+hash-verifies locally supplied originals, including the photos James already holds for sealed
+entrances; it never reads R2 and never shows model output. The blank 53-by-4 template lands with
+the workflow, but #168 remains open until James has reviewed every entrance and the completion
+check passes.

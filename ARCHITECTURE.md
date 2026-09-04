@@ -133,12 +133,15 @@ Three things this shape buys:
 
 > **Amended 2026-09-02 by D-036.** No caliper is used, so there is no instrument reading to bind.
 > What binds at the shutter is the entrance ID and the condition tags; ground truth for the
-> screening study is the operator's **presence labels** (#168), which need no instrument. Capture
+> screening study is James's retrospective **presence labels** (#168), recorded from his original
+> photos and recollection after dataset closeout. They need no instrument and are not part of an
+> image upload. Capture
 > runs on **one device** — James's iPhone 17 Pro (`iPhone18,1`) with LiDAR — so `device_model` is a
 > constant rather than a stratification variable after applying D-040's alias normalization.
 
-- **Ground truth binds at the shutter press.** The operator enters the entrance ID and the caliper
-  reading in the app. There is no later reconciliation of a spreadsheet against filenames.
+- **Capture identity binds at the shutter press.** The app records the entrance ID and condition
+  tags with each capture. The separate label CSV joins by entrance ID; it does not rely on filename
+  reconciliation and is not required for upload.
 - **Split is assigned when an entrance ID is first created** (D-007), before any image is processed,
   and is immutable thereafter.
 - **Capture angle is derived, not typed.** Obliquity comes from the recovered plane pose (§5), with

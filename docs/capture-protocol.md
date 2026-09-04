@@ -22,9 +22,10 @@ device, so the findings can say plainly what hardware the result was measured on
 D-040's alias normalization before grouping `device_model`.
 
 **No caliper. No reference card. No tape measure.** There is no instrument reading to take at the
-door: ground truth for this study is what you *saw*, recorded as presence labels, not what anything
-measured. If you find yourself wanting to measure a step, that is the earlier version of this
-project and it is not what we are collecting.
+door: ground truth for this study is what James can establish from his original photos and
+recollection, recorded retrospectively as presence labels after dataset closeout, not what anything
+measured. These labels are separate from capture and upload. If you find yourself wanting to
+measure a step, that is the earlier version of this project and it is not what we are collecting.
 
 **Depth delivery is enabled automatically** and needs nothing from you. The measured configuration
 delivered relative stereo data, which the app persists as `DepthFloat32` when supported. Capture
