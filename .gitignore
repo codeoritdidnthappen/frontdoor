@@ -167,3 +167,8 @@ vite.config.ts.timestamp-*
 # Local git worktrees. Kept inside the repo so every path stays within the project
 # directory; never committed.
 .worktrees/
+
+# Community scan records (TICK-262): runtime server data, appended by POST
+# /screen/publish. Local publishes must not end up committed alongside the
+# curated dataset files.
+data/scans.jsonl
