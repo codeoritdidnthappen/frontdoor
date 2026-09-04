@@ -7,6 +7,7 @@ parse the written JSON/markdown and check values, not exact bytes.
 
 import csv
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -21,8 +22,11 @@ from frontdoor.screening import (
     SealedSplitError,
 )
 from frontdoor.screening_eval import (
+    CONDITION_KEYS,
     LATENCY_BUDGET_S,
+    MIN_CONDITION_ENTRANCES,
     ScreeningEvalError,
+    _condition_analysis,
     classify,
     collect_entrances,
     entrance_flip_rates,
@@ -39,7 +43,10 @@ SEALED_ID = "E-014"
 CALIB_ID = "E-042"
 
 
-def _screening(entrance_id, verdicts, *, flip_rates=None, latencies=(1.0,)):
+def _screening(
+    entrance_id, verdicts, *, flip_rates=None, latencies=(1.0,),
+    assessment_verdicts=None,
+):
     """Build an EntranceScreening from {criterion: verdict}.
 
     Criteria missing from `verdicts` get verdict None (no valid view), whose
@@ -56,9 +63,18 @@ def _screening(entrance_id, verdicts, *, flip_rates=None, latencies=(1.0,)):
             flip_rate=flip_rates.get(key, default_rate),
             counts={},
         )
+    if assessment_verdicts is None:
+        assessment_verdicts = [verdicts] * len(latencies)
     assessments = tuple(
-        ImageAssessment(criteria=None, latency_s=latency, error=None)
-        for latency in latencies
+        ImageAssessment(
+            criteria={
+                key: {"verdict": image_verdicts.get(key, "not_visible")}
+                for key in CRITERIA_KEYS
+            },
+            latency_s=latency,
+            error=None,
+        )
+        for latency, image_verdicts in zip(latencies, assessment_verdicts)
     )
     return EntranceScreening(
         entrance_id=entrance_id,
@@ -120,8 +136,20 @@ def _write_labels(path, rows):
     return path
 
 
-def _fake_get_image(capture_id):
-    return b"img-" + capture_id.encode("ascii")
+def _capture(capture_id, *, distance=2.5, lighting="overcast", occlusion="none"):
+    return SimpleNamespace(
+        capture_id=capture_id,
+        image=b"img-" + capture_id.encode("ascii"),
+        sidecar={"conditions": {
+            "distance_m": distance,
+            "lighting": lighting,
+            "occlusion": occlusion,
+        }},
+    )
+
+
+def _fake_get_capture(capture_id):
+    return _capture(capture_id)
 
 
 # --- join math ---------------------------------------------------------------
@@ -247,7 +275,7 @@ def test_sealed_split_is_refused_before_any_file_is_touched(tmp_path):
             labels_path=tmp_path / "does-not-exist-either.csv",
             out_dir=tmp_path / "out",
             engine=FakeEngine({}),
-            get_image=_boom,
+            get_capture=_boom,
             split="sealed",
         )
     assert not (tmp_path / "out").exists()
@@ -289,7 +317,7 @@ def test_run_eval_never_hands_sealed_or_calib_entrances_to_the_engine(tmp_path):
         labels_path=labels,
         out_dir=tmp_path / "out",
         engine=engine,
-        get_image=_fake_get_image,
+        get_capture=_fake_get_capture,
     )
     assert engine.calls == [(DEV_A, 1)]
 
@@ -331,6 +359,18 @@ def _run_report(tmp_path):
                 flip_rates={"ramp_or_bevel": 0.5, "handrails": 0.0,
                             "accessible_door_hardware": 0.0},
                 latencies=(2.0, 16.0),
+                assessment_verdicts=(
+                    {
+                        "ramp_or_bevel": "present",
+                        "handrails": "present",
+                        "accessible_door_hardware": "present",
+                    },
+                    {
+                        "ramp_or_bevel": "absent",
+                        "handrails": "present",
+                        "accessible_door_hardware": "not_visible",
+                    },
+                ),
             ),
             DEV_B: _screening(
                 DEV_B,
@@ -339,12 +379,23 @@ def _run_report(tmp_path):
             ),
         }
     )
+    captures = {
+        "cap-1": _capture(
+            "cap-1", distance=1.5, lighting="overcast", occlusion="none"
+        ),
+        "cap-2": _capture(
+            "cap-2", distance=3.5, lighting="low_light", occlusion="partial"
+        ),
+        "cap-3": _capture(
+            "cap-3", distance=1.5, lighting="overcast", occlusion="none"
+        ),
+    }
     result = run_eval(
         manifest_path=manifest,
         labels_path=labels,
         out_dir=tmp_path / "out",
         engine=engine,
-        get_image=_fake_get_image,
+        get_capture=captures.__getitem__,
     )
     return result, tmp_path / "out"
 
@@ -397,6 +448,25 @@ def test_report_json_values(tmp_path):
     assert run["labels_scored"] == 5
     assert run["labels_blank_skipped"] == 1
 
+    conditions = written["condition_analysis"]
+    assert conditions["analysis"] == "exploratory"
+    assert conditions["interpretation"] == "descriptive associations only; not causal"
+    assert conditions["minimum_entrances"] == MIN_CONDITION_ENTRANCES
+    assert tuple(conditions["dimensions"]) == CONDITION_KEYS
+    distance = conditions["dimensions"]["distance_m"]
+    assert list(distance["groups"]) == ["1.5", "3.5"]
+    near = distance["groups"]["1.5"]
+    assert near["capture_count"] == 2
+    assert near["entrance_count"] == 2
+    assert near["criteria"]["ramp_or_bevel"]["correct"] == 2
+    assert near["criteria"]["ramp_or_bevel"]["underpowered"] is True
+    far = distance["groups"]["3.5"]
+    assert far["criteria"]["ramp_or_bevel"]["wrong"] == 1
+    assert far["criteria"]["accessible_door_hardware"]["abstained"] == 1
+    condition_text = json.dumps(conditions)
+    assert "surface" not in condition_text
+    assert "angle" not in condition_text
+
     # sealed entrance appears nowhere in the report
     assert SEALED_ID not in json.dumps(written)
 
@@ -411,6 +481,10 @@ def test_report_markdown_carries_the_numbers(tmp_path):
     assert "| ramp_or_bevel | 2 | 0 | 0 | 0 | 1.000 |" in text
     assert "| handrails | 1 | 1 | 0 | 0 | 0.500 |" in text
     assert "0.750 (3 correct / 4 committed)" in text
+    for dimension in CONDITION_KEYS:
+        assert f"## Exploratory condition analysis: {dimension}" in text
+    assert text.count("**Exploratory — descriptive associations only; not causal.**") == 3
+    assert "| exploratory | 1.5 | ramp_or_bevel | 2 | 2 | underpowered " in text
     assert f"| {DEV_A} | 0.167 |" in text
     assert "| 2.000 | 4.000 | 16.000 | 16.000 | 1 of 3 |" in text
     assert SEALED_ID not in text
@@ -430,6 +504,155 @@ def test_joins_are_ordered_by_entrance_then_criterion(tmp_path):
     keys = [(j["entrance_id"], j["criterion"]) for j in result["joins"]]
     order = {key: i for i, key in enumerate(CRITERIA_KEYS)}
     assert keys == sorted(keys, key=lambda pair: (pair[0], order[pair[1]]))
+
+
+def test_condition_power_uses_distinct_entrances_and_orders_distance_numerically():
+    joins = []
+    for capture_id, entrance_id, distance, lighting in (
+        ("cap-1", "E-001", 10, "overcast"),
+        ("cap-2", "E-001", 2.5, "overcast"),
+        ("cap-3", "E-003", 2.5, "overcast"),
+        ("cap-4", "E-007", 2.5, "overcast"),
+        ("cap-5", "E-009", 3, "low_light"),
+    ):
+        joins.append({
+            "capture_id": capture_id,
+            "entrance_id": entrance_id,
+            "criterion": "ramp_or_bevel",
+            "verdict": "present",
+            "truth": "present",
+            "outcome": "correct",
+            "conditions": {
+                "distance_m": distance,
+                "lighting": lighting,
+                "occlusion": "none",
+            },
+        })
+
+    analysis = _condition_analysis(joins)
+    distance_groups = analysis["dimensions"]["distance_m"]["groups"]
+    assert list(distance_groups) == ["2.5", "3.0", "10.0"]
+    assert distance_groups["2.5"]["capture_count"] == 3
+    assert distance_groups["2.5"]["entrance_count"] == 3
+    assert (
+        distance_groups["2.5"]["criteria"]["ramp_or_bevel"]["underpowered"]
+        is False
+    )
+    assert (
+        distance_groups["10.0"]["criteria"]["ramp_or_bevel"]["underpowered"]
+        is True
+    )
+    assert (
+        distance_groups["2.5"]["criteria"]["handrails"]["entrance_count"]
+        == 0
+    )
+    assert (
+        distance_groups["2.5"]["criteria"]["handrails"]["underpowered"]
+        is True
+    )
+
+    lighting_groups = analysis["dimensions"]["lighting"]["groups"]
+    assert lighting_groups["overcast"]["capture_count"] == 4
+    assert lighting_groups["overcast"]["entrance_count"] == 3
+    assert (
+        lighting_groups["overcast"]["criteria"]["ramp_or_bevel"]["underpowered"]
+        is False
+    )
+    assert (
+        lighting_groups["low_light"]["criteria"]["ramp_or_bevel"]["underpowered"]
+        is True
+    )
+
+
+def test_condition_analysis_keeps_close_recorded_distances_distinct():
+    joins = []
+    for index, distance in enumerate((2.5000001, 2.5000002), start=1):
+        joins.append({
+            "capture_id": f"cap-{index}",
+            "entrance_id": f"E-00{index}",
+            "criterion": "ramp_or_bevel",
+            "verdict": "present",
+            "truth": "present",
+            "outcome": "correct",
+            "conditions": {
+                "distance_m": distance,
+                "lighting": "overcast",
+                "occlusion": "none",
+            },
+        })
+
+    groups = _condition_analysis(joins)["dimensions"]["distance_m"]["groups"]
+    assert list(groups) == ["2.5000001", "2.5000002"]
+    assert [group["capture_count"] for group in groups.values()] == [1, 1]
+
+
+def test_written_json_preserves_numeric_distance_order(tmp_path):
+    manifest = _write_manifest(
+        tmp_path / "manifest.csv",
+        [("cap-1", DEV_A), ("cap-2", DEV_B), ("cap-3", DEV_C)],
+    )
+    labels = _write_labels(
+        tmp_path / "labels.csv",
+        [
+            (DEV_A, "ramp_or_bevel", "present"),
+            (DEV_B, "ramp_or_bevel", "present"),
+            (DEV_C, "ramp_or_bevel", "present"),
+        ],
+    )
+    engine = FakeEngine({
+        entrance_id: _screening(entrance_id, {"ramp_or_bevel": "present"})
+        for entrance_id in (DEV_A, DEV_B, DEV_C)
+    })
+    captures = {
+        "cap-1": _capture("cap-1", distance=10),
+        "cap-2": _capture("cap-2", distance=2.5),
+        "cap-3": _capture("cap-3", distance=3),
+    }
+
+    run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=engine,
+        get_capture=captures.__getitem__,
+    )
+
+    written = json.loads(
+        (tmp_path / "out" / "screening_eval.json").read_text(encoding="utf-8")
+    )
+    groups = written["condition_analysis"]["dimensions"]["distance_m"]["groups"]
+    assert list(groups) == ["2.5", "3.0", "10.0"]
+
+
+def test_condition_analysis_treats_an_invalid_model_verdict_as_uncommitted(tmp_path):
+    manifest = _write_manifest(tmp_path / "manifest.csv", [("cap-1", DEV_A)])
+    labels = _write_labels(
+        tmp_path / "labels.csv", [(DEV_A, "ramp_or_bevel", "present")]
+    )
+    engine = FakeEngine({
+        DEV_A: _screening(
+            DEV_A,
+            {"ramp_or_bevel": None},
+            assessment_verdicts=({"ramp_or_bevel": "INVALID:maybe"},),
+        ),
+    })
+
+    result = run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=engine,
+        get_capture=_fake_get_capture,
+    )
+
+    metrics = result["condition_analysis"]["dimensions"]["distance_m"][
+        "groups"
+    ]["2.5"]["criteria"]["ramp_or_bevel"]
+    assert metrics["correct"] == 0
+    assert metrics["wrong"] == 0
+    assert metrics["abstained"] == 1
+    assert metrics["accuracy_of_committed"] is None
+    assert metrics["abstention_rate"] == 1.0
 
 
 # --- CLI ---------------------------------------------------------------------
