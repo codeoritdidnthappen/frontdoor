@@ -186,6 +186,28 @@ public map renders no pins. Two ways to fix it, pick one and record it here:
 Either way, verify with `curl https://frontdoor-measure.fly.dev/map/data` and confirm
 `dataset_error` is `null` and pins are present.
 
+### Scan persistence (TICK-262)
+
+`POST /screen/publish` is the consent step after `/screen`: the same blur → audit → integrated
+assessment, and then — only when the face audit answered exactly `clear` — it stores the
+**processed** image bytes and appends one scan record. It needs two things beyond `/screen`:
+
+- **Object storage** — the same images-bucket credential the `/upload` path already uses
+  (`FRONTDOOR_IMAGES_BUCKET` / `FRONTDOOR_IMAGES_ACCESS_KEY` / `FRONTDOOR_IMAGES_SECRET_KEY`,
+  plus `FRONTDOOR_S3_ENDPOINT` / `FRONTDOOR_S3_REGION`). No new credential. Scan images land
+  under `open/scans/<place>/<uuid>.jpg`; `GET /scan/photo/scans/<place>/<uuid>.jpg` serves them
+  back (unauthenticated — every stored byte is face-blurred and EXIF-stripped by construction,
+  and only keys under the `scans/` prefix resolve).
+- **`FRONTDOOR_SCANS`** — path of the append-only JSONL scan-record store, default
+  `data/scans.jsonl` (relative, like the map dataset — same caveat: point it at a **mounted
+  volume** in `fly.toml`'s `[env]`, or the records vanish with the machine's rootfs on the next
+  deploy).
+
+`GET /map/data` merges the store into the pre-catalogue automatically; no scan store, or an
+unreadable one, changes nothing. If storage is down or misconfigured, publish degrades to a 503
+`assessed-but-not-published` response that still carries the verdicts — nothing is dropped
+silently, and no credential material ever appears in a response.
+
 ### /screen sizing note — measure before Demo Day
 
 The **69 MiB** footprint in the table was measured serving `GET /health`. It says nothing about
