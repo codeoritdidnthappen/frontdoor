@@ -283,6 +283,58 @@ def test_audit_keys_match_record_unsealing_signature():
     assert all(key in params for key in AUDIT_KEYS)
 
 
+def test_audit_keys_are_owned_by_seal_audit():
+    # One contract, defined once, next to record_unsealing's signature. A
+    # labels-side copy is exactly the drift this pin exists to prevent.
+    from frontdoor import seal_audit
+
+    assert AUDIT_KEYS is seal_audit.AUDIT_KEYS
+
+
+def test_sealed_release_delegates_to_seal_audit_record_unsealing(
+    tmp_path, monkeypatch
+):
+    # The audited path goes through seal_audit.record_unsealing - the one
+    # doorway - not a labels-side reimplementation. Patching the seal_audit
+    # module attribute intercepts the call only if labels.py delegates.
+    loaded = load_labels(_write_labels(tmp_path / "labels.csv", _mixed_split_labels()))
+    audit = _audit_context(tmp_path)
+    calls = []
+    monkeypatch.setattr(
+        "frontdoor.seal_audit.record_unsealing",
+        lambda argv, **kwargs: calls.append((argv, kwargs)),
+    )
+    sealed = labels_for_eval(loaded.labels, split="sealed", audited=True, audit=audit)
+    assert [l["entrance_id"] for l in sealed] == ["E-002", "E-014"]
+    assert calls == [
+        (
+            ["labels", "--split", "sealed"],
+            {key: audit[key] for key in AUDIT_KEYS},
+        )
+    ]
+
+
+def test_labels_audit_line_matches_seal_audit_log_format(tmp_path, monkeypatch):
+    # The line labels_for_eval causes to be written is a seal_audit line:
+    # same tab-separated AUDIT_FIELDS order the eval doorway writes and
+    # ARCHITECTURE.md documents. One log, one format.
+    from frontdoor.manifest import manifest_sha256
+
+    loaded = load_labels(_write_labels(tmp_path / "labels.csv", _mixed_split_labels()))
+    audit = _audit_context(tmp_path)
+    _clean_recordable_repo(monkeypatch)
+    labels_for_eval(loaded.labels, split="sealed", audited=True, audit=audit)
+    line = audit["audit_path"].read_text(encoding="utf-8").splitlines()[0]
+    fields = line.split("\t")
+    assert len(fields) == len(AUDIT_FIELDS)
+    record = dict(zip(AUDIT_FIELDS, fields))
+    assert record["utc_timestamp"].endswith("Z")
+    assert record["commit_sha"] == "b" * 40
+    assert record["manifest_sha256"] == manifest_sha256(audit["manifest_path"])
+    assert json.loads(record["command_line"]) == ["labels", "--split", "sealed"]
+    assert set(json.loads(record["resolved_config"])) == {"images_bucket", "endpoint"}
+
+
 def test_eval_filter_rejects_unknown_split(tmp_path):
     loaded = load_labels(_write_labels(tmp_path / "labels.csv", _mixed_split_labels()))
     with pytest.raises(LabelError, match="unknown split"):

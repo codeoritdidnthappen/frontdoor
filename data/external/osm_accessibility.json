@@ -1,0 +1,858 @@
+{
+  "source": "openstreetmap",
+  "license": "ODbL-1.0",
+  "attribution": "Contains data from OpenStreetMap (\u00a9 OpenStreetMap contributors), licensed under the Open Database License (ODbL) 1.0. https://www.openstreetmap.org/copyright",
+  "segregation": "ODbL-licensed data stored as a segregated side table per the ODbL Collective Database Guideline. Do not merge these records into any proprietary dataset.",
+  "fetched_at": "2026-09-03T23:48:47Z",
+  "record_count": 45,
+  "records": [
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 1539153968,
+      "name": "Foxtrot",
+      "lat": 30.2648968,
+      "lon": -97.7469115,
+      "tags": {
+        "addr:city": "Austin",
+        "addr:housenumber": "301",
+        "addr:postcode": "78701",
+        "addr:state": "TX",
+        "addr:street": "West 2nd Street",
+        "addr:unit": "100",
+        "air_conditioning": "yes",
+        "branch": "Downtown 2nd Street",
+        "level": "0",
+        "name": "Foxtrot",
+        "opening_hours": "Su-We 06:30-21:30; Th-Sa 06:30-22:00",
+        "organic": "yes",
+        "phone": "+1-512-296-2039",
+        "shop": "convenience",
+        "stroller": "yes",
+        "website": "https://foxtrotco.com/",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 3764035157,
+      "name": "Fogo de Ch\u00e3o",
+      "lat": 30.2645201,
+      "lon": -97.7443922,
+      "tags": {
+        "addr:city": "Austin",
+        "addr:housenumber": "200",
+        "addr:postcode": "78701",
+        "addr:state": "TX",
+        "addr:street": "Congress Avenue",
+        "air_conditioning": "yes",
+        "amenity": "restaurant",
+        "bar": "yes",
+        "branch": "Austin",
+        "brand": "Fogo de Ch\u00e3o",
+        "brand:wikidata": "Q5464133",
+        "cuisine": "brazilian;steak_house",
+        "level": "0",
+        "name": "Fogo de Ch\u00e3o",
+        "opening_hours": "Mo-Fr 11:00-15:00, Mo-Th 15:00-22:00, Fr 15:00-22:30, Sa,Su 11:30-14:00, Sa 14:00-22:30, Su 14:00-21:00",
+        "outdoor_seating": "yes",
+        "phone": "+1-512-472-0220",
+        "reservation": "yes",
+        "start_date": "2022-12-23",
+        "takeaway": "yes",
+        "toilets": "yes",
+        "website": "https://fogodechao.com/",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 3849776337,
+      "name": "Red Farm",
+      "lat": 30.2655408,
+      "lon": -97.7453907,
+      "tags": {
+        "addr:city": "Austin",
+        "addr:housenumber": "201",
+        "addr:postcode": "78701",
+        "addr:state": "TX",
+        "addr:street": "West 3rd Street",
+        "air_conditioning": "yes",
+        "amenity": "restaurant",
+        "cuisine": "chinese",
+        "name": "Red Farm",
+        "opening_date": "2023-11-08",
+        "phone": "+1-512-859-9700",
+        "reservation": "yes",
+        "toilets": "yes",
+        "website": "https://www.redfarmnyc.com/location/Austin/",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 4048674696,
+      "name": null,
+      "lat": 30.2646715,
+      "lon": -97.7456669,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 4048674697,
+      "name": null,
+      "lat": 30.2647592,
+      "lon": -97.7456345,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 4048674700,
+      "name": null,
+      "lat": 30.2646251,
+      "lon": -97.7456351,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 5883104713,
+      "name": null,
+      "lat": 30.2671177,
+      "lon": -97.7471338,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 7313191250,
+      "name": null,
+      "lat": 30.2671641,
+      "lon": -97.7465442,
+      "tags": {
+        "access": "private",
+        "entrance": "yes",
+        "level": "0",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 7313191251,
+      "name": null,
+      "lat": 30.2673366,
+      "lon": -97.7467928,
+      "tags": {
+        "access": "yes",
+        "entrance": "yes",
+        "level": "1",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 8094058508,
+      "name": null,
+      "lat": 30.2634338,
+      "lon": -97.744368,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 8094058509,
+      "name": null,
+      "lat": 30.2632776,
+      "lon": -97.7444109,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 8094058511,
+      "name": null,
+      "lat": 30.2632923,
+      "lon": -97.7446979,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 8094058512,
+      "name": null,
+      "lat": 30.2632243,
+      "lon": -97.7444591,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 8094060019,
+      "name": null,
+      "lat": 30.2633469,
+      "lon": -97.7447484,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 8094060020,
+      "name": null,
+      "lat": 30.2635182,
+      "lon": -97.7446812,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 8094060023,
+      "name": null,
+      "lat": 30.2635268,
+      "lon": -97.7446082,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 8104168774,
+      "name": null,
+      "lat": 30.2646967,
+      "lon": -97.7454094,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 8104168777,
+      "name": null,
+      "lat": 30.2646116,
+      "lon": -97.7454409,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 8104168778,
+      "name": null,
+      "lat": 30.2645884,
+      "lon": -97.7454956,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 8104191260,
+      "name": null,
+      "lat": 30.264918,
+      "lon": -97.7465111,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 8104191261,
+      "name": null,
+      "lat": 30.2649886,
+      "lon": -97.7464644,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 8104191263,
+      "name": null,
+      "lat": 30.2649241,
+      "lon": -97.7467051,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 8104191264,
+      "name": null,
+      "lat": 30.2648874,
+      "lon": -97.746572,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 8104191269,
+      "name": null,
+      "lat": 30.2649807,
+      "lon": -97.7467428,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 8104191271,
+      "name": null,
+      "lat": 30.2650861,
+      "lon": -97.7466499,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 8104191272,
+      "name": null,
+      "lat": 30.2650486,
+      "lon": -97.7465099,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 10011894199,
+      "name": null,
+      "lat": 30.2670437,
+      "lon": -97.7461352,
+      "tags": {
+        "access": "yes",
+        "entrance": "main",
+        "level": "0",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 11679087442,
+      "name": "Manny's",
+      "lat": 30.2677115,
+      "lon": -97.7457896,
+      "tags": {
+        "addr:city": "Austin",
+        "addr:housenumber": "303",
+        "addr:postcode": "78701",
+        "addr:state": "TX",
+        "addr:street": "West 5th Street",
+        "addr:unit": "A",
+        "air_conditioning": "yes",
+        "amenity": "restaurant",
+        "bar": "yes",
+        "level": "0",
+        "name": "Manny's",
+        "outdoor_seating": "yes",
+        "phone": "+1-512-996-1223",
+        "takeaway": "yes",
+        "website": "https://www.loboshospitality.com/venues/mannysaustin",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 12534518532,
+      "name": "Lavaca/3rd",
+      "lat": 30.2657865,
+      "lon": -97.7462183,
+      "tags": {
+        "bench": "yes",
+        "bin": "yes",
+        "bus": "yes",
+        "gtfs:stop_id:US-TX-CMTA": "5944",
+        "highway": "bus_stop",
+        "lit": "yes",
+        "local_ref": "A",
+        "name": "Lavaca/3rd",
+        "network": "MetroBus",
+        "network:wikidata": "Q108455549",
+        "operator": "Capital Metropolitan Transportation Authority",
+        "operator:short": "CapMetro",
+        "operator:wikidata": "Q587830",
+        "public_transport": "platform",
+        "ref": "5944",
+        "shelter": "yes",
+        "surface": "concrete",
+        "website": "https://www.capmetro.org/plan/schedmap/stopdetail/5944",
+        "wheelchair": "limited"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 13275858176,
+      "name": null,
+      "lat": 30.2670975,
+      "lon": -97.7471199,
+      "tags": {
+        "barrier": "kerb",
+        "kerb": "lowered",
+        "tactile_paving": "yes",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 13278494297,
+      "name": null,
+      "lat": 30.2669814,
+      "lon": -97.7474706,
+      "tags": {
+        "addr:city": "Austin",
+        "addr:housenumber": "401",
+        "addr:postcode": "78701",
+        "addr:state": "TX",
+        "addr:street": "West 4th Street",
+        "door": "hinged",
+        "entrance": "main",
+        "level": "0",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 13848036078,
+      "name": null,
+      "lat": 30.2637198,
+      "lon": -97.746135,
+      "tags": {
+        "access": "yes",
+        "amenity": "drinking_water",
+        "bottle": "no",
+        "dog": "yes",
+        "fee": "no",
+        "wheelchair": "designated"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 13907660015,
+      "name": null,
+      "lat": 30.2667483,
+      "lon": -97.7472964,
+      "tags": {
+        "addr:city": "Austin",
+        "addr:housenumber": "401",
+        "addr:postcode": "78701",
+        "addr:state": "TX",
+        "addr:street": "West 4th Street",
+        "addr:unit": "115",
+        "entrance": "shop",
+        "level": "0",
+        "wheelchair": "designated"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 13907660023,
+      "name": null,
+      "lat": 30.2664997,
+      "lon": -97.7473895,
+      "tags": {
+        "access": "yes",
+        "addr:city": "Austin",
+        "addr:housenumber": "401",
+        "addr:postcode": "78701",
+        "addr:state": "TX",
+        "addr:street": "West 4th Street",
+        "addr:unit": "120",
+        "door": "hinged",
+        "entrance": "shop",
+        "level": "0",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 13907660024,
+      "name": null,
+      "lat": 30.2663973,
+      "lon": -97.7474651,
+      "tags": {
+        "addr:city": "Austin",
+        "addr:housenumber": "401",
+        "addr:postcode": "78701",
+        "addr:state": "TX",
+        "addr:street": "West 4th Street",
+        "addr:unit": "120",
+        "entrance": "shop",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 13907660043,
+      "name": null,
+      "lat": 30.2669924,
+      "lon": -97.7475077,
+      "tags": {
+        "addr:city": "Austin",
+        "addr:housenumber": "401",
+        "addr:postcode": "78701",
+        "addr:state": "TX",
+        "addr:street": "West 4th Street",
+        "door": "revolving",
+        "entrance": "main",
+        "level": "0",
+        "wheelchair": "no"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 13907660047,
+      "name": null,
+      "lat": 30.267006,
+      "lon": -97.7475536,
+      "tags": {
+        "addr:city": "Austin",
+        "addr:housenumber": "401",
+        "addr:postcode": "78701",
+        "addr:state": "TX",
+        "addr:street": "West 4th Street",
+        "door": "hinged",
+        "entrance": "main",
+        "level": "0",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "node",
+      "osm_id": 13907660048,
+      "name": null,
+      "lat": 30.2670016,
+      "lon": -97.7475388,
+      "tags": {
+        "addr:city": "Austin",
+        "addr:housenumber": "401",
+        "addr:postcode": "78701",
+        "addr:state": "TX",
+        "addr:street": "West 4th Street",
+        "door": "revolving",
+        "entrance": "main",
+        "level": "0",
+        "wheelchair": "no"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "way",
+      "osm_id": 99725034,
+      "name": "CVS Pharmacy",
+      "lat": 30.26742,
+      "lon": -97.7435148,
+      "tags": {
+        "addr:city": "Austin",
+        "addr:housenumber": "500",
+        "addr:postcode": "78701",
+        "addr:state": "TX",
+        "addr:street": "Congress Avenue",
+        "brand": "CVS Pharmacy",
+        "brand:website": "https://www.cvs.com/",
+        "brand:wikidata": "Q2078880",
+        "building": "yes",
+        "building:levels": "2",
+        "check_date": "2025-01-15",
+        "name": "CVS Pharmacy",
+        "opening_hours": "Mo-Su 07:00-23:00",
+        "payment:american_express": "yes",
+        "payment:cash": "yes",
+        "payment:discover_card": "yes",
+        "payment:mastercard": "yes",
+        "payment:visa": "yes",
+        "shop": "chemist",
+        "short_name": "CVS",
+        "website": "https://www.cvs.com/store-locator/austin-tx-pharmacies/500-congress-ave-austin-tx-78701/storeid=10888",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "way",
+      "osm_id": 134807228,
+      "name": "W Austin",
+      "lat": 30.265668,
+      "lon": -97.746977,
+      "tags": {
+        "addr:city": "Austin",
+        "addr:housenumber": "200",
+        "addr:postcode": "78701",
+        "addr:state": "TX",
+        "addr:street": "Lavaca Street",
+        "brand": "W Hotels",
+        "brand:short": "W",
+        "brand:wikidata": "Q7958488",
+        "building": "yes",
+        "email": "waustinreservations@whotels.com",
+        "fax": "+1 512-542-3265",
+        "name": "W Austin",
+        "phone": "+1 512-542-3600",
+        "short_name": "W",
+        "smoking": "no",
+        "tourism": "hotel",
+        "website": "https://www.marriott.com/hotels/travel/auswh-w-austin/",
+        "wheelchair": "yes",
+        "wikidata": "Q7958469"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "way",
+      "osm_id": 204413180,
+      "name": "Austin City Hall",
+      "lat": 30.2647876,
+      "lon": -97.7471982,
+      "tags": {
+        "amenity": "townhall",
+        "building": "civic",
+        "building:levels": "4",
+        "check_date": "2025-02-13",
+        "name": "Austin City Hall",
+        "wheelchair": "yes",
+        "wikidata": "Q39070904",
+        "wikipedia": "en:Austin City Hall (Austin, Texas)"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "way",
+      "osm_id": 317429233,
+      "name": "Ann & Roy Butler Hike and Bike Trail",
+      "lat": 30.2616318,
+      "lon": -97.7434351,
+      "tags": {
+        "access": "yes",
+        "bicycle": "designated",
+        "dog": "leashed",
+        "foot": "designated",
+        "highway": "cycleway",
+        "horse": "no",
+        "maxspeed": "10 mph",
+        "mofa": "no",
+        "motor_vehicle": "no",
+        "name": "Ann & Roy Butler Hike and Bike Trail",
+        "segregated": "no",
+        "surface": "concrete",
+        "wheelchair": "designated",
+        "width": "3.6"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "way",
+      "osm_id": 317430886,
+      "name": null,
+      "lat": 30.263148,
+      "lon": -97.7452898,
+      "tags": {
+        "access": "yes",
+        "bicycle": "designated",
+        "dog": "leashed",
+        "foot": "designated",
+        "highway": "cycleway",
+        "horse": "no",
+        "maxspeed": "10 mph",
+        "motor_vehicle": "no",
+        "segregated": "no",
+        "smoothness": "intermediate",
+        "surface": "concrete",
+        "wheelchair": "designated"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "way",
+      "osm_id": 1034702489,
+      "name": null,
+      "lat": 30.2637579,
+      "lon": -97.7440323,
+      "tags": {
+        "highway": "footway",
+        "surface": "concrete",
+        "wheelchair": "yes"
+      }
+    },
+    {
+      "source": "openstreetmap",
+      "fetched_at": "2026-09-03T23:48:47Z",
+      "osm_type": "way",
+      "osm_id": 1120921408,
+      "name": "The Republic",
+      "lat": 30.2667597,
+      "lon": -97.7477458,
+      "tags": {
+        "addr:city": "Austin",
+        "addr:housenumber": "401",
+        "addr:postcode": "78701",
+        "addr:state": "TX",
+        "addr:street": "West 4th Street",
+        "building": "office",
+        "building:levels": "46",
+        "building:prefabricated": "no",
+        "check_date": "2025-09-21",
+        "height": "216",
+        "name": "The Republic",
+        "opening_date": "2025",
+        "smoking": "no",
+        "website": "https://republicaustin.com/",
+        "wheelchair": "yes"
+      }
+    }
+  ]
+}

@@ -83,6 +83,28 @@ AUDIT_FIELDS = (
 )
 
 
+#: The mapping form of record_unsealing's arguments, for callers that carry the audit context
+#: around as one mapping (labels.labels_for_eval's `audit=`). Keys are exactly record_unsealing's
+#: parameters after argv; this module owns the contract so a caller-side copy cannot drift from
+#: the signature it mirrors. Validate with validate_audit_mapping before unpacking.
+AUDIT_KEYS = ("manifest_path", "audit_path", "repo", "config")
+
+
+def validate_audit_mapping(audit):
+    """Check a mapping against AUDIT_KEYS; raise SealAuditError naming what is missing.
+
+    The one validation of "is this audit context complete", shared by every doorway that accepts
+    the mapping form, so the refusal names the same keys record_unsealing actually takes.
+    """
+    missing = [key for key in AUDIT_KEYS if key not in audit]
+    if missing:
+        raise SealAuditError(
+            f"audit is missing {missing}; record_unsealing needs all of "
+            f"{AUDIT_KEYS} to append the audit line"
+        )
+    return audit
+
+
 def record_unsealing(argv, manifest_path, *, audit_path, repo, config):
     """Append one audit line, or raise without writing.
 

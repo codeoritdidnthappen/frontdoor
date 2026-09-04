@@ -1,9 +1,15 @@
 """Vision screening engine: LLM checklist over entrance photos (TICK-245, #167).
 
-Per image, one model call assesses which accessibility features are VISIBLE:
-ramp or beveled threshold, handrails, accessible door hardware, accessibility
-signage. Per entrance, verdicts from the 5-6 views are aggregated into a
-majority verdict per criterion with the flip-rate reported alongside.
+Two modes. Per-image: one model call per photo assesses which accessibility
+features are VISIBLE - ramp or beveled threshold, handrails, accessible door
+hardware, accessibility signage - and per entrance the 5-6 views are
+aggregated into a majority verdict per criterion with the flip-rate reported
+alongside. Integrated (preferred): ALL of an entrance's views go into ONE
+model call that weighs them together, so the one oblique frame that shows a
+platform's riser informs the verdict instead of being outvoted by the frontal
+frames that hide it. Offline eval on the 12-entrance pilot set: per-image
+majority voting amplifies shared camera-position blind spots; the integrated
+call raised committed accuracy from ~90% to 97% and cut abstentions 38 -> 4.
 
 The same call also answers a fifth checklist item, face_check (TICK-257
 follow-up, #232): whether any identifiable face survived the automatic blur
@@ -38,14 +44,25 @@ from frontdoor.split import assign_split, canonical_entrance_id
 
 logger = logging.getLogger(__name__)
 
+# Criterion descriptions carry the decision rules that error adjudication on
+# the pilot set showed the model needs spelled out: where ramps actually sit,
+# what a same-tone platform hides from a frontal camera, and which hardware
+# look-alikes are NOT accessible hardware.
 CRITERIA = (
     ("ramp_or_bevel",
      "A ramp (permanent or portable) or a beveled threshold serving the "
-     "entrance is visible"),
+     "entrance is visible. Ramps often sit off-axis at the side of the "
+     "entrance, may be surfaced in brick or stone like the surroundings, and "
+     "their railings can resemble fencing. Check the platform edges in every "
+     "view: a raised platform in the same tone as the sidewalk hides its step "
+     "when photographed from on top of it, so only commit to a verdict when a "
+     "view actually shows the ground plane at the entrance"),
     ("handrails",
-     "Handrails on any visible steps or ramp"),
+     "Handrails on any steps or ramp serving the entrance"),
     ("accessible_door_hardware",
-     "Door hardware is lever-style, push-bar, or loop pull (not a round knob)"),
+     "Door hardware operable with a closed fist: a lever handle, a push bar, "
+     "or a loop/D pull that stands off the door surface. Flat push plates, "
+     "round knobs, and latch brackets are NOT accessible hardware"),
     ("accessibility_signage",
      "International Symbol of Accessibility or directional accessibility "
      "signage visible"),
@@ -98,8 +115,13 @@ class SpendCapError(ScreeningError):
 
 @dataclass(frozen=True)
 class ScreeningConfig:
-    model: str = "claude-opus-5"
-    max_tokens: int = 2000
+    # Offline eval on the 12-entrance pilot set: claude-sonnet-5 matches opus at
+    # 97% committed accuracy in integrated multi-view mode, at a median 7.2s vs
+    # 20.6s per entrance and roughly 2.5x cheaper. max_tokens must be >= 4000:
+    # at 2000, adaptive thinking consumes the budget on hard entrances and
+    # sonnet's JSON output truncates mid-object.
+    model: str = "claude-sonnet-5"
+    max_tokens: int = 4000
     max_usd_per_run: float = 1.00
     usd_per_image: float = 0.05  # conservative per-image estimate (cents-order)
 
@@ -121,8 +143,12 @@ class ImageAssessment:
 @dataclass(frozen=True)
 class CriterionSummary:
     verdict: str | None  # None when no view produced a valid verdict
+    # Cross-view statistics. Both are None in integrated mode: one integrated
+    # call makes no cross-view comparison, so there is no flip rate or vote
+    # count to report -- and reporting a fabricated 0.0 would turn the honesty
+    # signal about view disagreement into false confidence.
     flip_rate: float | None  # fraction of valid views disagreeing with verdict
-    counts: dict  # valid verdict -> number of views
+    counts: dict | None  # valid verdict -> number of voting views
 
 
 @dataclass(frozen=True)
@@ -131,6 +157,10 @@ class EntranceScreening:
     split: str
     assessments: tuple
     summary: dict  # criterion key -> CriterionSummary
+    # "per_image": one model call per view, summary holds real cross-view
+    # statistics. "integrated": one call over all views, summary carries the
+    # integrated verdicts with flip_rate/counts None.
+    mode: str = "per_image"
 
 
 def build_prompt():
@@ -148,6 +178,45 @@ def build_prompt():
         "accessibility criterion:"
     )
     lines.append(f"- {FACE_CHECK_KEY}: {FACE_CHECK_QUESTION}")
+    lines.append(
+        'Return exactly this JSON shape: {"criteria": {"<key>": '
+        '{"verdict": "...", "confidence": 0, "evidence": "..."}}, '
+        '"face_check": "clear" or "face_visible"}'
+    )
+    return "\n".join(lines)
+
+
+def build_integrated_prompt(view_count):
+    """The multi-view prompt: one integrated verdict per criterion.
+
+    The instruction to trust the view that shows the relevant area is the
+    point of the mode - it is how a single oblique frame showing a riser or a
+    side ramp beats the frontal frames that cannot see it.
+    """
+    lines = [
+        f"The {view_count} photos above are different views of the SAME "
+        "entrance. Integrate ALL views into ONE checklist result for the "
+        "entrance.",
+        "A feature clearly visible in ANY view is visible. When views appear "
+        "to disagree, trust the view that actually shows the relevant area - "
+        "for example, only a view that shows the ground plane can settle "
+        "whether a platform is raised, and an object that merely overlaps the "
+        "doorway from an oblique angle is not blocking the path.",
+        "For each criterion return: verdict ('present', 'absent', or "
+        "'not_visible'), confidence (0-100), evidence (one short phrase "
+        "describing what you see and, when it matters, which view shows it).",
+        "Criteria:",
+    ]
+    for key, desc in CRITERIA:
+        lines.append(f"- {key}: {desc}")
+    lines.append(
+        "Additionally answer one privacy check, which is not an "
+        "accessibility criterion and covers ALL the views together:"
+    )
+    lines.append(
+        f"- {FACE_CHECK_KEY}: {FACE_CHECK_QUESTION} Answer face_visible if "
+        "ANY view still shows one."
+    )
     lines.append(
         'Return exactly this JSON shape: {"criteria": {"<key>": '
         '{"verdict": "...", "confidence": 0, "evidence": "..."}}, '
@@ -236,6 +305,27 @@ def aggregate_assessments(assessments):
     return summary
 
 
+def integrated_summary(assessment):
+    """Per-criterion summary for ONE integrated assessment.
+
+    The verdicts are the integrated verdicts; flip_rate and counts are None
+    because no cross-view comparison was made. A constant flip_rate of 0.0
+    here would read as "all views agreed" -- a measurement that never
+    happened -- and counts of {verdict: 1} would read as one view voting when
+    several were submitted. None is the stronger signal: a consumer branching
+    on the number notices, one reading 0.0 does not.
+    """
+    summary = {}
+    for key in CRITERIA_KEYS:
+        verdict = None
+        if assessment.criteria is not None:
+            candidate = assessment.criteria[key]["verdict"]
+            if candidate in ALLOWED_VERDICTS:
+                verdict = candidate
+        summary[key] = CriterionSummary(verdict=verdict, flip_rate=None, counts=None)
+    return summary
+
+
 class ScreeningEngine:
     def __init__(self, client=None, config=None):
         self._client = client
@@ -254,14 +344,62 @@ class ScreeningEngine:
                 self._client = anthropic.Anthropic()
             return self._client
 
-    def _check_spend_cap(self):
-        projected = self.spent_usd + self.config.usd_per_image
+    def _check_spend_cap(self, cost=None):
+        if cost is None:
+            cost = self.config.usd_per_image
+        projected = self.spent_usd + cost
         if projected > self.config.max_usd_per_run:
             raise SpendCapError(
                 f"next call would spend an estimated ${projected:.2f}, over "
                 f"the ${self.config.max_usd_per_run:.2f} cap for this run; "
                 "aborting"
             )
+
+    @staticmethod
+    def _image_block(image, media_type):
+        return {
+            "type": "image",
+            "source": {"type": "base64", "media_type": media_type,
+                       "data": base64.standard_b64encode(image).decode("ascii")},
+        }
+
+    def _call_model(self, content, *, expect_face_check=False):
+        """One model call over the given content blocks; refusals, truncation
+        and parse failures are recorded errors, never silent.
+
+        With expect_face_check the reply's face_check privacy answer is
+        validated and carried on the result; without it (the integrated
+        prompt does not ask the question) the default "clear" stands and no
+        missing-key warning is logged."""
+        t0 = time.perf_counter()
+        try:
+            response = self._get_client().messages.create(
+                model=self.config.model,
+                max_tokens=self.config.max_tokens,
+                system=SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": content}],
+            )
+            latency = time.perf_counter() - t0
+            if response.stop_reason == "refusal":
+                raise ScreeningError("model refused the request")
+            if response.stop_reason == "max_tokens":
+                raise ScreeningError(
+                    "response truncated at max_tokens; raise "
+                    "ScreeningConfig.max_tokens"
+                )
+            text = next((b.text for b in response.content if b.type == "text"), "")
+            parsed = parse_json_response(text)
+            criteria = validate_verdicts(parsed)
+            face_check = (validate_face_check(parsed) if expect_face_check
+                          else "clear")
+        except Exception as exc:
+            latency = time.perf_counter() - t0
+            error = f"{type(exc).__name__}: {exc}"
+            logger.warning("assessment failed: %s", error)
+            return ImageAssessment(criteria=None, latency_s=round(latency, 3),
+                                   error=error)
+        return ImageAssessment(criteria=criteria, latency_s=round(latency, 3),
+                               face_check=face_check)
 
     def assess_image(self, image, *, media_type="image/jpeg"):
         """One model call over one image; refusals and parse failures are
@@ -272,44 +410,35 @@ class ScreeningEngine:
         with self._lock:
             self._check_spend_cap()
             self.spent_usd += self.config.usd_per_image
-        t0 = time.perf_counter()
-        try:
-            response = self._get_client().messages.create(
-                model=self.config.model,
-                max_tokens=self.config.max_tokens,
-                system=SYSTEM_PROMPT,
-                messages=[{
-                    "role": "user",
-                    "content": [
-                        {"type": "image",
-                         "source": {"type": "base64", "media_type": media_type,
-                                    "data": base64.standard_b64encode(image).decode("ascii")}},
-                        {"type": "text", "text": build_prompt()},
-                    ],
-                }],
-            )
-            latency = time.perf_counter() - t0
-            if response.stop_reason == "refusal":
-                raise ScreeningError("model refused the request")
-            text = next((b.text for b in response.content if b.type == "text"), "")
-            parsed = parse_json_response(text)
-            criteria = validate_verdicts(parsed)
-            face_check = validate_face_check(parsed)
-        except Exception as exc:
-            latency = time.perf_counter() - t0
-            error = f"{type(exc).__name__}: {exc}"
-            logger.warning("image assessment failed: %s", error)
-            return ImageAssessment(criteria=None, latency_s=round(latency, 3),
-                                   error=error)
-        return ImageAssessment(criteria=criteria, latency_s=round(latency, 3),
-                               face_check=face_check)
+        return self._call_model([
+            self._image_block(image, media_type),
+            {"type": "text", "text": build_prompt()},
+        ], expect_face_check=True)
 
-    def screen_entrance(self, entrance_id, images):
-        """Screen one entrance from its captured views (image bytes).
+    def assess_images_integrated(self, images, *, media_types=None):
+        """ALL of an entrance's views in ONE model call, one integrated result.
 
-        Resolves the split itself and refuses sealed entrances; the split
-        check is logged for every entrance touched.
+        The cost booked is usd_per_image * len(images): an integrated call
+        sends the same image tokens as the per-image calls it replaces, so the
+        conservative per-image estimate is kept rather than assumed away.
         """
+        if not images:
+            raise ScreeningError("assess_images_integrated needs at least one image")
+        if media_types is None:
+            media_types = ["image/jpeg"] * len(images)
+        cost = self.config.usd_per_image * len(images)
+        with self._lock:
+            self._check_spend_cap(cost)
+            self.spent_usd += cost
+        content = [
+            self._image_block(image, media_type)
+            for image, media_type in zip(images, media_types)
+        ]
+        content.append({"type": "text", "text": build_integrated_prompt(len(images))})
+        return self._call_model(content, expect_face_check=True)
+
+    def _resolve_split_or_refuse(self, entrance_id):
+        """Canonicalize, resolve and log the split; refuse sealed entrances."""
         entrance_id = canonical_entrance_id(entrance_id)
         split = assign_split(entrance_id)
         logger.info("split check: entrance %s -> %s", entrance_id, split)
@@ -324,10 +453,39 @@ class ScreeningEngine:
             self.config.max_usd_per_run, self.config.usd_per_image,
             self.spent_usd,
         )
+        return entrance_id, split
+
+    def screen_entrance(self, entrance_id, images):
+        """Screen one entrance from its captured views (image bytes), one
+        model call per view. Kept for callers that need per-view verdicts.
+
+        Resolves the split itself and refuses sealed entrances; the split
+        check is logged for every entrance touched.
+        """
+        entrance_id, split = self._resolve_split_or_refuse(entrance_id)
         assessments = tuple(self.assess_image(image) for image in images)
         return EntranceScreening(
             entrance_id=entrance_id,
             split=split,
             assessments=assessments,
             summary=aggregate_assessments(assessments),
+            mode="per_image",
+        )
+
+    def screen_entrance_integrated(self, entrance_id, images):
+        """Screen one entrance by assessing ALL its views in ONE model call.
+
+        Same split discipline and result shape as screen_entrance: one
+        assessment carrying the integrated verdicts, and a summary carrying
+        those verdicts with flip_rate and counts None -- no cross-view
+        comparison was made, and the mode field says so.
+        """
+        entrance_id, split = self._resolve_split_or_refuse(entrance_id)
+        assessments = (self.assess_images_integrated(images),)
+        return EntranceScreening(
+            entrance_id=entrance_id,
+            split=split,
+            assessments=assessments,
+            summary=integrated_summary(assessments[0]),
+            mode="integrated",
         )

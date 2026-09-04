@@ -61,18 +61,13 @@ derived before any data existed. LiDAR remains **captured, not consumed**: D-015
 and D-020's quarantine are unchanged by targeting hardware that has a depth sensor. Reported as an
 amendment at Demo Day. Full entry in `CHANGES.log`.
 
-**Amendment A-2 (date not established) — the success criterion names its arm.** The criterion
-above reads "MAE ≤ 0.25" on the sealed test split" without saying which of the arms it judges.
-A-2 fixes it to **Arm A only**; A′, B and C are reported without a pass/fail bar. Reason, as
-stated in the tickets that cite it: an unnamed arm would let the hypothesis be scored against
-whichever arm looked best once results were seen — the exact failure D-007 exists to prevent.
-
-**This entry is RECONSTRUCTED from ticket usage; its date and original wording are not
-recoverable.** It is recorded so the amendment is not silently absent from the pre-registration,
-not to assert when it was agreed. Whether this rule originates in A-2 or in D-022 is unresolved
-(#183, #132), and the distinction matters: an amendment must be reported as such at Demo Day,
-while a locked decision carries no such obligation. Until whoever took the decision settles it,
-treat this as reportable. See `CHANGES.log`, "Decision-log gap".
+**Amendment A-2 (2026-08-29) — the success criterion names its arm.** The criterion above reads
+"MAE ≤ 0.25" on the sealed test split" without saying which of the four arms it judges. It is fixed
+to **Arm A** (D-022); the other arms are reported without a pass/fail bar. Reason: an unnamed arm
+lets the hypothesis be scored against whichever arm looks best once results are seen, which is the
+exact failure pre-registration exists to prevent. Committed 2026-08-29, before first capture and
+before any image was processed. Reported as an amendment at Demo Day. The original wording and
+date were recovered from commit 13e735a by #132.
 
 ## 3. Scope
 
@@ -118,7 +113,7 @@ treat this as reportable. See `CHANGES.log`, "Decision-log gap".
 | D-018 | **Dataset: bytes in free-tier object storage, records in git** (D-026). Entrance ID and caliper reading are entered in the app at capture and written to a per-capture sidecar. | Low single-digit gigabytes is the wrong shape for a repo. Binding truth to image at the shutter press removes the reconciliation step where datasets rot. |
 | D-019 | **Capture angle is pre-registered as a continuous error-versus-angle model on the sealed split**; the other four condition variables are reported from dev as exploratory. | A curve fitted against a continuously measured angle is affordable at 12-18 sealed entrances; a five-way contingency table is not. Amends the §2 analysis plan — see Amendment A-1. |
 | D-020 | **LiDAR captured on every entrance and quarantined** from the metrology code path; loaded only by the evaluation harness. | Free once capture is instrumented, and it strengthens deliverable #5. If depth sits where the method can reach it, it eventually gets used to tune. Supersedes the matched-subset scope in §6. **Confirmed 2026-09-02 by D-032: depth is captured, on James's iPhone 17 Pro (`iPhone18,1`)** — one LiDAR device shooting every entrance meets "every entrance". LiDAR delivers no calibration and depth arrives `accuracy=relative`, so it is a map to compare against, not a metric ruler; D-015 is untouched. |
-| D-021–D-024 | **RECONSTRUCTED — not original text, and not locked by this table.** D-021 (the per-entrance shot plan is enforced by the instrument), D-022 (the success bar applies to Arm A only), D-023 (three-way dev/calib/sealed split assigned deterministically at capture and immutable thereafter), D-024 (Stage 1 ROI taps happen in-app at capture and go inside the seal). | These four IDs are cited across the backlog but were never written into `CHANGES.log`. The statements there are reconstructed from how each ID is used in tickets and are **not claimed to be the original wording**; they are listed here so the IDs resolve rather than dangle. **D-022's attribution is unresolved** — it states the same rule as Amendment A-2, and a decision and an amendment cannot both originate one rule (#183, #132). Full text and status lines: `CHANGES.log`, "Decision-log gap". |
+| D-021–D-024 | D-021, D-023 and D-024 remain reconstructed. D-022's original text was recovered from commit 13e735a: the success bar applies to Arm A only. | D-022 records the decision in the decision register and points to Amendment A-2, which is the formal pre-registration amendment. #132 resolved that attribution from repository history. Full text and status lines: `CHANGES.log`, "Decision-log gap". |
 | D-025 | **No paid Apple Developer Program.** The capture app is signed with **free provisioning** and installed over a cable from a team Mac. | No paid-gated capability is needed: AVFoundation capture, depth delivery and CoreMotion require only Info.plist usage descriptions. Accepted cost: builds expire after 7 days (R-7), making signing a scheduled activity rather than a one-off. A build signed 2026-08-31 expires 2026-09-07, **before Demo Day, so a re-sign no later than 2026-09-06 is mandatory.** Supersedes TICK-001's requirement to enrol and pay by 2026-08-29. |
 | D-026 | **All hosted infrastructure runs on provider free tiers.** No spend authorised for object storage or the server host. | Cost decision. Load-bearing consequences: projected dataset volume is 2-5 GB, so a 5 GB allowance is marginal and 10 GB comfortable; **billing must be incapable of starting silently**; and the D-020 depth quarantine must be satisfied by **two buckets** where a provider scopes credentials per bucket rather than per prefix — the denial is the requirement, not the layout. Supersedes the unstated assumption in D-016 and D-018 that hosting would be paid. **Amended 2026-09-02 by D-031, for the server host only; object storage stays free.** |
 | D-027 | **Tickets are assigned, not self-assigned.** Every open issue names an owner in GitHub, following the work division in TEAM.md §3. | The self-assign-and-rotate convention left the whole backlog owner-less, and the device audit showed the division is constrained by hardware rather than preference — only one person can capture entrances, and only one can build and test the capture app unaided. Work may still move between people; the rule is to **reassign rather than clear**, so no ticket is ever left without a name against it. Supersedes D-010's "names pending" and O-1's self-assign convention. |

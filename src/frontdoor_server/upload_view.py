@@ -43,6 +43,7 @@ from frontdoor_server.depth_ingest import (
     DepthIngestConfig,
     DepthIngestConflict,
     DepthIngestError,
+    DepthIngestRejected,
     put_depth,
 )
 
@@ -237,6 +238,11 @@ def register_upload(app, error):
                         f"{key} exists and cannot be compared from here; it was not overwritten.",
                         status=409,
                     )
+                except DepthIngestRejected as exc:
+                    # Permanent, so it must not be reported as an outage: these bytes will never
+                    # hash to the declared digest, and 503 would keep the phone retrying them
+                    # forever. Same 422 the local digest check above returns.
+                    return error("sha256 mismatch", str(exc), field="sha256", status=422)
                 except DepthIngestError as exc:
                     # 503 keeps the only copy queued on the phone while an internal credential or
                     # Worker outage is repaired; its details expose no service credential.

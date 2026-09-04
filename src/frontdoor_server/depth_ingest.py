@@ -16,6 +16,10 @@ class DepthIngestConflict(DepthIngestError):
     """The Worker refused to overwrite an existing depth object."""
 
 
+class DepthIngestRejected(DepthIngestError):
+    """The Worker refused these bytes for good; sending them again cannot succeed."""
+
+
 @dataclass(frozen=True)
 class DepthIngestResponse:
     sha256: str
@@ -90,10 +94,16 @@ def put_depth(
 
     if response.status == 409:
         raise DepthIngestConflict("depth object already exists")
+    if response.status == 422:
+        raise DepthIngestRejected(
+            "the bytes did not hash to the declared sha256; nothing was stored"
+        )
     if response.status != 201:
         raise DepthIngestError(f"depth-ingest Worker returned HTTP {response.status}")
     if len(response_body) > 4096:
         raise DepthIngestError("depth-ingest Worker returned an oversized response")
-    confirmation = DepthIngestResponse.parse(response_body)
-    if confirmation.sha256 != sha256:
-        raise DepthIngestError("depth-ingest Worker confirmed a different digest")
+    # Shape check only. The Worker builds its 201 body from the digest header it was handed, so
+    # comparing the value it returns against `sha256` would compare the header with itself and
+    # could never fail. The integrity guarantee is R2's server-side `sha256` precondition inside
+    # the Worker's `bucket.put`, which refuses a mismatched body and stores nothing (TICK-256).
+    DepthIngestResponse.parse(response_body)
