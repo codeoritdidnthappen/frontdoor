@@ -10,6 +10,13 @@ only). Its path comes from FRONTDOOR_MAP_DATASET, defaulting to
 data/precatalogue.json. A missing or unreadable dataset degrades to an empty
 pin list with the problem named in the payload, never an error page.
 
+External provenance (TICK-258, #242): when the segregated OSM side file is
+present (FRONTDOOR_EXTERNAL_OSM, default data/external/osm_accessibility.json),
+pins with a matching positive external record gain an optional "provenance"
+array of source+date lines. External data can never change a pin's state —
+frontdoor.external_data only ever emits agreeable lines publicly, and the
+state is computed before provenance is attached.
+
 The Google Maps API key is supplied by the viewer as a ?key= query parameter
 on /map; the server never sees, stores, or hardcodes it.
 """
@@ -21,10 +28,13 @@ from pathlib import Path
 
 from flask import Blueprint, Response
 
+from frontdoor.external_data import load_osm_records, provenance_for_place
 from frontdoor.map_states import prepare_map_payload
 
 DATASET_ENV = "FRONTDOOR_MAP_DATASET"
 DEFAULT_DATASET_PATH = "data/precatalogue.json"
+EXTERNAL_OSM_ENV = "FRONTDOOR_EXTERNAL_OSM"
+DEFAULT_EXTERNAL_OSM_PATH = "data/external/osm_accessibility.json"
 
 map_page = Blueprint("map_page", __name__)
 
@@ -52,4 +62,26 @@ def map_data():
         dataset_error = f"dataset unreadable: {exc}"
     payload = prepare_map_payload(dataset)
     payload["dataset_error"] = dataset_error
+    _attach_provenance(payload["pins"])
     return payload
+
+
+def _attach_provenance(pins):
+    """Add the optional "provenance" array to pins with external matches.
+
+    States and labels are already computed; this only ever appends
+    source+date lines (positive-only by frontdoor.external_data's
+    never-negative rule) and touches nothing else. No external file, no
+    change at all.
+    """
+    external_path = os.environ.get(EXTERNAL_OSM_ENV, DEFAULT_EXTERNAL_OSM_PATH)
+    records = load_osm_records(external_path)
+    if not records:
+        return
+    for pin in pins:
+        location = pin["location"]
+        lines = provenance_for_place(
+            pin.get("name"), location["lat"], location["lng"], records
+        )
+        if lines:
+            pin["provenance"] = lines

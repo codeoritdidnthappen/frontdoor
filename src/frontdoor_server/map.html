@@ -46,6 +46,8 @@
   .card td { padding: 2px 0; vertical-align: top; }
   .card td:last-child { text-align: right; color: #4b5563; white-space: nowrap; padding-left: 10px; }
   .card .meta { margin: 8px 0 0; color: #6b7280; }
+  .card .provenance { margin: 8px 0 0; color: #374151; }
+  .card .provenance .attribution { color: #9ca3af; font-size: 11px; }
   .card .note { margin: 8px 0 0; color: #6b7280; font-style: italic; }
 </style>
 </head>
@@ -106,6 +108,18 @@ function checklistCard(pin, note) {
     table.appendChild(row);
   });
   card.appendChild(table);
+
+  // Optional external provenance lines (TICK-258). Server-side code emits
+  // only positive, attributed source+date lines; this renders them verbatim
+  // and never derives any state from them.
+  (pin.provenance || []).forEach(function (line) {
+    if (!line || typeof line.label !== "string") return;
+    var p = el("p", "provenance", line.label);
+    if (typeof line.detail === "string") {
+      p.appendChild(el("span", "attribution", " · " + line.detail));
+    }
+    card.appendChild(p);
+  });
 
   if (!hasData) {
     card.appendChild(el("p", "meta", "No screening data yet for this location."));
