@@ -246,3 +246,71 @@ def test_the_orientation_map_covers_all_eight_exif_values():
                  "leftMirrored", "right", "rightMirrored", "left"):
         assert f"case .{case}:" in body, f"{case} is not mapped"
     assert "rawValue" not in body, "the mapping must not be derived from rawValue"
+
+
+# --- the review-before-publish consent gate (#275) -------------------------------------------
+#
+# A community scan is a photograph of someone's premises. Screening frames used to become
+# captures AT THE SHUTTER -- `commit(pending, taps: nil)` ran straight from the capture callback
+# -- so there was no moment at which the operator could be asked whether to publish one.
+#
+# What makes the gate real is not the screen; it is that `commit` has no other caller. A
+# shutter-time commit added back later would bypass the consent question while every screen still
+# looked right.
+
+
+def _commit_callers():
+    """Every function in CaptureController whose body calls `commit(`."""
+    source = _strip_comments(
+        (APP / "Capture" / "CaptureController.swift").read_text(encoding="utf-8"))
+    callers = []
+    for match in re.finditer(r"\n    (?:private )?func (\w+)\(", source):
+        name = match.group(1)
+        body = source[match.start():]
+        end = body.find("\n    }")
+        if "commit(" in body[:end]:
+            callers.append(name)
+    return callers
+
+
+def test_a_screening_frame_waits_for_review_instead_of_committing_at_the_shutter():
+    source = _strip_comments(
+        (APP / "Capture" / "CaptureController.swift").read_text(encoding="utf-8"))
+    assert "func confirmScreeningReview()" in source, (
+        "the screening consent gate has no confirm path")
+    # The capture callback sets pendingReview for BOTH modes; a mode-conditional commit here is
+    # the shape the gate replaced.
+    callback = _body_of(source, "private func accept(")  # the capture completion path
+    assert "commit(" not in callback, (
+        "the capture callback commits directly, so a frame becomes a capture before anyone is "
+        "asked whether to publish it")
+
+
+def test_commit_is_reachable_only_from_the_confirm_paths():
+    """The invariant the gate rests on.
+
+    Note `importPhoto` does not appear: it writes through `CaptureWriter` directly rather than
+    through `commit`, so it is not gated by this and is not claimed to be. An imported photo was
+    taken deliberately and then chosen from the library, which is a different act from pointing a
+    camera at a stranger's shopfront -- but if the canon wants imports gated too, that is a
+    separate change and this test will not notice it.
+    """
+    callers = set(_commit_callers())
+    allowed = {"commit", "confirmReview", "confirmScreeningReview"}
+    assert callers <= allowed, (
+        f"commit() is called from {sorted(callers - allowed)}; every route to a capture must pass "
+        "through a confirm path or the consent gate is bypassable")
+
+
+def test_discarding_writes_nothing():
+    """Declining must leave no trace -- not a file, not a tally, not a queue entry.
+
+    The privacy-safe reading of "review before publish": an unconsented photo kept on the phone is
+    one a later drain can still upload.
+    """
+    source = _strip_comments(
+        (APP / "Capture" / "CaptureController.swift").read_text(encoding="utf-8"))
+    body = _body_of(source, "func discardReview(")
+    assert "pendingReview = nil" in body
+    for forbidden in ("CaptureWriter.write(", "tally.increment(", "commit("):
+        assert forbidden not in body, f"discardReview calls {forbidden}"

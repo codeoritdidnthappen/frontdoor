@@ -107,16 +107,26 @@ struct CaptureView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .topLeading) { closeButton }
         .overlay(alignment: .top) { conditionsBar }
-        // Between the shutter and the record: the frame cannot become a capture until its six
-        // points are marked, and it cannot be marked from behind the viewfinder.
+        // Between the shutter and the record. Neither mode writes anything until the frame has
+        // been through this: metrology needs its six points marked, screening needs the operator
+        // to consent to publishing a photo of someone's premises (#275).
         .fullScreenCover(item: $controller.pendingReview) { pending in
-            ROIReviewView(
-                image: pending.image,
-                pixelWidth: pending.record.pixelWidth,
-                pixelHeight: pending.record.pixelHeight,
-                onConfirm: controller.confirmReview,
-                onDiscard: controller.discardReview
-            )
+            if controller.captureMode.carriesMetrologyTruth {
+                ROIReviewView(
+                    image: pending.image,
+                    pixelWidth: pending.record.pixelWidth,
+                    pixelHeight: pending.record.pixelHeight,
+                    onConfirm: controller.confirmReview,
+                    onDiscard: controller.discardReview
+                )
+            } else {
+                ScreeningReviewView(
+                    image: pending.image,
+                    entranceId: pending.record.entrance.id,
+                    onPublish: controller.confirmScreeningReview,
+                    onDiscard: controller.discardReview
+                )
+            }
         }
         .sheet(isPresented: $editingConditions) {
             if let subject = controller.subject {

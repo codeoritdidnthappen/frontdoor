@@ -460,15 +460,15 @@ final class CaptureController: ObservableObject {
             let pending = PendingReview(
                 record: record, image: captured.image,
                 imageData: captured.imageData, depthBytes: depth?.bytes)
-            if captureMode.carriesMetrologyTruth {
-                pendingReview = pending
-            } else {
-                // No ROI step under the plain-photo protocol: there are no taps to place, so a
-                // review screen asking for six of them would be a gate with nothing behind it.
-                // The frame becomes a capture at the shutter. `pendingReview` is never set, so
-                // the review sheet cannot flicker into view and back out within one update.
-                commit(pending, taps: nil)
-            }
+            // Both modes pause here now. The reason differs, and the earlier comment -- that a
+            // screening review would be "a gate with nothing behind it" -- was right about ROI
+            // taps and wrong about consent (#275): metrology stops to collect six points,
+            // screening stops to ask whether this photo should be published at all.
+            //
+            // A community scan is a photograph of someone's premises, and the canon puts a
+            // review-before-publish gate in front of it. Committing at the shutter meant there
+            // was no moment at which that question could be asked.
+            pendingReview = pending
         case .failure(let rejection):
             lastCaptureError = rejection.message
         }
@@ -545,6 +545,16 @@ final class CaptureController: ObservableObject {
     func confirmReview(_ taps: ROITaps) {
         guard let pending = pendingReview else { return }
         commit(pending, taps: taps)
+    }
+
+    /// Accept a SCREENING frame: the operator has looked at it and consented to publishing it.
+    ///
+    /// The screening counterpart of `confirmReview`, and the only route from a screening frame to
+    /// a capture. Nothing is hashed, written, counted or queued before this is called -- so
+    /// declining leaves no trace, which is the point of asking.
+    func confirmScreeningReview() {
+        guard let pending = pendingReview else { return }
+        commit(pending, taps: nil)
     }
 
     /// Turn the frame under review into a capture on disk.
