@@ -49,6 +49,7 @@ targets:
       - sdk: AVFoundation.framework
       - sdk: CoreMotion.framework
       - sdk: Network.framework
+      - sdk: Vision.framework
     preBuildScripts:
       - name: "Assert no ARKit (D-015)"
         script: '"$SRCROOT/Scripts/assert-no-arkit.sh" "$SRCROOT"'

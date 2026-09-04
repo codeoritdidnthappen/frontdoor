@@ -16,6 +16,7 @@ import pytest
 
 from frontdoor import faceblur
 from frontdoor.faceblur import (
+    InvalidImageError,
     ProcessedImage,
     blur_faces,
     detect_faces,
@@ -337,6 +338,7 @@ def test_process_upload_reencodes_png_as_jpeg():
     assert result.image_bytes[:2] == b"\xff\xd8"
 
 
-def test_process_upload_rejects_undecodable_bytes():
-    with pytest.raises(ValueError):
-        process_upload(b"not an image at all")
+@pytest.mark.parametrize("raw", [b"", b"not an image at all"])
+def test_process_upload_rejects_undecodable_bytes(raw):
+    with pytest.raises(InvalidImageError):
+        process_upload(raw)

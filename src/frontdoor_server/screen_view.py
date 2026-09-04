@@ -27,8 +27,8 @@ all views cannot attribute the face to a single view. The response reports
 the audit's answer verbatim under "face_check": "clear" (the model checked
 and saw no face), "face_visible", or "unknown" (the model never produced an
 answer - PR #243 review: "checked, clear" and "never answered" are different
-facts and a consumer must be able to tell them apart). Only face_visible
-quarantines; unknown does not. The verdicts still
+facts and a consumer must be able to tell them apart). Anything except an
+explicit clear quarantines. The verdicts still
 stand - the model has already seen the blurred images, so the privacy issue
 is retention, not assessment - but the response marks the result
 {"quarantined": true, "quarantine_reason": "face_check"}. Retention
@@ -44,7 +44,7 @@ from importlib import resources
 
 from flask import Blueprint, Response, current_app, request
 
-from frontdoor.faceblur import process_upload
+from frontdoor.faceblur import InvalidImageError, process_upload
 from frontdoor.screening import ScreeningEngine, integrated_summary
 from frontdoor.split import InvalidEntranceId, assign_split, canonical_entrance_id
 
@@ -160,19 +160,21 @@ def screen():
     # sees it - faces irreversibly blurred, EXIF/GPS stripped - so the model call and any
     # later storage only ever handle the processed bytes; the raw upload is dropped here.
     # Processed images are re-encoded JPEG, so their media type is image/jpeg regardless of
-    # what was posted. Bytes no decoder accepts pass through unchanged: they hold no
-    # renderable face, and the engine will name the failure on that image itself. A detector
-    # surprise degrades the same way (PR #243 review): OverflowError is an ArithmeticError,
-    # not a ValueError, so catching only ValueError turned a YuNet non-finite box into an
-    # unhandled 500 on the demo endpoint instead of the unblurred-original path.
+    # what was posted. Invalid image bytes are a request error. An unexpected detector error
+    # becomes the service's bounded 500. Both outcomes fail closed: neither can cross the
+    # model boundary as an unblurred original (TICK-257 AC1/AC2, QA TICK-B01).
     payloads = []
     faces_blurred = 0
     for part in files:
         raw = part.read()
         try:
             processed = process_upload(raw)
-        except (ValueError, ArithmeticError):
-            payloads.append((raw, part.mimetype))
+        except InvalidImageError:
+            return _error(
+                "invalid image",
+                f"file part {part.name!r} could not be decoded and privacy-processed.",
+                status=422,
+            )
         else:
             payloads.append((processed.image_bytes, "image/jpeg"))
             faces_blurred += processed.face_count
@@ -212,8 +214,8 @@ def screen():
     # this endpoint never persists image bytes anywhere (see the module
     # docstring), marking the response is the whole quarantine. The answer
     # itself is reported below: "unknown" (the audit never produced an answer)
-    # is a different fact from "clear" and does not quarantine.
-    quarantined = assessment.face_check == "face_visible"
+    # is a different fact from "clear" and fails closed into quarantine.
+    quarantined = assessment.face_check != "clear"
 
     body = {
         "entrance_id": entrance_id,

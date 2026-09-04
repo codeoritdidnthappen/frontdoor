@@ -6,6 +6,8 @@ constructs an anthropic client or needs an API key.
 
 import io
 
+import pytest
+
 from frontdoor.screening import CRITERIA_KEYS, ImageAssessment, ScreeningConfig
 from frontdoor_server.app import create_app
 from frontdoor_server.screen_view import ENGINE_KEY, MAX_IMAGES, WORDING
@@ -60,7 +62,9 @@ def make_client(engine):
     return app.test_client()
 
 
-def image_part(name="view.jpg", content_type="image/jpeg", data=b"fake-image-bytes"):
+def image_part(name="view.jpg", content_type="image/jpeg", data=None):
+    if data is None:
+        data = real_jpeg()
     return (io.BytesIO(data), name, content_type)
 
 
@@ -123,7 +127,7 @@ def test_multi_image_gets_one_integrated_assessment_and_aggregate():
     comparison was made, so there is no flip rate to report, and a fabricated
     0.0 would read as "all views agreed"."""
     engine = FakeEngine(assessment=ok_assessment("present"))
-    parts = [image_part(f"v{i}.jpg", data=f"v{i}".encode()) for i in range(3)]
+    parts = [image_part(f"v{i}.jpg", data=real_jpeg(80 + i)) for i in range(3)]
     body = post_screen(make_client(engine), parts).get_json()
     assert len(engine.calls) == 1
     assert [img["filename"] for img in body["images"]] == [
@@ -142,25 +146,26 @@ def test_response_declares_integrated_mode():
     comparison was made"; the response says which mode produced it."""
     body = post_screen(make_client(FakeEngine()), [image_part()]).get_json()
     assert body["mode"] == "integrated"
-    parts = [image_part(f"v{i}.jpg", data=f"v{i}".encode()) for i in range(3)]
+    parts = [image_part(f"v{i}.jpg", data=real_jpeg(80 + i)) for i in range(3)]
     body = post_screen(make_client(FakeEngine()), parts).get_json()
     assert body["mode"] == "integrated"
 
 
-def test_engine_receives_all_bytes_and_media_types_in_one_call_in_order():
+def test_engine_receives_all_processed_images_as_jpeg_in_one_call_in_order():
     engine = FakeEngine()
+    originals = [real_image(".jpg", 40), real_image(".png", 80), real_image(".webp", 120)]
     parts = [
-        image_part("a.jpg", "image/jpeg", b"jpeg-bytes"),
-        image_part("b.png", "image/png", b"png-bytes"),
-        image_part("c.webp", "image/webp", b"webp-bytes"),
+        image_part("a.jpg", "image/jpeg", originals[0]),
+        image_part("b.png", "image/png", originals[1]),
+        image_part("c.webp", "image/webp", originals[2]),
     ]
     post_screen(make_client(engine), parts)
-    assert engine.calls == [
-        (
-            (b"jpeg-bytes", b"png-bytes", b"webp-bytes"),
-            ("image/jpeg", "image/png", "image/webp"),
-        )
-    ]
+    assert len(engine.calls) == 1
+    sent, media_types = engine.calls[0]
+    assert media_types == ("image/jpeg", "image/jpeg", "image/jpeg")
+    assert len(sent) == 3
+    assert all(image[:2] == b"\xff\xd8" for image in sent)
+    assert all(processed != original for processed, original in zip(sent, originals))
 
 
 def test_valid_entrance_id_is_echoed_in_canonical_form():
@@ -351,15 +356,19 @@ def test_the_page_carries_a_provenance_tag():
 # same way the engine is.
 
 
-def real_jpeg(shade=128):
+def real_image(extension=".jpg", shade=128):
     import cv2
     import numpy as np
 
     ok, buf = cv2.imencode(
-        ".jpg", np.full((32, 32, 3), shade, dtype=np.uint8), [cv2.IMWRITE_JPEG_QUALITY, 95]
+        extension, np.full((32, 32, 3), shade, dtype=np.uint8)
     )
     assert ok
     return buf.tobytes()
+
+
+def real_jpeg(shade=128):
+    return real_image(".jpg", shade)
 
 
 def test_response_reports_faces_blurred_even_when_zero():
@@ -411,34 +420,36 @@ def test_a_real_image_reaches_the_engine_reencoded(monkeypatch):
     assert sent != real_jpeg()  # processed, not the raw upload
 
 
-def test_a_detector_surprise_degrades_to_the_unblurred_original_not_a_500(monkeypatch):
-    # PR #243 review, blocking item: on some OpenCV builds YuNet emits a
-    # non-finite box for a degenerate frame and _detect_yunet raised
-    # OverflowError - an ArithmeticError, which `except ValueError` did not
-    # catch, so /screen answered 500. The detector row is now skipped in
-    # faceblur (see test_faceblur), and the endpoint's degrade-catch is
-    # widened so any remaining detector surprise falls back to the
-    # unblurred-original path the undecodable-bytes case already takes.
+@pytest.mark.parametrize("failure", [
+    OverflowError("cannot convert float infinity to integer"),
+    ValueError("detector returned an invalid tensor"),
+])
+def test_ac_1_ac_2_detector_surprise_never_sends_the_unblurred_original(
+    monkeypatch, failure
+):
+    # A detector bug must fail closed. Converting it into a successful model
+    # call with the original bytes defeats the privacy boundary itself.
     from frontdoor_server import screen_view
 
     def exploding(raw):
-        raise OverflowError("cannot convert float infinity to integer")
+        raise failure
 
     monkeypatch.setattr(screen_view, "process_upload", exploding)
     engine = FakeEngine()
-    response = post_screen(make_client(engine), [image_part(data=b"jpegish-bytes")])
-    assert response.status_code == 200
-    assert engine.calls == [((b"jpegish-bytes",), ("image/jpeg",))]
-    assert response.get_json()["faces_blurred"] == 0
+    response = post_screen(make_client(engine), [image_part(data=real_jpeg())])
+    assert response.status_code == 500
+    assert engine.calls == []
 
 
-def test_undecodable_bytes_pass_through_to_the_engine_unchanged():
-    # Covered positionally by test_engine_receives_all_bytes_and_media_types_in_one_call
-    # too; this states the ingest rule on its own: bytes no decoder accepts hold no
-    # renderable face, so they go through untouched for the engine to fail on by name.
+@pytest.mark.parametrize("raw", [b"", b"not-an-image"])
+def test_ac_1_ac_2_undecodable_bytes_are_rejected_before_the_model(raw):
     engine = FakeEngine()
-    post_screen(make_client(engine), [image_part("a.png", "image/png", b"not-an-image")])
-    assert engine.calls == [((b"not-an-image",), ("image/png",))]
+    response = post_screen(
+        make_client(engine), [image_part("a.png", "image/png", raw)]
+    )
+    assert response.status_code == 422
+    assert response.get_json()["error"] == "invalid image"
+    assert engine.calls == []
 
 
 # --- face_check quarantine (TICK-257 follow-up, #232) -------------------------------------
@@ -452,7 +463,7 @@ def test_undecodable_bytes_pass_through_to_the_engine_unchanged():
 
 def test_face_visible_answer_quarantines_the_request_but_verdicts_still_stand():
     engine = FakeEngine(assessment=ok_assessment("present", face_check="face_visible"))
-    parts = [image_part(f"v{i}.jpg", data=f"v{i}".encode()) for i in range(3)]
+    parts = [image_part(f"v{i}.jpg", data=real_jpeg(80 + i)) for i in range(3)]
     body = post_screen(make_client(engine), parts).get_json()
 
     assert body["face_check"] == "face_visible"
@@ -472,12 +483,12 @@ def test_quarantined_is_false_when_the_face_check_is_clear():
     assert "quarantine_reason" not in body
 
 
-def test_a_missing_face_check_answer_reads_unknown_and_does_not_quarantine():
+def test_ac_4_a_missing_face_check_answer_is_unknown_and_quarantined():
     # PR #243 review: "checked, clear" and "never answered" are different
     # facts. An assessment built without the field - the model never produced
     # an answer, or the question was never asked - must reach the consumer as
-    # "unknown", never as a fabricated "clear"; quarantine stays reserved for
-    # face_visible, and nothing 500s.
+    # "unknown", never as a fabricated "clear". Unknown fails closed into the
+    # same quarantine fallback as a visible face.
     engine = FakeEngine(assessment=ImageAssessment(
         criteria={key: {"verdict": "present", "confidence": 80, "evidence": ""}
                   for key in CRITERIA_KEYS},
@@ -487,8 +498,8 @@ def test_a_missing_face_check_answer_reads_unknown_and_does_not_quarantine():
     assert response.status_code == 200
     body = response.get_json()
     assert body["face_check"] == "unknown"
-    assert body["quarantined"] is False
-    assert "quarantine_reason" not in body
+    assert body["quarantined"] is True
+    assert body["quarantine_reason"] == "face_check"
 
 
 def test_the_endpoint_has_no_persistence_path_for_image_bytes():
@@ -522,10 +533,17 @@ def test_the_endpoint_has_no_persistence_path_for_image_bytes():
 
 def test_a_full_batch_of_views_is_exactly_one_engine_call_in_posted_order():
     engine = FakeEngine()
-    parts = [image_part(f"v{i}.jpg", data=f"v{i}".encode()) for i in range(MAX_IMAGES)]
+    parts = [image_part(f"v{i}.jpg", data=real_jpeg(80 + i)) for i in range(MAX_IMAGES)]
     response = post_screen(make_client(engine), parts)
     assert response.status_code == 200
     assert len(engine.calls) == 1
     (images, media_types), = engine.calls
-    assert images == tuple(f"v{i}".encode() for i in range(MAX_IMAGES))
-    assert len(media_types) == MAX_IMAGES
+    import cv2
+    import numpy as np
+
+    observed_shades = [
+        round(float(cv2.imdecode(np.frombuffer(image, np.uint8), cv2.IMREAD_COLOR).mean()))
+        for image in images
+    ]
+    assert observed_shades == list(range(80, 80 + MAX_IMAGES))
+    assert media_types == ("image/jpeg",) * MAX_IMAGES

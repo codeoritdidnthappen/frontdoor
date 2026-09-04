@@ -208,7 +208,7 @@ def test_the_sidecar_records_the_stored_orientation():
     "site,needle",
     [
         ("Capture/CaptureController.swift", "imageExifOrientation: captured.exifOrientation"),
-        ("Capture/CaptureController.swift", "imageExifOrientation: details.exifOrientation"),
+        ("Capture/CaptureController.swift", "imageExifOrientation: 1"),
     ],
 )
 def test_both_capture_routes_supply_an_orientation(site, needle):
@@ -217,6 +217,21 @@ def test_both_capture_routes_supply_an_orientation(site, needle):
     """
     source = _strip_comments((APP / site).read_text(encoding="utf-8"))
     assert needle in source
+
+
+def test_ac_1_ac_2_ac_3_import_privacy_processing_precedes_the_only_write():
+    """Camera-roll originals may supply truthful record metadata, but only the processed JPEG
+    may cross CaptureWriter's persistence boundary.
+    """
+    source = _strip_comments(
+        (APP / "Capture" / "CaptureController.swift").read_text(encoding="utf-8"))
+    body = _body_of(source, "func importPhoto(")
+    processing = body.index("ImportedPhotoPrivacy.process(data)")
+    writing = body.index("CaptureWriter.write(")
+    assert processing < writing
+    assert "imageData: processed.data" in body
+    assert 'imageExtension: "jpg"' in body
+    assert "imageData: data" not in body
 
 
 def test_the_orientation_map_covers_all_eight_exif_values():

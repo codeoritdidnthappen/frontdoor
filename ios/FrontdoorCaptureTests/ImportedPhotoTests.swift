@@ -184,6 +184,81 @@ extension ImportedPhotoTests {
 
 extension ImportedPhotoTests {
 
+    /// TICK-257 AC1/AC2/AC3: import persists only the face-processed, metadata-free JPEG.
+    func testAC1AC2AC3PrivacyProcessingPixelatesAndStripsMetadata() throws {
+        let width = 64, height = 64
+        var bytes = [UInt8](repeating: 0, count: width * height * 4)
+        for y in 0..<height {
+            for x in 0..<width {
+                let offset = (y * width + x) * 4
+                let value: UInt8 = (x + y).isMultiple(of: 2) ? 0 : 255
+                bytes[offset] = value
+                bytes[offset + 1] = 255 - value
+                bytes[offset + 2] = value
+                bytes[offset + 3] = 255
+            }
+        }
+        let provider = CGDataProvider(data: Data(bytes) as CFData)!
+        let image = CGImage(
+            width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
+            bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent)!
+        let source = NSMutableData()
+        let destination = CGImageDestinationCreateWithData(
+            source, UTType.jpeg.identifier as CFString, 1, nil)!
+        CGImageDestinationAddImage(destination, image, [
+            kCGImagePropertyExifDictionary: [
+                kCGImagePropertyExifDateTimeOriginal: "2026:09:01 14:22:31",
+            ],
+            kCGImagePropertyTIFFDictionary: [
+                kCGImagePropertyTIFFModel: "iPhone 17 Pro",
+            ],
+            kCGImagePropertyGPSDictionary: [
+                kCGImagePropertyGPSLatitude: 30.2672,
+                kCGImagePropertyGPSLongitude: -97.7431,
+            ],
+        ] as CFDictionary)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+
+        let raw = source as Data
+        let clear: ImportedPhotoPrivacy.Processed
+        let blurred: ImportedPhotoPrivacy.Processed
+        guard case .success(let noFaces) = ImportedPhotoPrivacy.process(
+            raw, normalizedFaceRectangles: []) else {
+            return XCTFail("metadata-only processing failed")
+        }
+        clear = noFaces
+        guard case .success(let oneFace) = ImportedPhotoPrivacy.process(
+            raw, normalizedFaceRectangles: [CGRect(x: 0.25, y: 0.25, width: 0.5, height: 0.5)])
+        else { return XCTFail("face processing failed") }
+        blurred = oneFace
+
+        XCTAssertEqual(blurred.faceCount, 1)
+        XCTAssertNotEqual(blurred.data, raw)
+        XCTAssertNotEqual(blurred.data, clear.data, "the face rectangle must change pixels")
+        XCTAssertEqual(blurred.pixelWidth, width)
+        XCTAssertEqual(blurred.pixelHeight, height)
+        let outputSource = try XCTUnwrap(
+            CGImageSourceCreateWithData(blurred.data as CFData, nil))
+        let outputProperties = try XCTUnwrap(
+            CGImageSourceCopyPropertiesAtIndex(outputSource, 0, nil) as? [CFString: Any])
+        XCTAssertNil(outputProperties[kCGImagePropertyGPSDictionary])
+        let outputExif = outputProperties[kCGImagePropertyExifDictionary] as? [CFString: Any]
+        let outputTIFF = outputProperties[kCGImagePropertyTIFFDictionary] as? [CFString: Any]
+        XCTAssertNil(outputExif?[kCGImagePropertyExifDateTimeOriginal])
+        XCTAssertNil(outputTIFF?[kCGImagePropertyTIFFModel])
+        XCTAssertEqual(CGImageSourceGetType(outputSource) as String?, UTType.jpeg.identifier)
+    }
+
+    func testAC1AC2UnreadableImportIsRefusedWithoutAnOriginalFallback() {
+        guard case .failure(.unreadable) = ImportedPhotoPrivacy.process(Data("not image".utf8))
+        else { return XCTFail("an unreadable image must fail closed") }
+    }
+}
+
+extension ImportedPhotoTests {
+
     // MARK: - which way the pixels are stored
 
     /// An imported photo carries its own orientation, and the record must not invent one: the

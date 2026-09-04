@@ -86,7 +86,8 @@ FACE_CHECK_ANSWERS = ("clear", "face_visible")
 #: never asked. The same distinction the verdicts already insist on
 #: (not_visible is never collapsed into absent) applied to the audit: a
 #: consumer must be able to tell "checked, clear" from "never answered"
-#: (PR #243 review). "unknown" never quarantines - only face_visible does.
+#: (PR #243 review). Callers quarantine "unknown" as well as "face_visible";
+#: only an explicit "clear" passes the privacy gate.
 FACE_CHECK_UNKNOWN = "unknown"
 FACE_CHECK_VALUES = FACE_CHECK_ANSWERS + (FACE_CHECK_UNKNOWN,)
 FACE_CHECK_QUESTION = (
@@ -276,7 +277,7 @@ def validate_face_check(parsed):
     it. (The blur pass has already run regardless.) It is also never "clear":
     "clear" asserts the model checked and saw no face, and a reply that never
     answered is a different fact a consumer must be able to see (PR #243
-    review). "unknown" does not quarantine - only face_visible does.
+    review). Callers quarantine "unknown" as the fail-closed fallback.
     """
     value = str(parsed.get(FACE_CHECK_KEY, "")).strip().lower()
     if value in FACE_CHECK_ANSWERS:

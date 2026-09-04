@@ -94,6 +94,10 @@ _yunet = None
 _yunet_lock = threading.Lock()
 
 
+class InvalidImageError(ValueError):
+    """The supplied bytes are not a decodable image."""
+
+
 def _get_cascades():
     """Load the Haar cascades OpenCV ships, once."""
     global _cascades
@@ -175,12 +179,14 @@ def _decode(image_bytes):
     IMREAD_IGNORE_ORIENTATION turns off OpenCV's own EXIF handling so the
     rotation happens exactly once, here, where it is explicit and tested.
     """
+    if not image_bytes:
+        raise InvalidImageError("could not decode image bytes")
     img = cv2.imdecode(
         np.frombuffer(image_bytes, dtype=np.uint8),
         cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION,
     )
     if img is None:
-        raise ValueError("could not decode image bytes")
+        raise InvalidImageError("could not decode image bytes")
     return _apply_orientation(img, _exif_orientation(image_bytes))
 
 
@@ -344,7 +350,7 @@ class ProcessedImage:
 def process_upload(image_bytes):
     """The one ingest entry point: blur faces, strip EXIF/GPS, re-encode.
 
-    Returns a ProcessedImage; raises ValueError for bytes no decoder accepts
+    Returns a ProcessedImage; raises InvalidImageError for bytes no decoder accepts
     (the caller decides what an undecodable upload means on its path).
     """
     img = _decode(image_bytes)
