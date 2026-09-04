@@ -35,12 +35,14 @@ both — and that is not the whole answer.** See the second table.
 |--------|----------|-----|----------------|----------|------------------------------|-----------|------------------|
 | Emily — iPhone 16 | `iPhone17,3` | 26.6.1 | **no** | **no** | 8064×6048 / 4032×3024 | no | none |
 | iPhone 15 Pro Max | `iPhone16,2` | 26.6.1 | **no** | **no** | 8064×6048 / 4032×3024 | no | none |
+| **James — iPhone 17 Pro** | `iPhone18,1` | 26.6 | **no** | **no** | 8064×6048 / 4032×3024 | no | none |
 
-James's phone is still unmeasured. It is an **iPhone 17 Pro** (`iPhone18,1`), not the iPhone 16 Pro
-the team audit recorded, and a build was installed and launched on it on 2026-09-02 -- so the only
-thing standing between it and a row here is running the probe. Both phones tested so far agree, so
-the expectation is
-that it agrees too — but it is an expectation, not a row.
+**All three devices are now measured.** James's iPhone 17 Pro (`iPhone18,1`) was probed
+2026-09-04 and agrees with the other two: the 1× wide-angle path D-014 names delivers neither
+calibration nor depth. The expectation recorded here previously is now a row.
+
+It also produced the finding below, which the other two phones could not, because neither has
+LiDAR.
 
 ### The row that matters: `builtInDualWideCamera`
 
@@ -48,12 +50,39 @@ that it agrees too — but it is an expectation, not a row.
 |--------|-------------|-------|---------------------------|------------------|------------|------------------|
 | iPhone 15 Pro Max | **yes**, via `depthData.cameraCalibrationData` | yes (`accuracy=relative`) | **2.00** | 4032×3024 | `fx=2792.0 fy=2792.0 cx=2037.2 cy=1499.0`, reference 4032×3024 | 42 entries |
 | Emily — iPhone 16 | **yes**, same channel | yes | 2.00 | 4032×3024 | delivered | delivered |
+| **James — iPhone 17 Pro** | **yes**, same channel | yes (`hdis`, `accuracy=relative`) | 2.00 | 4032×3024 | `fx=2807.7 fy=2807.7 cx=2006.4 cy=1503.2`, reference 4032×3024 | 42 entries |
 
-`builtInLiDARDepthCamera` on the Pro Max: depth **yes**, calibration **no**, intrinsics not
-delivered. LiDAR is not a route to intrinsics on this hardware.
+`builtInLiDARDepthCamera`, on the Pro Max and now on James's iPhone 17 Pro: depth **yes**,
+calibration **no**, intrinsics not delivered. LiDAR is not a route to intrinsics on this hardware.
 
-**Both phones can capture measurable frames. Neither can do it through the device type D-014
+**All three phones can capture measurable frames. None can do it through the device type D-014
 names.**
+
+### The depth in this dataset is stereo disparity, not LiDAR — measured 2026-09-04
+
+This matters because D-036 clause 1 says "LiDAR is used ... depth is captured on every entrance",
+and D-032 calls James's phone "the depth device (LiDAR)". On the device carrying the whole dataset,
+the app cannot reach LiDAR depth at all, and the reason is structural rather than a setting:
+
+| Device on `iPhone18,1` | calibration | depth |
+|---|---|---|
+| `builtInWideAngleCamera` (the D-014 path) | no | no |
+| `builtInDualWideCamera` | **yes** | yes — pixel format `hdis`, `accuracy=0` |
+| `builtInLiDARDepthCamera` | **no** | yes — but no intrinsics |
+
+`hdis` is `kCVPixelFormatType_DisparityFloat16` and `accuracy=0` is `AVDepthData.Accuracy.relative`:
+**relative stereo disparity from the two lenses, not metric LiDAR depth.**
+
+The app captures through `builtInDualWideCamera` because that is the only device that delivers
+calibration, and `CaptureValidation.record` refuses a frame without intrinsics (D-015). Reaching
+LiDAR depth would cost exactly the intrinsics the method requires, so the choice is not available.
+
+**What this changes, and what it does not.** It does not affect the screening study: D-020
+quarantines depth and the method never consumes it, so nothing measured depends on which sensor
+produced it. What it does change is the wording of D-036 and D-032 — the dataset's depth is
+`accuracy=relative` disparity on every device, and any later comparison that assumed a metric
+LiDAR reference does not have one. Worth correcting on the decisions rather than discovering it in
+an analysis.
 
 ### What follows
 
