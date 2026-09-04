@@ -15,6 +15,13 @@ which was frozen before this package existed.
 """
 
 from frontdoor.metrology.arm import Arm, ArmCut, ArmNotImplemented, CutArm, PendingArm
+from frontdoor.metrology.distortion import (
+    DistortionError,
+    ImageSize,
+    Point,
+    undistort_point,
+    undistort_points,
+)
 from frontdoor.metrology.registry import (
     ARM_NAMES,
     UnknownArm,
@@ -42,14 +49,19 @@ __all__ = [
     "ArmCut",
     "ArmNotImplemented",
     "CutArm",
+    "DistortionError",
+    "ImageSize",
     "Interval",
     "LineDecision",
     "Measurement",
     "PendingArm",
+    "Point",
     "ResultError",
     "UnknownArm",
     "Verdict",
     "all_arms",
     "get_arm",
     "register_arm",
+    "undistort_point",
+    "undistort_points",
 ]
