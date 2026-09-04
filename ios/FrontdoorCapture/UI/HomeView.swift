@@ -48,6 +48,40 @@ struct HomeView: View {
         }
     }
 
+    /// Which entrances still owe views, without opening the capture files (#289).
+    ///
+    /// The one question a paper checklist answers badly at the end of a day: an entrance shot four
+    /// views deep an hour ago looks finished in memory. Read from the coverage file, which is the
+    /// only durable record -- `EntranceStore` forgets on relaunch and the capture directory empties
+    /// as the queue drains.
+    ///
+    /// Incomplete entrances first, because they are the ones that can still be fixed by walking
+    /// back. Nothing here is a demand: a five-view entrance may be finished and only the operator
+    /// knows (docs/capture-protocol.md).
+    @ViewBuilder
+    private var coverageRows: some View {
+        let entrances = controller.coverageByEntrance.sorted { left, right in
+            let leftDone = left.value.state == .complete
+            let rightDone = right.value.state == .complete
+            return leftDone == rightDone ? left.key < right.key : !leftDone
+        }
+        if !entrances.isEmpty {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("View coverage").font(.footnote.weight(.semibold)).foregroundStyle(.secondary)
+                ForEach(entrances, id: \.key) { id, coverage in
+                    HStack {
+                        Text(id).font(.subheadline.monospaced())
+                        Spacer()
+                        Text(coverage.summary)
+                            .font(.caption)
+                            .foregroundStyle(coverage.state == .complete ? .secondary : .primary)
+                    }
+                }
+            }
+            .padding(.horizontal, 24)
+        }
+    }
+
     var body: some View {
         VStack(spacing: 28) {
             Spacer()
@@ -134,6 +168,9 @@ struct HomeView: View {
                 .foregroundStyle(.secondary)
 
             pendingRow
+                .padding(.bottom, 12)
+
+            coverageRows
                 .padding(.bottom, 12)
         }
     }

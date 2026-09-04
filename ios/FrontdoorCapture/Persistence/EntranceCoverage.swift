@@ -31,6 +31,17 @@ struct EntranceCoverage {
         ViewSetCoverage(captured: Set((load()[entranceId] ?? []).compactMap(ViewSlot.init(rawValue:))))
     }
 
+    /// Every entrance this phone has recorded a view for, by ID.
+    ///
+    /// The file is the only durable record of which doorways have been shot: `EntranceStore` is in
+    /// memory and forgets on relaunch, and the capture directory empties as the queue drains. So
+    /// this is what answers "did I finish E-014?" after leaving the street.
+    func all() -> [String: ViewSetCoverage] {
+        load().mapValues {
+            ViewSetCoverage(captured: Set($0.compactMap(ViewSlot.init(rawValue:))))
+        }
+    }
+
     /// Record that this entrance now has this view, and return the coverage that results.
     @discardableResult
     func record(_ slot: ViewSlot, for entranceId: String) -> ViewSetCoverage {

@@ -307,6 +307,14 @@ final class CaptureController: ObservableObject {
 
     let coverage = EntranceCoverage.inDocuments()
 
+    /// Coverage for every entrance this phone has shot, for the home screen. Re-read rather than
+    /// derived from `coverageForSubject`, which only knows the doorway in hand.
+    @Published private(set) var coverageByEntrance: [String: ViewSetCoverage] = [:]
+
+    func refreshCoverage() {
+        coverageByEntrance = coverage.all()
+    }
+
     /// Re-read the count and the view coverage for the entrance in hand. Zero when there is no
     /// subject.
     func refreshSubjectTally() {
@@ -606,6 +614,7 @@ final class CaptureController: ObservableObject {
             // the operator is told what to shoot next, and refused nothing.
             coverageForSubject = coverage.record(viewSlot, for: record.entrance.id)
             viewSlot = coverageForSubject.suggested
+            refreshCoverage()
             // The last drain's verdict described a queue this capture just changed. Left standing,
             // "Nothing to upload. Everything here is already safe." sits under a nonzero count --
             // observed on the 15 Pro Max, three captures on the phone, the app calling them safe.

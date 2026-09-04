@@ -90,3 +90,20 @@ final class ViewSetCoverageTests: XCTestCase {
         XCTAssertEqual(store.coverage(for: "E-014").captured, [])
     }
 }
+
+/// The home screen's coverage list reads the same store (#289).
+extension ViewSetCoverageTests {
+
+    func testEveryEntranceWithAViewIsListed() {
+        store.record(.headOn, for: "E-014")
+        store.record(.far, for: "E-015")
+        XCTAssertEqual(Set(store.all().keys), ["E-014", "E-015"])
+        XCTAssertEqual(store.all()["E-015"]?.captured, [.far])
+    }
+
+    func testAnEntranceWithNoViewsIsNotListed() {
+        // Absent, not zero: an entrance nobody has shot has no row rather than an empty one.
+        store.record(.headOn, for: "E-014")
+        XCTAssertNil(store.all()["E-015"])
+    }
+}
