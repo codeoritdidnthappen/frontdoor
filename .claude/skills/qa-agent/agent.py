@@ -245,7 +245,27 @@ async def run(repo: Path, docs: list[Path], tickets_dir: Path | None,
 # Entry point
 # --------------------------------------------------------------------------
 
+def allow_unencodable_output() -> None:
+    """Keep a character the console cannot encode from ending the run.
+
+    `drain` streams the model's own prose straight to stdout, and that prose routinely contains
+    arrows and box-drawing characters. Where stdout is cp1252 -- a Windows console, or any
+    redirect to a file or pipe on a Windows box -- one of them raised UnicodeEncodeError, which
+    escaped `asyncio.run` and killed the process partway through a run, before any report was
+    written. UTF-8 keeps the characters intact in a redirect; `errors="replace"` means anything
+    still unencodable degrades to a placeholder instead of being fatal.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except (AttributeError, OSError, ValueError):
+            # A stream that cannot be reconfigured (already detached, or replaced by a plain
+            # object in an embedding host) is not worth failing the run over.
+            pass
+
+
 def main() -> None:
+    allow_unencodable_output()
     ap = argparse.ArgumentParser(
         description="Independent QA agent: specs + app in, evidence-backed "
                     "report and bug tickets out.",
