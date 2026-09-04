@@ -281,7 +281,10 @@ def _raise_from_client(exc, action, bucket, key):
         # errors quote the whole URL -- and the server returns a StorageError's text verbatim as
         # the `detail` of a 503, so anyone holding the upload key would read our storage
         # configuration back. They need to know the put failed and roughly how; the URL is ours.
-        logger.warning("%s s3://%s/%s failed: %s", action, bucket, key, exc)
+        logger.exception(
+            "storage provider request failed",
+            extra={"storage_action": action, "storage_bucket": bucket, "object_key": key},
+        )
         raise StorageError(
             f"{action} s3://{bucket}/{key} failed ({type(exc).__name__})"
         ) from exc

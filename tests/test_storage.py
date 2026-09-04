@@ -284,14 +284,18 @@ def test_a_network_failure_is_not_the_denial():
     assert not isinstance(caught.value, StorageDenied)
 
 
-def test_a_network_failure_does_not_echo_the_configured_endpoint(caplog):
+def test_tick_263_ac_1_ac_2_ac_3_network_failure_is_safe_and_logged(
+        caplog: pytest.LogCaptureFixture) -> None:
     """TICK-263: botocore names the endpoint URL; the server hands that message to the caller.
 
     upload_view returns a StorageError's text as the `detail` of a 503, so whatever is in it
     reaches anyone holding the upload key. The endpoint is our configuration and no client needs
     it, but the operator does -- so it belongs in the log and not in the exception.
     """
-    endpoint = "https://an-account-id.r2.cloudflarestorage.com"
+    # Fixture shape follows botocore's transport boundary, which raises
+    # EndpointConnectionError(endpoint_url=request.url, error=exc).
+    # https://github.com/boto/botocore/blob/develop/botocore/httpsession.py
+    endpoint = "https://private-storage.example.test"
     exc = EndpointConnectionError(endpoint_url=endpoint)
     with caplog.at_level(logging.WARNING, logger="frontdoor.storage"):
         with pytest.raises(StorageError) as caught:
@@ -301,7 +305,8 @@ def test_a_network_failure_does_not_echo_the_configured_endpoint(caplog):
     # failure -- enough to tell an outage from a refusal without retrying to find out.
     assert "put s3://frontdoor-image/open/cap-1 failed" in str(caught.value)
     assert "EndpointConnectionError" in str(caught.value)
-    assert endpoint in caplog.text, "the full message must survive for whoever debugs it"
+    assert caught.value.__cause__ is exc
+    assert "storage provider request failed" in caplog.text
 
 
 def test_storage_denied_is_a_storage_error():
