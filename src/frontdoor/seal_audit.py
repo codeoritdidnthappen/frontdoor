@@ -135,7 +135,11 @@ def record_unsealing(argv, manifest_path, *, audit_path, repo, config):
         )
     command = list(argv)
     if command:
-        command[0] = MODULE_INVOCATIONS.get(Path(command[0]).name, command[0])
+        # Path.name uses os.sep, so a Windows argv[0] recorded on Linux (or
+        # the other way around) would keep the whole path. The filename is
+        # the last segment under either separator.
+        argv0_name = command[0].replace("\\", "/").rsplit("/", 1)[-1]
+        command[0] = MODULE_INVOCATIONS.get(argv0_name, command[0])
     line = "\t".join(
         [
             _utc_now(),
