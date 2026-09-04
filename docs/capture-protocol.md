@@ -1,8 +1,8 @@
 # TICK-090 — field capture protocol
 
-Four people are capturing 40-60 entrances over a few days. This is the one protocol all four
-follow, so the result is one dataset instead of four. It is written for the doorstep, on a phone —
-read the checklist at the bottom if you only have thirty seconds.
+James captures every entrance on his iPhone 17 Pro. This is the sole field protocol, so the result
+is one consistent dataset. It is written for the doorstep — read the checklist at the bottom if
+you only have thirty seconds.
 
 Per the team's pivot (2026-09-01), frontdoor screens **visible feature presence** — ramp/bevel,
 handrails, accessible door hardware, signage — from plain photos. This protocol produces no
@@ -16,25 +16,23 @@ scales up capture. Anything ambiguous in here gets fixed after the pilot, not gu
 
 ## The kit: one phone, and nothing else
 
-**Every entrance in this dataset is shot on the same device** — James's iPhone Pro with LiDAR
-(D-036). Not "a team phone", not whichever is to hand. One device, so `device_model` is a constant
-and the findings can say plainly what hardware the result was measured on.
+**Every entrance in this dataset is shot on the same device** — James's iPhone 17 Pro
+(`iPhone18,1`) with LiDAR (D-036). Not "a team phone", not whichever is to hand. One physical
+device, so the findings can say plainly what hardware the result was measured on; analysis applies
+D-040's alias normalization before grouping `device_model`.
 
 **No caliper. No reference card. No tape measure.** There is no instrument reading to take at the
 door: ground truth for this study is what you *saw*, recorded as presence labels, not what anything
 measured. If you find yourself wanting to measure a step, that is the earlier version of this
 project and it is not what we are collecting.
 
-**Depth is recorded automatically** on every capture and needs nothing from you. It is stored for a
-later comparison and is never used to produce a verdict.
+**Depth delivery is enabled automatically** and needs nothing from you. The measured configuration
+delivered relative stereo data, which the app persists as `DepthFloat32` when supported. Capture
+validation still requires intrinsics, and depth is never used to produce a verdict.
 
 > If that phone will not launch the app, capture does not happen that day — nothing is shooting
 > alongside it. That is why the launch check below is the first line of the checklist and not the
 > last.
->
-> There **is** a standby if it comes to that: Emily's iPhone Pro Max is the same target class and
-> also has LiDAR. Switching is a decision for the day it is needed, not something to do casually —
-> it makes the device a variable in the findings rather than a constant.
 
 ## Before you shoot: assign the entrance ID
 
@@ -172,7 +170,7 @@ free-text reason if none fits):
 Do not substitute a lesser view set, a worse angle, or a cropped shot to force a difficult entrance
 into the dataset. A skipped entrance is honest data. A forced, non-compliant capture is not.
 
-## Before you leave: launch the app on every device going out
+## Before you leave: launch the app on James's iPhone 17 Pro
 
 Not "check the profile date" — **launch it**. Free-provisioning builds expire after seven days
 (D-025, R-7), and a profile can also be invalidated for reasons that have nothing to do with expiry:
@@ -184,7 +182,7 @@ entrances, and there are not many left. Schedule and steps: [signing-calendar.md
 
 ## Checklist — read this at the door
 
-- [ ] **App launches on every device going out** — done before leaving, not at the entrance
+- [ ] **App launches on James's iPhone 17 Pro** — done before leaving, not at the entrance
 - [ ] Entrance ID assigned (`E-NNN`), written down before shooting
 - [ ] Vantage point, sightlines, and people situation checked — capturable, or logged as a skip
 - [ ] 5-6 views captured: head-on, both obliques, near (~1.5 m), far (~3-4 m), hardware close-up

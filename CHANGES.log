@@ -1182,3 +1182,27 @@ diagnosis linked, is the correction the append-only discipline is meant to produ
 Verified against the object store rather than any working tree: sha256 of each staged sidecar
 blob (`git cat-file blob :data/sidecars/<id>.json`) equals its manifest cell, 48/48, and #236's
 four checks pass against the corrected data.
+
+## 2026-09-04 — Fix the capture and demo hardware to James's phone (TICK-267, #269)
+
+## D-040  James's iPhone 17 Pro is the sole phone
+
+Capture, hardware testing, and the live demo use **James's iPhone 17 Pro (`iPhone18,1`) with
+LiDAR**, and no other handset is part of the project. This sharpens D-036: the single-device choice
+has no standby or hardware-switch branch.
+
+The phone is an accepted, unmitigated single point of failure. Its capability probe completed on
+2026-09-04. Free-provisioning signing still requires physical access to a team Mac; if the build
+expires or the phone is unavailable, capture stops until that same phone is restored.
+
+Although the phone contains LiDAR hardware, normal capture enables generic depth delivery. The
+2026-09-04 probe observed relative stereo disparity from `builtInDualWideCamera` and did not observe
+LiDAR range; the app converts supported delivered depth to `DepthFloat32` before persistence. This decision
+removes cross-hardware validation and fallback-device work from current scope without changing the
+capture app, stored-record schema, split discipline, or the rule that screening must not consume
+device depth.
+
+Existing imported sidecars use `device_model = "iPhone 17 Pro"`; new app captures use
+`device_model = "iPhone18,1"`. These are aliases for James's same physical phone. Analysis must
+normalize both to `iPhone18,1` before grouping so the single-device claim does not create two
+apparent device strata.

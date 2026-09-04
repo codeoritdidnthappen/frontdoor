@@ -1,8 +1,7 @@
-# TEAM — roster, capture devices and track coverage
+# TEAM — roster, capture device and track coverage
 
 Closes PRD §12 open item **O-1**. Records who is on the team and what capture hardware exists,
-and fixes the response rule for **R-8** (fewer capture devices than the parallel field tracks
-assume).
+and fixes the response rule for **R-8** (one capture phone serialises the parallel field tracks).
 
 This note records *facts and one decision*, and names the **work division** the backlog is
 assigned from. It supersedes the earlier self-assign-and-rotate convention recorded in O-1:
@@ -30,136 +29,25 @@ person and #82 has to check four accounts against the floors.
 Every member needs an X account recorded: build-in-public is graded **per person**, not per
 project (PRD §11) — four accounts, not one.
 
-## 2. Capture devices
+## 2. Capture device
 
-A-1 assumes capture devices are LiDAR-capable iPhones; A-3 assumes at least three are available.
-**Both assumptions are false.** The capture app is iOS-only — AVFoundation photo capture plus
-CoreMotion device motion, no ARKit (D-014, ARCHITECTURE.md §4) — so an Android device cannot run
-it at all, with or without a depth sensor.
+There is exactly one capture and demo phone: **James's iPhone 17 Pro (`iPhone18,1`) with LiDAR**
+(D-032, D-036). It runs the iOS capture app and carries every entrance. No other handset is a
+capture device, test device, fallback, standby, or part of the supported device pool.
 
-Measured 2026-09-02 with the in-app capability probe (TICK-020, #24); see
-[docs/tick-020-capability-probe.md](docs/tick-020-capability-probe.md).
+The in-app capability probe measured this phone on 2026-09-04; see
+[docs/tick-020-capability-probe.md](docs/tick-020-capability-probe.md). Through
+`builtInDualWideCamera` at the main-lens switch-over factor it delivers a 4032×3024 still,
+intrinsics, a 42-entry distortion table, and relative stereo disparity. Its
+`builtInLiDARDepthCamera` delivers depth without calibration, so the app does not use that path for
+normal capture. The measured `builtInDualWideCamera` configuration delivered relative stereo
+disparity, which the app converts to `DepthFloat32` before persistence; the probe did not observe
+LiDAR range, and D-015 still forbids the screening method from consuming device depth.
 
-| Holder | Device | Runs the capture app | Delivers intrinsics | Depth | Consequence |
-|--------|--------|----------------------|---------------------|-------|-------------|
-| David | Samsung Galaxy S25 | **No** — Android | — | — | Cannot capture |
-| Emily | iPhone 16 (non-Pro) | Yes | **Yes**, verified | Relative (stereo) | **Full capture** |
-| Emily *(**borrowed**, returned — see §2.1)* | iPhone 15 **Pro Max** | Yes | **Yes**, verified | **LiDAR**, and the probed one — TICK-020 ran `builtInLiDARDepthCamera` here | **Qualifies as the target device on capability.** Not carrying capture (D-036). **Not a standby that can be relied on** — the handset is not Emily's and is not on call |
-| James | iPhone 17 **Pro** (`iPhone18,1`) | **Yes**, build installed and launched 2026-09-02 | Probe not yet run | **LiDAR — the depth device (D-032, D-036)** | **Carries all capture.** Signing proven; capability unmeasured, so run the probe (#24) before it carries a capture day |
-| Ruben | Google Pixel 9 | **No** — Android | — | — | Cannot capture |
-
-### 2.1 The iPhone 15 Pro Max is borrowed
-
-**Confirmed by Emily 2026-09-02.** The handset is not hers. It was borrowed, has already been
-returned to its owner, and comes back only intermittently by arrangement — she has described the
-access as limited use time with no fixed schedule.
-
-Its *capability* rows above stand: the probe ran on this phone and the readings are real. What does
-not stand is availability. D-036's mitigation for its single point of failure reads "Emily's Pro Max
-takes over", which assumes a phone that can be picked up on the day James's build expires or his
-device fails. That phone would have to be requested from someone outside the team first.
-
-So the honest position is that **D-036's single point of failure is closer to unmitigated than the
-decision reads.** Two things follow, neither of them decided here:
-
-- The capability probe on James's phone (#24) stops being urgent and becomes the only check
-  standing between the project and a capture week with no working instrument.
-- If a real standby is wanted, it has to be arranged — borrowing the Pro Max for a defined window,
-  or accepting Emily's iPhone 16, which is non-Pro and has no LiDAR and so does not satisfy D-036's
-  depth-on-every-entrance clause.
-
-Three things the probe changed. **Intrinsics arrive on both tested phones, including the non-Pro**,
-which the row above used to deny — but only through `builtInDualWideCamera`, never through the
-`builtInWideAngleCamera` that D-014 names. **LiDAR delivers depth with no calibration at all**, so
-it is not a route to intrinsics on any device. And **the depth that does arrive is
-`accuracy=relative`** rather than metric range. The probe records the stereo-disparity
-reading for the iPhone 16 specifically; the 15 Pro Max is recorded as relative without the
-disparity detail, so "stereo on both" would say more than was measured.
-
-**The audit said James had an iPhone 16 Pro. The device is an iPhone 17 Pro** (`iPhone18,1`), read
-from `devicectl` when a build was installed on it on 2026-09-02. Which of the two is stale --
-an upgrade, or an error in the original audit -- is not something the evidence settles, so the
-model identifier above is what was measured rather than what was assumed. It matters because the
-probe rows are keyed by model, and a row filed against the wrong one proves nothing.
-
-A free-provisioning build installs and launches on it, so the signing chain is proven on three
-devices. The capability probe has NOT been run there, which is the remaining row in TICK-020 (#24)
-and the reason it is still open.
-
-**D-032 (2026-09-02) makes this phone the depth device**, so it is no longer a spare: LiDAR
-capture runs on it and nowhere else. That raises the stakes on the missing probe row rather than
-lowering them — the device carrying all of the depth is the one device whose capability has not
-been measured, and the probe is keyed by a model identifier that was wrong until today.
-
-### Development machines
-
-| Holder | Machine | Can build the iOS app | Has an iPhone to test on |
-|--------|---------|-----------------------|--------------------------|
-| David | Mac | Yes | No |
-| James | **Windows** | **No** | Yes — the only LiDAR device |
-| Emily | Mac | Yes | Yes |
-| Ruben | Mac | Yes | No |
-
-Xcode is macOS-only, so James cannot build the capture app, and cannot install a build onto his own
-phone unaided — that requires a Mac with the device physically connected, or a paid-account
-distribution channel (TICK-001, #13).
-
-**Emily is the only person with both a Mac and an iPhone**, and therefore the only one who can
-develop and test the capture app without borrowing hardware.
-
-**The LiDAR capture path (#27) is not what it was assumed to be.** TICK-020 found that
-`builtInLiDARDepthCamera` delivers a depth map with **no calibration data**, so a LiDAR frame
-carries no intrinsics to interpret it with. Both tested phones instead get depth through the
-dual-wide, at `accuracy=relative`.
-
-This does **not** touch Arms B and C. Both consume *learned monocular* depth estimated from the
-image (ARCHITECTURE.md §5), and D-015 forbids the method consuming device depth at all — so device
-depth being relative cannot affect them. What it does touch is everything that treats device depth
-as a **measurement**:
-
-- **D-020**, whose premise is a monocular-versus-LiDAR comparison. A relative map has no metric
-  scale to compare against a caliper, so the comparison as specified does not have a subject.
-- **Deliverable #5**, "comparison against LiDAR on every entrance", which inherits that.
-- **R-10**, which planned to bench-test device depth against the caliper. There is no longer a
-  device-depth quantity in inches to test.
-
-None of that is resolved here. It is recorded so the next person does not re-derive it.
-
-Free-provisioning builds still expire every seven days (R-7), which is what TICK-001 (#13)
-schedules; see [docs/signing-calendar.md](docs/signing-calendar.md).
-
-- **Verified capture devices: 2** — Emily's iPhone 16, and the borrowed iPhone 15 Pro Max
-  (§2.1), only one of which the team can count on having. Against A-3's
-  assumed three. James's iPhone 17 Pro now runs a build but has never had the probe run on it, so
-  it is not counted as verified until it has a measured row.
-- **LiDAR-capable devices: 2** — James's iPhone **Pro** and the borrowed iPhone **Pro Max**,
-  confirmed 2026-09-02. Only James's is available to the team without asking an outsider (§2.1). This line once said 1. The Pro Max is the device TICK-020 actually ran
-  `builtInLiDARDepthCamera` on, making it the *probed* one of the two, while the phone carrying
-  capture is the unprobed one. LiDAR is not a route to intrinsics on any device, so
-  it does not gate capture the way A-1 assumed. **A-3 makes an iPhone Pro with LiDAR the product's
-  target device**, so this count is now the capture pool for the product itself: two devices, one
-  of them probed and held by a Mac owner.
-
-All five devices are now recorded. The two verified capture phones are an **iPhone 16 and an
-iPhone 15 Pro Max** — two generations and two camera tiers, not the single generation an earlier
-draft of this section claimed.
-
-A-1 states that evidence comes from Pro-class cameras, with generalisation to other phones recorded
-as a limitation rather than a result. That no longer holds: the pool is an iPhone 16 (non-Pro) and
-an iPhone 15 Pro Max — **both a tier and a generation apart**.
-
-The spread is wider than A-1 assumed but still bounded. The Pro adds a telephoto and the LiDAR
-scanner, and under the fixed capture rule of **1× main lens, no digital zoom, no crop**
-(ARCHITECTURE.md §4) neither enters the dataset; both shoot a 48MP main wide. Intrinsics differ per
-device and per unit anyway, and the sidecar records `device_model` on every capture, so device stays
-a variable the error analysis can see — with two devices, it is a variable with two levels rather
-than a constant. A-1 needs restating to cover both, and that restatement is not in this document.
-
-**Calibration-data delivery is now verified on two phones** (A-2, R-9). TICK-020 (#24) ran on
-2026-09-02: both the iPhone 16 and the iPhone 15 Pro Max deliver intrinsics, a distortion table and
-depth through `builtInDualWideCamera`, and neither delivers anything through the bare 1× wide
-camera that D-014 names. The capture pool is two devices, not one, and the risk this paragraph
-described did not materialise — R-9 fired on the *device type*, not on the phones.
+James runs Windows, so signing and installing the app requires James's phone to be physically
+connected to a team Mac. Free-provisioning builds expire every seven days; the mandatory sessions
+are recorded in [docs/signing-calendar.md](docs/signing-calendar.md). This is an accepted,
+unmitigated single point of failure: if James's phone or its build is unavailable, capture stops.
 
 ## 3. Work division
 
@@ -171,24 +59,10 @@ from O-1, and every open issue names an owner in GitHub.
 Work can still move between people. When it does, **reassign the ticket rather than clearing it**,
 so no issue is ever left without a name against it.
 
-Two constraints shape it, both from §2:
-
-- **Field capture runs on Emily's two phones, not James's.** This constraint used to read "James
-  holds the only LiDAR device, so every entrance must pass through his phone". TICK-020 retired it:
-  LiDAR is not a route to intrinsics, both verified capture devices are Emily's, and James's iPhone
-  16 Pro had not been probed. James still runs Windows and cannot build iOS.
-
-  > **Reopened 2026-09-02 by D-032.** Depth capture is now assigned to James's iPhone 17 Pro (`iPhone18,1`), so
-  > entrances carrying LiDAR do pass through his phone after all. A build has run on that phone, so
-  > the install is not the open item — the capability probe is, and so is the 7-day re-sign, which
-  > James cannot do unaided on Windows. Who operates which device is still unsettled.
-
-  **This has a consequence §3 does not yet resolve.** Field capture (#9, #64–#69) is assigned to
-  James, and the phones that can capture belong to Emily. Either the devices move to the operator,
-  or the operator changes, or Emily carries capture on top of the capture app. Whoever decides that
-  should also revisit "he carries little else until capture closes", which was reasoning built on
-  the constraint that no longer holds.
-- **Emily is the only person with both a Mac and an iPhone**, so the capture app is hers.
+A hardware constraint shapes it: **field capture and the live demo run only on James's iPhone 17
+Pro (`iPhone18,1`) with LiDAR.** James carries field capture; Emily carries capture-app development
+and uses a team Mac to sign and install builds on James's connected phone. There is no alternate
+phone or operator path.
 
 A third rule applies throughout: **nobody verifies their own work.** Every `qa` ticket is held by
 someone who did not build the thing under test.
@@ -224,91 +98,21 @@ Ruben 26, Emily 20, James 18.
 after capture closes. Emily's capture-app work is front-loaded, since nothing can be captured until
 it ships (D-014).
 
-## 4. R-8 response rule — **FIRED, on a trigger that has since been re-read**
+## 4. R-8 response rule — **FIRED**
 
-The trigger condition was met as written: fewer than three LiDAR-capable iPhones are available.
-There is one, and it is untested.
+The active capture pool contains one phone: James's iPhone 17 Pro with LiDAR. This is a deliberate
+single-device protocol decision, not a fallback arrangement.
 
-**What TICK-020 changed (2026-09-02).** LiDAR turned out not to be the thing that gates capture —
-it delivers no calibration data, so it is not a route to intrinsics on any device. What actually
-gates capture is *devices that deliver intrinsics*, and there are two verified, both Emily's. So the
-rule stays fired on A-3's count of capture devices, and stops being fired on A-1's LiDAR premise.
-The response below is unchanged, because it cuts the entrance target and that argument does not
-depend on which capability was scarce.
-
-The response is a **schedule change, not an architecture change** (ARCHITECTURE.md §10, A-3):
-
-> **Amended 2026-09-02 by D-036.** Capture runs on **one device**: James's iPhone Pro with LiDAR.
-> Emily's iPhone 16 and iPhone 15 Pro Max are no longer capture devices for this dataset. **No
-> caliper is used** — ground truth is the operator's presence labels, recorded at the door.
->
-> Two consequences this section should carry rather than leave implicit. `device_model` becomes a
-> **constant**, so the findings must say the result was measured on a single phone — the
-> generalisation limit A-1 already needed restating for is sharper now, not softer. And that phone
-> is a **single point of failure while it is the only one shooting**: builds expire in 7 days
-> (D-025, R-7), James runs Windows and cannot re-sign unaided, and the device has still never been
-> through the capability probe (#24). Probing it is urgent, not tidy.
->
-> **The standby is thinner than it was written.** James holds an iPhone **Pro** and a second
-> qualifying handset exists — an iPhone **Pro Max**, LiDAR present, and the one TICK-020 actually
-> probed. On capability, single-device capture is a **deliberate constraint, not a hardware
-> limit**: one operator with one phone gives a uniform dataset and a constant `device_model`.
->
-> **On availability it is not a standby at all.** Emily confirmed 2026-09-02 that the Pro Max is
-> **borrowed and already returned** (§2.1). Taking it over means asking its owner, on their
-> timetable, on the day James's build expires or his phone disappoints the probe. Emily's other
-> phone, the iPhone 16, is non-Pro with no LiDAR and does not satisfy D-036's depth clause.
->
-> Switching would still cost only a two-level `device_model` the findings must state — cheap, if
-> the phone is there. **Nothing currently guarantees it is.** Either the borrow is arranged in
-> advance for a defined window, or the single point of failure is recorded as unmitigated and #24
-> becomes the only thing standing in front of it.
-
-1. **Cut the entrance target, never the protocol.** Per-entrance shot list, ROI taps, caliper
-   ground truth and split-at-capture stay exactly as specified.
-   *Superseded in part by the 2026-09-01 pivot to plain-photo screening (#67, #9 thread), recorded
-   in CHANGES.log: capture is plain photos, with no caliper, no ROI taps and no LiDAR depth, and the
-   per-entrance plan is now #64's 5–6-view protocol. Split-at-capture survives. The clause is kept
-   because "cut the target, not the protocol" still holds — it is the protocol underneath it that
-   changed.*
-2. **The floor is 30 entrances.** Below that, per-condition cells are too small to interpret,
-   which is the whole reason the target was cut to 40-60 in the first place (D-002).
-3. **Arm A′ captures are dropped before entrances are.** A′ is the realistic-user path in the
-   usability gradient (D-013); losing it costs one arm of the ablation, whereas losing entrances
-   costs the error budget its resolution.
-   *Overtaken by the same pivot: the A′ ground-card subset is retired and #68 is closed, so there is
-   no longer an A′ capture to drop first. What this clause protected — entrance count over arm
-   count — has no remaining lever.*
-
-### Open conflict this rule does not resolve
-
-R-8 anticipated *fewer devices than tracks*. The actual constraint is tighter, and cutting the
-entrance target does not clear it:
-
-**RETIRED 2026-09-02 by TICK-020 (#24).** The paragraph below was written when LiDAR was believed
-to be both available on one device and necessary on every entrance. The probe found LiDAR delivers
-no calibration data at all, so it is not a route to intrinsics; depth arrives through the dual-wide
-on both verified phones, and both of those are Emily's. Capture is no longer serialised onto one
-device. Kept as the record of what was believed, not as a live constraint — and D-020's own premise
-is now open (see §2).
-
-~~**D-020 requires LiDAR on every entrance, and exactly one device can produce it.** Every entrance
-must therefore pass through James's phone, which serialises field capture onto one device and one
-operator regardless of how far the target is cut. Emily's iPhone can capture a conforming record
-in every respect except depth.
-
-Resolving this means either relaxing D-020 to a matched LiDAR subset — reverting to the pre-D-020
-position in PRD §6, which changes what deliverable #5 can claim — or accepting a single-device
-capture pipeline. **Both are protocol decisions and out of scope for this ticket**, which cuts
-targets rather than rewriting the protocol. Escalated, not decided here.~~
+1. **Cut the entrance target, never the protocol.** Every entrance still follows the complete
+   5–6-view plain-photo protocol with presence labels and the committed split discipline.
+2. **The floor is 30 entrances.** Below that, per-condition cells are too small to interpret.
+3. **Treat the phone as an unmitigated single point of failure.** Keep its free-provisioning build
+   valid, launch-check it before leaving, and stop capture if it is unavailable. Do not switch
+   hardware.
 
 ## 5. How this was verified
 
-- Device list: confirmed by someone physically holding each phone and reading its model from
-  Settings, not from memory — for the four devices in the original roster.
-  **The iPhone 15 Pro Max is the exception.** TICK-020's probe records it as `iPhone16,2` but its
-  row carries no holder, unlike the iPhone 16 row which reads "Emily — iPhone 16". Its owner is
-  asserted here and nowhere else. Since it is one of only two verified capture devices, whoever
-  holds it should confirm, and the probe row should gain a name.
-- Roster and X handles: confirmed by each person.
-- Track coverage: confirmed as coverage, not assignment.
+- James's iPhone 17 Pro model identifier was read from `devicectl` as `iPhone18,1`.
+- The capability probe recorded its camera, intrinsics, distortion, and depth behavior.
+- Roster and X handles were confirmed by each person.
+- Track coverage was confirmed as coverage, not assignment.
