@@ -384,3 +384,40 @@ def test_a_non_ascii_configured_key_still_authorises_its_own_value(monkeypatch, 
     with mock_aws():
         _buckets()
         assert _post(c, key="kéy").status_code == 201
+
+
+# --- a misconfigured deploy answers with the contract, not a traceback (TICK-225) ---------------
+#
+# Seen for real on 2026-09-04. A stale release asked for FRONTDOOR_DEPTH_BUCKET -- obsolete since
+# depth moved to the Worker, and deliberately unset -- and the store was CONSTRUCTED outside the
+# try that handles StorageError.
+#
+# The JSON shape held: app.py's catch-all still answered valid JSON, so TICK-225's guarantee was
+# not broken. What the phone actually got was
+#
+#     500 {"error": "internal error",
+#          "detail": "The server failed to handle the request. Nothing was measured."}
+#
+# which is wrong three ways. 500 rather than 503, so the client cannot tell a retryable outage
+# from a bug. "internal error" names nothing, so the real cause -- a stale release, not a bad key
+# -- was findable only in fly logs. And "Nothing was measured" is the /measure wording arriving on
+# /upload, where nothing was being measured at all.
+
+
+@mock_aws
+def test_a_missing_image_credential_is_a_named_503_not_a_500(monkeypatch, env):
+    """503, like a failed put: the bytes are good and the capture is the only copy.
+
+    A 4xx would tell the app the capture is rejected and stop it retrying something that is
+    perfectly fine; a 500 tells it nothing at all.
+    """
+    _buckets()
+    monkeypatch.delenv("FRONTDOOR_IMAGES_BUCKET", raising=False)
+    client = create_app().test_client()
+
+    response = _post(client, kind="image")
+
+    assert response.status_code == 503, response.get_data(as_text=True)[:200]
+    body = response.get_json()
+    assert body["error"] == "could not store the object"
+    assert "FRONTDOOR_IMAGES_BUCKET" in body["detail"], body["detail"]

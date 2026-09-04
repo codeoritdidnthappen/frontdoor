@@ -249,7 +249,20 @@ def register_upload(app, error):
                     return error("could not store the object", str(exc), status=503)
                 store = None
             else:
-                store = image_store()
+                try:
+                    # Constructing the store reads credentials from the environment, so a
+                    # misconfigured deploy raises HERE rather than in put() below. That was
+                    # outside the try, so a missing variable escaped as an unhandled 500 with a
+                    # traceback instead of the JSON contract every response is supposed to carry
+                    # (TICK-225). Seen for real on 2026-09-04: a stale release asked for
+                    # FRONTDOOR_DEPTH_BUCKET, which is obsolete and deliberately unset, and the
+                    # phone got a bare 500 -- the actual cause was only findable in server logs.
+                    #
+                    # 503, like a failed put: the bytes are good, the capture is the only copy,
+                    # and the client must keep it and retry rather than treat it as rejected.
+                    store = image_store()
+                except StorageError as exc:
+                    return error("could not store the object", str(exc), status=503)
                 try:
                     store.put(key, spool, if_absent=True)
                 except ObjectExists:
