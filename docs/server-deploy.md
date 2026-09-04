@@ -274,9 +274,9 @@ Then **verify the machine count in the `fly status` output — it must list exac
 
 ## Verify, before Demo Day rather than on it
 
-**1. The endpoint answers from a phone on cellular** (#50 AC — not from laptop wifi):
+**1. The endpoint answers from James's iPhone 17 Pro on cellular** (#50 AC — not from laptop wifi):
 
-Turn wifi off on the phone, then open `https://frontdoor-measure.fly.dev/health` in Safari.
+Turn wifi off on James's iPhone 17 Pro, then open `https://frontdoor-measure.fly.dev/health` in Safari.
 HTTPS matters: iOS App Transport Security refuses plain HTTP, which is why `force_https` is set.
 
 **2. The host and the laptop run the same image digest** (#50 AC). One command:

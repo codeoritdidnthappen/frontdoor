@@ -25,8 +25,9 @@ deck answers is **screening accuracy** — can plain photos screen entrance acce
 (ramp/bevel, handrails, accessible hardware, signage) reliably — which **supersedes** the
 original metrology MAE-on-threshold-rise question. **Amendment A-3 is now committed**
 (CHANGES.log, taken 2026-09-02 by David, requested by James in #67 on 2026-09-01): one product,
-target device an iPhone Pro with LiDAR, and the pre-registered MAE hypothesis is **untested in
-this window** — not relaxed, not re-scored, untested. Every slide that touches results says so.
+target device an iPhone Pro with LiDAR, and the pre-registered MAE hypothesis is **untested in this
+window** — not relaxed, not re-scored, untested. D-040 (2026-09-04) narrows current capture and demo
+hardware to James's iPhone 17 Pro (`iPhone18,1`) alone. Every slide that touches results says so.
 
 Claims discipline, product-wide (from the #73 product-model thread): never claim a measurement,
 a compliance determination, or a legal status. The line that survives every slide: **"when it
@@ -44,7 +45,7 @@ supersedes the original one — so a reviewer who read the PRD doesn't spend Q&A
 this project no longer asks.
 
 **Content:**
-- Current question, one sentence: **can ordinary phone photos screen an entrance for visible
+- Current question, one sentence: **can photos from James's iPhone 17 Pro screen an entrance for visible
   accessibility features — ramp/bevel, handrails, accessible door hardware, signage — reliably
   enough to power a map disabled people can trust?** Measured against human-labeled ground
   truth.
@@ -80,8 +81,9 @@ and #73 both flag this as the thing most likely to get silently dropped under de
   against whichever arm looked best after unsealing. Source: CHANGES.log (A-2 record restored
   by PR #235 from commit 13e735a; D-022 is the decision-register cross-reference).
 - **A-3** — the pivot, **committed 2026-09-02** (taken by David; requested by James in #67 on
-  2026-09-01). One product — plain-photo screening on an iPhone Pro with LiDAR; the metrology
-  arms are a later version. Consequence stated on the slide in A-3's own words: **"the primary
+  2026-09-01). One product — plain-photo screening on an iPhone Pro with LiDAR; the metrology arms
+  are a later version. **D-040 (2026-09-04) fixes that phone to James's iPhone 17 Pro.** Consequence
+  stated on the slide in A-3's own words: **"the primary
   hypothesis is not tested in this window"** — not relaxed, not re-scoped, not re-judged
   against a different arm. Source: CHANGES.log Amendment A-3 entry.
 

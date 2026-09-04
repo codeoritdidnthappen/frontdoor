@@ -89,7 +89,7 @@ request. When a ticket is complete, review it, fix every bug, and merge it immed
 
    The failure this prevents is not a wrong ticket state, it is a **silent** one: a ticket
    left open with a criterion nobody can ever tick stops meaning "in progress" and starts
-   meaning nothing at all. #50 could not close because one criterion needed a phone on
+   meaning nothing at all. #50 could not close because one criterion needed James's iPhone on
    cellular; #55 could not close because two needed arms that are deprioritised. Both had
    landed, working, verified code sitting behind a checkbox.
 
