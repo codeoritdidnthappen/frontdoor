@@ -42,12 +42,25 @@ from pathlib import Path
 
 from frontdoor.labels import SPLITS, labels_for_eval, load_labels
 from frontdoor.manifest import read_manifest
-from frontdoor.screening import CRITERIA_KEYS, ScreeningEngine, SealedSplitError
+from frontdoor.screening import (
+    ALLOWED_VERDICTS,
+    CRITERIA_KEYS,
+    ScreeningEngine,
+    SealedSplitError,
+)
 from frontdoor.seal_audit import SealAuditError
 from frontdoor.split import assign_split, canonical_entrance_id
 
 #: Per-image latency budget (seconds); the report counts every view over it.
 LATENCY_BUDGET_S = 15.0
+
+#: Screening-mode conditions recorded for each capture. Surface is
+#: metrology-only, and angle is neither entered nor derived for screening.
+CONDITION_KEYS = ("distance_m", "lighting", "occlusion")
+
+#: Exploratory cells below this many independent entrances are still shown,
+#: but are too thin to present as findings.
+MIN_CONDITION_ENTRANCES = 3
 
 JSON_NAME = "screening_eval.json"
 MARKDOWN_NAME = "screening_eval.md"
@@ -185,6 +198,119 @@ def entrance_calls(screenings, joins):
     return calls
 
 
+def _condition_joins(screenings, captures, labels):
+    """Score each image against its capture's recorded conditions."""
+    truth = {
+        (label["entrance_id"], label["criterion"]): label["truth"]
+        for label in labels
+    }
+    joins = []
+    for entrance_id in sorted(screenings):
+        assessments = screenings[entrance_id].assessments
+        entrance_captures = captures[entrance_id]
+        if len(assessments) != len(entrance_captures):
+            raise ScreeningEvalError(
+                f"entrance {entrance_id} produced {len(assessments)} per-image "
+                f"assessments for {len(entrance_captures)} captures"
+            )
+        for assessment, capture in zip(assessments, entrance_captures):
+            conditions = capture.sidecar["conditions"]
+            recorded = {key: conditions[key] for key in CONDITION_KEYS}
+            for key in CRITERIA_KEYS:
+                label = truth.get((entrance_id, key))
+                if label is None:
+                    continue
+                verdict = None
+                if assessment.criteria is not None:
+                    candidate = assessment.criteria[key]["verdict"]
+                    if candidate in ALLOWED_VERDICTS:
+                        verdict = candidate
+                joins.append({
+                    "capture_id": capture.capture_id,
+                    "entrance_id": entrance_id,
+                    "criterion": key,
+                    "verdict": verdict,
+                    "truth": label,
+                    "outcome": classify(verdict, label),
+                    "conditions": recorded,
+                })
+    return joins
+
+
+def _condition_label(dimension, value):
+    if dimension == "distance_m":
+        return repr(float(value))
+    return str(value)
+
+
+def _condition_sort_key(dimension, value):
+    if dimension == "distance_m":
+        return float(value)
+    return str(value)
+
+
+def _outcome_metrics(rows):
+    counts = {
+        outcome: sum(row["outcome"] == outcome for row in rows)
+        for outcome in ("correct", "wrong", "abstained")
+    }
+    scored = sum(counts.values())
+    entrance_count = len({row["entrance_id"] for row in rows})
+    return {
+        "analysis": "exploratory",
+        "capture_count": len({row["capture_id"] for row in rows}),
+        "entrance_count": entrance_count,
+        "underpowered": entrance_count < MIN_CONDITION_ENTRANCES,
+        **counts,
+        "accuracy_of_committed": accuracy_of_committed(counts),
+        "abstention_rate": counts["abstained"] / scored if scored else None,
+    }
+
+
+def _condition_analysis(joins):
+    dimensions = {}
+    for dimension in CONDITION_KEYS:
+        observed = {row["conditions"][dimension] for row in joins}
+        if dimension == "distance_m":
+            observed = {float(value) for value in observed}
+        values = sorted(
+            observed,
+            key=lambda value: _condition_sort_key(dimension, value),
+        )
+        groups = {}
+        for value in values:
+            rows = [
+                row for row in joins
+                if (
+                    float(row["conditions"][dimension]) == value
+                    if dimension == "distance_m"
+                    else row["conditions"][dimension] == value
+                )
+            ]
+            groups[_condition_label(dimension, value)] = {
+                "analysis": "exploratory",
+                "capture_count": len({row["capture_id"] for row in rows}),
+                "entrance_count": len({row["entrance_id"] for row in rows}),
+                "criteria": {
+                    key: _outcome_metrics([
+                        row for row in rows if row["criterion"] == key
+                    ])
+                    for key in CRITERIA_KEYS
+                },
+            }
+        dimensions[dimension] = {
+            "analysis": "exploratory",
+            "groups": groups,
+        }
+    return {
+        "analysis": "exploratory",
+        "interpretation": "descriptive associations only; not causal",
+        "minimum_entrances": MIN_CONDITION_ENTRANCES,
+        "dimensions": dimensions,
+        "joins": joins,
+    }
+
+
 def entrance_flip_rates(screenings):
     """Mean flip rate per entrance across criteria with a valid verdict."""
     out = {}
@@ -220,7 +346,8 @@ def latency_stats(screenings, *, budget_s=LATENCY_BUDGET_S):
 
 
 def build_result(
-    screenings, labels, *, split, engine, image_count, blank_skipped, duration_s
+    screenings, labels, *, split, engine, image_count, blank_skipped,
+    condition_joins, duration_s,
 ):
     per_criterion, joins = score_joins(screenings, labels)
     overall = {
@@ -267,6 +394,7 @@ def build_result(
             "mean": sum(rated) / len(rated) if rated else None,
         },
         "latency_s": latency_stats(screenings),
+        "condition_analysis": _condition_analysis(condition_joins),
         "run": {
             "model": engine.config.model,
             "entrance_count": len(screenings),
@@ -348,6 +476,36 @@ def render_markdown(result):
             for entrance_id, call in result["entrance_call"]["per_entrance"].items()
         ),
         f"| agreement | | | | | {_fmt(result['entrance_call']['agreement'])} |",
+    ]
+    condition_analysis = result["condition_analysis"]
+    for dimension in CONDITION_KEYS:
+        groups = condition_analysis["dimensions"][dimension]["groups"]
+        lines += [
+            "",
+            f"## Exploratory condition analysis: {dimension}",
+            "",
+            "**Exploratory — descriptive associations only; not causal.**",
+            "",
+            "| analysis | value | criterion | captures | entrances | status "
+            "| correct | wrong | abstained | accuracy of committed "
+            "| abstention rate |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        ]
+        for value, group in groups.items():
+            for key in CRITERIA_KEYS:
+                metrics = group["criteria"][key]
+                status = (
+                    "underpowered" if metrics["underpowered"] else "descriptive"
+                )
+                lines.append(
+                    f"| exploratory | {value} | {key} | "
+                    f"{metrics['capture_count']} | {metrics['entrance_count']} | "
+                    f"{status} | {metrics['correct']} | {metrics['wrong']} | "
+                    f"{metrics['abstained']} | "
+                    f"{_fmt(metrics['accuracy_of_committed'])} | "
+                    f"{_fmt(metrics['abstention_rate'])} |"
+                )
+    lines += [
         "",
         "## Per-entrance cross-view consistency (flip rate)",
         "",
@@ -376,7 +534,7 @@ def write_outputs(result, out_dir):
     json_path = out_dir / JSON_NAME
     md_path = out_dir / MARKDOWN_NAME
     json_path.write_text(
-        json.dumps(result, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        json.dumps(result, indent=2) + "\n", encoding="utf-8"
     )
     md_path.write_text(render_markdown(result), encoding="utf-8")
     return json_path, md_path
@@ -388,7 +546,7 @@ def run_eval(
     labels_path,
     out_dir,
     engine,
-    get_image,
+    get_capture,
     split="dev",
     audit=None,
     argv=None,
@@ -396,8 +554,9 @@ def run_eval(
     """Screen every entrance of one split and write the report.
 
     engine is any object with screen_entrance / config / spent_usd (the real
-    ScreeningEngine, or a fake in tests); get_image maps a capture_id to image
-    bytes (the real path goes through the hash-verifying DatasetLoader).
+    ScreeningEngine, or a fake in tests); get_capture maps a capture_id to a
+    hash-verified Capture carrying both image bytes and its validated sidecar
+    (the real path goes through the hash-verifying DatasetLoader).
 
     split="sealed" needs `audit`, a mapping with labels.AUDIT_KEYS. It is the
     audit context, and it is also the permission: sealed labels are released
@@ -426,13 +585,18 @@ def run_eval(
         entrances.setdefault(canonical_entrance_id(label["entrance_id"]), [])
     entrances = {eid: caps for eid, caps in sorted(entrances.items())}
     screenings = {}
+    captures = {}
     image_count = 0
     for entrance_id, capture_ids in entrances.items():
-        images = [get_image(capture_id) for capture_id in capture_ids]
-        image_count += len(images)
+        entrance_captures = [get_capture(capture_id) for capture_id in capture_ids]
+        captures[entrance_id] = entrance_captures
+        image_count += len(entrance_captures)
         screenings[entrance_id] = engine.screen_entrance(
-            entrance_id, images, allow_sealed=sealed_run
+            entrance_id,
+            [capture.image for capture in entrance_captures],
+            allow_sealed=sealed_run,
         )
+    condition_joins = _condition_joins(screenings, captures, labels)
     result = build_result(
         screenings,
         labels,
@@ -440,6 +604,7 @@ def run_eval(
         engine=engine,
         image_count=image_count,
         blank_skipped=loaded.blank_skipped,
+        condition_joins=condition_joins,
         duration_s=round(time.perf_counter() - started, 3),
     )
     write_outputs(result, out_dir)
@@ -504,13 +669,13 @@ def main(argv=None, *, from_cli=False):
     )
     loader = DatasetLoader(manifest_path, sidecar_dir)
 
-    def get_image(capture_id):
+    def get_capture(capture_id):
         # loader.load refuses sealed rows outright, so the unsealing run goes
         # through _load_row's allow_sealed - the same doorway frontdoor.eval
         # uses. Everything else stays on the public API.
         if args.include_sealed:
-            return loader._load_row(loader._row(capture_id), allow_sealed=True).image
-        return loader.load(capture_id).image
+            return loader._load_row(loader._row(capture_id), allow_sealed=True)
+        return loader.load(capture_id)
 
     audit = None
     try:
@@ -535,7 +700,7 @@ def main(argv=None, *, from_cli=False):
             labels_path=args.labels,
             out_dir=args.out,
             engine=ScreeningEngine(),
-            get_image=get_image,
+            get_capture=get_capture,
             split="sealed" if args.include_sealed else "dev",
             audit=audit,
             argv=sys.argv if argv is None else [sys.argv[0], *argv],

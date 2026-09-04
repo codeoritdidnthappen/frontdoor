@@ -1,0 +1,21 @@
+{
+ "capture_id": "E-030-3419-p",
+ "entrance_id": "E-030",
+ "captured_at": "2026-09-04T19:56:19Z",
+ "device_model": "iPhone 17 Pro",
+ "image": {
+  "path": "E-030/IMG_3419_processed.JPEG",
+  "sha256": "6ef6eeb7d618bb70c9cd6e530b907333695d0e5295127658585e0a8cb4282e36",
+  "width": 4284,
+  "height": 5712,
+  "exif_orientation": 1
+ },
+ "depth": null,
+ "conditions": {
+  "distance_m": 2.5,
+  "lighting": "direct sun",
+  "occlusion": "none"
+ },
+ "split": "dev",
+ "capture_mode": "imported"
+}

@@ -106,17 +106,32 @@ struct CaptureView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .topLeading) { closeButton }
-        .overlay(alignment: .top) { conditionsBar }
-        // Between the shutter and the record: the frame cannot become a capture until its six
-        // points are marked, and it cannot be marked from behind the viewfinder.
+        .overlay(alignment: .top) {
+            VStack(spacing: 6) {
+                conditionsBar
+                coachingBar
+            }
+        }
+        // Between the shutter and the record. Neither mode writes anything until the frame has
+        // been through this: metrology needs its six points marked, screening needs the operator
+        // to consent to publishing a photo of someone's premises (#275).
         .fullScreenCover(item: $controller.pendingReview) { pending in
-            ROIReviewView(
-                image: pending.image,
-                pixelWidth: pending.record.pixelWidth,
-                pixelHeight: pending.record.pixelHeight,
-                onConfirm: controller.confirmReview,
-                onDiscard: controller.discardReview
-            )
+            if controller.captureMode.carriesMetrologyTruth {
+                ROIReviewView(
+                    image: pending.image,
+                    pixelWidth: pending.record.pixelWidth,
+                    pixelHeight: pending.record.pixelHeight,
+                    onConfirm: controller.confirmReview,
+                    onDiscard: controller.discardReview
+                )
+            } else {
+                ScreeningReviewView(
+                    image: pending.image,
+                    entranceId: pending.record.entrance.id,
+                    onPublish: controller.confirmScreeningReview,
+                    onDiscard: controller.discardReview
+                )
+            }
         }
         .sheet(isPresented: $editingConditions) {
             if let subject = controller.subject {
@@ -127,6 +142,56 @@ struct CaptureView: View {
                     editingConditions = false
                 }
             }
+        }
+    }
+
+    /// Which view of the protocol's set the next shot is, and what is still missing (#289).
+    ///
+    /// Deliberately an offer and not a gate. It follows the coverage to the next missing view so
+    /// an operator who just works through the prompts ends up with the set, but every view stays
+    /// selectable — including one already covered. `docs/capture-protocol.md` allows deviation,
+    /// and an instrument that refused a seventh angle would cost captures it cannot get back.
+    ///
+    /// Plain on purpose: the canon boards for this surface are with James (#251), and what is
+    /// settled here is which views exist and how coverage is reported, which restyling will not
+    /// change.
+    @ViewBuilder
+    private var coachingBar: some View {
+        if controller.subject != nil {
+            Menu {
+                ForEach(ViewSlot.allCases, id: \.self) { slot in
+                    Button {
+                        controller.viewSlot = slot
+                    } label: {
+                        Label(
+                            slot.label,
+                            systemImage: controller.coverageForSubject.captured.contains(slot)
+                                ? "checkmark.circle.fill" : "circle")
+                    }
+                }
+            } label: {
+                VStack(spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(controller.viewSlot.label).fontWeight(.semibold)
+                        Image(systemName: "chevron.down").font(.caption2)
+                    }
+                    Text(controller.viewSlot.coaching)
+                        .font(.caption)
+                        .multilineTextAlignment(.center)
+                    Text(controller.coverageForSubject.summary)
+                        .font(.caption2)
+                        .foregroundStyle(.white.opacity(0.75))
+                }
+                .font(.footnote)
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .frame(maxWidth: 320)
+                .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 14))
+            }
+            .accessibilityLabel(
+                "Next view: \(controller.viewSlot.label). \(controller.viewSlot.coaching) "
+                + "\(controller.coverageForSubject.summary). Tap to choose a different view.")
         }
     }
 
@@ -143,10 +208,10 @@ struct CaptureView: View {
                 HStack(spacing: 6) {
                     Text(subject.entrance.id).fontWeight(.semibold)
                     Text("·")
-                    // Coverage for this doorway, at the doorway. The protocol asks for 5-6 views
-                    // per entrance and the app does not enforce that (D-021 moved to
-                    // capture-protocol.md in the 2026-09-01 pivot), so this is the only place an
-                    // under-shot entrance is visible while it can still be fixed.
+                    // How many photos this doorway has, including the extra angles and
+                    // deviations the protocol allows. Which of the named views are covered is the
+                    // separate question the coaching bar below answers (#289); the app enforces
+                    // neither (D-021 moved to capture-protocol.md in the 2026-09-01 pivot).
                     Text("^[\(controller.capturesForSubject) photo](inflect: true)")
                         .monospacedDigit()
                     Text("·")

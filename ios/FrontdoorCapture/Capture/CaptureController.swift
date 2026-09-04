@@ -293,9 +293,27 @@ final class CaptureController: ObservableObject {
 
     let tally = EntranceTally.inDocuments()
 
-    /// Re-read the count for the entrance in hand. Zero when there is no subject.
+    /// Which of the protocol's six views this entrance already has (#289).
+    ///
+    /// A count answers "how many did I take of this one" and nothing else -- six head-on shots and
+    /// a proper view set look identical to it. This is what lets the viewfinder say which view is
+    /// still missing while the operator is still standing there.
+    @Published private(set) var coverageForSubject = ViewSetCoverage(captured: [])
+
+    /// What the next shot will be recorded as. Offered, never imposed: it follows the coverage to
+    /// the next missing view, and the operator can set it to anything, including a view that is
+    /// already covered.
+    @Published var viewSlot: ViewSlot = .headOn
+
+    let coverage = EntranceCoverage.inDocuments()
+
+    /// Re-read the count and the view coverage for the entrance in hand. Zero when there is no
+    /// subject.
     func refreshSubjectTally() {
         capturesForSubject = subject.map { tally.count(for: $0.entrance.id) } ?? 0
+        coverageForSubject = subject
+            .map { coverage.coverage(for: $0.entrance.id) } ?? ViewSetCoverage(captured: [])
+        viewSlot = coverageForSubject.suggested
     }
 
     /// A frame that passed validation and is waiting for its six ROI points (TICK-026).
@@ -460,15 +478,15 @@ final class CaptureController: ObservableObject {
             let pending = PendingReview(
                 record: record, image: captured.image,
                 imageData: captured.imageData, depthBytes: depth?.bytes)
-            if captureMode.carriesMetrologyTruth {
-                pendingReview = pending
-            } else {
-                // No ROI step under the plain-photo protocol: there are no taps to place, so a
-                // review screen asking for six of them would be a gate with nothing behind it.
-                // The frame becomes a capture at the shutter. `pendingReview` is never set, so
-                // the review sheet cannot flicker into view and back out within one update.
-                commit(pending, taps: nil)
-            }
+            // Both modes pause here now. The reason differs, and the earlier comment -- that a
+            // screening review would be "a gate with nothing behind it" -- was right about ROI
+            // taps and wrong about consent (#275): metrology stops to collect six points,
+            // screening stops to ask whether this photo should be published at all.
+            //
+            // A community scan is a photograph of someone's premises, and the canon puts a
+            // review-before-publish gate in front of it. Committing at the shutter meant there
+            // was no moment at which that question could be asked.
+            pendingReview = pending
         case .failure(let rejection):
             lastCaptureError = rejection.message
         }
@@ -547,6 +565,16 @@ final class CaptureController: ObservableObject {
         commit(pending, taps: taps)
     }
 
+    /// Accept a SCREENING frame: the operator has looked at it and consented to publishing it.
+    ///
+    /// The screening counterpart of `confirmReview`, and the only route from a screening frame to
+    /// a capture. Nothing is hashed, written, counted or queued before this is called -- so
+    /// declining leaves no trace, which is the point of asking.
+    func confirmScreeningReview() {
+        guard let pending = pendingReview else { return }
+        commit(pending, taps: nil)
+    }
+
     /// Turn the frame under review into a capture on disk.
     ///
     /// `taps` is nil for a screening capture, which places none. Everything after this point --
@@ -572,6 +600,12 @@ final class CaptureController: ObservableObject {
             photosTaken += 1
             refreshPendingUploads()
             capturesForSubject = tally.increment(record.entrance.id)
+            // Recorded after the write, like the count, and for the same reason: coverage is
+            // guidance, and losing it must never cost a capture that is already on disk. Then the
+            // offer moves on to the next view still missing -- which is the whole of the coaching:
+            // the operator is told what to shoot next, and refused nothing.
+            coverageForSubject = coverage.record(viewSlot, for: record.entrance.id)
+            viewSlot = coverageForSubject.suggested
             // The last drain's verdict described a queue this capture just changed. Left standing,
             // "Nothing to upload. Everything here is already safe." sits under a nonzero count --
             // observed on the 15 Pro Max, three captures on the phone, the app calling them safe.
@@ -581,10 +615,20 @@ final class CaptureController: ObservableObject {
             lastRecord = record
             lastCaptureError = nil
             pendingReview = nil
-            // The capture is on disk and queued before this runs, so the measurement is a read of
-            // it, never a gate on it. AC6: with no server configured nothing below happens and the
-            // capture flow is byte-for-byte what it was.
-            measure(written, caliperInches: record.entrance.riseInches)
+            // The capture is on disk and queued before this runs, so asking the server is a read
+            // of it, never a gate on it. AC6: with no server configured nothing below happens and
+            // the capture flow is byte-for-byte what it was.
+            //
+            // Which server question gets asked follows the mode, because they are different
+            // questions: metrology asks /measure for a rise, screening asks /screen what features
+            // are visible in a plain photo. Sending a screening frame to /measure returned the
+            // stub arms -- placeholder numbers, correctly banner-ed, and not what the scan flow
+            // is for (#275).
+            if record.captureMode.carriesMetrologyTruth {
+                measure(written, caliperInches: record.entrance.riseInches)
+            } else {
+                screen(written, entranceId: record.entrance.id)
+            }
         case .failure(let failure):
             // Complete-or-nothing (AC5): nothing is counted for a capture that is not on disk.
             //
@@ -594,6 +638,51 @@ final class CaptureController: ObservableObject {
             // retaken. That is why the screening path refuses so little: the camera-model gate
             // does not apply to it, and the remaining failures are disk failures.
             lastCaptureError = failure.message
+        }
+    }
+
+    // MARK: screening (#275)
+
+    /// The named checks for the last screening capture: on screen from the moment the photo is
+    /// sent, so the criteria are named while the answer is being waited for.
+    @Published var screeningRun: ScreeningRun?
+
+    /// Built from the same Info.plist settings as the uploader and the measure client, so a build
+    /// has one server or none. Nil when the build has no server, which is what keeps this additive.
+    var screenClient: ScreenClient? = UploadSettings.fromBundle().serverURL
+        .map { ScreenClient(baseURL: $0) }
+
+    /// Ask the server what accessibility features are visible in a photo already safe on disk.
+    ///
+    /// Not awaited, for the same reason `measure` is not: this waits on a vision model for tens of
+    /// seconds, and the operator has to be able to take the next frame. The verdicts are a read of
+    /// a capture that is already written and queued, whatever comes back.
+    private func screen(_ written: CaptureWriter.Written, entranceId: String) {
+        guard let screenClient else { return }
+        let image: Data
+        do {
+            image = try Data(contentsOf: written.imageURL)
+        } catch {
+            screeningRun = ScreeningRun(
+                entranceId: entranceId, startedAt: Date(),
+                outcome: .failed(ScreenClient.Failure.unreadable(error.localizedDescription).message))
+            return
+        }
+        let run = ScreeningRun(entranceId: entranceId, startedAt: Date(), outcome: .inFlight)
+        screeningRun = run
+        Task { [screenClient, filename = written.imageURL.lastPathComponent] in
+            let outcome = await screenClient.screen(
+                image: image, entranceId: entranceId, filename: filename)
+            // Only if this run is still the one on screen. A second photo taken while the first was
+            // in flight has already replaced it, and letting the older answer land would show the
+            // previous doorway's verdicts under the current one's heading.
+            guard screeningRun?.id == run.id else { return }
+            switch outcome {
+            case .success(let response):
+                screeningRun?.outcome = .assessed(response)
+            case .failure(let failure):
+                screeningRun?.outcome = .failed(failure.message)
+            }
         }
     }
 

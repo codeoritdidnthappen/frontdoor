@@ -61,6 +61,14 @@ struct RootView: View {
                 controller.measurement = nil
             }
         }
+        // The scan flow's result surface, over the viewfinder like the measurement sheet. It
+        // opens when the photo is SENT, not when the answer arrives, so the checks are named while
+        // the server is still reading the photo (#275).
+        .sheet(item: $controller.screeningRun) { run in
+            ScreeningChecksView(run: run) {
+                controller.screeningRun = nil
+            }
+        }
         .sheet(isPresented: $showingDiagnostics) {
             DiagnosticsView { showingDiagnostics = false }
         }

@@ -15,6 +15,9 @@ import Foundation
 /// It answers the one question the paper checklist cannot answer at the door -- how many did I
 /// already take of this one -- which under D-036 is asked by a single operator across 40-60
 /// entrances with no second phone shooting the same doorway.
+///
+/// Which named views an entrance has is a different question and lives next door, in
+/// `EntranceCoverage` (#289). A count of six is not the same fact as a complete set.
 struct EntranceTally {
     var url: URL
 
