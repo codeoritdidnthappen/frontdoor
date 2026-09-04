@@ -293,9 +293,27 @@ final class CaptureController: ObservableObject {
 
     let tally = EntranceTally.inDocuments()
 
-    /// Re-read the count for the entrance in hand. Zero when there is no subject.
+    /// Which of the protocol's six views this entrance already has (#289).
+    ///
+    /// A count answers "how many did I take of this one" and nothing else -- six head-on shots and
+    /// a proper view set look identical to it. This is what lets the viewfinder say which view is
+    /// still missing while the operator is still standing there.
+    @Published private(set) var coverageForSubject = ViewSetCoverage(captured: [])
+
+    /// What the next shot will be recorded as. Offered, never imposed: it follows the coverage to
+    /// the next missing view, and the operator can set it to anything, including a view that is
+    /// already covered.
+    @Published var viewSlot: ViewSlot = .headOn
+
+    let coverage = EntranceCoverage.inDocuments()
+
+    /// Re-read the count and the view coverage for the entrance in hand. Zero when there is no
+    /// subject.
     func refreshSubjectTally() {
         capturesForSubject = subject.map { tally.count(for: $0.entrance.id) } ?? 0
+        coverageForSubject = subject
+            .map { coverage.coverage(for: $0.entrance.id) } ?? ViewSetCoverage(captured: [])
+        viewSlot = coverageForSubject.suggested
     }
 
     /// A frame that passed validation and is waiting for its six ROI points (TICK-026).
@@ -582,6 +600,12 @@ final class CaptureController: ObservableObject {
             photosTaken += 1
             refreshPendingUploads()
             capturesForSubject = tally.increment(record.entrance.id)
+            // Recorded after the write, like the count, and for the same reason: coverage is
+            // guidance, and losing it must never cost a capture that is already on disk. Then the
+            // offer moves on to the next view still missing -- which is the whole of the coaching:
+            // the operator is told what to shoot next, and refused nothing.
+            coverageForSubject = coverage.record(viewSlot, for: record.entrance.id)
+            viewSlot = coverageForSubject.suggested
             // The last drain's verdict described a queue this capture just changed. Left standing,
             // "Nothing to upload. Everything here is already safe." sits under a nonzero count --
             // observed on the 15 Pro Max, three captures on the phone, the app calling them safe.
