@@ -3,69 +3,316 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>frontdoor — screened entrances</title>
+<title>frontdoor — accessibility map</title>
 <style>
-  html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
-  #map { height: 100%; }
+  /* ------------------------------------------------------------------ *
+   * Design tokens (the agreed UI reference).                            *
+   * Ground: soft lavender. Cards: white, generous radius, airy.         *
+   * Accents: marigold (Scanned tier / action), purple (Owner tier /     *
+   * links), soft blue (Estimated tier / feature icons).                 *
+   * The match-state hue is reserved for a future needs-match chip and   *
+   * deliberately does not exist on this page; confidence dots use the   *
+   * tier's own hue. Amber is freshness aging only. No negative hue      *
+   * exists anywhere in the product.                                     *
+   * ------------------------------------------------------------------ */
+  :root {
+    --ground: #EDEBFA;
+    --card: #FFFFFF;
+    --ink: #2B2547;
+    --muted: #5A5470;
+    --line: #DDD8F0;
+
+    --blue: #4C7DDE;
+    --blue-deep: #2F55B0;
+    --blue-soft: #E7EEFB;
+
+    --marigold: #F0A32B;
+    --marigold-deep: #7A5000;
+    --marigold-soft: #FBEAC8;
+    --marigold-glyph: #4A3406;
+
+    --purple: #6C4FD8;
+    --purple-deep: #4C36A8;
+    --purple-soft: #EAE4FA;
+
+    --amber-ink: #92600A;
+    --amber-soft: #FDF1D8;
+
+    --radius: 16px;
+    --shadow: 0 6px 24px rgba(43, 37, 71, .16);
+  }
+
+  html, body {
+    height: 100%; margin: 0;
+    font-family: "Segoe UI", ui-rounded, "SF Pro Rounded", system-ui, sans-serif;
+    color: var(--ink);
+    background: var(--ground);
+  }
+  #map { height: 100%; background: var(--ground); }
 
   #banner {
-    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
-    z-index: 5; background: #fff; border: 1px solid #d1d5db; border-radius: 8px;
-    padding: 10px 16px; font-size: 14px; color: #374151;
-    box-shadow: 0 2px 8px rgba(0,0,0,.15); max-width: 80%;
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    z-index: 6; background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 10px 18px; font-size: 14px;
+    color: var(--muted); box-shadow: var(--shadow); max-width: 80%;
   }
   #banner:empty { display: none; }
 
-  /* Exactly two stamp states. Green-or-Gray is enforced server-side by
-     frontdoor.map_states.state_for_row; stampClass() below mirrors it as a
-     total, default-neutral guard. There is deliberately no third class. */
-  .stamp {
-    display: flex; align-items: center; gap: 6px;
-    padding: 5px 10px; border-radius: 999px;
-    font-size: 12px; font-weight: 600; white-space: nowrap;
-    box-shadow: 0 2px 6px rgba(0,0,0,.25);
-    cursor: pointer;
+  /* ------------------------------------------------------------------ *
+   * Pins. Exactly three trust tiers, and the encoding is shape + glyph  *
+   * + hue, never hue alone:                                             *
+   *   tier-estimated  hollow pin, dashed blue outline, italic i glyph,  *
+   *                   sparkle-in-dashed-circle accessory when the       *
+   *                   estimate is AI-derived                            *
+   *   tier-scanned    solid marigold pin, person glyph, segmented ring  *
+   *   tier-owner      solid purple pin, storefront glyph, outlined      *
+   *                   floating check                                    *
+   * Pins only upgrade. There is no negative rendering; every state the  *
+   * server can emit maps to Estimated or above (see tierClass below).   *
+   * ------------------------------------------------------------------ */
+  .pin {
+    position: relative; width: 36px; height: 48px; cursor: pointer;
+    filter: drop-shadow(0 3px 5px rgba(43, 37, 71, .28));
   }
-  .stamp::before { content: ""; width: 8px; height: 8px; border-radius: 50%; }
-  .stamp-verified { background: #15803d; color: #fff; }
-  .stamp-verified::before { background: #bbf7d0; }
-  .stamp-neutral { background: #f3f4f6; color: #4b5563; border: 1px solid #d1d5db; }
-  .stamp-neutral::before { background: #9ca3af; }
+  .pin:focus-visible {
+    outline: 3px solid var(--purple-deep); outline-offset: 3px;
+    border-radius: 12px;
+  }
+  .pin > svg { display: block; overflow: visible; }
 
-  @keyframes stamp-drop {
-    0%   { transform: translateY(-60px); opacity: 0; }
-    70%  { transform: translateY(4px); opacity: 1; }
+  .accessory {
+    position: absolute; display: grid; place-items: center;
+    background: var(--card); border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(43, 37, 71, .25);
+  }
+  .pin-spark {
+    top: -7px; right: -9px; width: 17px; height: 17px;
+    border: 1.5px dashed var(--blue); color: var(--blue-deep);
+    font-size: 10px; line-height: 1; font-style: normal;
+  }
+  .pin-check { top: -6px; right: -11px; width: 18px; height: 18px; }
+  .pin-star  { top: 13px; left: -10px; width: 17px; height: 17px; }
+  .pin-ring  { position: absolute; top: -7px; left: -5px; pointer-events: none; }
+
+  /* State-records layer: when the toggle is on, every pin carrying a
+     state-record provenance line lifts with a purple halo. */
+  .sr-on .pin.has-state-record {
+    filter: drop-shadow(0 0 7px var(--purple)) drop-shadow(0 3px 5px rgba(43, 37, 71, .28));
+    transform: scale(1.12); transform-origin: bottom center;
+  }
+
+  @keyframes pin-drop {
+    0%   { transform: translateY(-46px); opacity: 0; }
+    70%  { transform: translateY(5px); opacity: 1; }
     100% { transform: translateY(0); opacity: 1; }
   }
-  .stamp-dropping { animation: stamp-drop .45s ease-out backwards; }
+  .pin-drop { animation: pin-drop .5s ease-out backwards; }
 
-  .card { font-size: 13px; color: #1f2937; max-width: 280px; }
-  .card h3 { margin: 0 0 2px; font-size: 14px; }
-  .card .state { font-weight: 600; margin: 0 0 8px; }
-  .card table { border-collapse: collapse; width: 100%; }
-  .card td { padding: 2px 0; vertical-align: top; }
-  .card td:last-child { text-align: right; color: #4b5563; white-space: nowrap; padding-left: 10px; }
-  .card .meta { margin: 8px 0 0; color: #6b7280; }
-  .card .provenance { margin: 8px 0 0; color: #374151; }
-  .card .provenance .attribution { color: #9ca3af; font-size: 11px; }
-  .card .note { margin: 8px 0 0; color: #6b7280; font-style: italic; }
+  .ripple {
+    position: absolute; left: 50%; bottom: -4px; width: 34px; height: 12px;
+    transform: translateX(-50%); border: 2px solid var(--marigold);
+    border-radius: 50%; opacity: 0; pointer-events: none;
+    animation: ripple-out .9s ease-out .1s;
+  }
+  @keyframes ripple-out {
+    0%   { transform: translateX(-50%) scale(.4); opacity: .9; }
+    100% { transform: translateX(-50%) scale(2.4); opacity: 0; }
+  }
+
+  /* ------------------------------------------------------------------ *
+   * Layers panel (top right).                                           *
+   * ------------------------------------------------------------------ */
+  #layers {
+    position: absolute; top: 14px; right: 14px; z-index: 6;
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--radius); box-shadow: var(--shadow);
+    padding: 10px 14px; font-size: 13px;
+  }
+  #layers label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  #layers label.off { color: var(--muted); cursor: not-allowed; }
+  #layers input { accent-color: var(--purple); width: 15px; height: 15px; }
+
+  /* ------------------------------------------------------------------ *
+   * Bottom sheet card ("receipts card").                                *
+   * ------------------------------------------------------------------ */
+  #sheet {
+    position: absolute; left: 50%; bottom: 0; transform: translateX(-50%);
+    z-index: 7; width: min(480px, calc(100% - 20px));
+    background: var(--card); border-radius: 20px 20px 0 0;
+    box-shadow: 0 -8px 32px rgba(43, 37, 71, .24);
+    padding: 18px 20px 16px; box-sizing: border-box;
+    max-height: 62%; overflow-y: auto; font-size: 14px;
+  }
+  #sheet:focus-visible { outline: 3px solid var(--purple-deep); outline-offset: -3px; }
+
+  .sheet-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .avatar {
+    width: 40px; height: 40px; border-radius: 14px; flex: none;
+    display: grid; place-items: center;
+  }
+  .tier-estimated .avatar { background: var(--blue-soft); border: 1.5px dashed var(--blue); }
+  .tier-scanned   .avatar { background: var(--marigold); }
+  .tier-owner     .avatar { background: var(--purple); }
+  .sheet-head h2 { margin: 0; font-size: 17px; flex: 1; min-width: 0; }
+  .chip {
+    display: inline-block; padding: 3px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; white-space: nowrap;
+  }
+  .tier-estimated .chip { background: var(--blue-soft); color: var(--blue-deep); border: 1px dashed var(--blue); }
+  .tier-scanned   .chip { background: var(--marigold-soft); color: var(--marigold-deep); }
+  .tier-owner     .chip { background: var(--purple-soft); color: var(--purple-deep); }
+
+  .close-btn {
+    flex: none; width: 30px; height: 30px; border-radius: 50%;
+    border: 1px solid var(--line); background: var(--card); color: var(--muted);
+    font-size: 15px; cursor: pointer; line-height: 1;
+  }
+  .close-btn:focus-visible { outline: 3px solid var(--purple-deep); outline-offset: 2px; }
+
+  .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+  .tile {
+    background: #F4F2FC; border-radius: 12px; padding: 10px 12px;
+  }
+  .tile .tile-label { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .tile .tile-value { font-size: 15px; font-weight: 600; margin-top: 2px; display: flex; align-items: center; gap: 7px; }
+  /* Freshness ages to muted amber — wording stays about time, never the place. */
+  .tile.freshness.stale { background: var(--amber-soft); }
+  .tile.freshness.stale .tile-value, .tile.freshness.stale .tile-label { color: var(--amber-ink); }
+
+  /* Confidence dot-triples take the tier's own hue. The match-state hue
+     is reserved and never used for confidence. */
+  .dots { display: inline-flex; gap: 3px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; border: 1.5px solid var(--line); background: transparent; }
+  .tier-estimated .dot.filled { background: var(--blue); border-color: var(--blue); }
+  .tier-scanned   .dot.filled { background: var(--marigold); border-color: var(--marigold); }
+  .tier-owner     .dot.filled { background: var(--purple); border-color: var(--purple); }
+
+  .receipts, .features { list-style: none; margin: 0 0 12px; padding: 0; }
+  .receipts li, .features li {
+    display: flex; align-items: baseline; gap: 9px;
+    padding: 7px 0; border-top: 1px solid var(--line);
+  }
+  .receipts li:first-child, .features li:first-child { border-top: 0; }
+  .row-icon { flex: none; width: 18px; text-align: center; color: var(--blue-deep); align-self: center; }
+  .receipts .attribution { color: var(--muted); font-size: 11px; }
+  .receipts .cta { color: var(--blue-deep); }
+  .features .feature-name { flex: 1; min-width: 0; }
+  .features .obs { color: var(--muted); font-size: 12px; white-space: nowrap; }
+  .unknown-row { color: var(--muted); font-style: italic; }
+
+  .correction {
+    display: inline-flex; align-items: center; gap: 6px;
+    color: var(--purple-deep); font-weight: 600; text-decoration: none;
+    margin-bottom: 12px;
+  }
+  .correction:hover { text-decoration: underline; }
+  .correction:focus-visible { outline: 3px solid var(--purple-deep); outline-offset: 2px; border-radius: 6px; }
+
+  .sheet-actions { display: flex; gap: 10px; margin-bottom: 10px; }
+  .sheet-actions button {
+    flex: 1; padding: 9px 0; border-radius: 999px; font-size: 13px; font-weight: 600;
+    border: 1px solid var(--line); background: #F4F2FC; color: var(--muted);
+    font-family: inherit;
+  }
+  .sheet-actions button[disabled] { cursor: not-allowed; }
+
+  .note { margin: 0; color: var(--muted); font-style: italic; font-size: 12px; }
+
+  /* ------------------------------------------------------------------ *
+   * Demo controls (?demo=1 only; nothing below renders otherwise).      *
+   * ------------------------------------------------------------------ */
+  #demo-holder { position: absolute; bottom: 18px; left: 14px; z-index: 6; }
+  #demo-holder button {
+    background: var(--marigold); color: var(--marigold-glyph);
+    border: 0; border-radius: 999px; padding: 11px 20px;
+    font-size: 14px; font-weight: 700; font-family: inherit;
+    box-shadow: var(--shadow); cursor: pointer;
+  }
+  #demo-holder button[disabled] { opacity: .55; cursor: wait; }
+  #demo-holder button:focus-visible { outline: 3px solid var(--purple-deep); outline-offset: 2px; }
+
+  #scanbox {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    z-index: 8; background: var(--card); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 18px 22px; width: 250px;
+    font-size: 13px;
+  }
+  #scanbox h3 { margin: 0 0 10px; font-size: 14px; display: flex; align-items: center; gap: 10px; }
+  #scanbox .ring { flex: none; }
+  #scanbox .ring .track { stroke: var(--line); }
+  #scanbox .ring .fill {
+    stroke: var(--marigold); stroke-linecap: round;
+    stroke-dasharray: 138.2; stroke-dashoffset: 138.2;
+    animation: ring-fill 4.4s linear forwards;
+  }
+  @keyframes ring-fill { to { stroke-dashoffset: 0; } }
+  #scanbox ul { list-style: none; margin: 0; padding: 0; }
+  #scanbox li { padding: 5px 0; color: var(--muted); display: flex; gap: 8px; align-items: center; }
+  #scanbox li .tick { visibility: hidden; color: var(--blue-deep); font-weight: 700; }
+  #scanbox li.ticked { color: var(--ink); }
+  #scanbox li.ticked .tick { visibility: visible; }
+
+  /* prefers-reduced-motion collapses every animation to its end state. */
+  @media (prefers-reduced-motion: reduce) {
+    .pin-drop, .ripple, #scanbox .ring .fill { animation: none !important; }
+    #scanbox .ring .fill { stroke-dashoffset: 0; }
+    .sr-on .pin.has-state-record { transform: none; }
+  }
 </style>
 </head>
 <body>
-<div id="map"></div>
-<div id="banner"></div>
+<div id="map" role="application" aria-label="Accessibility map"></div>
+<div id="banner" role="status"></div>
+
+<div id="layers" role="group" aria-label="Map layers">
+  <label id="sr-label">
+    <input type="checkbox" id="sr-toggle" aria-describedby="sr-hint">
+    <svg width="15" height="15" viewBox="0 0 16 16" aria-hidden="true">
+      <path d="M8 1.6l1.8 3.7 4.1.6-3 2.9.7 4.1L8 11l-3.6 1.9.7-4.1-3-2.9 4.1-.6z"
+            fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>
+    </svg>
+    State records
+  </label>
+  <span id="sr-hint" hidden></span>
+</div>
+
+<div id="sheet" role="dialog" aria-modal="false" aria-label="Place details" tabindex="-1" hidden></div>
+
 <script>
 "use strict";
 
 var VERIFIED_STATE = "verified_accessible";
 
-// Mirror of frontdoor.map_states.state_for_row's output contract: total and
-// default-neutral. Only the exact server-computed verified state renders the
-// green stamp; every other value — including anything unexpected — renders
-// neutral. No input can select a third look.
-function stampClass(state) {
-  return state === VERIFIED_STATE ? "stamp-verified" : "stamp-neutral";
+var TIER_LABELS = {
+  "tier-estimated": "Estimated",
+  "tier-scanned": "Scanned on-site",
+  "tier-owner": "Owner-confirmed"
+};
+
+// Honest tier mapping, mirroring the server's two-state contract
+// (frontdoor.map_states.state_for_row): total and default-Estimated.
+// Only the exact server-computed verified state — which requires human,
+// non-imagery confirmation server-side — renders the Scanned tier. Nothing
+// in today's data can reach the Owner tier; that class exists in the visual
+// system only, and no input can select it here. ai_estimated rows and every
+// unexpected value render Estimated. Pins only upgrade; no negative state
+// exists.
+function tierClass(state) { return state === VERIFIED_STATE ? "tier-scanned" : "tier-estimated"; }
+
+// State-record provenance detection, keyed on the provenance source string.
+// TABS/TDLR data is a later round; the mechanism is ready for it and
+// degrades to a disabled layer toggle when zero pins qualify.
+function isStateRecordLine(line) {
+  var source = line && line.source;
+  return typeof source === "string" && /^(tabs|tdlr|texas)/i.test(source);
 }
+
+function pinHasStateRecord(pin) {
+  return (pin.provenance || []).some(isStateRecordLine);
+}
+
+var REDUCED_MOTION = window.matchMedia &&
+  window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 function banner(text) {
   document.getElementById("banner").textContent = text || "";
@@ -78,60 +325,414 @@ function el(tag, className, text) {
   return node;
 }
 
-function stampElement(pin, index) {
-  var stamp = el("div", "stamp " + stampClass(pin.state) + " stamp-dropping",
-                 pin.label || "Not Yet Checked");
-  stamp.style.animationDelay = (index * 60) + "ms";
-  stamp.addEventListener("animationend", function () {
-    stamp.classList.remove("stamp-dropping");
-  });
-  return stamp;
+function svgEl(markup, className, width, height) {
+  var holder = el("span", className);
+  holder.innerHTML = "<svg width=\"" + width + "\" height=\"" + height +
+    "\" viewBox=\"0 0 " + width + " " + height + "\" aria-hidden=\"true\">" +
+    markup + "</svg>";
+  return holder;
 }
 
-function checklistCard(pin, note) {
-  var card = el("div", "card");
-  card.appendChild(el("h3", null, pin.name || "Unnamed business"));
-  card.appendChild(el("p", "state", pin.label || "Not Yet Checked"));
+/* ---------------------------------------------------------------------- *
+ * Pin construction: shape + glyph + hue per tier, plus accessories.       *
+ * ---------------------------------------------------------------------- */
 
-  var table = el("table");
-  var hasData = false;
-  (pin.checklist || []).forEach(function (item) {
-    var row = el("tr");
-    row.appendChild(el("td", null, item.label));
-    var value = item.observation_label || "Not assessed";
-    if (typeof item.confidence === "number" && item.confidence >= 0 && item.confidence <= 1) {
-      value += " (" + Math.round(item.confidence * 100) + "% confidence)";
-      hasData = true;
-    }
-    if (item.observation && item.observation !== "not_assessed") hasData = true;
-    row.appendChild(el("td", null, value));
-    table.appendChild(row);
+var PIN_PATH = "M18 2C10.3 2 4 8.3 4 16c0 10.5 14 28 14 28s14-17.5 14-28C32 8.3 25.7 2 18 2z";
+
+function pinBodySvg(tier) {
+  var svg;
+  if (tier === "tier-scanned") {
+    svg = "<path d=\"" + PIN_PATH + "\" fill=\"var(--marigold)\"/>" +
+      "<circle cx=\"18\" cy=\"12\" r=\"3.6\" fill=\"var(--marigold-glyph)\"/>" +
+      "<path d=\"M11 25c0-4 3.1-6.5 7-6.5s7 2.5 7 6.5H11z\" fill=\"var(--marigold-glyph)\"/>";
+  } else if (tier === "tier-owner") {
+    svg = "<path d=\"" + PIN_PATH + "\" fill=\"var(--purple)\"/>" +
+      "<rect x=\"10\" y=\"8.5\" width=\"16\" height=\"3.5\" rx=\"1.5\" fill=\"#fff\"/>" +
+      "<rect x=\"11.5\" y=\"13.5\" width=\"13\" height=\"9\" rx=\"1.2\" fill=\"#fff\"/>" +
+      "<rect x=\"15.8\" y=\"16.2\" width=\"4.4\" height=\"6.3\" fill=\"var(--purple)\"/>";
+  } else {
+    svg = "<path d=\"" + PIN_PATH + "\" fill=\"#fff\" stroke=\"var(--blue)\"" +
+      " stroke-width=\"2.2\" stroke-dasharray=\"5 4\" stroke-linecap=\"round\"/>" +
+      "<text x=\"18\" y=\"21.5\" text-anchor=\"middle\" font-size=\"15\"" +
+      " font-style=\"italic\" font-weight=\"700\" fill=\"var(--blue-deep)\">i</text>";
+  }
+  return "<svg width=\"36\" height=\"48\" viewBox=\"0 0 36 48\" aria-hidden=\"true\">" + svg + "</svg>";
+}
+
+function pinElement(pin, index) {
+  var tier = tierClass(pin.state);
+  var node = el("div", "pin " + tier + " pin-drop");
+  node.setAttribute("role", "button");
+  node.setAttribute("tabindex", "0");
+  node.setAttribute("aria-label",
+    (pin.name || "Unnamed business") + " — " + TIER_LABELS[tier] + ". Open details.");
+  node.innerHTML = pinBodySvg(tier);
+
+  if (tier === "tier-scanned") {
+    node.appendChild(svgEl(
+      "<circle cx=\"23\" cy=\"23\" r=\"20\" fill=\"none\" stroke=\"var(--marigold)\"" +
+      " stroke-width=\"2.4\" stroke-dasharray=\"8 6\" stroke-linecap=\"round\"/>",
+      "pin-ring", 46, 46));
+  }
+  if (tier === "tier-owner") {
+    node.appendChild(svgEl(
+      "<circle cx=\"9\" cy=\"9\" r=\"7.6\" fill=\"#fff\" stroke=\"var(--purple)\" stroke-width=\"1.6\"/>" +
+      "<path d=\"M5.6 9.3l2.2 2.2 4.4-4.6\" fill=\"none\" stroke=\"var(--purple)\"" +
+      " stroke-width=\"1.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/>",
+      "accessory pin-check", 18, 18));
+  }
+  if (tier === "tier-estimated" && pin.ai_estimated) {
+    node.appendChild(el("span", "accessory pin-spark", "✦"));
+  }
+  if (pinHasStateRecord(pin)) {
+    node.classList.add("has-state-record");
+    node.appendChild(svgEl(
+      "<path d=\"M8.5 2.2l1.7 3.4 3.8.6-2.8 2.7.7 3.8-3.4-1.8-3.4 1.8.7-3.8-2.8-2.7 3.8-.6z\"" +
+      " fill=\"none\" stroke=\"var(--purple-deep)\" stroke-width=\"1.3\" stroke-linejoin=\"round\"/>",
+      "accessory pin-star", 17, 17));
+  }
+
+  node.style.animationDelay = (index * 60) + "ms";
+  node.addEventListener("animationend", function () {
+    node.classList.remove("pin-drop");
+    node.style.animationDelay = "";
   });
-  card.appendChild(table);
+  return node;
+}
 
-  // Optional external provenance lines (TICK-258). Server-side code emits
-  // only positive, attributed source+date lines; this renders them verbatim
-  // and never derives any state from them.
+/* ---------------------------------------------------------------------- *
+ * Card helpers.                                                           *
+ * ---------------------------------------------------------------------- */
+
+var MONTHS = ["January", "February", "March", "April", "May", "June", "July",
+  "August", "September", "October", "November", "December"];
+
+// Freshness is worded about time, never about the place, and ages to amber
+// (class "stale") past twelve months.
+function freshness(dateStr) {
+  if (typeof dateStr !== "string" || !/^\d{4}-\d{2}/.test(dateStr)) {
+    return { text: "Date unknown", monthName: null, stale: false, known: false };
+  }
+  var y = +dateStr.slice(0, 4), m = +dateStr.slice(5, 7);
+  var now = new Date();
+  var months = (now.getFullYear() - y) * 12 + (now.getMonth() + 1 - m);
+  if (months < 0) months = 0;
+  var text = months === 0 ? "This month"
+    : months === 1 ? "1 month ago"
+    : months < 24 ? months + " months ago"
+    : "In " + MONTHS[m - 1] + " " + y;
+  return { text: text, monthName: MONTHS[m - 1] + " " + y, stale: months > 12, known: true };
+}
+
+function confidenceSummary(checklist) {
+  var values = [];
+  (checklist || []).forEach(function (item) {
+    if (item && typeof item.confidence === "number" &&
+        item.confidence >= 0 && item.confidence <= 1) {
+      values.push(item.confidence);
+    }
+  });
+  if (!values.length) return { label: "Awaiting scan", dots: 0 };
+  var mean = values.reduce(function (a, b) { return a + b; }, 0) / values.length;
+  if (mean >= 0.75) return { label: "High", dots: 3 };
+  if (mean >= 0.5) return { label: "Medium", dots: 2 };
+  return { label: "Low", dots: 1 };
+}
+
+function dotsFor(confidence) {
+  if (typeof confidence !== "number" || confidence < 0 || confidence > 1) return 0;
+  return confidence >= 0.75 ? 3 : confidence >= 0.5 ? 2 : 1;
+}
+
+function dotTriple(count) {
+  var dots = el("span", "dots");
+  dots.setAttribute("role", "img");
+  dots.setAttribute("aria-label", "Confidence " + count + " of 3");
+  for (var i = 0; i < 3; i++) {
+    dots.appendChild(el("span", i < count ? "dot filled" : "dot"));
+  }
+  return dots;
+}
+
+var FEATURE_ICONS = {
+  ramp_or_bevel: "<path d=\"M2 14L14 5v9z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\" stroke-linejoin=\"round\"/>",
+  handrails: "<path d=\"M2 6h9a3 3 0 013 3v5M4 6v8M8 6v8\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\" stroke-linecap=\"round\"/>",
+  accessible_door_hardware: "<rect x=\"4\" y=\"2\" width=\"8\" height=\"12\" rx=\"1\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"/><circle cx=\"10\" cy=\"8.5\" r=\"1.2\" fill=\"currentColor\"/>",
+  accessibility_signage: "<rect x=\"3\" y=\"3\" width=\"10\" height=\"10\" rx=\"2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.4\"/><circle cx=\"8\" cy=\"6.4\" r=\"1\" fill=\"currentColor\"/><path d=\"M8 8v3M6.4 9.2h3.2\" stroke=\"currentColor\" stroke-width=\"1.2\" stroke-linecap=\"round\"/>"
+};
+
+var SOURCE_ICONS = {
+  camera: "<rect x=\"2\" y=\"5\" width=\"12\" height=\"8.5\" rx=\"1.6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\"/><circle cx=\"8\" cy=\"9.2\" r=\"2.2\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\"/><path d=\"M6 5l1-1.6h2L10 5\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\"/>",
+  globe: "<circle cx=\"8\" cy=\"8\" r=\"6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\"/><path d=\"M2 8h12M8 2c-2.4 3.6-2.4 8.4 0 12 2.4-3.6 2.4-8.4 0-12z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.1\"/>",
+  star: "<path d=\"M8 1.8l1.8 3.6 4 .6-2.9 2.8.7 4L8 10.9l-3.6 1.9.7-4L2.2 6l4-.6z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linejoin=\"round\"/>",
+  doc: "<path d=\"M4 2h6l3 3v9H4z\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linejoin=\"round\"/><path d=\"M6 8h5M6 10.5h5\" stroke=\"currentColor\" stroke-width=\"1.1\" stroke-linecap=\"round\"/>"
+};
+
+function sourceIcon(line) {
+  if (isStateRecordLine(line)) return SOURCE_ICONS.star;
+  if (line && line.source === "openstreetmap") return SOURCE_ICONS.globe;
+  return SOURCE_ICONS.doc;
+}
+
+function rowIcon(markup) {
+  return svgEl(markup, "row-icon", 16, 16);
+}
+
+/* ---------------------------------------------------------------------- *
+ * Bottom sheet.                                                           *
+ * ---------------------------------------------------------------------- */
+
+var lastFocusedPin = null;
+
+function closeSheet() {
+  var sheet = document.getElementById("sheet");
+  if (sheet.hidden) return;
+  sheet.hidden = true;
+  sheet.innerHTML = "";
+  if (lastFocusedPin) { lastFocusedPin.focus(); lastFocusedPin = null; }
+}
+
+function openSheet(pin, sourceElement) {
+  var sheet = document.getElementById("sheet");
+  var tier = tierClass(pin.state);
+  var name = pin.name || "Unnamed business";
+  lastFocusedPin = sourceElement || null;
+  sheet.className = tier;
+  sheet.setAttribute("aria-label", name + " details");
+  sheet.innerHTML = "";
+
+  // 1. Tier avatar + business name + tier chip + close.
+  var head = el("div", "sheet-head");
+  var avatar = el("span", "avatar");
+  avatar.innerHTML = "<svg width=\"22\" height=\"22\" viewBox=\"7 4 22 24\" aria-hidden=\"true\">" +
+    (tier === "tier-scanned"
+      ? "<circle cx=\"18\" cy=\"12\" r=\"3.6\" fill=\"var(--marigold-glyph)\"/><path d=\"M11 25c0-4 3.1-6.5 7-6.5s7 2.5 7 6.5H11z\" fill=\"var(--marigold-glyph)\"/>"
+      : tier === "tier-owner"
+      ? "<rect x=\"10\" y=\"8.5\" width=\"16\" height=\"3.5\" rx=\"1.5\" fill=\"#fff\"/><rect x=\"11.5\" y=\"13.5\" width=\"13\" height=\"9\" rx=\"1.2\" fill=\"#fff\"/><rect x=\"15.8\" y=\"16.2\" width=\"4.4\" height=\"6.3\" fill=\"var(--purple)\"/>"
+      : "<text x=\"18\" y=\"22\" text-anchor=\"middle\" font-size=\"16\" font-style=\"italic\" font-weight=\"700\" fill=\"var(--blue-deep)\">i</text>") +
+    "</svg>";
+  head.appendChild(avatar);
+  var h2 = el("h2", null, name);
+  head.appendChild(h2);
+  head.appendChild(el("span", "chip", TIER_LABELS[tier]));
+  var closeBtn = el("button", "close-btn", "✕");
+  closeBtn.setAttribute("aria-label", "Close details");
+  closeBtn.addEventListener("click", closeSheet);
+  head.appendChild(closeBtn);
+  sheet.appendChild(head);
+
+  // 2. Freshness + confidence tiles.
+  var tiles = el("div", "tiles");
+  var fresh = freshness(pin.imagery_date);
+  var freshTile = el("div", "tile freshness" + (fresh.stale ? " stale" : ""));
+  freshTile.appendChild(el("div", "tile-label", "Imagery"));
+  var freshValue = el("div", "tile-value");
+  freshValue.appendChild(rowIcon(
+    "<circle cx=\"8\" cy=\"8\" r=\"6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\"/>" +
+    "<path d=\"M8 4.6V8l2.3 1.6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linecap=\"round\"/>"));
+  freshValue.appendChild(el("span", null, fresh.text));
+  freshTile.appendChild(freshValue);
+  tiles.appendChild(freshTile);
+
+  var conf = confidenceSummary(pin.checklist);
+  var confTile = el("div", "tile");
+  confTile.appendChild(el("div", "tile-label", "Confidence"));
+  var confValue = el("div", "tile-value");
+  confValue.appendChild(el("span", null, conf.label));
+  confValue.appendChild(dotTriple(conf.dots));
+  confTile.appendChild(confValue);
+  tiles.appendChild(confTile);
+  sheet.appendChild(tiles);
+
+  // 3. Provenance rows (receipts). The Estimated tier's line always ends in
+  // the replacement invitation — the estimate visibly wants to be replaced.
+  var receipts = el("ul", "receipts");
+  if (pin.ai_estimated) {
+    var cta = el("li");
+    cta.appendChild(rowIcon(SOURCE_ICONS.camera));
+    var ctaText = el("span", "cta",
+      "Estimated by AI from street imagery" +
+      (fresh.known ? " · " + fresh.monthName : "") +
+      " — been here? Confirm or correct in 30 seconds");
+    cta.appendChild(ctaText);
+    receipts.appendChild(cta);
+  }
+  // Optional external provenance lines (composes with the external-data
+  // work): rendered verbatim when present, nothing rendered when absent or
+  // malformed, and no state is ever derived from them.
   (pin.provenance || []).forEach(function (line) {
     if (!line || typeof line.label !== "string") return;
-    var p = el("p", "provenance", line.label);
+    var li = el("li");
+    li.appendChild(rowIcon(sourceIcon(line)));
+    var span = el("span", null, line.label);
     if (typeof line.detail === "string") {
-      p.appendChild(el("span", "attribution", " · " + line.detail));
+      span.appendChild(el("span", "attribution", " · " + line.detail));
     }
-    card.appendChild(p);
+    li.appendChild(span);
+    receipts.appendChild(li);
   });
+  if (receipts.children.length) sheet.appendChild(receipts);
 
-  if (!hasData) {
-    card.appendChild(el("p", "meta", "No screening data yet for this location."));
+  // 4. Feature rows: named by what was seen, dot-triple in the tier hue.
+  // 5. Unknown row: an invitation, not an apology.
+  var features = el("ul", "features");
+  var unknownCount = 0;
+  (pin.checklist || []).forEach(function (item) {
+    if (!item) return;
+    if (item.observation !== "visible" && item.observation !== "not_visible") {
+      unknownCount++;
+      return;
+    }
+    var li = el("li");
+    li.appendChild(rowIcon(FEATURE_ICONS[item.key] || SOURCE_ICONS.doc));
+    li.appendChild(el("span", "feature-name", item.label));
+    li.appendChild(el("span", "obs", item.observation_label || ""));
+    li.appendChild(dotTriple(dotsFor(item.confidence)));
+    features.appendChild(li);
+  });
+  if (unknownCount) {
+    var unknown = el("li");
+    unknown.appendChild(rowIcon(
+      "<circle cx=\"8\" cy=\"8\" r=\"6\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-dasharray=\"2.5 2.5\"/>"));
+    unknown.appendChild(el("span", "unknown-row",
+      features.children.length
+        ? "Not yet seen — be the first to scan the rest."
+        : "Not yet seen — be the first to scan."));
+    features.appendChild(unknown);
   }
-  var freshness = pin.imagery_date
-    ? "Imagery date: " + pin.imagery_date
-    : "Imagery date unknown";
-  if (pin.ai_estimated) freshness += " · AI-estimated";
-  card.appendChild(el("p", "meta", freshness));
-  card.appendChild(el("p", "note", note));
-  return card;
+  sheet.appendChild(features);
+
+  // 6. Suggest a correction — on every card.
+  var correction = el("a", "correction");
+  correction.href = "mailto:corrections@frontdoor.app?subject=" +
+    encodeURIComponent("Correction: " + name + " (" + (pin.place_id || "") + ")");
+  correction.appendChild(svgEl(
+    "<path d=\"M3 13l1-3.4 7-7a1.5 1.5 0 012.4 0l.1.1a1.5 1.5 0 010 2.3l-7 7z\"" +
+    " fill=\"none\" stroke=\"currentColor\" stroke-width=\"1.3\" stroke-linejoin=\"round\"/>",
+    "row-icon", 16, 16));
+  correction.appendChild(document.createTextNode("Suggest a correction"));
+  sheet.appendChild(correction);
+
+  // 7. My needs / How trust grows (later rounds; inert until they exist).
+  var actions = el("div", "sheet-actions");
+  ["♡ My needs", "How trust grows"].forEach(function (label) {
+    var button = el("button", null, label);
+    button.disabled = true;
+    button.title = "Coming soon";
+    actions.appendChild(button);
+  });
+  sheet.appendChild(actions);
+
+  if (pin.note) sheet.appendChild(el("p", "note", pin.note));
+
+  sheet.hidden = false;
+  closeBtn.focus();
 }
+
+document.addEventListener("keydown", function (event) {
+  if (event.key === "Escape") closeSheet();
+});
+
+/* ---------------------------------------------------------------------- *
+ * State-records layer.                                                    *
+ * ---------------------------------------------------------------------- */
+
+function setupLayers(pins) {
+  var toggle = document.getElementById("sr-toggle");
+  var label = document.getElementById("sr-label");
+  var hint = document.getElementById("sr-hint");
+  var qualifying = pins.filter(pinHasStateRecord).length;
+  if (!qualifying) {
+    toggle.disabled = true;
+    label.classList.add("off");
+    var hintText = "State-record matching is coming — no pins in this dataset carry a state record yet.";
+    label.title = hintText;
+    hint.textContent = hintText;
+    return;
+  }
+  toggle.disabled = false;
+  hint.textContent = "Highlights the " + qualifying +
+    " pin(s) with an accessibility inspection on record.";
+  toggle.addEventListener("change", function () {
+    document.getElementById("map").classList.toggle("sr-on", toggle.checked);
+  });
+}
+
+/* ---------------------------------------------------------------------- *
+ * Demo-only scan simulation (?demo=1). Progress ring, checklist ticks,    *
+ * pin drop with ripple; prefers-reduced-motion collapses to end state.    *
+ * ---------------------------------------------------------------------- */
+
+function playScanDemo(pin, markerContent, done) {
+  if (REDUCED_MOTION) {
+    openSheet(pin, markerContent);
+    done();
+    return;
+  }
+  var box = el("div");
+  box.id = "scanbox";
+  box.setAttribute("role", "status");
+  box.setAttribute("aria-label", "Simulated scan in progress");
+  var h3 = el("h3");
+  h3.appendChild(svgEl(
+    "<circle class=\"track\" cx=\"14\" cy=\"14\" r=\"11\" fill=\"none\" stroke-width=\"3\"/>" +
+    "<circle class=\"fill\" cx=\"14\" cy=\"14\" r=\"11\" fill=\"none\" stroke-width=\"3\"" +
+    " transform=\"rotate(-90 14 14)\"/>",
+    "ring", 28, 28));
+  h3.appendChild(document.createTextNode("Looking at the door…"));
+  box.appendChild(h3);
+  var list = el("ul");
+  var items = (pin.checklist || []).slice(0, 4);
+  items.forEach(function (item) {
+    var li = el("li");
+    li.appendChild(el("span", "tick", "✓"));
+    li.appendChild(el("span", null, item.label));
+    list.appendChild(li);
+  });
+  box.appendChild(list);
+  document.body.appendChild(box);
+
+  items.forEach(function (_, i) {
+    setTimeout(function () {
+      if (list.children[i]) list.children[i].classList.add("ticked");
+    }, 950 * (i + 1));
+  });
+  setTimeout(function () {
+    box.remove();
+    markerContent.classList.remove("pin-drop");
+    void markerContent.offsetWidth; /* restart the drop animation */
+    markerContent.classList.add("pin-drop");
+    var ripple = el("span", "ripple");
+    ripple.addEventListener("animationend", function () { ripple.remove(); });
+    markerContent.appendChild(ripple);
+    setTimeout(function () {
+      openSheet(pin, markerContent);
+      done();
+    }, 650);
+  }, 4700);
+}
+
+function setupDemo(params, pins, contents) {
+  // The scan simulation exists only behind ?demo=1; without it none of
+  // these controls are created at all.
+  if (params.get("demo") === "1" && pins.length) {
+    var holder = el("div");
+    holder.id = "demo-holder";
+    var button = el("button", null, "Simulate scan");
+    button.id = "simulate-scan";
+    button.setAttribute("aria-label", "Simulate a live scan on a sample pin (demo)");
+    button.addEventListener("click", function () {
+      button.disabled = true;
+      playScanDemo(pins[0], contents[0], function () { button.disabled = false; });
+    });
+    holder.appendChild(button);
+    document.body.appendChild(holder);
+  }
+}
+
+/* ---------------------------------------------------------------------- *
+ * Map bootstrap.                                                          *
+ * ---------------------------------------------------------------------- */
 
 async function loadMapsApi(key) {
   await new Promise(function (resolve, reject) {
@@ -159,7 +760,7 @@ async function init() {
   } catch (err) { /* degrade to the empty payload */ }
 
   await loadMapsApi(key);
-  var { Map, InfoWindow } = await google.maps.importLibrary("maps");
+  var { Map } = await google.maps.importLibrary("maps");
   var { AdvancedMarkerElement } = await google.maps.importLibrary("marker");
 
   var map = new Map(document.getElementById("map"), {
@@ -169,29 +770,37 @@ async function init() {
   });
 
   var pins = payload.pins || [];
+  setupLayers(pins);
   if (!pins.length) {
     banner(payload.dataset_error
       ? "No map data loaded (" + payload.dataset_error + ")"
-      : "No screened entrances in the dataset yet.");
+      : "No doors in the dataset yet.");
     return;
   }
 
-  var infoWindow = new InfoWindow();
   var bounds = new google.maps.LatLngBounds();
+  var contents = [];
   pins.forEach(function (pin, index) {
+    pin.note = payload.note;
     bounds.extend(pin.location);
+    var content = pinElement(pin, index);
+    contents.push(content);
     var marker = new AdvancedMarkerElement({
       map: map,
       position: pin.location,
-      content: stampElement(pin, index),
+      content: content,
       title: pin.name || "",
     });
-    marker.addListener("gmp-click", function () {
-      infoWindow.setContent(checklistCard(pin, payload.note));
-      infoWindow.open({ anchor: marker, map: map });
+    marker.addListener("gmp-click", function () { openSheet(pin, content); });
+    content.addEventListener("keydown", function (event) {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openSheet(pin, content);
+      }
     });
   });
   map.fitBounds(bounds, 80);
+  setupDemo(params, pins, contents);
 }
 
 init().catch(function (err) { banner(String(err)); });
