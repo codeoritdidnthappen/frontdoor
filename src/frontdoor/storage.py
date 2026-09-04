@@ -22,6 +22,8 @@ depth bucket.
 from __future__ import annotations
 
 import os
+from ipaddress import ip_address
+from urllib.parse import urlsplit
 
 from dotenv import find_dotenv, load_dotenv
 import sys
@@ -170,6 +172,28 @@ def _optional_env(name):
     return value or None
 
 
+def _valid_endpoint_hostname(hostname):
+    if not hostname:
+        return False
+    try:
+        ip_address(hostname)
+        return True
+    except ValueError:
+        pass
+    candidate = hostname[:-1] if hostname.endswith(".") else hostname
+    if not candidate or len(candidate) > 253:
+        return False
+    labels = candidate.split(".")
+    return all(
+        label
+        and len(label) <= 63
+        and label[0] != "-"
+        and label[-1] != "-"
+        and all(char.isascii() and (char.isalnum() or char == "-") for char in label)
+        for label in labels
+    )
+
+
 def _shared_location():
     return {
         "region": os.environ.get("FRONTDOOR_S3_REGION", "auto").strip() or "auto",
@@ -193,6 +217,7 @@ def _client(creds):
     try:
         import boto3
         from botocore.config import Config
+        from botocore.exceptions import BotoCoreError
     except ImportError as exc:
         raise StorageError("boto3 is required to talk to object storage") from exc
     # boto3 1.36+ sends CRC32 checksums by default; R2 rejects them as AccessDenied.
@@ -206,8 +231,32 @@ def _client(creds):
         ),
     }
     if creds.endpoint:
+        try:
+            endpoint = urlsplit(creds.endpoint)
+            endpoint.port
+        except ValueError as exc:
+            raise StorageError(
+                "could not configure object storage client; check FRONTDOOR_S3_ENDPOINT"
+            ) from exc
+        if (
+                endpoint.scheme not in {"http", "https"}
+                or not _valid_endpoint_hostname(endpoint.hostname)
+                or endpoint.username
+                or endpoint.password
+                or endpoint.query
+                or endpoint.fragment
+        ):
+            raise StorageError(
+                "could not configure object storage client; check FRONTDOOR_S3_ENDPOINT"
+            )
         kwargs["endpoint_url"] = creds.endpoint
-    return boto3.client("s3", **kwargs)
+    try:
+        return boto3.client("s3", **kwargs)
+    except BotoCoreError as exc:
+        raise StorageError(
+            "could not configure object storage client; check "
+            "FRONTDOOR_S3_ENDPOINT and FRONTDOOR_S3_REGION"
+        ) from exc
 
 
 def _is_precondition_failed(exc):
