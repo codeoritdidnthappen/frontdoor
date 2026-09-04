@@ -82,13 +82,15 @@ def test_the_server_is_configured_in_exactly_one_place():
     the mismatch would only show as results that do not correspond to the dataset.
     """
     source = code()
-    assert source.count("UploadSettings.fromBundle()") == 2, (
-        "uploader and measure client must both come from UploadSettings, and nothing else should"
-    )
-    assert "MeasureClient(baseURL:" in source
-    assert re.search(r'MeasureClient\(baseURL: URL\(string: "', source) is None, (
-        "no hardcoded server URL"
-    )
+    # Stated per property rather than as a count of call sites: #275 added a third client
+    # (/screen), and a hardcoded number here would have to be edited every time one is added --
+    # which is an invitation to edit it without checking what it was asserting.
+    for name in ("uploader", "measureClient", "screenClient"):
+        declaration = source.split(f"var {name}", 1)[1][:200]
+        assert "UploadSettings.fromBundle()" in declaration, (
+            f"{name} must come from UploadSettings, so a build has one server or none"
+        )
+    assert re.search(r'URL\(string: "http', source) is None, "no hardcoded server URL"
 
 
 def test_every_path_that_enqueues_a_capture_retires_the_last_drain_verdict():
@@ -183,3 +185,37 @@ def test_the_count_is_on_the_viewfinder_where_it_can_still_be_acted_on():
         "entrance id it belongs to"
     )
     assert "capturesForSubject" in spoken, "and spoken, so the bar reads the same either way"
+
+
+def test_the_photo_is_written_and_queued_before_it_is_screened():
+    """Every ScreenClient failure message ends "The photo is saved and queued" (#275).
+
+    That sentence is only true if the write and the queue refresh happen first. It is the same
+    rule as measurement, asserted separately because it is a second call site: a screening
+    capture that were screened before it was written would be promised safe while it was not.
+    """
+    body = confirm_review_body()
+    assert body.index("CaptureWriter.write(") < body.index("screen(written")
+    assert body.index("refreshPendingUploads()") < body.index("screen(written")
+
+
+def test_the_mode_decides_which_question_the_server_is_asked():
+    """A screening frame must not go to /measure.
+
+    /measure serves the stub arms, so sending a plain photo there returns placeholder numbers
+    behind a banner -- correctly labelled, and not what the scan flow is for. The branch is the
+    only thing keeping the two protocols apart at this call site.
+    """
+    body = confirm_review_body()
+    branch = body.split("if record.captureMode.carriesMetrologyTruth", 1)[1]
+    measured, screened = branch.index("measure(written"), branch.index("screen(written")
+    assert measured < screened, "metrology takes the /measure branch, screening the /screen one"
+
+
+def test_screening_does_not_block_the_shutter_and_is_off_without_a_server():
+    body = body_of("private func screen(")
+    assert "guard let screenClient else { return }" in body, (
+        "with no server configured, screening must be a no-op"
+    )
+    assert "Task {" in body, "the request must not be awaited inline in the capture path"
+    assert "await screenClient.screen" in body

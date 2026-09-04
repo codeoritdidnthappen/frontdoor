@@ -591,10 +591,20 @@ final class CaptureController: ObservableObject {
             lastRecord = record
             lastCaptureError = nil
             pendingReview = nil
-            // The capture is on disk and queued before this runs, so the measurement is a read of
-            // it, never a gate on it. AC6: with no server configured nothing below happens and the
-            // capture flow is byte-for-byte what it was.
-            measure(written, caliperInches: record.entrance.riseInches)
+            // The capture is on disk and queued before this runs, so asking the server is a read
+            // of it, never a gate on it. AC6: with no server configured nothing below happens and
+            // the capture flow is byte-for-byte what it was.
+            //
+            // Which server question gets asked follows the mode, because they are different
+            // questions: metrology asks /measure for a rise, screening asks /screen what features
+            // are visible in a plain photo. Sending a screening frame to /measure returned the
+            // stub arms -- placeholder numbers, correctly banner-ed, and not what the scan flow
+            // is for (#275).
+            if record.captureMode.carriesMetrologyTruth {
+                measure(written, caliperInches: record.entrance.riseInches)
+            } else {
+                screen(written, entranceId: record.entrance.id)
+            }
         case .failure(let failure):
             // Complete-or-nothing (AC5): nothing is counted for a capture that is not on disk.
             //
@@ -604,6 +614,51 @@ final class CaptureController: ObservableObject {
             // retaken. That is why the screening path refuses so little: the camera-model gate
             // does not apply to it, and the remaining failures are disk failures.
             lastCaptureError = failure.message
+        }
+    }
+
+    // MARK: screening (#275)
+
+    /// The named checks for the last screening capture: on screen from the moment the photo is
+    /// sent, so the criteria are named while the answer is being waited for.
+    @Published var screeningRun: ScreeningRun?
+
+    /// Built from the same Info.plist settings as the uploader and the measure client, so a build
+    /// has one server or none. Nil when the build has no server, which is what keeps this additive.
+    var screenClient: ScreenClient? = UploadSettings.fromBundle().serverURL
+        .map { ScreenClient(baseURL: $0) }
+
+    /// Ask the server what accessibility features are visible in a photo already safe on disk.
+    ///
+    /// Not awaited, for the same reason `measure` is not: this waits on a vision model for tens of
+    /// seconds, and the operator has to be able to take the next frame. The verdicts are a read of
+    /// a capture that is already written and queued, whatever comes back.
+    private func screen(_ written: CaptureWriter.Written, entranceId: String) {
+        guard let screenClient else { return }
+        let image: Data
+        do {
+            image = try Data(contentsOf: written.imageURL)
+        } catch {
+            screeningRun = ScreeningRun(
+                entranceId: entranceId, startedAt: Date(),
+                outcome: .failed(ScreenClient.Failure.unreadable(error.localizedDescription).message))
+            return
+        }
+        let run = ScreeningRun(entranceId: entranceId, startedAt: Date(), outcome: .inFlight)
+        screeningRun = run
+        Task { [screenClient, filename = written.imageURL.lastPathComponent] in
+            let outcome = await screenClient.screen(
+                image: image, entranceId: entranceId, filename: filename)
+            // Only if this run is still the one on screen. A second photo taken while the first was
+            // in flight has already replaced it, and letting the older answer land would show the
+            // previous doorway's verdicts under the current one's heading.
+            guard screeningRun?.id == run.id else { return }
+            switch outcome {
+            case .success(let response):
+                screeningRun?.outcome = .assessed(response)
+            case .failure(let failure):
+                screeningRun?.outcome = .failed(failure.message)
+            }
         }
     }
 
