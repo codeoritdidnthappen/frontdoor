@@ -6,6 +6,12 @@ state, no public negative verdict, no third state, for any input including
 deliberately adversarial rows. These tests pin that contract on the Python
 side (frontdoor.map_states), which is where the server computes every state
 the page renders.
+
+The page renders those two server states as the reference UI's trust tiers
+(Estimated / Scanned on-site / Owner-confirmed) and the page-level tests
+below pin the honesty of that mapping: ai_estimated never renders above
+Estimated, nothing renders negatively, and the match-state hue never leaks
+into confidence styling.
 """
 
 import json
@@ -191,16 +197,115 @@ def client():
     return create_app().test_client()
 
 
-def test_map_page_serves_html_with_two_stamp_classes(client):
+def page(client):
     response = client.get("/map")
     assert response.status_code == 200
     assert response.mimetype == "text/html"
-    html = response.get_data(as_text=True)
-    # The page defines exactly the two stamp state classes and no others.
-    # stamp-drop / stamp-dropping are the drop animation, not a state.
-    classes = set(re.findall(r"stamp-(?!drop)[a-z]+", html))
-    assert classes == {"stamp-verified", "stamp-neutral"}
-    assert "Not Yet Checked" in html
+    return response.get_data(as_text=True)
+
+
+def test_map_page_defines_exactly_three_tier_classes(client):
+    # The page's visual system has exactly the three trust tiers of the
+    # agreed UI reference and no others. Tier is encoded shape + glyph +
+    # hue, and the "tier-" class prefix is reserved for these three tokens
+    # so this census stays meaningful.
+    classes = set(re.findall(r"tier-[a-z]+", page(client)))
+    assert classes == {"tier-estimated", "tier-scanned", "tier-owner"}
+
+
+def test_tier_mapping_honesty(client):
+    # The client-side tier mapping mirrors the server's two-state contract:
+    # total and default-Estimated. Only the exact server-computed verified
+    # state (human, non-imagery confirmation) renders the Scanned tier;
+    # ai_estimated and every other input render Estimated, and nothing can
+    # reach the Owner tier from today's data — tierClass cannot return it.
+    html = page(client)
+    match = re.search(r"function tierClass\(state\) \{([^}]*)\}", html)
+    assert match, "tierClass mapping function must exist"
+    body = match.group(1)
+    assert 'state === VERIFIED_STATE ? "tier-scanned" : "tier-estimated"' in body
+    assert "tier-owner" not in body
+    assert '"verified_accessible"' in html  # the exact server token, nothing looser
+
+
+def test_page_has_no_negative_and_no_match_state_hue(client):
+    # Color rules from the reference: the match-state hue is reserved for a
+    # future needs-match chip and must not appear anywhere on this page
+    # (confidence dots use the tier's own hue), and no negative hue exists
+    # in the product at all. Amber is freshness aging only.
+    html = page(client).lower()
+    assert "green" not in html
+    assert not re.search(r"\bred\b", html)
+    for hex_value in ("#15803d", "#bbf7d0", "#22c55e", "#16a34a", "#4ade80",
+                      "#dc2626", "#ef4444", "#b91c1c"):
+        assert hex_value not in html
+
+
+def test_estimated_cta_replacement_line(client):
+    # The Estimated tier's provenance line always ends with the replacement
+    # invitation — the estimate visibly wants to be replaced.
+    html = page(client)
+    assert "Estimated by AI from street imagery" in html
+    assert "been here? Confirm or correct in 30 seconds" in html
+
+
+def test_card_renders_provenance_when_present_and_degrades_when_absent(client):
+    # Provenance rows compose with the external-data work: an optional
+    # pin.provenance array renders as receipt rows when present; when the
+    # field is absent or a line is malformed, nothing renders and no state
+    # is ever derived from it.
+    html = page(client)
+    assert "pin.provenance || []" in html
+    assert 'typeof line.label !== "string"' in html
+
+
+def test_state_records_layer_keyed_on_provenance_source(client):
+    # The "State records" toggle is keyed on the provenance source string
+    # (tabs/tdlr/texas…) and degrades to a disabled toggle with a "coming"
+    # hint when zero pins qualify — the mechanism ships before the data.
+    html = page(client)
+    assert "State records" in html
+    assert "isStateRecordLine" in html
+    assert re.search(r"tabs\|tdlr\|texas", html)
+    assert "toggle.disabled = true" in html
+    assert "coming" in html
+
+
+def test_unknown_row_and_correction_affordance(client):
+    html = page(client)
+    # Unknowns are an invitation, not an apology.
+    assert "Not yet seen — be the first to scan." in html
+    # Suggest a correction is on every card.
+    assert "Suggest a correction" in html
+
+
+def test_demo_scan_control_gated_behind_query_param(client):
+    html = page(client)
+    # The scan simulation exists only behind ?demo=1 …
+    assert 'params.get("demo") === "1"' in html
+    assert "Simulate scan" in html
+    # … and the control is created dynamically inside that gate, never
+    # present as an element in the static markup (only its CSS is static).
+    assert 'id="simulate-scan"' not in html
+    assert 'id="scanbox"' not in html
+    static_markup = html.split("<script>")[0]
+    assert "Simulate scan" not in static_markup
+    # Reduced motion collapses the animation to its end state.
+    assert "prefers-reduced-motion" in html
+
+
+def test_page_accessibility_hooks(client):
+    html = page(client)
+    # Pins are keyboard-focusable buttons with labels; the card is a
+    # labelled dialog with a close control; tier is never color alone
+    # (glyph assertions: person/storefront/italic i/sparkle are all in the
+    # pin construction code).
+    assert 'setAttribute("role", "button")' in html
+    assert 'setAttribute("tabindex", "0")' in html
+    assert 'role="dialog"' in html
+    assert 'aria-label' in html
+    assert "Close details" in html
+    assert "✦" in html  # AI sparkle glyph accompanies the dashed outline
 
 
 def test_map_page_html_matches_packaged_file(client):
