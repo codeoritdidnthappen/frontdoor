@@ -1,0 +1,21 @@
+{
+ "capture_id": "E-045-3505-p",
+ "entrance_id": "E-045",
+ "captured_at": "2026-09-04T20:04:10Z",
+ "device_model": "iPhone 17 Pro",
+ "image": {
+  "path": "E-045/IMG_3505_processed.JPEG",
+  "sha256": "14e90f559f355bec464c1f61288a9cef81f867a2e6e6de02980a2f995517f42a",
+  "width": 4284,
+  "height": 5712,
+  "exif_orientation": 1
+ },
+ "depth": null,
+ "conditions": {
+  "distance_m": 2.5,
+  "lighting": "direct sun",
+  "occlusion": "none"
+ },
+ "split": "dev",
+ "capture_mode": "imported"
+}

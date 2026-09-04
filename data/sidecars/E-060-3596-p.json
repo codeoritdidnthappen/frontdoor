@@ -1,0 +1,21 @@
+{
+ "capture_id": "E-060-3596-p",
+ "entrance_id": "E-060",
+ "captured_at": "2026-09-04T20:10:38Z",
+ "device_model": "iPhone 17 Pro",
+ "image": {
+  "path": "E-060/IMG_3596_processed.JPEG",
+  "sha256": "cc2c26050096e9c32c145e5cac5c77dca5c0242ce391fd288e002c9d28819ed2",
+  "width": 4284,
+  "height": 5712,
+  "exif_orientation": 1
+ },
+ "depth": null,
+ "conditions": {
+  "distance_m": 2.5,
+  "lighting": "direct sun",
+  "occlusion": "none"
+ },
+ "split": "dev",
+ "capture_mode": "imported"
+}
