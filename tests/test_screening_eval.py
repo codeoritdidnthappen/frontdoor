@@ -11,6 +11,8 @@ from types import SimpleNamespace
 
 import pytest
 
+import frontdoor.screening_eval as screening_eval_module
+from frontdoor.dataset_closeout import DatasetCloseoutError
 from frontdoor.labels import COLUMNS as LABEL_COLUMNS
 from frontdoor.manifest import COLUMNS as MANIFEST_COLUMNS, manifest_sha256
 from frontdoor.screening import (
@@ -154,6 +156,24 @@ def _fake_get_capture(capture_id):
     return _capture(capture_id)
 
 
+@pytest.fixture(autouse=True)
+def _fixture_eligibility(monkeypatch):
+    """Unit fixtures predate the committed closeout; admit their manifest IDs."""
+    def eligible(_closeout_path, manifest_path, _sidecar_dir):
+        with open(manifest_path, encoding="utf-8", newline="") as handle:
+            return frozenset(row["entrance_id"] for row in csv.DictReader(handle))
+
+    monkeypatch.setattr(screening_eval_module, "load_eligible_entrances", eligible)
+
+
+def _run_eval(tmp_path, **kwargs):
+    return run_eval(
+        closeout_path=tmp_path / "dataset-closeout.json",
+        sidecar_dir=tmp_path / "sidecars",
+        **kwargs,
+    )
+
+
 # --- join math ---------------------------------------------------------------
 
 
@@ -275,7 +295,8 @@ def test_sealed_split_is_refused_before_any_file_is_touched(tmp_path):
         raise AssertionError("no image should be read")
 
     with pytest.raises(SealedSplitError, match="audited"):
-        run_eval(
+        _run_eval(
+            tmp_path,
             manifest_path=tmp_path / "does-not-exist.csv",
             labels_path=tmp_path / "does-not-exist-either.csv",
             out_dir=tmp_path / "out",
@@ -288,7 +309,9 @@ def test_sealed_split_is_refused_before_any_file_is_touched(tmp_path):
 
 def test_unknown_split_is_an_error_not_an_empty_report(tmp_path):
     with pytest.raises(ScreeningEvalError, match="unknown split"):
-        collect_entrances(tmp_path / "irrelevant.csv", split="devv")
+        collect_entrances(
+            tmp_path / "irrelevant.csv", eligible_entrances=frozenset(), split="devv"
+        )
 
 
 def test_collect_entrances_filters_to_the_dev_split(tmp_path):
@@ -302,7 +325,9 @@ def test_collect_entrances_filters_to_the_dev_split(tmp_path):
             ("cap-5", CALIB_ID),
         ],
     )
-    entrances = collect_entrances(manifest)
+    entrances = collect_entrances(
+        manifest, eligible_entrances={DEV_A, DEV_B, CALIB_ID, SEALED_ID}
+    )
     assert entrances == {DEV_A: ["cap-1", "cap-2"], DEV_B: ["cap-3"]}
     assert list(entrances) == sorted(entrances)
 
@@ -317,7 +342,8 @@ def test_run_eval_never_hands_sealed_or_calib_entrances_to_the_engine(tmp_path):
         [(DEV_A, "ramp_or_bevel", "present")],
     )
     engine = FakeEngine({DEV_A: _screening(DEV_A, {"ramp_or_bevel": "present"})})
-    run_eval(
+    _run_eval(
+        tmp_path,
         manifest_path=manifest,
         labels_path=labels,
         out_dir=tmp_path / "out",
@@ -325,6 +351,67 @@ def test_run_eval_never_hands_sealed_or_calib_entrances_to_the_engine(tmp_path):
         get_capture=_fake_get_capture,
     )
     assert engine.calls == [(DEV_A, 1)]
+
+
+def test_run_eval_never_hands_an_ineligible_entrance_to_the_engine(
+    tmp_path, monkeypatch
+):
+    manifest = _write_manifest(
+        tmp_path / "manifest.csv", [("cap-1", DEV_A), ("cap-2", DEV_B)]
+    )
+    labels = _write_labels(
+        tmp_path / "labels.csv",
+        [(DEV_A, "ramp_or_bevel", "present"), (DEV_B, "ramp_or_bevel", "present")],
+    )
+    monkeypatch.setattr(
+        screening_eval_module,
+        "load_eligible_entrances",
+        lambda *_args: frozenset({DEV_A}),
+    )
+    engine = FakeEngine({DEV_A: _screening(DEV_A, {"ramp_or_bevel": "present"})})
+
+    _run_eval(
+        tmp_path,
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=engine,
+        get_capture=_fake_get_capture,
+    )
+
+    assert engine.calls == [(DEV_A, 1)]
+
+
+def test_stale_closeout_fails_before_images_are_read_or_output_is_written(
+    tmp_path, monkeypatch
+):
+    manifest = _write_manifest(tmp_path / "manifest.csv", [("cap-1", DEV_A)])
+    labels = _write_labels(
+        tmp_path / "labels.csv", [(DEV_A, "ramp_or_bevel", "present")]
+    )
+    image_reads = []
+
+    def reject_stale_closeout(*_args):
+        raise DatasetCloseoutError("manifest hash does not match")
+
+    monkeypatch.setattr(
+        screening_eval_module,
+        "load_eligible_entrances",
+        reject_stale_closeout,
+    )
+
+    with pytest.raises(DatasetCloseoutError, match="manifest hash does not match"):
+        _run_eval(
+            tmp_path,
+            manifest_path=manifest,
+            labels_path=labels,
+            out_dir=tmp_path / "out",
+            engine=FakeEngine({}),
+            get_capture=lambda capture_id: image_reads.append(capture_id),
+        )
+
+    assert image_reads == []
+    assert not (tmp_path / "out").exists()
 
 
 # --- end-to-end report -------------------------------------------------------
@@ -395,7 +482,8 @@ def _run_report(tmp_path):
             "cap-3", distance=1.5, lighting="overcast", occlusion="none"
         ),
     }
-    result = run_eval(
+    result = _run_eval(
+        tmp_path,
         manifest_path=manifest,
         labels_path=labels,
         out_dir=tmp_path / "out",
@@ -645,7 +733,8 @@ def test_written_json_preserves_numeric_distance_order(tmp_path):
         "cap-3": _capture("cap-3", distance=3),
     }
 
-    run_eval(
+    _run_eval(
+        tmp_path,
         manifest_path=manifest,
         labels_path=labels,
         out_dir=tmp_path / "out",
@@ -673,7 +762,8 @@ def test_condition_analysis_treats_an_invalid_model_verdict_as_uncommitted(tmp_p
         ),
     })
 
-    result = run_eval(
+    result = _run_eval(
+        tmp_path,
         manifest_path=manifest,
         labels_path=labels,
         out_dir=tmp_path / "out",

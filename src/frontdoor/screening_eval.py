@@ -40,6 +40,7 @@ import sys
 import time
 from pathlib import Path
 
+from frontdoor.dataset_closeout import DatasetCloseoutError, load_eligible_entrances
 from frontdoor.labels import SPLITS, labels_for_eval, load_labels
 from frontdoor.manifest import read_manifest
 from frontdoor.screening import (
@@ -87,7 +88,9 @@ def _require_permitted_split(split, *, allow_sealed=False):
         )
 
 
-def collect_entrances(manifest_path, *, split="dev", allow_sealed=False):
+def collect_entrances(
+    manifest_path, *, eligible_entrances, split="dev", allow_sealed=False
+):
     """Entrance ID -> sorted capture IDs for one split.
 
     The split is re-derived from the committed seed per entrance; the
@@ -98,6 +101,8 @@ def collect_entrances(manifest_path, *, split="dev", allow_sealed=False):
     for row in read_manifest(manifest_path):
         entrance_id = canonical_entrance_id(row["entrance_id"])
         if assign_split(entrance_id) != split:
+            continue
+        if entrance_id not in eligible_entrances:
             continue
         entrances.setdefault(entrance_id, []).append(row["capture_id"])
     return {eid: sorted(caps) for eid, caps in sorted(entrances.items())}
@@ -545,6 +550,8 @@ def run_eval(
     manifest_path,
     labels_path,
     out_dir,
+    closeout_path=None,
+    sidecar_dir=None,
     engine,
     get_capture,
     split="dev",
@@ -568,6 +575,15 @@ def run_eval(
     sealed_run = split == "sealed"
     _require_permitted_split(split, allow_sealed=audit is not None)
     started = time.perf_counter()
+    manifest_path = Path(manifest_path)
+    sidecar_dir = (
+        Path(sidecar_dir) if sidecar_dir else manifest_path.parent / "sidecars"
+    )
+    closeout_path = (
+        Path(closeout_path)
+        if closeout_path
+        else manifest_path.parent / "dataset-closeout.json"
+    )
     loaded = load_labels(labels_path)
     labels = labels_for_eval(
         list(loaded.labels),
@@ -576,13 +592,28 @@ def run_eval(
         audit=audit,
         argv=argv,
     )
+    eligible_entrances = load_eligible_entrances(
+        closeout_path, manifest_path, sidecar_dir
+    )
     entrances = collect_entrances(
-        manifest_path, split=split, allow_sealed=sealed_run
+        manifest_path,
+        eligible_entrances=eligible_entrances,
+        split=split,
+        allow_sealed=sealed_run,
     )
     # A labeled entrance with no captures is AC4's "entrance with no views":
     # it must appear with an empty view list, not vanish from the report.
+    recorded_entrances = {
+        canonical_entrance_id(row["entrance_id"])
+        for row in read_manifest(manifest_path)
+    }
     for label in labels:
-        entrances.setdefault(canonical_entrance_id(label["entrance_id"]), [])
+        entrance_id = canonical_entrance_id(label["entrance_id"])
+        if (
+            entrance_id in eligible_entrances
+            or entrance_id not in recorded_entrances
+        ):
+            entrances.setdefault(entrance_id, [])
     entrances = {eid: caps for eid, caps in sorted(entrances.items())}
     screenings = {}
     captures = {}
@@ -628,6 +659,11 @@ def main(argv=None, *, from_cli=False):
         help="sidecar directory (default: <manifest dir>/sidecars)",
     )
     parser.add_argument(
+        "--closeout",
+        default=None,
+        help="dataset closeout (default: <manifest dir>/dataset-closeout.json)",
+    )
+    parser.add_argument(
         "--include-sealed",
         action="store_true",
         help="score the sealed split instead of dev, once, recording the "
@@ -668,7 +704,6 @@ def main(argv=None, *, from_cli=False):
         Path(args.sidecars) if args.sidecars else manifest_path.parent / "sidecars"
     )
     loader = DatasetLoader(manifest_path, sidecar_dir)
-
     def get_capture(capture_id):
         # loader.load refuses sealed rows outright, so the unsealing run goes
         # through _load_row's allow_sealed - the same doorway frontdoor.eval
@@ -699,13 +734,19 @@ def main(argv=None, *, from_cli=False):
             manifest_path=manifest_path,
             labels_path=args.labels,
             out_dir=args.out,
+            closeout_path=(
+                Path(args.closeout)
+                if args.closeout
+                else manifest_path.parent / "dataset-closeout.json"
+            ),
+            sidecar_dir=sidecar_dir,
             engine=ScreeningEngine(),
             get_capture=get_capture,
             split="sealed" if args.include_sealed else "dev",
             audit=audit,
             argv=sys.argv if argv is None else [sys.argv[0], *argv],
         )
-    except SealAuditError as exc:
+    except (DatasetCloseoutError, SealAuditError) as exc:
         # Nothing sealed has been read: the run is refused, not half-done.
         print(exc, file=sys.stderr)
         return 1
