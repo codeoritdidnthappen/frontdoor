@@ -19,6 +19,23 @@ clear 503 rather than a crash. Tests inject a fake engine via app.config.
 Uploads pass through the face-blur ingest step (frontdoor.faceblur, TICK-257)
 before the engine sees them: faces irreversibly blurred, EXIF GPS stripped,
 and the response reports the total under "faces_blurred".
+
+The model then audits the blur itself (face_check, the TICK-257 follow-up):
+the integrated call answers one privacy question over all its views, and a
+face_visible answer QUARANTINES the request's views as a set - one call over
+all views cannot attribute the face to a single view. The response reports
+the audit's answer verbatim under "face_check": "clear" (the model checked
+and saw no face), "face_visible", or "unknown" (the model never produced an
+answer - PR #243 review: "checked, clear" and "never answered" are different
+facts and a consumer must be able to tell them apart). Anything except an
+explicit clear quarantines. The verdicts still
+stand - the model has already seen the blurred images, so the privacy issue
+is retention, not assessment - but the response marks the result
+{"quarantined": true, "quarantine_reason": "face_check"}. Retention
+guarantee: this endpoint holds image bytes in request-scoped locals only.
+Nothing here writes them to disk, object storage, or any other store (pinned
+by test_screen_endpoint), so a quarantined image needs no deletion step - its
+bytes die with the request.
 """
 
 import os
@@ -27,7 +44,7 @@ from importlib import resources
 
 from flask import Blueprint, Response, current_app, request
 
-from frontdoor.faceblur import process_upload
+from frontdoor.faceblur import InvalidImageError, process_upload
 from frontdoor.screening import ScreeningEngine, integrated_summary
 from frontdoor.split import InvalidEntranceId, assign_split, canonical_entrance_id
 
@@ -143,16 +160,21 @@ def screen():
     # sees it - faces irreversibly blurred, EXIF/GPS stripped - so the model call and any
     # later storage only ever handle the processed bytes; the raw upload is dropped here.
     # Processed images are re-encoded JPEG, so their media type is image/jpeg regardless of
-    # what was posted. Bytes no decoder accepts pass through unchanged: they hold no
-    # renderable face, and the engine will name the failure on that image itself.
+    # what was posted. Invalid image bytes are a request error. An unexpected detector error
+    # becomes the service's bounded 500. Both outcomes fail closed: neither can cross the
+    # model boundary as an unblurred original (TICK-257 AC1/AC2, QA TICK-B01).
     payloads = []
     faces_blurred = 0
     for part in files:
         raw = part.read()
         try:
             processed = process_upload(raw)
-        except ValueError:
-            payloads.append((raw, part.mimetype))
+        except InvalidImageError:
+            return _error(
+                "invalid image",
+                f"file part {part.name!r} could not be decoded and privacy-processed.",
+                status=422,
+            )
         else:
             payloads.append((processed.image_bytes, "image/jpeg"))
             faces_blurred += processed.face_count
@@ -184,6 +206,17 @@ def screen():
             status=502,
         )
 
+    # face_check quarantine (TICK-257 follow-up, #232): the model has audited its
+    # own (already blurred) input inside the same integrated call. A face_visible
+    # answer quarantines the request's views as a set - one call over all views
+    # cannot attribute the face to a single view. The verdicts still stand
+    # (assessment already happened - retention is the privacy issue), and because
+    # this endpoint never persists image bytes anywhere (see the module
+    # docstring), marking the response is the whole quarantine. The answer
+    # itself is reported below: "unknown" (the audit never produced an answer)
+    # is a different fact from "clear" and fails closed into quarantine.
+    quarantined = assessment.face_check != "clear"
+
     body = {
         "entrance_id": entrance_id,
         # The mode is stated so a consumer can tell "the views agreed" from "no
@@ -200,10 +233,17 @@ def screen():
         },
         "latency_ms": latency_ms,
         "faces_blurred": faces_blurred,
+        # The privacy audit's answer as validated: clear, face_visible, or
+        # unknown - so a consumer can tell a checked-clear from a check that
+        # never produced an answer (PR #243 review).
+        "face_check": assessment.face_check,
+        "quarantined": quarantined,
         "model": engine.config.model,
         "status": "ai_estimated",
         "wording": WORDING,
     }
+    if quarantined:
+        body["quarantine_reason"] = "face_check"
     if len(files) > 1:
         # Kept for consumers that read the entrance-level verdict here: the integrated
         # verdicts. flip_rate and counts are null in integrated mode -- one call over

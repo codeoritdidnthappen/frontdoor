@@ -491,12 +491,18 @@ final class CaptureController: ObservableObject {
         case .failure(let refusal): return .refused(refusal.message)
         }
 
+        let processed: ImportedPhotoPrivacy.Processed
+        switch ImportedPhotoPrivacy.process(data) {
+        case .success(let image): processed = image
+        case .failure(let failure): return .refused(failure.message)
+        }
+
         let record = CaptureRecord(
             captureId: UUID().uuidString,
             captureMode: .imported,
-            pixelWidth: details.pixelWidth,
-            pixelHeight: details.pixelHeight,
-            imageExifOrientation: details.exifOrientation,
+            pixelWidth: processed.pixelWidth,
+            pixelHeight: processed.pixelHeight,
+            imageExifOrientation: 1,
             intrinsics: nil,
             gravity: nil,
             deviceModel: details.deviceModel,
@@ -509,9 +515,9 @@ final class CaptureController: ObservableObject {
             conditions: conditions,
             roi: nil)
 
-        switch CaptureWriter.write(record, imageData: data, depthData: nil,
+        switch CaptureWriter.write(record, imageData: processed.data, depthData: nil,
                                    into: Self.capturesDirectory,
-                                   imageExtension: details.fileExtension) {
+                                   imageExtension: "jpg") {
         case .success:
             photosTaken += 1
             refreshPendingUploads()

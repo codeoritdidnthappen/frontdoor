@@ -11,6 +11,11 @@ frames that hide it. Offline eval on the 12-entrance pilot set: per-image
 majority voting amplifies shared camera-position blind spots; the integrated
 call raised committed accuracy from ~90% to 97% and cut abstentions 38 -> 4.
 
+The same call also answers a fifth checklist item, face_check (TICK-257
+follow-up, #232): whether any identifiable face survived the automatic blur
+pass. It is a privacy audit, not an accessibility criterion - it never joins
+CRITERIA or the aggregate, and callers use it to quarantine the image.
+
 Honesty rule (load-bearing, do not relax): verdicts are screening statements
 about what is visible in the photos. Never measurements, never compliance or
 legal conclusions. When a feature cannot be confidently seen the verdict is
@@ -67,6 +72,31 @@ CRITERIA_KEYS = tuple(key for key, _ in CRITERIA)
 
 ALLOWED_VERDICTS = ("present", "absent", "not_visible")
 
+# The automatic privacy audit (TICK-257 follow-up, #232). NOT an accessibility
+# criterion: it never joins CRITERIA, never votes in aggregate_assessments,
+# and is carried separately on ImageAssessment. The model has already seen
+# the blurred image by the time it answers, so a face_visible answer is a
+# retention decision (quarantine the image), never an assessment one.
+FACE_CHECK_KEY = "face_check"
+#: What the model may answer. "clear" asserts the model checked and saw no
+#: face; "face_visible" quarantines.
+FACE_CHECK_ANSWERS = ("clear", "face_visible")
+#: The third value the pipeline itself supplies: the check never produced an
+#: answer - the model skipped the key, answered out of vocabulary, or was
+#: never asked. The same distinction the verdicts already insist on
+#: (not_visible is never collapsed into absent) applied to the audit: a
+#: consumer must be able to tell "checked, clear" from "never answered"
+#: (PR #243 review). Callers quarantine "unknown" as well as "face_visible";
+#: only an explicit "clear" passes the privacy gate.
+FACE_CHECK_UNKNOWN = "unknown"
+FACE_CHECK_VALUES = FACE_CHECK_ANSWERS + (FACE_CHECK_UNKNOWN,)
+FACE_CHECK_QUESTION = (
+    "After the automatic blurring already applied to this image, is any "
+    "identifiable human face still visible anywhere - including reflections "
+    "in glass and people seen through windows? Answer face_visible if any "
+    "face could be recognized, clear otherwise."
+)
+
 # Tie-break order for the majority verdict: most conservative first. A tie
 # never invents certainty, and not_visible stays distinct from absent.
 _CONSERVATIVE_ORDER = ("not_visible", "absent", "present")
@@ -114,6 +144,13 @@ class ImageAssessment:
     criteria: dict | None
     latency_s: float | None
     error: str | None = None
+    #: The privacy audit answer ("clear", "face_visible", or "unknown"),
+    #: separate from the accessibility criteria. Defaults to "unknown": an
+    #: assessment built without the field never had the question answered, and
+    #: reporting "clear" would assert a check that did not happen (PR #243
+    #: review). A reply missing the key is likewise normalized to "unknown"
+    #: (with a logged warning) rather than crashed on.
+    face_check: str = FACE_CHECK_UNKNOWN
 
 
 @dataclass(frozen=True)
@@ -150,8 +187,14 @@ def build_prompt():
     for key, desc in CRITERIA:
         lines.append(f"- {key}: {desc}")
     lines.append(
+        "Additionally answer one privacy check, which is not an "
+        "accessibility criterion:"
+    )
+    lines.append(f"- {FACE_CHECK_KEY}: {FACE_CHECK_QUESTION}")
+    lines.append(
         'Return exactly this JSON shape: {"criteria": {"<key>": '
-        '{"verdict": "...", "confidence": 0, "evidence": "..."}}}'
+        '{"verdict": "...", "confidence": 0, "evidence": "..."}}, '
+        '"face_check": "clear" or "face_visible"}'
     )
     return "\n".join(lines)
 
@@ -180,8 +223,17 @@ def build_integrated_prompt(view_count):
     for key, desc in CRITERIA:
         lines.append(f"- {key}: {desc}")
     lines.append(
+        "Additionally answer one privacy check, which is not an "
+        "accessibility criterion and covers ALL the views together:"
+    )
+    lines.append(
+        f"- {FACE_CHECK_KEY}: {FACE_CHECK_QUESTION} Answer face_visible if "
+        "ANY view still shows one."
+    )
+    lines.append(
         'Return exactly this JSON shape: {"criteria": {"<key>": '
-        '{"verdict": "...", "confidence": 0, "evidence": "..."}}}'
+        '{"verdict": "...", "confidence": 0, "evidence": "..."}}, '
+        '"face_check": "clear" or "face_visible"}'
     )
     return "\n".join(lines)
 
@@ -214,6 +266,27 @@ def validate_verdicts(parsed):
             "evidence": str(entry.get("evidence", ""))[:200],
         }
     return out
+
+
+def validate_face_check(parsed):
+    """Normalize the privacy-audit answer to "clear", "face_visible" or "unknown".
+
+    A missing or out-of-vocabulary answer becomes "unknown" with a logged
+    warning, never a crash: the audit is an extra net over the blur pass, and
+    a model that skips the key must not take the whole assessment down with
+    it. (The blur pass has already run regardless.) It is also never "clear":
+    "clear" asserts the model checked and saw no face, and a reply that never
+    answered is a different fact a consumer must be able to see (PR #243
+    review). Callers quarantine "unknown" as the fail-closed fallback.
+    """
+    value = str(parsed.get(FACE_CHECK_KEY, "")).strip().lower()
+    if value in FACE_CHECK_ANSWERS:
+        return value
+    logger.warning(
+        "face_check missing or invalid in model reply (%r); treating as unknown",
+        value or None,
+    )
+    return FACE_CHECK_UNKNOWN
 
 
 def aggregate_assessments(assessments):
@@ -306,9 +379,14 @@ class ScreeningEngine:
                        "data": base64.standard_b64encode(image).decode("ascii")},
         }
 
-    def _call_model(self, content):
+    def _call_model(self, content, *, expect_face_check=False):
         """One model call over the given content blocks; refusals, truncation
-        and parse failures are recorded errors, never silent."""
+        and parse failures are recorded errors, never silent.
+
+        With expect_face_check the reply's face_check privacy answer is
+        validated and carried on the result; without it the question was never
+        asked, so the answer is "unknown" - never "clear", which would assert
+        a check that did not happen - and no missing-key warning is logged."""
         t0 = time.perf_counter()
         try:
             response = self._get_client().messages.create(
@@ -326,14 +404,18 @@ class ScreeningEngine:
                     "ScreeningConfig.max_tokens"
                 )
             text = next((b.text for b in response.content if b.type == "text"), "")
-            criteria = validate_verdicts(parse_json_response(text))
+            parsed = parse_json_response(text)
+            criteria = validate_verdicts(parsed)
+            face_check = (validate_face_check(parsed) if expect_face_check
+                          else FACE_CHECK_UNKNOWN)
         except Exception as exc:
             latency = time.perf_counter() - t0
             error = f"{type(exc).__name__}: {exc}"
             logger.warning("assessment failed: %s", error)
             return ImageAssessment(criteria=None, latency_s=round(latency, 3),
                                    error=error)
-        return ImageAssessment(criteria=criteria, latency_s=round(latency, 3))
+        return ImageAssessment(criteria=criteria, latency_s=round(latency, 3),
+                               face_check=face_check)
 
     def assess_image(self, image, *, media_type="image/jpeg"):
         """One model call over one image; refusals and parse failures are
@@ -347,7 +429,7 @@ class ScreeningEngine:
         return self._call_model([
             self._image_block(image, media_type),
             {"type": "text", "text": build_prompt()},
-        ])
+        ], expect_face_check=True)
 
     def assess_images_integrated(self, images, *, media_types=None):
         """ALL of an entrance's views in ONE model call, one integrated result.
@@ -369,7 +451,7 @@ class ScreeningEngine:
             for image, media_type in zip(images, media_types)
         ]
         content.append({"type": "text", "text": build_integrated_prompt(len(images))})
-        return self._call_model(content)
+        return self._call_model(content, expect_face_check=True)
 
     def _resolve_split_or_refuse(self, entrance_id):
         """Canonicalize, resolve and log the split; refuse sealed entrances."""

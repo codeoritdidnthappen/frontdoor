@@ -103,14 +103,17 @@ Across the view set (not necessarily every single shot), the set as a whole must
   reshoot. Reshoot only when a person **physically occludes the entrance** — that is an occlusion
   problem, not a privacy one, and no amount of blurring puts the doorway back in frame. If the
   occlusion won't clear in a reasonable wait, treat the entrance as a skip (see below).
-- **Check the glass — now a verification, not the only line of defense.** Storefront doors are
-  mirrors: the pilot (TICK-092) lost 17 of 65 shots to identifiable faces, mostly *in the door
-  glass* — reflections of passers-by, people inside seen through the pane, and the photographer's
-  own reflection — none noticed at capture. The blur step exists because that rule did not survive
-  contact with glass; but reflected and through-glass faces are exactly where automatic detection
-  is weakest, so the human check stays. Before leaving an entrance, flick through the set once
-  looking specifically at the glass, and after ingest confirm the blur output actually covered
-  what you saw. Your own reflection counts; shooting from a slight angle keeps you out of it.
+- **Verify the processed glass — never rely on the raw preview.** Storefront
+  doors are mirrors: the pilot (TICK-092) lost 17 of 65 shots to identifiable faces, mostly *in
+  the door glass* — reflections of passers-by, people inside seen through the pane, and the
+  photographer's own reflection — none noticed at capture, which is exactly why a human check was
+  never going to be the only fix. Ingest detects and irreversibly blurs faces (reflections and
+  through-glass included), and the screening model audits its own input. A `face_visible` or
+  `unknown` audit quarantines the image; only an explicit `clear` passes. Verify the processed
+  output before retaining it, paying particular attention to glass. Never keep or send the raw
+  original as a fallback when processing or verification fails.
+  (Shooting from a slight angle still keeps your own reflection out of the shot, which is good
+  craft, but it does not replace checking the processed output.)
 
 ## Record at capture — not from memory later
 
@@ -187,6 +190,7 @@ entrances, and there are not many left. Schedule and steps: [signing-calendar.md
 - [ ] 5-6 views captured: head-on, both obliques, near (~1.5 m), far (~3-4 m), hardware close-up
 - [ ] 1× lens, no zoom, no crop, on every shot
 - [ ] Full entrance + approach path + hardware covered across the set
-- [ ] No interiors; people occluding the entrance reshot (faces are blurred at ingest, TICK-257)
+- [ ] No interiors; people occluding the entrance reshot; processed blur output verified,
+      especially in glass (TICK-257)
 - [ ] Condition tags (lighting, occlusion) recorded now, at the entrance
 - [ ] If skipped: entrance and reason recorded before moving on

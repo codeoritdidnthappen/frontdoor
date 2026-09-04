@@ -20,5 +20,5 @@ dev = ["pytest>=8", "flask>=3", "moto>=5"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-frontdoor = ["*.json"]
+frontdoor = ["*.json", "models/*.onnx", "models/README.md"]
 frontdoor_server = ["*.json", "*.html"]
