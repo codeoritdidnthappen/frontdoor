@@ -421,3 +421,37 @@ def test_a_missing_image_credential_is_a_named_503_not_a_500(monkeypatch, env):
     body = response.get_json()
     assert body["error"] == "could not store the object"
     assert "FRONTDOOR_IMAGES_BUCKET" in body["detail"], body["detail"]
+
+
+@pytest.mark.parametrize(("name", "value"), [
+    ("FRONTDOOR_S3_ENDPOINT", "not a url"),
+    ("FRONTDOOR_S3_ENDPOINT", "https://exa mple.com"),
+    ("FRONTDOOR_S3_ENDPOINT", "https://_bad.example"),
+    ("FRONTDOOR_S3_ENDPOINT", "https://-bad.example"),
+    ("FRONTDOOR_S3_ENDPOINT", "https://bad-.example"),
+    ("FRONTDOOR_S3_ENDPOINT", "https://example..com"),
+    ("FRONTDOOR_S3_REGION", "bad region"),
+])
+def test_tick_b01_malformed_image_config_is_a_named_503(
+        monkeypatch, env, name, value):
+    monkeypatch.setenv(name, value)
+    client = create_app().test_client()
+
+    response = _post(client, kind="image")
+
+    assert response.status_code == 503, response.get_data(as_text=True)[:200]
+    body = response.get_json()
+    assert body["error"] == "could not store the object"
+    assert "could not configure object storage" in body["detail"]
+
+
+def test_tick_b01_programmer_error_inside_boto_client_remains_a_500(
+        monkeypatch, env):
+    def fail(*args, **kwargs):
+        raise ValueError("internal invariant failed")
+
+    monkeypatch.setattr("boto3.client", fail)
+    response = _post(create_app().test_client(), kind="image")
+
+    assert response.status_code == 500
+    assert response.get_json()["error"] == "internal error"

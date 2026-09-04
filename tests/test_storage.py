@@ -114,6 +114,37 @@ def test_missing_image_credential_is_an_error(monkeypatch):
         load_image_creds()
 
 
+@pytest.mark.parametrize(("name", "value"), [
+    ("FRONTDOOR_S3_ENDPOINT", "not a url"),
+    ("FRONTDOOR_S3_ENDPOINT", "https://exa mple.com"),
+    ("FRONTDOOR_S3_ENDPOINT", "https://_bad.example"),
+    ("FRONTDOOR_S3_ENDPOINT", "https://-bad.example"),
+    ("FRONTDOOR_S3_ENDPOINT", "https://bad-.example"),
+    ("FRONTDOOR_S3_ENDPOINT", "https://example..com"),
+    ("FRONTDOOR_S3_REGION", "bad region"),
+])
+def test_tick_b01_malformed_client_config_is_a_storage_error(
+        monkeypatch, name, value):
+    _image_env(monkeypatch)
+    monkeypatch.setenv(name, value)
+
+    with pytest.raises(StorageError, match="could not configure object storage"):
+        image_store()
+
+
+@pytest.mark.parametrize("endpoint", [
+    "https://account.r2.cloudflarestorage.com",
+    "http://127.0.0.1:9000",
+    "http://[::1]:9000",
+])
+def test_tick_b01_valid_storage_endpoint_hosts_are_accepted(
+        monkeypatch, endpoint):
+    _image_env(monkeypatch)
+    monkeypatch.setenv("FRONTDOOR_S3_ENDPOINT", endpoint)
+
+    assert image_store().creds.endpoint == endpoint
+
+
 @mock_aws
 def test_image_put_and_get_round_trip(monkeypatch):
     _image_env(monkeypatch)
