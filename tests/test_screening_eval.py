@@ -808,20 +808,28 @@ def _stub_freeze_day(monkeypatch):
     )
 
 
+def _stub_run_eval(monkeypatch):
+    """Capture run_eval kwargs; return a dummy report so main can print."""
+    captured = {}
+
+    def _capture(**kwargs):
+        captured.update(kwargs)
+        return {
+            "run": {"labels_scored": 0, "entrance_count": 0, "duration_s": 1.0},
+            "overall": {"accuracy_of_committed": None},
+        }
+
+    monkeypatch.setattr("frontdoor.screening_eval.run_eval", _capture)
+    return captured
+
+
 def test_cli_include_sealed_asks_for_the_sealed_split_with_an_audit_context(
     tmp_path, monkeypatch
 ):
     from frontdoor.labels import AUDIT_KEYS
 
     _stub_freeze_day(monkeypatch)
-    captured = {}
-
-    def _capture(**kwargs):
-        captured.update(kwargs)
-        return {"run": {"labels_scored": 0, "entrance_count": 0, "duration_s": 1.0},
-                "overall": {"accuracy_of_committed": None}}
-
-    monkeypatch.setattr("frontdoor.screening_eval.run_eval", _capture)
+    captured = _stub_run_eval(monkeypatch)
     assert main(_cli_args(tmp_path, "--include-sealed"), from_cli=True) == 0
     assert captured["split"] == "sealed"
     assert all(key in captured["audit"] for key in AUDIT_KEYS)
@@ -832,14 +840,7 @@ def test_cli_include_sealed_asks_for_the_sealed_split_with_an_audit_context(
 
 def test_cli_without_the_flag_asks_for_dev_and_no_audit(tmp_path, monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    captured = {}
-
-    def _capture(**kwargs):
-        captured.update(kwargs)
-        return {"run": {"labels_scored": 0, "entrance_count": 0, "duration_s": 1.0},
-                "overall": {"accuracy_of_committed": None}}
-
-    monkeypatch.setattr("frontdoor.screening_eval.run_eval", _capture)
+    captured = _stub_run_eval(monkeypatch)
     assert main(_cli_args(tmp_path), from_cli=True) == 0
     assert captured["split"] == "dev"
     assert captured["audit"] is None

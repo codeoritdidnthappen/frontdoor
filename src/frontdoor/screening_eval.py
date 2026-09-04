@@ -60,9 +60,10 @@ class ScreeningEvalError(ValueError):
 def _require_permitted_split(split, *, allow_sealed=False):
     """Raise unless this split may be scored, before any file is read.
 
-    `allow_sealed` is set once the unsealing has been recorded; on its own the
-    argument is not permission to read anything, it just stops this check from
-    refusing a run the audit log already accounts for.
+    `allow_sealed` means an audit mapping is present, not that the log line
+    has been written yet. Recording happens next, in labels_for_eval. On its
+    own the argument is not permission to read anything; it only stops this
+    check from refusing a sealed split the caller is about to audit.
     """
     if split not in SPLITS:
         raise ScreeningEvalError(f"unknown split {split!r}; expected one of {SPLITS}")
@@ -239,7 +240,7 @@ def build_result(
         }
     scored = overall["correct"] + overall["wrong"] + overall["abstained"]
     calls = entrance_calls(screenings, joins)
-    called = [
+    call_outcomes = [
         call["all_committed_correct"]
         for call in calls.values()
         if call["all_committed_correct"] is not None
@@ -257,7 +258,9 @@ def build_result(
         },
         "entrance_call": {
             "per_entrance": calls,
-            "agreement": sum(called) / len(called) if called else None,
+            "agreement": (
+                sum(call_outcomes) / len(call_outcomes) if call_outcomes else None
+            ),
         },
         "flip_rate": {
             "per_entrance": flip_rates,
