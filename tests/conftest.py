@@ -23,6 +23,15 @@ for _path in (REPO_ROOT / "src", REPO_ROOT):
         sys.path.insert(0, str(_path))
 
 
+#: Read by `test_no_server_config_leaks_from_dotenv`, and by the fixture above, so the list
+#: cannot drift between the thing that clears and the thing that checks.
+SERVER_CONFIG_NOT_FROM_DOTENV = (
+    "FRONTDOOR_UPLOAD_KEY",
+    "FRONTDOOR_DEPTH_INGEST_URL",
+    "FRONTDOOR_DEPTH_INGEST_KEY",
+)
+
+
 @pytest.fixture(scope="session", autouse=True)
 def _load_dotenv_before_any_test():
     """Load `.env` once, up front, so which test runs first stops mattering.
@@ -42,6 +51,30 @@ def _load_dotenv_before_any_test():
     Loading here makes the order deterministic: real values are present before the first
     test, and `monkeypatch.delenv` inside a test now stays deleted for that test.
     """
+    import os
+
     from frontdoor import storage
 
     storage._load_dotenv_once()
+
+    # ...and then take back the variables that are application CONFIG rather than storage
+    # credentials.
+    #
+    # The load above exists so the opt-in live storage tests can find real credentials. It also,
+    # unavoidably, hands the suite whatever else is in the operator's .env -- and
+    # `create_app()` now reads FRONTDOOR_UPLOAD_KEY at CONSTRUCTION time and builds the
+    # depth-ingest config from it, raising when the ingest URL is absent. So a developer who
+    # follows data/STORAGE.md and fills in an upload key gets 38 failures and 68 collection
+    # errors, while CI -- which has no .env -- stays green. Measured on 2026-09-03: 831 pass
+    # without .env, 725 with it, and removing this one variable accounts for all 106.
+    #
+    # A test must not depend on the machine's server configuration. Every test that needs these
+    # sets them with monkeypatch (test_upload_endpoint, test_depth_ingest), so clearing them here
+    # costs nothing and makes the result the same everywhere.
+    #
+    # ANTHROPIC_API_KEY is deliberately NOT cleared: it is read per request rather than at
+    # construction, so it cannot break collection, and the tests that care about the keyless path
+    # delete it themselves.
+    for name in SERVER_CONFIG_NOT_FROM_DOTENV:
+        os.environ.pop(name, None)
+
