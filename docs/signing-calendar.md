@@ -29,12 +29,64 @@ scheduling risk in this ticket rather than a footnote to it.
 | # | Date | Mac owner | Device | Purpose |
 |---|------|-----------|--------|---------|
 | 1 | 2026-09-02 ✅ | Emily | James's iPhone 17 Pro | Done. Installed and launched. |
-| 2 | **by 2026-09-06 — NO DATE AGREED** | Emily | **James's iPhone 17 Pro** | **The session that cannot be missed.** Signed 2026-09-02, so it expires 2026-09-09 — Demo Day itself. Needs co-location, which AC3 requires be agreed in advance. It is not. |
-| 3 | 2026-09-08 *(optional)* | Emily | James's iPhone 17 Pro | Top-up before rehearsal. Expires Sep 15. |
+| 2 | **2026-09-04 ✅** | Emily | James's iPhone 17 Pro (`iPhone18,1`) | Done. Installed and **observed launching**. Profile `1decf9c0`, expires **2026-09-10 18:32 PDT** — covers Demo Day, but see the warning below: it does **not** cover the Showcase. |
+| 3 | **2026-09-08 — REQUIRED** | Emily | James's iPhone 17 Pro | Not optional any more. Session 2 was signed early and dies 2026-09-10 evening; without this the app is dead for the Showcase. A Sep 8 signing expires Sep 15. |
 
-**Session 2 is the open item on this ticket.** Every other session is one person at one desk and
-can happen whenever. This one needs James and Emily in the same place before Sep 6, and no date has
-been agreed. **D-025 fixes the deadline at 2026-09-06 and this document does not move it.**
+**Session 2 is done** (2026-09-04, #214). Every other session is one person at one desk and can
+happen whenever. **D-025 fixes the deadline at 2026-09-06 and this document does not move it.**
+
+### Signing EARLY undershoots the Showcase — the deadline has a floor as well as a ceiling
+
+Session 2 was done on 2026-09-04, comfortably inside D-025's "no later than Sep 6". That turns out
+to be too early:
+
+| | |
+|---|---|
+| Profile issued | 2026-09-04 01:32 UTC |
+| Expires (7 days) | **2026-09-10 18:32 PDT** |
+| Demo Day, Sep 9 | covered |
+| Showcase day 1, Sep 10 | dies at 18:32 that evening |
+| Showcase day 2, Sep 11 | **not covered** |
+
+A 7-day profile only reaches the end of Sep 11 if it is issued on or after **2026-09-05 07:00
+UTC**. So the window for a single covering signature is **Sep 5 or Sep 6**, not "any time up to
+Sep 6" — the deadline has a floor as well as a ceiling, and this document did not say so.
+
+That is why session 3 is now marked REQUIRED rather than optional. It is the only thing standing
+between the app and a dead Showcase.
+
+### Re-signing does NOT extend the expiry unless the cached profile is deleted first
+
+The single most important thing learned in session 2, and it would have failed silently. Running
+the documented build command again produced a successful build, a successful install, and **the
+same expiry**: Xcode reused the cached profile rather than issuing a new one.
+
+```
+before:  profile 61318044  created 2026-09-02  expires 2026-09-09   <- Demo Day
+after a plain rebuild:      unchanged
+after deleting the cache:   profile 1decf9c0  created 2026-09-04  expires 2026-09-11
+```
+
+So the re-sign step is:
+
+```
+rm ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/<uuid>.mobileprovision
+```
+
+**before** the `xcodebuild` line below. Without it, session 3 will look like it worked and leave
+the app dying mid-Demo-Day.
+
+### Two more things session 2 established
+
+**Trust is per developer, not per app.** Deleting the app removed the Device Management entry, and
+the phone then refused to launch anything signed by that certificate until it was re-granted —
+which needs the phone online, because iOS verifies with Apple. Do not delete the app to "start
+clean" on a capture day.
+
+**The free team's device slots are full — 3 of 3.** The borrowed iPhone 15 Pro Max, Emily's
+iPhone 16 and James's iPhone 17 Pro. **No fourth device can be enrolled.** R-7's "borrow a
+handset" mitigation is therefore unavailable: a borrowed phone cannot be signed at all, whoever
+lends it.
 
 An earlier draft of this paragraph said Sep 5–8 all produce valid coverage. Sep 7 and Sep 8 do cover
 Demo Day arithmetically — a build signed Sep 8 expires Sep 15 — but they leave the app **dead on Sep
