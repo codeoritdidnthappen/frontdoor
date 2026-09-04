@@ -4,9 +4,9 @@ The metrology library and the evaluation harness both go through here. A
 truncated or substituted file must raise, naming the capture, rather than
 quietly changing a number in the error budget.
 
-Sealed rows are absent from listings and refused on direct load. The only
-way to read them is `python -m frontdoor.eval --include-sealed`, which
-appends SEAL_AUDIT.log first (TICK-071).
+Sealed rows are absent from listings and refused on direct load. They are
+read only by an audited `--include-sealed` run, which appends SEAL_AUDIT.log
+first (TICK-071).
 
 Sidecars live in git at data/sidecars/<capture_id>.json. Images are fetched
 by capture_id from the image bucket (TICK-012). Depth is not loaded.
@@ -184,7 +184,7 @@ class DatasetLoader:
         if split == "sealed":
             raise LoaderError(
                 "the sealed split cannot be listed; it is opened once, by an audited "
-                "`python -m frontdoor.eval --include-sealed` run (D-007, D-017)"
+                "`--include-sealed` run (D-007, D-017)"
             )
         if split is not None and split not in self.SPLITS:
             raise LoaderError(

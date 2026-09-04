@@ -184,7 +184,13 @@ def load_labels(path):
 AUDIT_KEYS = seal_audit.AUDIT_KEYS
 
 
-def labels_for_eval(labels, *, split="dev", audited=False, audit=None):
+#: Recorded as the command line when the caller is a library call rather than
+#: a command someone typed. A real entrypoint passes its own argv, because the
+#: audit line's job is to name a run that can be reconstructed.
+LIBRARY_AUDIT_ARGV = ("labels", "--split", "sealed")
+
+
+def labels_for_eval(labels, *, split="dev", audited=False, audit=None, argv=None):
     """Filter labels to one split for eval use; sealed is audited, not flagged.
 
     Mirrors the screening engine's split discipline: the split is resolved
@@ -192,10 +198,14 @@ def labels_for_eval(labels, *, split="dev", audited=False, audit=None):
     through the deliberate, human-run results-freeze path. That path passes
     audited=True AND `audit`, a mapping with AUDIT_KEYS, and the labels are
     released only after seal_audit.record_unsealing has appended one line to
-    the audit log (D-017) — same discipline as `python -m frontdoor.eval
-    --include-sealed`. audited=True alone never unseals; any SealAuditError
-    (dirty tree, unwritable log, ...) propagates and no sealed label is
-    returned. Day-to-day eval calls get the dev split by default.
+    the audit log (D-017) — same discipline as an audited `--include-sealed`
+    run. audited=True alone never unseals; any SealAuditError (dirty tree,
+    unwritable log, ...) propagates and no sealed label is returned. Day-to-day
+    eval calls get the dev split by default.
+
+    `argv` is the command line to record. An entrypoint passes the one the
+    operator actually typed, so the freeze-day line names a runnable command;
+    omitting it records LIBRARY_AUDIT_ARGV.
     """
     if split not in SPLITS:
         raise LabelError(f"unknown split {split!r}; expected one of {SPLITS}")
@@ -222,7 +232,7 @@ def labels_for_eval(labels, *, split="dev", audited=False, audit=None):
         # Raises SealAuditError without writing if the run cannot be recorded;
         # sealed labels are handed back only after the line is on disk.
         seal_audit.record_unsealing(
-            argv=["labels", "--split", "sealed"],
+            argv=list(LIBRARY_AUDIT_ARGV) if argv is None else list(argv),
             **{key: audit[key] for key in AUDIT_KEYS},
         )
     return [

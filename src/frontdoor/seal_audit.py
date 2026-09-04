@@ -1,8 +1,8 @@
 """Append-only unsealing audit log (TICK-071, D-017).
 
-Every `python -m frontdoor.eval --include-sealed` run appends one line to
-SEAL_AUDIT.log before any sealed byte is read. The file is never truncated,
-rewritten, or deleted by this module.
+Every audited `--include-sealed` run appends one line to SEAL_AUDIT.log before
+any sealed byte is read. The file is never truncated, rewritten, or deleted by
+this module.
 """
 
 from __future__ import annotations

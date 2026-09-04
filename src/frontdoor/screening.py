@@ -453,12 +453,18 @@ class ScreeningEngine:
         content.append({"type": "text", "text": build_integrated_prompt(len(images))})
         return self._call_model(content, expect_face_check=True)
 
-    def _resolve_split_or_refuse(self, entrance_id):
-        """Canonicalize, resolve and log the split; refuse sealed entrances."""
+    def _resolve_split_or_refuse(self, entrance_id, *, allow_sealed=False):
+        """Canonicalize, resolve and log the split; refuse sealed entrances.
+
+        `allow_sealed` is for the one results-freeze run, whose caller has
+        already recorded the unsealing in SEAL_AUDIT.log (D-017). This engine
+        does not verify that record - the doorway that releases sealed labels
+        and sealed bytes does - so nothing but that run should pass it.
+        """
         entrance_id = canonical_entrance_id(entrance_id)
         split = assign_split(entrance_id)
         logger.info("split check: entrance %s -> %s", entrance_id, split)
-        if split == "sealed":
+        if split == "sealed" and not allow_sealed:
             raise SealedSplitError(
                 f"entrance {entrance_id} is in the sealed split; the sealed "
                 "split is evaluated exactly once at results freeze, not here"
@@ -471,14 +477,17 @@ class ScreeningEngine:
         )
         return entrance_id, split
 
-    def screen_entrance(self, entrance_id, images):
+    def screen_entrance(self, entrance_id, images, *, allow_sealed=False):
         """Screen one entrance from its captured views (image bytes), one
         model call per view. Kept for callers that need per-view verdicts.
 
-        Resolves the split itself and refuses sealed entrances; the split
+        Resolves the split itself and refuses sealed entrances unless
+        `allow_sealed` says the unsealing has already been recorded; the split
         check is logged for every entrance touched.
         """
-        entrance_id, split = self._resolve_split_or_refuse(entrance_id)
+        entrance_id, split = self._resolve_split_or_refuse(
+            entrance_id, allow_sealed=allow_sealed
+        )
         assessments = tuple(self.assess_image(image) for image in images)
         return EntranceScreening(
             entrance_id=entrance_id,
