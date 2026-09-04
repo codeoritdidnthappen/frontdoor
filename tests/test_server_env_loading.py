@@ -12,6 +12,7 @@ that a already-imported module stayed imported.
 """
 
 import json
+import os
 import subprocess
 import sys
 import textwrap
@@ -34,12 +35,21 @@ PROBE = textwrap.dedent(
 
 def run_probe(tmp_path, env_text, extra_env=None):
     (tmp_path / ".env").write_text(env_text, encoding="utf-8")
+    # Inherit the real environment and then STRIP it, rather than building a minimal one from
+    # scratch. The scratch version hardcoded PATH=/usr/bin:/bin, which is not a path on Windows --
+    # so these three tests failed for the one teammate who runs Windows, and he was excluding them
+    # by hand as though they were a known platform exception. They were not; they were wrong.
+    #
+    # Inheriting keeps the interpreter launchable everywhere. Stripping keeps the intent: the
+    # probe must not reach the developer's real credentials, or it would prove nothing about
+    # loading them from the temporary .env this test writes.
     env = {
-        "PATH": "/usr/bin:/bin",
-        "HOME": str(tmp_path),
-        # Keep the probe from reaching the developer's own credentials.
-        "FRONTDOOR_MAP_DATASET": str(tmp_path / "nothing.json"),
+        k: v for k, v in os.environ.items()
+        if not k.startswith(("FRONTDOOR_", "ANTHROPIC_"))
     }
+    env["HOME"] = str(tmp_path)
+    env["USERPROFILE"] = str(tmp_path)  # HOME's counterpart on Windows
+    env["FRONTDOOR_MAP_DATASET"] = str(tmp_path / "nothing.json")
     env.update(extra_env or {})
     result = subprocess.run(
         [sys.executable, "-c", PROBE.format(src=str(REPO_ROOT / "src"))],
