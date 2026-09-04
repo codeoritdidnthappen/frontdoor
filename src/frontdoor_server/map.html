@@ -196,6 +196,8 @@
   .row-icon { flex: none; width: 18px; text-align: center; color: var(--blue-deep); align-self: center; }
   .receipts .attribution { color: var(--muted); font-size: 11px; }
   .receipts .cta { color: var(--blue-deep); }
+  .provenance-link { color: inherit; }
+  .provenance-link:focus-visible { outline: 3px solid var(--purple-deep); outline-offset: 2px; border-radius: 3px; }
   .features .feature-name { flex: 1; min-width: 0; }
   .features .obs { color: var(--muted); font-size: 12px; white-space: nowrap; }
   .unknown-row { color: var(--muted); font-style: italic; }
@@ -309,6 +311,19 @@ function isStateRecordLine(line) {
 
 function pinHasStateRecord(pin) {
   return (pin.provenance || []).some(isStateRecordLine);
+}
+
+function commonsPageUrl(line) {
+  if (!line || line.source !== "wikimedia_commons" || typeof line.url !== "string") return null;
+  try {
+    var url = new URL(line.url);
+    if (url.protocol !== "https:" || url.hostname !== "commons.wikimedia.org" ||
+        url.port || url.username || url.password ||
+        !url.pathname.startsWith("/wiki/")) return null;
+    return url.href;
+  } catch (err) {
+    return null;
+  }
 }
 
 var REDUCED_MOTION = window.matchMedia &&
@@ -564,11 +579,18 @@ function openSheet(pin, sourceElement) {
     if (!line || typeof line.label !== "string") return;
     var li = el("li");
     li.appendChild(rowIcon(sourceIcon(line)));
-    var span = el("span", null, line.label);
-    if (typeof line.detail === "string") {
-      span.appendChild(el("span", "attribution", " · " + line.detail));
+    var pageUrl = commonsPageUrl(line);
+    var text = pageUrl ? el("a", "provenance-link", line.label)
+                       : el("span", null, line.label);
+    if (pageUrl) {
+      text.href = pageUrl;
+      text.target = "_blank";
+      text.rel = "noopener noreferrer";
     }
-    li.appendChild(span);
+    if (typeof line.detail === "string") {
+      text.appendChild(el("span", "attribution", " · " + line.detail));
+    }
+    li.appendChild(text);
     receipts.appendChild(li);
   });
   if (receipts.children.length) sheet.appendChild(receipts);
