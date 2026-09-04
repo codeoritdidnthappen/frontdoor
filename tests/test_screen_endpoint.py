@@ -5,10 +5,6 @@ constructs an anthropic client or needs an API key.
 """
 
 import io
-import threading
-import time
-
-import pytest
 
 from frontdoor.screening import CRITERIA_KEYS, ImageAssessment, ScreeningConfig
 from frontdoor_server.app import create_app
@@ -34,38 +30,26 @@ def errored_assessment(error="ScreeningError: no JSON object in response"):
 
 
 class FakeEngine:
-    """Stands in for ScreeningEngine as the view uses it: .config, .assess_image.
+    """Stands in for ScreeningEngine as the view uses it: .config and
+    .assess_images_integrated.
 
-    Keyed by image BYTES rather than by call order. The view assesses views concurrently,
-    so "the third call gets the third assessment" is not a property any fake can rely on --
-    and a fake that popped a list would make these tests pass or fail on thread scheduling.
-    Keying on the bytes asserts the thing that actually matters: the assessment reported for
-    an image is the assessment OF that image, whichever thread got to it first.
+    One request is one integrated engine call over ALL the views, so the fake
+    records each call as (images tuple, media_types tuple) and returns a single
+    integrated assessment.
     """
 
-    def __init__(self, assessments=None, raises=None, delay=0.0):
-        # bytes -> assessment. `assessments` may be a dict, or a list paired positionally
-        # with the images the test is about to post (which must then have distinct bytes).
-        self._by_bytes = dict(assessments) if isinstance(assessments, dict) else None
-        self._ordered = None if assessments is None or self._by_bytes else list(assessments)
+    def __init__(self, assessment=None, raises=None):
+        self._assessment = assessment
         self._raises = raises
-        self._delay = delay
         self.config = ScreeningConfig()
         self.calls = []
-        self._lock = threading.Lock()
 
-    def assess_image(self, image, *, media_type="image/jpeg"):
-        if self._delay:
-            time.sleep(self._delay)
-        with self._lock:
-            self.calls.append((image, media_type))
-            n = len(self.calls)
+    def assess_images_integrated(self, images, *, media_types=None):
+        self.calls.append((tuple(images), tuple(media_types or ())))
         if self._raises is not None:
             raise self._raises
-        if self._by_bytes is not None:
-            return self._by_bytes[image]
-        if self._ordered is not None:
-            return self._ordered[n - 1]
+        if self._assessment is not None:
+            return self._assessment
         return ok_assessment()
 
 
@@ -89,17 +73,17 @@ def post_screen(client, parts, entrance_id=None):
 # --- happy paths -------------------------------------------------------------
 
 
-def test_single_image_returns_per_criterion_verdicts():
+def test_single_image_returns_the_integrated_per_criterion_verdicts():
     engine = FakeEngine()
     response = post_screen(make_client(engine), [image_part()])
     assert response.status_code == 200
     body = response.get_json()
-    assert len(body["images"]) == 1
-    image = body["images"][0]
-    assert image["error"] is None
-    assert image["latency_ms"] == 1234
+    assert body["images"] == [{"filename": "view.jpg"}]
+    assessment = body["assessment"]
+    assert assessment["error"] is None
+    assert assessment["latency_ms"] == 1234
     for key in CRITERIA_KEYS:
-        entry = image["criteria"][key]
+        entry = assessment["criteria"][key]
         assert entry["verdict"] == "present"
         assert entry["confidence"] == 80
         assert entry["evidence"]
@@ -132,23 +116,37 @@ def test_single_image_has_no_aggregate():
     assert "aggregate" not in body
 
 
-def test_multi_image_aggregates_majority_and_flip_rate():
-    engine = FakeEngine(assessments={
-        b"v0": ok_assessment("present"),
-        b"v1": ok_assessment("present"),
-        b"v2": ok_assessment("not_visible"),
-    })
+def test_multi_image_gets_one_integrated_assessment_and_aggregate():
+    """N views are ONE engine call now, and the aggregate carries the
+    integrated verdicts with flip_rate and counts null - no cross-view
+    comparison was made, so there is no flip rate to report, and a fabricated
+    0.0 would read as "all views agreed"."""
+    engine = FakeEngine(assessment=ok_assessment("present"))
     parts = [image_part(f"v{i}.jpg", data=f"v{i}".encode()) for i in range(3)]
     body = post_screen(make_client(engine), parts).get_json()
-    assert len(body["images"]) == 3
+    assert len(engine.calls) == 1
+    assert [img["filename"] for img in body["images"]] == [
+        "v0.jpg", "v1.jpg", "v2.jpg",
+    ]
     for key in CRITERIA_KEYS:
+        assert body["assessment"]["criteria"][key]["verdict"] == "present"
         summary = body["aggregate"][key]
         assert summary["verdict"] == "present"
-        assert summary["flip_rate"] == pytest.approx(1 / 3)
-        assert summary["counts"] == {"present": 2, "not_visible": 1}
+        assert summary["flip_rate"] is None
+        assert summary["counts"] is None
 
 
-def test_engine_receives_bytes_and_the_declared_media_type():
+def test_response_declares_integrated_mode():
+    """A consumer must be able to tell "the views agreed" from "no cross-view
+    comparison was made"; the response says which mode produced it."""
+    body = post_screen(make_client(FakeEngine()), [image_part()]).get_json()
+    assert body["mode"] == "integrated"
+    parts = [image_part(f"v{i}.jpg", data=f"v{i}".encode()) for i in range(3)]
+    body = post_screen(make_client(FakeEngine()), parts).get_json()
+    assert body["mode"] == "integrated"
+
+
+def test_engine_receives_all_bytes_and_media_types_in_one_call_in_order():
     engine = FakeEngine()
     parts = [
         image_part("a.jpg", "image/jpeg", b"jpeg-bytes"),
@@ -156,13 +154,12 @@ def test_engine_receives_bytes_and_the_declared_media_type():
         image_part("c.webp", "image/webp", b"webp-bytes"),
     ]
     post_screen(make_client(engine), parts)
-    assert sorted(engine.calls) == sorted(
-        [
-            (b"jpeg-bytes", "image/jpeg"),
-            (b"png-bytes", "image/png"),
-            (b"webp-bytes", "image/webp"),
-        ]
-    )
+    assert engine.calls == [
+        (
+            (b"jpeg-bytes", b"png-bytes", b"webp-bytes"),
+            ("image/jpeg", "image/png", "image/webp"),
+        )
+    ]
 
 
 def test_valid_entrance_id_is_echoed_in_canonical_form():
@@ -170,19 +167,6 @@ def test_valid_entrance_id_is_echoed_in_canonical_form():
         make_client(FakeEngine()), [image_part()], entrance_id=" e-001 "
     ).get_json()
     assert body["entrance_id"] == DEV_ID
-
-
-def test_a_partially_failed_batch_still_returns_200_with_the_error_recorded():
-    engine = FakeEngine(assessments={
-        b"good": ok_assessment(), b"bad": errored_assessment("boom"),
-    })
-    parts = [image_part("a.jpg", data=b"good"), image_part("b.jpg", data=b"bad")]
-    response = post_screen(make_client(engine), parts)
-    assert response.status_code == 200
-    images = response.get_json()["images"]
-    assert images[0]["error"] is None
-    assert images[1]["error"] == "boom"
-    assert images[1]["criteria"] is None
 
 
 # --- error contract ----------------------------------------------------------
@@ -239,10 +223,10 @@ def test_sealed_entrance_returns_403_before_any_engine_call():
     assert engine.calls == []
 
 
-def test_all_assessments_failing_returns_502_naming_the_failures():
-    engine = FakeEngine(
-        assessments=[errored_assessment("refused"), errored_assessment("no JSON")]
-    )
+def test_a_failed_integrated_assessment_returns_502_naming_the_failure():
+    """One call for all views means a recorded engine error fails the request
+    as a whole - named, never a 200 with silently missing verdicts."""
+    engine = FakeEngine(assessment=errored_assessment("model refused the request"))
     response = post_screen(make_client(engine), [image_part("a.jpg"), image_part("b.jpg")])
     body = assert_error_shape(response, 502, "screening engine failure")
     assert "refused" in body["detail"]
@@ -391,16 +375,14 @@ def test_uploads_are_processed_before_the_engine_sees_them(monkeypatch):
         "process_upload",
         lambda raw: ProcessedImage(b"blurred:" + raw, face_count=2, gps_stripped=True),
     )
-    engine = FakeEngine(assessments={
-        b"blurred:v0": ok_assessment(), b"blurred:v1": ok_assessment(),
-    })
+    engine = FakeEngine()
     parts = [image_part(f"v{i}.jpg", data=f"v{i}".encode()) for i in range(2)]
 
     body = post_screen(make_client(engine), parts).get_json()
 
     # The engine only ever saw processed bytes, re-typed as the JPEG they now are...
-    assert sorted(engine.calls) == [
-        (b"blurred:v0", "image/jpeg"), (b"blurred:v1", "image/jpeg"),
+    assert engine.calls == [
+        ((b"blurred:v0", b"blurred:v1"), ("image/jpeg", "image/jpeg")),
     ]
     # ...and the response totals the blurred faces across images.
     assert body["faces_blurred"] == 4
@@ -409,62 +391,36 @@ def test_uploads_are_processed_before_the_engine_sees_them(monkeypatch):
 def test_a_real_image_reaches_the_engine_reencoded():
     engine = FakeEngine()
     post_screen(make_client(engine), [image_part(data=real_jpeg())])
-    (sent, media_type), = engine.calls
+    ((sent,), (media_type,)), = engine.calls
     assert media_type == "image/jpeg"
     assert sent[:2] == b"\xff\xd8"
     assert sent != real_jpeg()  # processed, not the raw upload
 
 
 def test_undecodable_bytes_pass_through_to_the_engine_unchanged():
-    # Covered positionally by test_engine_receives_bytes_and_the_declared_media_type
+    # Covered positionally by test_engine_receives_all_bytes_and_media_types_in_one_call
     # too; this states the ingest rule on its own: bytes no decoder accepts hold no
     # renderable face, so they go through untouched for the engine to fail on by name.
     engine = FakeEngine()
     post_screen(make_client(engine), [image_part("a.png", "image/png", b"not-an-image")])
-    assert engine.calls == [(b"not-an-image", "image/png")]
+    assert engine.calls == [((b"not-an-image",), ("image/png",))]
 
 
-# --- concurrent assessment ----------------------------------------------------------------
+# --- one integrated call ------------------------------------------------------------------
 #
-# One view took 13.5s against the live model on 2026-09-03, so a six-view entrance in series
-# is over a minute against the 2.5-minute technical-demo budget in docs/deck-outline.md.
-# Assessing views concurrently only overlaps the waiting -- these three tests pin the things
-# that overlap could plausibly break.
+# The endpoint used to fan a request's views out into one model call each and aggregate by
+# majority. Offline eval on the 12-entrance pilot set showed the majority vote amplifying
+# shared camera-position blind spots, so the views now go into ONE integrated call -- which
+# also replaces N calls' worth of waiting with one against the timed demo budget in
+# docs/deck-outline.md.
 
 
-def test_each_image_gets_its_own_assessment_whichever_thread_ran_first():
-    """images[i] must be files[i]. Positional pairing is how the response is built, and a
-    pool that returned results out of order would silently attribute one view's verdicts to
-    another -- wrong per-image evidence, and an aggregate built from it."""
-    engine = FakeEngine(assessments={
-        b"first": ok_assessment("present"),
-        b"second": ok_assessment("absent"),
-        b"third": ok_assessment("not_visible"),
-    })
-    parts = [
-        image_part("first.jpg", data=b"first"),
-        image_part("second.jpg", data=b"second"),
-        image_part("third.jpg", data=b"third"),
-    ]
-    images = post_screen(make_client(engine), parts).get_json()["images"]
-    assert [i["filename"] for i in images] == ["first.jpg", "second.jpg", "third.jpg"]
-    got = [i["criteria"]["ramp_or_bevel"]["verdict"] for i in images]
-    assert got == ["present", "absent", "not_visible"]
-
-
-def test_views_are_assessed_concurrently_not_one_after_another():
-    """The point of the change. Six views that each take 0.2s serially take 1.2s; overlapped
-    they take about 0.2s. The bound is deliberately loose -- this asserts that the calls
-    overlap at all, not a particular speed, so it does not become a timing flake on a loaded
-    CI box."""
-    engine = FakeEngine(delay=0.2)
+def test_a_full_batch_of_views_is_exactly_one_engine_call_in_posted_order():
+    engine = FakeEngine()
     parts = [image_part(f"v{i}.jpg", data=f"v{i}".encode()) for i in range(MAX_IMAGES)]
-
-    started = time.perf_counter()
     response = post_screen(make_client(engine), parts)
-    elapsed = time.perf_counter() - started
-
     assert response.status_code == 200
-    assert len(engine.calls) == MAX_IMAGES
-    serial = 0.2 * MAX_IMAGES
-    assert elapsed < serial / 2, f"took {elapsed:.2f}s; serial would be {serial:.2f}s"
+    assert len(engine.calls) == 1
+    (images, media_types), = engine.calls
+    assert images == tuple(f"v{i}".encode() for i in range(MAX_IMAGES))
+    assert len(media_types) == MAX_IMAGES

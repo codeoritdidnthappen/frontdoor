@@ -1,10 +1,10 @@
 {
-  "name": "south-congress-demo-blocks",
+  "name": "second-street-district-demo-blocks",
   "bounding_box": {
-    "south": 30.2465,
-    "west": -97.7513,
-    "north": 30.2521,
-    "east": -97.7478
+    "south": 30.262382,
+    "west": -97.747630,
+    "north": 30.267748,
+    "east": -97.743692
   },
   "headings_per_business": 3,
   "max_maps_calls": 1200

@@ -19,8 +19,8 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 
+from frontdoor import seal_audit
 from frontdoor.manifest import read_manifest
-from frontdoor.seal_audit import record_unsealing
 from frontdoor.split import InvalidEntranceId, assign_split, canonical_entrance_id
 
 # Must match the criterion keys in the screening engine's CRITERIA
@@ -177,9 +177,11 @@ def load_labels(path):
     return LoadedLabels(labels=tuple(labels), blank_skipped=blank_skipped)
 
 
-#: What labels_for_eval needs to record a sealed unsealing, keyed exactly as
-#: record_unsealing's keyword arguments (seal_audit, D-017).
-AUDIT_KEYS = ("manifest_path", "audit_path", "repo", "config")
+#: What labels_for_eval needs to record a sealed unsealing. Re-exported from
+#: seal_audit, which owns the contract (D-017): the keys are exactly
+#: record_unsealing's keyword arguments, defined once, next to that signature,
+#: so this module cannot drift from it.
+AUDIT_KEYS = seal_audit.AUDIT_KEYS
 
 
 def labels_for_eval(labels, *, split="dev", audited=False, audit=None):
@@ -209,20 +211,19 @@ def labels_for_eval(labels, *, split="dev", audited=False, audit=None):
                 "recorded first (D-017). Pass audit= a mapping with keys "
                 f"{AUDIT_KEYS} so record_unsealing can append the audit line."
             )
-        missing = [key for key in AUDIT_KEYS if key not in audit]
-        if missing:
-            raise SealedLabelError(
-                f"audit is missing {missing}; record_unsealing needs all of "
-                f"{AUDIT_KEYS} to append the audit line"
-            )
+        # seal_audit owns both halves of the doorway: it validates the audit
+        # mapping against the keys record_unsealing actually takes, and it
+        # appends the SEAL_AUDIT.log line. This module only translates an
+        # incomplete mapping into the label-domain refusal type.
+        try:
+            seal_audit.validate_audit_mapping(audit)
+        except seal_audit.SealAuditError as exc:
+            raise SealedLabelError(str(exc)) from exc
         # Raises SealAuditError without writing if the run cannot be recorded;
         # sealed labels are handed back only after the line is on disk.
-        record_unsealing(
+        seal_audit.record_unsealing(
             argv=["labels", "--split", "sealed"],
-            manifest_path=audit["manifest_path"],
-            audit_path=audit["audit_path"],
-            repo=audit["repo"],
-            config=audit["config"],
+            **{key: audit[key] for key in AUDIT_KEYS},
         )
     return [
         label for label in labels if assign_split(label["entrance_id"]) == split
