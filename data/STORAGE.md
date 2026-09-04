@@ -28,7 +28,7 @@ therefore the D-020 layout, not a prefix inside one bucket.
 | `frontdoor-image` | loader, server, harness | server, on behalf of capture upload |
 | `frontdoor-depth` | **harness only** | dedicated ingest Worker through an R2 binding (D-039) |
 
-Capture uploads go **through the server** (TICK-029, #33), not straight from the phone: no R2
+Capture uploads go **through the server** (TICK-029, #33), not straight from James's iPhone 17 Pro: no R2
 credential ships inside the app. The server holds read+write on `frontdoor-image`. It forwards
 validated depth bytes to the dedicated ingest Worker, whose R2 binding never enters the Fly
 process. Cloudflare does not offer a permanent write-only R2 API token; D-039 replaces D-033's

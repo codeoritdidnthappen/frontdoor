@@ -23,7 +23,7 @@ Simulator build, no signing needed:
 
 ```
 xcodebuild -project ios/FrontdoorCapture.xcodeproj -scheme FrontdoorCapture \
-  -destination 'platform=iOS Simulator,name=iPhone 15' CODE_SIGNING_ALLOWED=NO build
+  -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO build
 ```
 
 The simulator supplies neither a camera nor device motion, so the app correctly shows its
@@ -33,7 +33,7 @@ Capture is only verifiable on hardware.
 ## On device
 
 Free provisioning (D-025, TICK-001): open the project, set your own Apple ID under Signing &
-Capabilities, and run to a cabled iPhone. `DEVELOPMENT_TEAM` is deliberately not committed
+Capabilities, and run to James's cabled iPhone 17 Pro. `DEVELOPMENT_TEAM` is deliberately not committed
 because it differs per team member.
 
 Builds signed this way **expire after 7 days**. TICK-001 owns the signing calendar; a re-sign no

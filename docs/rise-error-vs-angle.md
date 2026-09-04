@@ -7,7 +7,7 @@ resolved before the sealed run.
 
 Independently re-derived in TICK-244 (#159) — `docs/rise-error-vs-angle-independent.md`, via 3D
 projection and a four-corner homography Monte Carlo rather than the tap/scale algebra below.
-The tables agree to ≤3%; F-001 through F-005 survived. TICK-234 (#138) recorded the same
+With James's measured focal length, the tables agree to ≤5.4%; F-001 through F-005 survived. TICK-234 (#138) recorded the same
 survival using the algebra in this note; TICK-244 replaced that write-up.
 
 ## 1. Setup
@@ -20,7 +20,7 @@ amplify noise, and that is what this budget estimates.
 
 | Symbol | Meaning | Value used |
 |---|---|---|
-| `f` | focal length, pixels | **2934.1** — ARCHITECTURE §4 example intrinsics, 4032×3024. **Superseded, see the note below: the measured value is 2792.0.** |
+| `f` | focal length, pixels | **2934.1** — the original ARCHITECTURE §4 example, 4032×3024. **Superseded, see the note below: James's measured value is 2807.7.** |
 | `W` | card long edge | **85.60 mm** — ISO/IEC 7810 ID-1 (D-006) |
 | `R` | threshold rise being measured | **12.7 mm** (0.5″, the ADA line) |
 | `d` | camera-to-threshold distance | 2 m, 3 m |
@@ -31,18 +31,17 @@ Metric scale at the plane is `d/f` mm per pixel. At 2.5 m that puts the card acr
 **100.5 px**, which reproduces R-3's own "roughly 100 px at 2-3 m" — the model agrees with the
 project's existing arithmetic before it is used to argue against it.
 
-> **Correction, 2026-09-02 (TICK-020, #24).** `f = 2934.1` is the ARCHITECTURE §4 *example*
-> intrinsics block, which carries `device_model: iPhone15,3` — **a device nobody on the team owns.**
-> The probe measured `fx = 2792.0` on the phones that will actually shoot the dataset, and the test
-> fixtures had already adopted it. A shorter focal length means fewer pixels per millimetre, so
-> every tolerance below is **about 5% optimistic**:
+> **Correction, 2026-09-04.** `f = 2934.1` is an example, not the value measured on the sole
+> capture phone. James's iPhone 17 Pro (`iPhone18,1`) delivered `fx = 2807.7` on a 4032×3024
+> frame. A shorter focal length means fewer pixels per millimetre, so the original tolerances are
+> optimistic:
 >
-> | | at `f` = 2934.1 (used below) | at `f` = 2792.0 (measured) |
+> | | at `f` = 2934.1 (used below) | at `f` = 2807.7 (measured) |
 > |---|---|---|
-> | scale at 2.0 m | 0.682 mm/px | 0.716 mm/px |
-> | card across, at 2.5 m | 100.5 px | **95.6 px** |
+> | scale at 2.0 m | 0.682 mm/px | 0.712 mm/px |
+> | card across, at 2.5 m | 100.5 px | **96.1 px** |
 > | δ budget at 2.0 m | ≤ 6.5 px | **≤ 6.2 px** |
-> | δ budget at 2.5 m | ≤ 5.2 px | **≤ 4.95 px** |
+> | δ budget at 2.5 m | ≤ 5.2 px | **≤ 4.99 px** |
 >
 > The tables below are left at 2934.1 rather than silently rescaled, so the arithmetic stays
 > checkable against the version that was reviewed. **Use the measured column when setting a
@@ -52,7 +51,7 @@ project's existing arithmetic before it is used to argue against it.
 >
 > **This creates a conflict TICK-232 (#135) has to resolve rather than round away.** #135's AC4
 > accepts a measured tap σ of **≤ 5 px**, and TICK-233 (#136) capped capture distance at **2.5 m**.
-> At that cap the corrected budget is **4.95 px**, so a capture that passes AC4 exactly at 5.0 px
+> At that cap the corrected budget is **4.99 px**, so a capture that passes AC4 exactly at 5.0 px
 > misses the budget at the furthest permitted distance. An earlier version of this note wrote the
 > figure as "≤ 5.0 px", which rounds a tolerance in the unsafe direction and made the conflict
 > invisible. The margin is small — 1% — but AC6 exists for precisely this case: if 5 px is what the
@@ -100,8 +99,8 @@ buys a larger error in millimetres:
 
 This is the term everything turns on, so it is worth stating honestly rather than assuming.
 
-On an iPhone 16, a 4032-px-wide still displayed full width across 1179 screen pixels is **3.4 image
-pixels per screen pixel**, at 460 ppi:
+A 4032-px-wide still displayed full width across 1179 screen pixels is **3.4 image pixels per
+screen pixel**. This historical UI estimate is not a hardware claim for the active screening study:
 
 | Tapping method | Image pixels |
 |---|---|
@@ -170,8 +169,8 @@ Stated so the disagreement with TICK-075, if any, has somewhere to land.
 - Lens distortion is corrected (TICK-042, #36). Residual distortion adds to δ.
 - Excludes motion blur, rolling shutter, card non-planarity, and card placement not flush to the
   riser.
-- `f` is the ARCHITECTURE §4 example value. Every number scales linearly with `f`; per-device
-  intrinsics should be substituted once TICK-022 (#26) records them.
+- `f` is the ARCHITECTURE §4 example value. Every number scales linearly with `f`; use the measured
+  `fx = 2807.7` from James's iPhone 17 Pro for any active calculation.
 
 ## 8. Consequences
 
