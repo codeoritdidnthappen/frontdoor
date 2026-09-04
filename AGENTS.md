@@ -62,8 +62,11 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 **Never work directly on `main`. Every change uses an appropriately named branch and a pull
 request. When a ticket is complete, review it, fix every bug, and merge it immediately.**
 
-1. **Trace.** Start from an up-to-date `main` and a ticket. Create a short-lived branch whose prefix
-   matches the work, such as `feat/`, `fix/`, `docs/`, or `chore/`.
+1. **Trace.** Start from an up-to-date `main` and a ticket. Immediately after syncing `main`, reread
+   the live workspace copies of `AGENTS.md` and `CLAUDE.md` before deciding how to land the work.
+   An instruction snapshot supplied earlier in a task or conversation may be stale and must not
+   override the current checked-out files. Create a short-lived branch whose prefix matches the
+   work, such as `feat/`, `fix/`, `docs/`, or `chore/`.
 2. **Code.** Keep commits small and scoped to the ticket. Each commit message says what
    changed and why, and references the ticket. Never credit an AI tool anywhere — no
    `Co-Authored-By` trailers, "generated with" notes, or any other credit for Claude, Codex,
