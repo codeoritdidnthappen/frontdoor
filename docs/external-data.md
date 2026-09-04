@@ -45,6 +45,32 @@ No external source ever upgrades a trust tier by itself.
 - **Refresh**: rerun the CLI; network calls happen only in the CLI path,
   never at import and never in tests.
 
+## Wikimedia Commons imagery (shipped in round one)
+
+- **What**: geotagged File-namespace photos in the demo bbox via the public
+  Commons geosearch API (no key), fetched by `python -m
+  frontdoor.external_data --refresh-commons`. The geosearch call MUST send
+  `gsnamespace=6` — the default namespace returns zero imagery. A second
+  batched `imageinfo`/`extmetadata` call per candidate supplies license,
+  artist, dates, and URLs.
+- **License gate**: only CC0 / CC BY / CC BY-SA (any version) survive
+  ingest; NC, ND, unknown, and fair-use records are dropped with a counted
+  reason before touching disk. CC BY / CC BY-SA records with no named
+  artist are undisplayable and dropped too. Kept records live ONLY in the
+  segregated side file `data/external/commons_imagery.json`, whose header
+  carries the required-attribution statement and the CC BY-SA share-alike
+  note.
+- **Display**: pins within ~35 m of a kept photo gain a provenance line
+  "Photo on Wikimedia Commons - \<year\> - \<license\> - \<artist\>"
+  linking the Commons page. The radius is tighter than the OSM place
+  radius, and no name matching applies, because Commons coordinates are
+  photo positions (where the camera stood), not business positions. A
+  photo line carries no accessibility claim — the never-negative rule is
+  untouched.
+- **Not yet**: no Commons image is assessed by the screening engine.
+  Third-party imagery assessment is a follow-up round with its own
+  matching QA; this round is ingest + provenance only.
+
 ## TDLR TABS (designed; code ships in round one — see `frontdoor.tabs` stub)
 
 The Texas Architectural Barriers System is real, public, and worth an honest
@@ -132,4 +158,5 @@ the page's render path.
 | File | Status | Contents |
 | --- | --- | --- |
 | `data/external/osm_accessibility.json` | public-safe, segregated, ODbL-attributed | OSM wheelchair/entrance records for the demo bbox |
+| `data/external/commons_imagery.json` | public-safe, segregated, per-record CC license + artist | open-licensed Wikimedia Commons photo records for the demo bbox |
 | `data/external/disagreements.json` | INTERNAL ONLY | external-vs-AI conflicts as scan priorities; never rendered |

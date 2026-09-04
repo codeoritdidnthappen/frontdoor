@@ -26,6 +26,10 @@ Network calls happen ONLY in the CLI path (``python -m
 frontdoor.external_data --refresh``); importing this module performs no
 I/O, and tests use fixture payloads.
 
+Round one adds open-licensed Wikimedia Commons imagery as a second
+segregated source — see ``frontdoor.commons_imagery`` (refreshed via
+``--refresh-commons`` on this module's CLI).
+
 TABS (Texas Architectural Barriers System) is round-one scope: the public
 TDLR registry search, its detail-page fields, and the PIA bulk-request path
 are documented in docs/external-data.md (with a drafted PIA request
@@ -429,6 +433,9 @@ def main(argv=None):
     )
     parser.add_argument("--refresh", action="store_true",
                         help="fetch OSM data from Overpass for the demo bbox")
+    parser.add_argument("--refresh-commons", action="store_true",
+                        help="fetch open-licensed Wikimedia Commons imagery "
+                             "records for the demo bbox (round one)")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH),
                         help="demo-area config with the bounding_box")
     parser.add_argument("--out", default=str(DEFAULT_OUT_DIR),
@@ -436,17 +443,38 @@ def main(argv=None):
     parser.add_argument("--dataset", default=str(DEFAULT_PRECATALOGUE_PATH),
                         help="pre-catalogue dataset for the disagreement scan")
     parser.add_argument("--overpass-url", default=OVERPASS_URL)
+    parser.add_argument("--commons-url", default=None,
+                        help="override the Commons API endpoint")
     args = parser.parse_args(argv)
 
-    if not args.refresh:
+    if not args.refresh and not args.refresh_commons:
         parser.print_help()
         return 2
 
     bbox = load_demo_bbox(args.config)
     fetched_at = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    out_dir = Path(args.out)
+
+    if args.refresh_commons:
+        from frontdoor import commons_imagery
+
+        commons_url = args.commons_url or commons_imagery.COMMONS_API_URL
+        geosearch, imageinfo = commons_imagery.fetch_commons_imagery(
+            bbox, url=commons_url)
+        commons_records, dropped = commons_imagery.parse_commons_payloads(
+            geosearch, imageinfo, fetched_at)
+        commons_path = out_dir / commons_imagery.COMMONS_FILENAME
+        commons_imagery.write_commons_dataset(
+            commons_records, commons_path, fetched_at, dropped)
+        print(f"wrote {len(commons_records)} Commons imagery records to "
+              f"{commons_path} (dropped at ingest: "
+              f"{dropped if dropped else 'none'})")
+
+    if not args.refresh:
+        return 0
+
     payload = fetch_overpass(build_overpass_query(bbox), url=args.overpass_url)
     records = parse_overpass_payload(payload, fetched_at)
-    out_dir = Path(args.out)
     osm_path = out_dir / OSM_FILENAME
     write_osm_dataset(records, osm_path, fetched_at)
     print(f"wrote {len(records)} OSM records to {osm_path}")
