@@ -16,6 +16,7 @@ into confidence styling.
 
 import json
 import re
+import subprocess
 from importlib import resources
 
 import pytest
@@ -257,6 +258,77 @@ def test_card_renders_provenance_when_present_and_degrades_when_absent(client):
     html = page(client)
     assert "pin.provenance || []" in html
     assert 'typeof line.label !== "string"' in html
+
+
+def test_tick_b03_commons_provenance_links_only_to_commons(client):
+    html = page(client)
+    script = re.search(r"<script>(.*)</script>", html, re.DOTALL).group(1)
+    dom_stub = r"""
+class FakeNode {
+  constructor(tag) {
+    this.tagName = tag.toUpperCase();
+    this.children = [];
+    this.attributes = {};
+    this.hidden = false;
+    this.classList = { add() {}, remove() {}, toggle() {} };
+  }
+  appendChild(child) { this.children.push(child); return child; }
+  setAttribute(name, value) { this.attributes[name] = value; }
+  addEventListener() {}
+  focus() { this.focused = true; }
+  set innerHTML(value) {
+    this._innerHTML = value;
+    if (value === "") this.children = [];
+  }
+  get innerHTML() { return this._innerHTML || ""; }
+}
+var qaElements = { banner: new FakeNode("div"), sheet: new FakeNode("div") };
+globalThis.document = {
+  body: new FakeNode("body"),
+  head: new FakeNode("head"),
+  createElement: function (tag) { return new FakeNode(tag); },
+  createTextNode: function (text) { var node = new FakeNode("#text"); node.textContent = text; return node; },
+  getElementById: function (id) { return qaElements[id] || new FakeNode("div"); },
+  addEventListener: function () {}
+};
+globalThis.window = { matchMedia: function () { return { matches: false }; } };
+globalThis.location = { search: "" };
+"""
+    assertions = r"""
+openSheet({
+  state: "neutral", name: "QA place", checklist: [], provenance: [
+    {source: "wikimedia_commons", label: "Good", url: "https://commons.wikimedia.org/wiki/File:Good.jpg"},
+    {source: "openstreetmap", label: "Plain", url: "https://commons.wikimedia.org/wiki/File:Wrong.jpg"},
+    {source: "wikimedia_commons", label: "Unsafe", url: "javascript:alert(1)"},
+    {source: "wikimedia_commons", label: "Wrong port", url: "https://commons.wikimedia.org:444/wiki/File:Bad.jpg"},
+    {source: "wikimedia_commons", label: "User info", url: "https://user@commons.wikimedia.org/wiki/File:Bad.jpg"}
+  ]
+});
+var receipts = qaElements.sheet.children.find(function (node) { return node.className === "receipts"; });
+var rendered = receipts.children.map(function (row) {
+  var text = row.children[1];
+  return {tag: text.tagName, label: text.textContent, href: text.href || null,
+          target: text.target || null, rel: text.rel || null};
+});
+console.log(JSON.stringify(rendered));
+"""
+    completed = subprocess.run(
+        ["node"], input=dom_stub + script + assertions,
+        text=True, capture_output=True, check=True)
+    assert json.loads(completed.stdout) == [
+        {"tag": "A", "label": "Good",
+         "href": "https://commons.wikimedia.org/wiki/File:Good.jpg",
+         "target": "_blank", "rel": "noopener noreferrer"},
+        {"tag": "SPAN", "label": "Plain", "href": None,
+         "target": None, "rel": None},
+        {"tag": "SPAN", "label": "Unsafe", "href": None,
+         "target": None, "rel": None},
+        {"tag": "SPAN", "label": "Wrong port", "href": None,
+         "target": None, "rel": None},
+        {"tag": "SPAN", "label": "User info", "href": None,
+         "target": None, "rel": None},
+    ]
+    assert ".provenance-link:focus-visible" in html
 
 
 def test_state_records_layer_keyed_on_provenance_source(client):

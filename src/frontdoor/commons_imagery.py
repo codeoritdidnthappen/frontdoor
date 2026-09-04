@@ -79,7 +79,7 @@ COMMONS_SEGREGATION_NOTE = (
 # Only these license families survive ingest, any version: CC0, CC BY,
 # CC BY-SA. NC/ND/unknown/fair-use are dropped (counted, never stored).
 _ALLOWED_LICENSE_RE = re.compile(
-    r"^cc(?:0|[ -]by(?:[ -]sa)?)(?:[ -]\d[\w.\- ]*)?$", re.IGNORECASE
+    r"cc(?:0|[ -]by(?:[ -]sa)?)(?:[ -]\d+(?:\.\d+)*)?", re.IGNORECASE
 )
 
 # Photo coordinates are camera positions, not business doors: tighter than
@@ -214,7 +214,7 @@ def license_allowed(short_name):
     """The license gate: CC0 / CC BY / CC BY-SA, any version, nothing else."""
     if not isinstance(short_name, str):
         return False
-    return bool(_ALLOWED_LICENSE_RE.match(short_name.strip()))
+    return bool(_ALLOWED_LICENSE_RE.fullmatch(short_name.strip()))
 
 
 def _license_requires_attribution(short_name):
@@ -357,11 +357,14 @@ def commons_provenance_for_place(lat, lon, records,
         license_name = record.get("license")
         if not license_allowed(license_name):
             continue  # belt and braces: never render an unvetted license
-        year = _record_year(record)
         artist = record.get("artist")
+        if (_license_requires_attribution(license_name)
+                and (not isinstance(artist, str) or not artist.strip())):
+            continue  # attribution licenses are undisplayable without artist
+        year = _record_year(record)
         label = f"Photo on Wikimedia Commons - {year} - {license_name.strip()}"
         if isinstance(artist, str) and artist:
-            label += f" - {artist}"
+            label += f" - {artist.strip()}"
         page_url = record.get("page_url")
         lines.append(ProvenanceLine(
             source=COMMONS_SOURCE,

@@ -143,13 +143,23 @@ def test_imageinfo_params_carry_extmetadata_and_urls():
 # --- the license gate -------------------------------------------------------
 
 
-def test_license_gate_families_and_versions():
+def test_tick_b01_license_gate_families_and_versions():
     for name in ("CC0", "CC0 1.0", "CC BY 2.0", "CC BY-SA 4.0",
                  "CC BY-SA 2.5", "cc by-sa 3.0", "CC BY"):
         assert license_allowed(name), name
     for name in ("CC BY-NC-SA 2.0", "CC BY-NC 4.0", "CC BY-ND 3.0",
-                 "Public domain", "Fair use", "", None, 7):
+                 "CC BY 4.0 NC", "CC BY-SA 4.0 ND",
+                 "CC0 1.0 fair-use", "Public domain", "Fair use", "",
+                 None, 7):
         assert not license_allowed(name), name
+
+    geosearch = {"query": {"geosearch": [geosearch_hit("File:Sneaky.jpg")]}}
+    imageinfo = {"query": {"pages": [imageinfo_page(
+        "File:Sneaky.jpg", "CC BY 4.0 NC", "Restricted Artist")]}}
+    records, dropped = parse_commons_payloads(
+        geosearch, [imageinfo], FETCHED_AT)
+    assert records == []
+    assert dropped == {"license_disallowed": 1}
 
 
 def test_parse_keeps_only_open_licenses_and_counts_drops():
@@ -281,6 +291,19 @@ def test_provenance_never_renders_an_unvetted_license():
         "lat": REF_LAT, "lon": REF_LON,
     }]
     assert commons_provenance_for_place(REF_LAT, REF_LON, smuggled) == []
+
+
+def test_tick_b02_provenance_requires_stored_attribution_artist():
+    missing_artist = [{
+        "source": COMMONS_SOURCE, "title": "File:Anonymous.jpg",
+        "page_url": "https://commons.wikimedia.org/wiki/File:Anonymous.jpg",
+        "license": "CC BY 4.0", "artist": None,
+        "lat": REF_LAT, "lon": REF_LON,
+    }]
+    blank_artist = [{**missing_artist[0], "artist": "  "}]
+    assert commons_provenance_for_place(
+        REF_LAT, REF_LON, missing_artist) == []
+    assert commons_provenance_for_place(REF_LAT, REF_LON, blank_artist) == []
 
 
 # --- /map/data passthrough --------------------------------------------------
