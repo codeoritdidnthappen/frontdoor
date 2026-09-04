@@ -1206,3 +1206,20 @@ Existing imported sidecars use `device_model = "iPhone 17 Pro"`; new app capture
 `device_model = "iPhone18,1"`. These are aliases for James's same physical phone. Analysis must
 normalize both to `iPhone18,1` before grouping so the single-device claim does not create two
 apparent device strata.
+
+## 2026-09-04 — Close the pose-aid open item (TICK-004, #16)
+
+## D-041  No tripod or physical pose aid
+
+No tripod, pose jig, or other physical positioning aid is used for dataset capture or the live
+demo. Capture remains handheld on James's iPhone 17 Pro (`iPhone18,1`) with LiDAR, consistent with
+D-036 and D-040. D-036 separately owns the no-caliper and no-measuring-aid decision.
+
+O-3 originally existed to make a controlled-angle subset interpretable for the metrology study.
+That study is paused under A-3, while the active screening product deliberately evaluates realistic
+handheld photographs. Fixing camera pose would test a different workflow and would not improve the
+screening study's evidence.
+
+Demo rehearsal does not preserve a smaller version of the requirement. TICK-104 (#74) rehearses
+the same handheld capture-to-verdict flow and verifies its offline recording fallback; it neither
+requires nor creates a ticket to buy a pose aid. O-3 is closed rather than restated.

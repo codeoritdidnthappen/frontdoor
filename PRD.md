@@ -130,6 +130,7 @@ date were recovered from commit 13e735a by #132.
 | D-036 **(CORRECTED — see D-040)** | **One capture device, depth enabled, no caliper** (2026-09-02). Capture and the live demo run on **James's iPhone 17 Pro (`iPhone18,1`) with LiDAR hardware**; generic depth delivery is enabled and supported delivered data is persisted as `DepthFloat32`; **no caliper is used**. Supersedes D-003. | One operator with one phone is the shortest path to a uniform dataset. After applying D-040's alias rule, `device_model` is a single physical-device value. The phone is an accepted, unmitigated single point of failure. **No caliper means no instrument ground truth**, so the §2 criterion is untested rather than relaxed and the planned LiDAR comparison has no metric reference. The screening study is unaffected. |
 | D-039 | **Depth ingest is isolated behind an authenticated Worker** (2026-09-03), superseding D-033's token mechanism. | The Fly process validates and hashes depth uploads, then calls a PUT-only Worker surface. The Worker writes through an R2 binding; Fly holds no depth R2 credential, and the harness retains the only depth-reader credential. This is a service boundary because Cloudflare's permanent R2 token permissions do not include Object Write only. TICK-249/TICK-250 (#216/#217). |
 | D-040 | **James's iPhone 17 Pro (`iPhone18,1`) with LiDAR is the sole capture, hardware-test, and demo phone** (2026-09-04). | Sharpens D-036: there is no standby or hardware-switch path. Normal capture enables generic depth delivery; the probe observed relative stereo disparity and did not observe LiDAR range, while the app persists supported delivered depth as `DepthFloat32`. For analysis, imported `device_model = "iPhone 17 Pro"` and app-captured `device_model = "iPhone18,1"` are aliases for this same physical phone and must be normalized to `iPhone18,1` before grouping. The phone is an accepted, unmitigated single point of failure. If it or its build is unavailable, capture stops until that same phone is restored. TICK-267 (#269). |
+| D-041 | **No tripod, pose jig, or other physical positioning aid is used for capture or the live demo** (2026-09-04). | O-3 existed to stabilize a controlled-angle subset of the paused metrology study. The active screening product evaluates realistic handheld capture on James's iPhone, so fixing camera pose would test a different workflow. Demo rehearsal (#74) exercises that same handheld path and its recorded fallback; it does not reopen a hardware-purchase requirement. TICK-004 (#16). |
 
 **Proposed, not yet locked**
 
@@ -265,8 +266,9 @@ research community is a reasonable tag given the work builds on that line.
   Pro (`iPhone18,1`) with LiDAR; R-8 treats it as an unmitigated single point of failure.
 - **O-2. Caliper not yet in hand.** D-003 depends on it and ground-truth capture starts Aug 28.
   Same-day purchase.
-- **O-3. No tripod or measuring aids confirmed.** The controlled-angle subset that makes the
-  angle-error curve interpretable needs a repeatable way to fix camera pose.
+- **O-3. CLOSED — no tripod or physical positioning aids (D-041).** The controlled-angle subset
+  belonged to the paused metrology study. Dataset capture and the live screening demo remain
+  handheld on James's iPhone; rehearsal and its recorded fallback are tracked by #74.
 - **O-4. D-011 unconfirmed.** Interval method must be settled before Sep 3.
 - **O-5. Tickets not yet filed.** Tracker chosen: **GitHub Issues** on this repo — already
   configured and currently empty. `CLAUDE.md` §5 requires every change to trace to a ticket; O-1 to
