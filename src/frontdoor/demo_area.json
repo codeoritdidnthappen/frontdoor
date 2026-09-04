@@ -7,5 +7,13 @@
     "east": -97.743692
   },
   "headings_per_business": 3,
-  "max_maps_calls": 1200
+  "max_maps_calls": 1200,
+  "place_types": [
+    "restaurant", "cafe", "bar", "bakery", "meal_takeaway",
+    "store", "clothing_store", "shoe_store", "jewelry_store", "book_store",
+    "convenience_store", "liquor_store", "florist",
+    "pharmacy", "gym", "hair_care", "beauty_salon", "spa", "laundry", "bank",
+    "lodging", "art_gallery"
+  ],
+  "include_establishment_sweep": true
 }
