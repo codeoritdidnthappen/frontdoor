@@ -163,16 +163,19 @@ def test_score_joins_counts_per_criterion_and_skips_unlabeled():
     ]
     per_criterion, joins = score_joins(screenings, labels)
     assert per_criterion["ramp_or_bevel"] == {
-        "correct": 2, "wrong": 0, "abstained": 0, "unlabeled": 0,
+        "correct": 2, "wrong": 0, "abstained": 0, "not_visible": 0, "unlabeled": 0,
     }
     assert per_criterion["handrails"] == {
-        "correct": 0, "wrong": 1, "abstained": 0, "unlabeled": 1,
+        "correct": 0, "wrong": 1, "abstained": 0, "not_visible": 0, "unlabeled": 1,
     }
+    # This one abstained by saying not_visible ...
     assert per_criterion["accessible_door_hardware"] == {
-        "correct": 0, "wrong": 0, "abstained": 1, "unlabeled": 1,
+        "correct": 0, "wrong": 0, "abstained": 1, "not_visible": 1, "unlabeled": 1,
     }
+    # ... and this one by returning no verdict at all. Both abstain; only the
+    # first counts toward the not-visible rate.
     assert per_criterion["accessibility_signage"] == {
-        "correct": 0, "wrong": 0, "abstained": 1, "unlabeled": 1,
+        "correct": 0, "wrong": 0, "abstained": 1, "not_visible": 0, "unlabeled": 1,
     }
     assert len(joins) == 5
     assert all(join["entrance_id"] != DEV_C for join in joins)
@@ -370,8 +373,9 @@ def test_report_json_values(tmp_path):
     signage = written["criteria"]["accessibility_signage"]
     # blank label row means the pair is unlabeled, never guessed
     assert signage == {
-        "correct": 0, "wrong": 0, "abstained": 0, "unlabeled": 2,
+        "correct": 0, "wrong": 0, "abstained": 0, "not_visible": 0, "unlabeled": 2,
         "accuracy_of_committed": None, "abstention_rate": None,
+        "not_visible_rate": None,
     }
 
     overall = written["overall"]
@@ -379,6 +383,10 @@ def test_report_json_values(tmp_path):
     assert overall["abstained"] == 1
     assert overall["accuracy_of_committed"] == pytest.approx(3 / 4)
     assert overall["abstention_rate"] == pytest.approx(1 / 5)
+    # The one abstention was a not_visible, so the rates coincide here; they
+    # part company as soon as a view returns no verdict at all.
+    assert overall["not_visible"] == 1
+    assert overall["not_visible_rate"] == pytest.approx(1 / 5)
 
     flips = written["flip_rate"]
     assert flips["per_entrance"][DEV_A] == pytest.approx(0.5 / 3)
@@ -410,8 +418,9 @@ def test_report_markdown_carries_the_numbers(tmp_path):
     assert "- model: fake-screening-model" in text
     assert "- images: 3" in text
     assert "- spend estimate: $0.15" in text
-    assert "| ramp_or_bevel | 2 | 0 | 0 | 0 | 1.000 |" in text
-    assert "| handrails | 1 | 1 | 0 | 0 | 0.500 |" in text
+    assert "| ramp_or_bevel | 2 | 0 | 0 | 0 | 0 | 1.000 |" in text
+    assert "| handrails | 1 | 1 | 0 | 0 | 0 | 0.500 |" in text
+    assert "- not visible rate: 0.200" in text
     assert "0.750 (3 correct / 4 committed)" in text
     assert f"| {DEV_A} | 0.167 |" in text
     assert "| 2.000 | 4.000 | 16.000 | 16.000 | 1 of 3 |" in text
@@ -814,3 +823,37 @@ def test_cli_reports_a_refused_unsealing_instead_of_a_traceback(
     monkeypatch.setattr("frontdoor.screening_eval.run_eval", _refuse)
     assert main(_cli_args(tmp_path, "--include-sealed"), from_cli=True) == 1
     assert "dirty" in capsys.readouterr().err
+
+
+def test_not_visible_is_distinguished_from_no_verdict_at_all(tmp_path):
+    # Both abstain, and neither is ever scored correct or wrong. But TICK-079
+    # asks the sealed run for the *not visible* rate specifically: "I looked
+    # and could not see it" is a finding about the photos; "no view returned
+    # anything" is a finding about the run.
+    manifest = _write_manifest(tmp_path / "manifest.csv", [("cap-1", DEV_A)])
+    labels = _write_labels(
+        tmp_path / "labels.csv",
+        [
+            (DEV_A, "ramp_or_bevel", "present"),
+            (DEV_A, "handrails", "present"),
+        ],
+    )
+    result = run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=FakeEngine(
+            # handrails is absent from the dict, so its verdict is None.
+            {DEV_A: _screening(DEV_A, {"ramp_or_bevel": "not_visible"})}
+        ),
+        get_image=_fake_get_image,
+    )
+    ramp = result["criteria"]["ramp_or_bevel"]
+    hand = result["criteria"]["handrails"]
+    assert ramp["abstained"] == 1 and ramp["not_visible"] == 1
+    assert hand["abstained"] == 1 and hand["not_visible"] == 0
+    assert ramp["not_visible_rate"] == 1.0
+    assert hand["not_visible_rate"] == 0.0
+    # Two abstentions, one of them not_visible.
+    assert result["overall"]["abstention_rate"] == 1.0
+    assert result["overall"]["not_visible_rate"] == 0.5

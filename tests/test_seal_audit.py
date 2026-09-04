@@ -178,3 +178,61 @@ def test_a_missing_repo_directory_is_named_rather_than_blamed_on_git(tmp_path):
         )
 
 
+
+
+@pytest.mark.parametrize(
+    "argv0, expected",
+    [
+        ("/repo/src/frontdoor/eval.py", "python -m frontdoor.eval"),
+        # screening_eval.py ends with "eval.py". Suffix matching recorded the
+        # freeze-day run as the wrong module, and as a command frontdoor.eval
+        # rejects outright ("usage: python -m frontdoor.eval [--include-sealed]").
+        (
+            "/repo/src/frontdoor/screening_eval.py",
+            "python -m frontdoor.screening_eval",
+        ),
+        (r"F:\repo\src\frontdoor\screening_eval.py", "python -m frontdoor.screening_eval"),
+        # Anything else is recorded as given rather than guessed at.
+        ("python", "python"),
+    ],
+)
+def test_argv0_is_normalised_to_the_module_that_actually_ran(
+    tmp_path, monkeypatch, argv0, expected
+):
+    manifest, _, _ = _three_captures(tmp_path)
+    audit = tmp_path / "SEAL_AUDIT.log"
+    monkeypatch.setattr("frontdoor.seal_audit._working_tree_dirty", lambda repo: False)
+    monkeypatch.setattr("frontdoor.seal_audit._git_commit", lambda repo: "d" * 40)
+    record_unsealing(
+        argv=[argv0, "--include-sealed"],
+        manifest_path=manifest,
+        audit_path=audit,
+        repo=tmp_path,
+        config={"images_bucket": "frontdoor-image", "endpoint": "default"},
+    )
+    record = dict(zip(AUDIT_FIELDS, audit.read_text(encoding="utf-8").split("\t")))
+    assert json.loads(record["command_line"]) == [expected, "--include-sealed"]
+
+
+def test_a_real_dirty_checkout_aborts_the_unsealing(tmp_path):
+    """TICK-079's Testing section: confirm the abort, because Sep 7 is the wrong
+    morning to discover the guard.
+
+    Deliberately uses a real `git init` rather than monkeypatching
+    `_working_tree_dirty` the way the tests above do: those pin what
+    record_unsealing does with the answer, this pins that git actually gives
+    that answer for an untracked file.
+    """
+    manifest, _, _ = _three_captures(tmp_path)
+    subprocess.run(["git", "init", "-q", str(tmp_path)], check=True)
+    audit = tmp_path / "SEAL_AUDIT.log"
+    with pytest.raises(SealAuditError, match="dirty"):
+        record_unsealing(
+            argv=["python", "-m", "frontdoor.screening_eval", "--include-sealed"],
+            manifest_path=manifest,
+            audit_path=audit,
+            repo=tmp_path,
+            config={"images_bucket": "frontdoor-image", "endpoint": "default"},
+        )
+    # Refused before writing: an unsealing that is not recorded must not happen.
+    assert not audit.exists()

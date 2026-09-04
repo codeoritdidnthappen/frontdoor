@@ -4,8 +4,8 @@ Runs the vision screening engine over every captured view of each entrance in
 one unsealed split (dev by default), joins the per-criterion majority verdicts
 to the human ground-truth labels, and writes the accuracy report the results
 freeze will be judged against: per-criterion correct / wrong / abstained, the
-accuracy of committed verdicts, per-entrance cross-view flip rates, and
-latency against the 15-second budget.
+accuracy of committed verdicts, the not-visible rate, per-entrance cross-view
+flip rates, and latency against the 15-second budget.
 
 Scoring vocabulary: labels are presence-only ("present"/"absent") because the
 operator stood at the door; the engine may also answer not_visible or produce
@@ -20,11 +20,13 @@ on results-freeze day, by the same runner with --include-sealed added - which
 appends one SEAL_AUDIT.log line naming the command that ran, before a single
 sealed byte is read, and refuses outright if the working tree is dirty.
 
-The dry run (TICK-079) and the freeze-day run (TICK-080) are the same command,
-and differ only in the flag:
+The dry run (TICK-079) and the freeze-day run (TICK-080) are the same command.
+Only --include-sealed changes what the run does; --out differs so the sealed
+report cannot overwrite the dry run's, which is the evidence the command was
+exercised beforehand:
 
     python -m frontdoor.screening_eval --manifest data/manifest.csv \
-        --labels data/labels.csv --out reports/dev
+        --labels data/labels.csv --out reports/dry-run
     python -m frontdoor.screening_eval --manifest data/manifest.csv \
         --labels data/labels.csv --out reports/sealed --include-sealed
 """
@@ -38,7 +40,7 @@ import sys
 import time
 from pathlib import Path
 
-from frontdoor.labels import labels_for_eval, load_labels
+from frontdoor.labels import SPLITS, labels_for_eval, load_labels
 from frontdoor.manifest import read_manifest
 from frontdoor.screening import CRITERIA_KEYS, ScreeningEngine, SealedSplitError
 from frontdoor.seal_audit import SealAuditError
@@ -46,10 +48,6 @@ from frontdoor.split import assign_split, canonical_entrance_id
 
 #: Per-image latency budget (seconds); the report counts every view over it.
 LATENCY_BUDGET_S = 15.0
-
-#: The three splits D-007 defines. sealed is refused, not merely absent, and
-#: reaches this runner only through an audited --include-sealed run.
-SPLITS = ("dev", "calib", "sealed")
 
 JSON_NAME = "screening_eval.json"
 MARKDOWN_NAME = "screening_eval.md"
@@ -59,8 +57,8 @@ class ScreeningEvalError(ValueError):
     """Raised when the eval cannot produce a trustworthy report."""
 
 
-def _check_split(split, *, allow_sealed=False):
-    """Refuse before any file is read, exactly like the engine.
+def _require_permitted_split(split, *, allow_sealed=False):
+    """Raise unless this split may be scored, before any file is read.
 
     `allow_sealed` is set once the unsealing has been recorded; on its own the
     argument is not permission to read anything, it just stops this check from
@@ -81,7 +79,7 @@ def collect_entrances(manifest_path, *, split="dev", allow_sealed=False):
     The split is re-derived from the committed seed per entrance; the
     manifest's split cell is a cache, not an authority.
     """
-    _check_split(split, allow_sealed=allow_sealed)
+    _require_permitted_split(split, allow_sealed=allow_sealed)
     entrances = {}
     for row in read_manifest(manifest_path):
         entrance_id = canonical_entrance_id(row["entrance_id"])
@@ -118,7 +116,15 @@ def score_joins(screenings, labels):
         for label in labels
     }
     per_criterion = {
-        key: {"correct": 0, "wrong": 0, "abstained": 0, "unlabeled": 0}
+        key: {
+            "correct": 0, "wrong": 0, "abstained": 0,
+            # A sub-count of abstained, not a fifth outcome: the engine saying
+            # "I cannot see it" and the engine returning nothing at all are
+            # both abstentions, but only the first is the not-visible rate
+            # TICK-079 asks the sealed run to report.
+            "not_visible": 0,
+            "unlabeled": 0,
+        }
         for key in CRITERIA_KEYS
     }
     joins = []
@@ -132,6 +138,8 @@ def score_joins(screenings, labels):
                 continue
             outcome = classify(verdict, label)
             per_criterion[key][outcome] += 1
+            if verdict == "not_visible":
+                per_criterion[key]["not_visible"] += 1
             joins.append(
                 {
                     "entrance_id": entrance_id,
@@ -179,10 +187,12 @@ def latency_stats(screenings, *, budget_s=LATENCY_BUDGET_S):
 
 
 def build_result(
-    screenings, labels, *, split, engine, image_count, blank_skipped, duration_s=None
+    screenings, labels, *, split, engine, image_count, blank_skipped, duration_s
 ):
     per_criterion, joins = score_joins(screenings, labels)
-    overall = {"correct": 0, "wrong": 0, "abstained": 0, "unlabeled": 0}
+    overall = {
+        "correct": 0, "wrong": 0, "abstained": 0, "not_visible": 0, "unlabeled": 0,
+    }
     criteria = {}
     for key in CRITERIA_KEYS:
         counts = per_criterion[key]
@@ -193,6 +203,7 @@ def build_result(
             **counts,
             "accuracy_of_committed": accuracy_of_committed(counts),
             "abstention_rate": counts["abstained"] / scored if scored else None,
+            "not_visible_rate": counts["not_visible"] / scored if scored else None,
         }
     scored = overall["correct"] + overall["wrong"] + overall["abstained"]
     flip_rates = entrance_flip_rates(screenings)
@@ -204,6 +215,7 @@ def build_result(
             **overall,
             "accuracy_of_committed": accuracy_of_committed(overall),
             "abstention_rate": overall["abstained"] / scored if scored else None,
+            "not_visible_rate": overall["not_visible"] / scored if scored else None,
         },
         "flip_rate": {
             "per_entrance": flip_rates,
@@ -249,16 +261,17 @@ def render_markdown(result):
         "",
         "## Per-criterion accuracy",
         "",
-        "| criterion | correct | wrong | abstained | unlabeled "
-        "| accuracy of committed | abstention rate |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
+        "| criterion | correct | wrong | abstained | not visible | unlabeled "
+        "| accuracy of committed | abstention rate | not visible rate |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for key in CRITERIA_KEYS:
         c = result["criteria"][key]
         lines.append(
             f"| {key} | {c['correct']} | {c['wrong']} | {c['abstained']} "
-            f"| {c['unlabeled']} | {_fmt(c['accuracy_of_committed'])} "
-            f"| {_fmt(c['abstention_rate'])} |"
+            f"| {c['not_visible']} | {c['unlabeled']} "
+            f"| {_fmt(c['accuracy_of_committed'])} "
+            f"| {_fmt(c['abstention_rate'])} | {_fmt(c['not_visible_rate'])} |"
         )
     overall = result["overall"]
     lines += [
@@ -271,6 +284,8 @@ def render_markdown(result):
         f"{overall['correct'] + overall['wrong']} committed)",
         f"- abstention rate: {_fmt(overall['abstention_rate'])} "
         f"({overall['abstained']} abstained)",
+        f"- not visible rate: {_fmt(overall['not_visible_rate'])} "
+        f"({overall['not_visible']} of those said not visible)",
         "",
         "## Per-entrance cross-view consistency (flip rate)",
         "",
@@ -330,14 +345,14 @@ def run_eval(
     raises SealAuditError here, having written and read nothing.
     """
     sealed_run = split == "sealed"
-    _check_split(split, allow_sealed=audit is not None)
+    _require_permitted_split(split, allow_sealed=audit is not None)
     started = time.perf_counter()
     loaded = load_labels(labels_path)
     labels = labels_for_eval(
         list(loaded.labels),
         split=split,
         audited=sealed_run,
-        audit=audit if sealed_run else None,
+        audit=audit,
         argv=argv,
     )
     entrances = collect_entrances(
@@ -425,9 +440,10 @@ def main(argv=None, *, from_cli=False):
     def get_image(capture_id):
         # loader.load refuses sealed rows outright, so the unsealing run goes
         # through _load_row's allow_sealed - the same doorway frontdoor.eval
-        # uses. On a dev run this is exactly loader.load.
-        row = loader._row(capture_id)
-        return loader._load_row(row, allow_sealed=args.include_sealed).image
+        # uses. Everything else stays on the public API.
+        if args.include_sealed:
+            return loader._load_row(loader._row(capture_id), allow_sealed=True).image
+        return loader.load(capture_id).image
 
     audit = None
     try:

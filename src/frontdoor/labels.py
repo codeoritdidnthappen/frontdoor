@@ -184,12 +184,6 @@ def load_labels(path):
 AUDIT_KEYS = seal_audit.AUDIT_KEYS
 
 
-#: Recorded as the command line when the caller is a library call rather than
-#: a command someone typed. A real entrypoint passes its own argv, because the
-#: audit line's job is to name a run that can be reconstructed.
-LIBRARY_AUDIT_ARGV = ("labels", "--split", "sealed")
-
-
 def labels_for_eval(labels, *, split="dev", audited=False, audit=None, argv=None):
     """Filter labels to one split for eval use; sealed is audited, not flagged.
 
@@ -205,7 +199,7 @@ def labels_for_eval(labels, *, split="dev", audited=False, audit=None, argv=None
 
     `argv` is the command line to record. An entrypoint passes the one the
     operator actually typed, so the freeze-day line names a runnable command;
-    omitting it records LIBRARY_AUDIT_ARGV.
+    a library call that omits it is recorded as such.
     """
     if split not in SPLITS:
         raise LabelError(f"unknown split {split!r}; expected one of {SPLITS}")
@@ -232,7 +226,7 @@ def labels_for_eval(labels, *, split="dev", audited=False, audit=None, argv=None
         # Raises SealAuditError without writing if the run cannot be recorded;
         # sealed labels are handed back only after the line is on disk.
         seal_audit.record_unsealing(
-            argv=list(LIBRARY_AUDIT_ARGV) if argv is None else list(argv),
+            argv=["labels", "--split", "sealed"] if argv is None else list(argv),
             **{key: audit[key] for key in AUDIT_KEYS},
         )
     return [
