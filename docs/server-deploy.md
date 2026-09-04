@@ -203,6 +203,28 @@ unreadable one, changes nothing. If storage is down or misconfigured, publish de
 `assessed-but-not-published` response that still carries the verdicts — nothing is dropped
 silently, and no credential material ever appears in a response.
 
+### EntryMap app page (TICK-247)
+
+**`GET /app`** — `https://frontdoor-measure.fly.dev/app` — is the phone-web scanner: the map, the
+place cards, and the scan flow, served as one self-contained page (`src/frontdoor_server/app.html`,
+~1 MB with its photos embedded). Every call it makes is **same-origin**: the shutter posts to
+`/screen` (assess only), "Publish scan" posts to `/screen/publish` with the place reference
+(`place_id`, or `lat` + `lng` + `name` from the phone's fix and the name the user confirms), the
+card loads the stored photo from `/scan/photo/<key>`, and the map merges `/map/data` at load so
+scans published from other phones appear. No CORS is involved.
+
+The page itself needs nothing — it loads with no key and no storage, and `/map/data` returning a
+`dataset_error` only means the embedded pins show. **Live publishes need what `/screen/publish`
+needs**: `ANTHROPIC_API_KEY` (or the page shows the 503 "screening unavailable" detail on the
+review screen) **and the object-storage credential plus `FRONTDOOR_SCANS`** above (or a publish
+comes back assessed-but-not-published, which the page shows as "saved for later"). When the phone
+cannot reach the server at all, the page falls back to a simulated scan and labels it *Simulated*
+everywhere it appears; it never presents that as a publish.
+
+The page is served from the image, so **a change to `app.html` ships with the next
+`fly deploy --ha=false`** and the phone picks it up within the page's five-minute `max-age`
+(force-reload sooner). Re-record the digests after that deploy, as below.
+
 ### /screen sizing note — measure before Demo Day
 
 The **69 MiB** footprint in the table was measured serving `GET /health`. It says nothing about
