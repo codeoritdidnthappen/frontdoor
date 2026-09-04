@@ -229,6 +229,8 @@ def test_live_loader_credential_is_denied_on_depth():
 # depth bucket, and verify() fails unless that happens. Before these tests it was raised zero times
 # by the running suite, so a change widening it would have shipped green.
 
+import logging
+
 import pytest
 from botocore.exceptions import ClientError, EndpointConnectionError
 
@@ -280,6 +282,31 @@ def test_a_network_failure_is_not_the_denial():
     with pytest.raises(StorageError) as caught:
         _raise_from_client(exc, "get", "frontdoor-depth", "k")
     assert not isinstance(caught.value, StorageDenied)
+
+
+def test_tick_263_ac_1_ac_2_ac_3_network_failure_is_safe_and_logged(
+        caplog: pytest.LogCaptureFixture) -> None:
+    """TICK-263: botocore names the endpoint URL; the server hands that message to the caller.
+
+    upload_view returns a StorageError's text as the `detail` of a 503, so whatever is in it
+    reaches anyone holding the upload key. The endpoint is our configuration and no client needs
+    it, but the operator does -- so it belongs in the log and not in the exception.
+    """
+    # Fixture shape follows botocore's transport boundary, which raises
+    # EndpointConnectionError(endpoint_url=request.url, error=exc).
+    # https://github.com/boto/botocore/blob/develop/botocore/httpsession.py
+    endpoint = "https://private-storage.example.test"
+    exc = EndpointConnectionError(endpoint_url=endpoint)
+    with caplog.at_level(logging.WARNING, logger="frontdoor.storage"):
+        with pytest.raises(StorageError) as caught:
+            _raise_from_client(exc, "put", "frontdoor-image", "open/cap-1")
+    assert endpoint not in str(caught.value)
+    # Still actionable from the client side: which operation, which object, and what kind of
+    # failure -- enough to tell an outage from a refusal without retrying to find out.
+    assert "put s3://frontdoor-image/open/cap-1 failed" in str(caught.value)
+    assert "EndpointConnectionError" in str(caught.value)
+    assert caught.value.__cause__ is exc
+    assert "storage provider request failed" in caplog.text
 
 
 def test_storage_denied_is_a_storage_error():

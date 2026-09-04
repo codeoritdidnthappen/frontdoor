@@ -21,6 +21,7 @@ depth bucket.
 
 from __future__ import annotations
 
+import logging
 import os
 from ipaddress import ip_address
 from urllib.parse import urlsplit
@@ -28,6 +29,8 @@ from urllib.parse import urlsplit
 from dotenv import find_dotenv, load_dotenv
 import sys
 from dataclasses import dataclass
+
+logger = logging.getLogger(__name__)
 
 #: Capture keys carry their partition (D-007, #182). Storage can then refuse a
 #: sealed read on the key alone -- it never reads the manifest, never imports
@@ -273,7 +276,18 @@ def _raise_from_client(exc, action, bucket, key):
     from botocore.exceptions import ClientError
 
     if not isinstance(exc, ClientError):
-        raise StorageError(f"{action} s3://{bucket}/{key} failed: {exc}") from exc
+        # The message goes to the log, the type goes to the caller (TICK-263). botocore spells
+        # the configured endpoint out in several of these -- EndpointConnectionError and the SSL
+        # errors quote the whole URL -- and the server returns a StorageError's text verbatim as
+        # the `detail` of a 503, so anyone holding the upload key would read our storage
+        # configuration back. They need to know the put failed and roughly how; the URL is ours.
+        logger.exception(
+            "storage provider request failed",
+            extra={"storage_action": action, "storage_bucket": bucket, "object_key": key},
+        )
+        raise StorageError(
+            f"{action} s3://{bucket}/{key} failed ({type(exc).__name__})"
+        ) from exc
     code = exc.response.get("Error", {}).get("Code", "")
     # Authentication failures are NOT the D-020 denial. A wrong or expired key also cannot read
     # depth, but for a reason that says nothing about the quarantine — treating it as proof would

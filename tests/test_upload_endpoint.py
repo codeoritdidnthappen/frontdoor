@@ -7,9 +7,11 @@ quarantine failing silently; and an ingest path a stranger can write into.
 
 import hashlib
 import io
+import logging
 
 import boto3
 import pytest
+from botocore.exceptions import EndpointConnectionError
 from flask.testing import FlaskClient
 from moto import mock_aws
 
@@ -501,3 +503,35 @@ def test_tick_262_ac_5_valid_depth_config_behaves_unchanged(
     assert response.status_code == 201
     assert response.get_json()["verified"] == "received"
     assert env[0]["body"] == b"depth"
+
+
+class _EndpointFailingS3:
+    def put_object(self, **kwargs: object) -> None:
+        # Fixture shape follows botocore's transport boundary, which raises
+        # EndpointConnectionError(endpoint_url=request.url, error=exc).
+        # https://github.com/boto/botocore/blob/develop/botocore/httpsession.py
+        raise EndpointConnectionError(
+            endpoint_url="https://private-storage.example.test")
+
+
+def test_tick_263_ac_1_ac_2_ac_3_ac_4_redacted_503_keeps_server_diagnosis(
+        monkeypatch: pytest.MonkeyPatch,
+        env: list[dict[str, object]],
+        caplog: pytest.LogCaptureFixture) -> None:
+    monkeypatch.setenv(
+        "FRONTDOOR_S3_ENDPOINT", "https://private-storage.example.test")
+
+    def failing_client(*args: object, **kwargs: object) -> _EndpointFailingS3:
+        return _EndpointFailingS3()
+
+    monkeypatch.setattr("boto3.client", failing_client)
+    with caplog.at_level(logging.ERROR):
+        response = _post(create_app().test_client(), kind="image")
+
+    assert response.status_code == 503
+    body = response.get_json()
+    assert body["error"] == "could not store the object"
+    assert body["detail"] == (
+        "put s3://frontdoor-image/open/cap-1 failed (EndpointConnectionError)")
+    assert "private-storage.example.test" not in response.get_data(as_text=True)
+    assert "private-storage.example.test" in caplog.text
