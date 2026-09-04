@@ -230,7 +230,7 @@
       ]
     },
     "capture_device": {
-      "description": "The AVFoundation device type actually opened, e.g. builtInDualWideCamera. Recorded because the bare 1x wide camera delivers no calibration data on either team phone (TICK-020) and so cannot have produced any measurable frame -- a sidecar naming it as the device would be describing a capture that could not have happened.",
+      "description": "The AVFoundation device type actually opened, e.g. builtInDualWideCamera. Recorded because the bare 1x wide camera delivers no calibration data on James's iPhone 17 Pro (TICK-020) and so cannot have produced any measurable frame -- a sidecar naming it as the device would be describing a capture that could not have happened.",
       "type": "string",
       "minLength": 1
     },
