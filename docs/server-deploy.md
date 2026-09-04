@@ -135,11 +135,6 @@ encrypted secret survives a deploy and does not need setting again. To go back, 
 id from `npx wrangler versions list --name frontdoor-depth-ingest` and run
 `npx wrangler rollback <version-id>`.
 
-> **Not yet shipped, as of 2026-09-04 (TICK-258, #252).** The running Worker is version
-> `f9baef60`, from 2026-09-03T20:10:57Z, which predates the fixes in #229 and #230. It still
-> answers a digest mismatch with `500 error code: 1101` instead of 422, and still accepts a
-> zero-length body. Delete this note when #252 closes.
-
 `FRONTDOOR_UPLOAD_KEY` is the shared secret for `POST /upload`, the capture-ingest endpoint
 (TICK-029, #33). The capture app sends it as `X-Frontdoor-Upload-Key`; the same value goes into the
 app's build setting of the same name, which is why it is not committed. **Unset means the endpoint
