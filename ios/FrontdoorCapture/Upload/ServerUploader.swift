@@ -19,6 +19,15 @@ struct ServerUploader: CaptureUploader {
         var errorDescription: String? { reason }
     }
 
+    /// A refusal that belongs to one capture: the server will answer the same way however many
+    /// times it is sent, and the captures behind it are fine. Separate type rather than a flag on
+    /// `Refusal` so the drain cannot skip something by accident -- a new failure has to be
+    /// deliberately declared per-capture to get that treatment.
+    struct PermanentRefusal: LocalizedError, PerCaptureUploadFailure {
+        var reason: String
+        var errorDescription: String? { reason }
+    }
+
     var baseURL: URL
     var uploadKey: String
     var session: URLSession
@@ -138,6 +147,11 @@ struct ServerUploader: CaptureUploader {
         func refuse(_ reason: String) -> Result<Void, Error> {
             .failure(Refusal(reason: reason))
         }
+        // Refused for a reason that is about THIS capture. Retrying cannot change the answer, and
+        // stopping the drain here would strand every capture queued behind it.
+        func refusePermanently(_ reason: String) -> Result<Void, Error> {
+            .failure(PermanentRefusal(reason: reason))
+        }
         switch status {
         // 200 is an idempotent repeat: the earlier upload landed and only its reply was lost.
         case 200, 201:
@@ -155,17 +169,18 @@ struct ServerUploader: CaptureUploader {
         case 401:
             return refuse("the upload key was refused. This build cannot upload until it is fixed")
         case 409:
-            return refuse("a different capture is already stored under this id. "
+            return refusePermanently("a different capture is already stored under this id. "
                           + "It was not overwritten, and this one is still on the phone")
         case 422:
-            return refuse("the bytes on this phone do not match the hash in the capture's own "
+            return refusePermanently("the bytes on this phone do not match the hash in the capture's own "
                           + "sidecar. Nothing was stored and nothing will be deleted")
         case 408, 429:
             return refuse("the server asked us to try again (\(status))")
         case 400...499:
             // A wrong host gives 404 and an oversized capture gives 413. Both would repeat on every
             // drain, so the message names the status rather than reading as a transient blip.
-            return refuse("the server rejected this upload (\(status)). This will not fix itself")
+            return refusePermanently(
+                "the server rejected this upload (\(status)). This will not fix itself")
         default:
             return refuse("the server answered \(status)")
         }

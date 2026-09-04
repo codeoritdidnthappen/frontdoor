@@ -254,3 +254,69 @@ final class CaptureQueueTests: XCTestCase {
         XCTAssertTrue(report.message.contains("already safe"), report.message)
     }
 }
+
+// MARK: - a capture the destination will never accept must not strand the rest (2026-09-04)
+//
+// `drain` stopped at the first failure, full stop. That is right for a dead network and wrong for
+// a capture the server refuses permanently: the bad one sits at the head of the queue and every
+// capture behind it never uploads, on every drain, indefinitely -- a phone that looks like it is
+// syncing and is not. Found while deciding what to do with a pre-D-037 capture on James's phone
+// that the server rejects 422 and always will.
+
+extension CaptureQueueTests {
+
+    private struct RejectsOne: CaptureUploader {
+        let rejectId: String
+        func upload(_ capture: CaptureQueue.Pending) async -> Result<Void, Error> {
+            capture.captureId == rejectId
+                ? .failure(ServerUploader.PermanentRefusal(reason: "the server will never take it"))
+                : .success(())
+        }
+    }
+
+    private struct SystemicFailure: CaptureUploader {
+        func upload(_ capture: CaptureQueue.Pending) async -> Result<Void, Error> {
+            .failure(ServerUploader.Refusal(reason: "the network is down"))
+        }
+    }
+
+    func testAPermanentlyRejectedCaptureDoesNotStrandTheOnesBehindIt() async throws {
+        try writeCapture("bad"); try writeCapture("c2"); try writeCapture("c3")
+        let report = await QueueDrain(queue: queue, uploader: RejectsOne(rejectId: "bad")).drain()
+
+        XCTAssertEqual(report.rejected, ["bad"])
+        XCTAssertEqual(report.uploaded, ["c2", "c3"], "the two behind it must still upload")
+        XCTAssertNil(report.stoppedBecause, "a per-capture refusal is not a reason to stop")
+    }
+
+    func testARejectedCaptureIsKeptNotDeleted() async throws {
+        try writeCapture("bad"); try writeCapture("c2")
+        _ = await QueueDrain(queue: queue, uploader: RejectsOne(rejectId: "bad")).drain()
+
+        XCTAssertEqual(queue.count, 1, "only the uploaded one is removed")
+        XCTAssertEqual(queue.pending().first?.captureId, "bad",
+                       "the rejected capture is still on the phone")
+    }
+
+    /// The battery argument the original design was written for, unchanged.
+    func testASystemicFailureStillStopsTheDrainAtTheFirstCapture() async throws {
+        try writeCapture("c1"); try writeCapture("c2"); try writeCapture("c3")
+        let report = await QueueDrain(queue: queue, uploader: SystemicFailure()).drain()
+
+        XCTAssertNotNil(report.stoppedBecause)
+        XCTAssertTrue(report.uploaded.isEmpty)
+        XCTAssertTrue(report.rejected.isEmpty, "a systemic failure rejects nothing")
+        XCTAssertEqual(queue.count, 3, "nothing was sent twice at a dead endpoint")
+    }
+
+    /// An operator told "2 uploaded" while one was silently skipped has been misled.
+    func testTheReportNamesRejectedCapturesToTheOperator() async throws {
+        try writeCapture("bad"); try writeCapture("c2")
+        let report = await QueueDrain(queue: queue, uploader: RejectsOne(rejectId: "bad")).drain()
+
+        XCTAssertTrue(report.message.contains("1 will not be accepted"), report.message)
+        XCTAssertTrue(report.message.contains("re-taking"), report.message)
+        XCTAssertTrue(report.message.contains("never take it"),
+                      "the reason has to reach the operator: \(report.message)")
+    }
+}
