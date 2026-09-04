@@ -126,7 +126,20 @@ def test_publish_of_a_real_image_stores_reencoded_jpeg_bytes(scans_path):
     assert stored != raw  # processed (re-encoded, EXIF-free), never the upload
 
 
-def test_publish_appends_one_scan_record_the_map_can_read(scans_path):
+def test_publish_appends_one_scan_record_the_map_can_read(
+        scans_path, monkeypatch):
+    # The detector is injected here for the same reason the first test injects
+    # it: recall-tuned face detection on a synthetic featureless frame is
+    # OpenCV-build-dependent (some builds emit spurious boxes on it - see the
+    # PR #243 note in faceblur.py), and this test is about the RECORD, not the
+    # detector. tests/test_faceblur.py owns detector behavior.
+    from frontdoor.faceblur import ProcessedImage
+
+    monkeypatch.setattr(
+        "frontdoor_server.scan_view.process_upload",
+        lambda raw: ProcessedImage(b"processed:" + raw, face_count=0,
+                                   gps_stripped=True),
+    )
     store = FakeStore()
     client = make_client(store=store)
     body = post_publish(
@@ -141,7 +154,7 @@ def test_publish_appends_one_scan_record_the_map_can_read(scans_path):
     assert record["created_at"] == body["created_at"]
     assert record["verdicts"] == {key: "present" for key in CRITERIA_KEYS}
     assert record["confidences"] == {key: 80 for key in CRITERIA_KEYS}
-    assert record["faces_blurred"] == 0
+    assert record["faces_blurred"] == body["faces_blurred"] == 0
     assert record["quarantined_count"] == 0
     assert record["image_keys"] == body["image_keys"]
     assert record["contributor"] == "tok_1"
