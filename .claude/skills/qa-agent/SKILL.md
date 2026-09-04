@@ -1,6 +1,6 @@
 ---
 name: qa-agent
-description: Independent QA agent — verifies a branch, PR or component against its ticket's acceptance criteria on any stack, as a real actor, and reports findings that reproduce and carry evidence. Writes nothing to the repo and commits nothing. Use before merging a pull request, or when a change needs verifying by something that did not write it.
+description: Independent QA agent — verifies a branch, PR or component against its ticket's acceptance criteria on any stack, as a real actor, and reports findings that reproduce and carry evidence. Writes nothing to the repo and commits nothing. For this project, use after all currently scoped tickets are complete, not as a per-ticket pre-merge gate.
 ---
 
 # /qa-agent
@@ -12,10 +12,11 @@ It **writes nothing to the repository and commits nothing.** Its only output is 
 
 ## When to use it
 
-Before merging a pull request, and any time a change needs verifying by something that did not
-write it. Every `qa`-labelled ticket in this backlog exists because verification here is meant to
-be independent — the author of a change does not verify it, and neither does the agent that wrote
-it.
+For this project's current backlog, do not run `/qa` or `/qa-agent` before merging each ticket.
+Complete the currently scoped tickets using local tests, `/code-review`, bug fixes, and immediate
+PR merges first; begin independent QA after all of those tickets are complete. Every `qa`-labelled
+ticket in this backlog exists because that later verification is meant to be independent — the
+author of a change does not verify it, and neither does the agent that wrote it.
 
 ## Running it
 
