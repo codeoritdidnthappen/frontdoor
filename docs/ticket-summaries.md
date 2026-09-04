@@ -46,9 +46,9 @@ by the CLI, returned as a string by the function.
 
 PR: [#100](https://github.com/codeoritdidnthappen/frontdoor/pull/100)
 
-Recorded who is on the team, what capture hardware exists, and the assignment
-rule that replaced self-assign-and-rotate. Closed O-1. A-1 and A-3 are
-falsified: two capture phones, one with LiDAR.
+Recorded who is on the team, what capture hardware existed, and the assignment
+rule that replaced self-assign-and-rotate. Closed O-1. A-1 and A-3 were
+falsified at the time: two capture phones, one with LiDAR.
 
 **Files created / updated**
 - `TEAM.md` — roster, devices, work division, R-8 response rule
@@ -58,6 +58,9 @@ falsified: two capture phones, one with LiDAR.
 **Input:** facts about the four people and their devices.
 **Output:** every open issue has an owner; field capture serialises onto James's
 iPhone 16 Pro.
+
+**Superseded 2026-09-04:** D-040 makes James's iPhone 17 Pro (`iPhone18,1`)
+with LiDAR the sole capture, test, and demo phone.
 
 ## #17 / TICK-005 — Run tests on every pull request
 
@@ -111,7 +114,9 @@ the real endpoint can share one schema. Stub returns placeholder rises flagged
 ## #84 / TICK-201 — QA: split determinism across devices
 
 Closed without a PR. The Python tool side is covered by TICK-011 tests; the
-cross-phone check needs the capture app (#29) and was refiled as [#109](https://github.com/codeoritdidnthappen/frontdoor/issues/109).
+cross-phone check needed the capture app (#29) and was refiled as [#109](https://github.com/codeoritdidnthappen/frontdoor/issues/109).
+That follow-up was later closed; D-040 now retires cross-phone verification
+because James's iPhone 17 Pro is the sole capture, test, and demo phone.
 
 **Input:** the same list of entrance IDs on every team device and the Python CLI.
 **Output:** identical `dev` / `calib` / `sealed` assignments, no UI to override.
@@ -124,12 +129,12 @@ Closed without a PR. Schema and manifest exist (#18, #21) but the loader
 **Input:** real captures plus deliberately corrupted image / sidecar / manifest.
 **Output:** loader raises, naming the capture, with no flag that disables hashing.
 
-## #94 / TICK-211 — QA: server and demo rendering on a real device
+## #94 / TICK-211 — QA: server and demo rendering on James's iPhone 17 Pro
 
 Closed without a PR. Depends on the real `/measure` implementation, deploy, and
 in-app rendering (#49–#51), none of which had landed.
 
-**Input:** real captures on a physical device against the deployed server.
+**Input:** real captures on James's iPhone 17 Pro against the deployed server.
 **Output:** server bytes match the library; abstain renders; network failure
 does not drop the local capture.
 

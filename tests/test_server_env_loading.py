@@ -18,16 +18,21 @@ import sys
 import textwrap
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
 PROBE = textwrap.dedent(
     """
     import json, os, sys
     sys.path.insert(0, {src!r})
-    import frontdoor_server.wsgi  # noqa: F401  -- the import IS the thing under test
+    import frontdoor_server.wsgi as wsgi
+    health = wsgi.app.test_client().get("/health")
     print(json.dumps({{
         "from_dotenv": os.environ.get("FRONTDOOR_TEST_MARKER"),
         "real_env_wins": os.environ.get("FRONTDOOR_TEST_PRESET"),
+        "health_status": health.status_code,
+        "health_body": health.get_json(),
     }}))
     """
 )
@@ -79,3 +84,33 @@ def test_no_dotenv_is_not_an_error(tmp_path):
     """A container has no .env at all; importing the entrypoint must still work."""
     out = run_probe(tmp_path, "")
     assert out["from_dotenv"] is None
+
+
+@pytest.mark.parametrize(
+    "depth_url",
+    [None, "", "not a url"],
+    ids=["absent", "empty", "malformed"],
+)
+def test_tick_262_ac_1_ac_6_wsgi_imports_with_bad_depth_config(
+        tmp_path: Path, depth_url: str | None) -> None:
+    extra_env = {
+        "FRONTDOOR_UPLOAD_KEY": "configured-upload-key",
+        "FRONTDOOR_DEPTH_INGEST_KEY": "configured-depth-key",
+    }
+    if depth_url is not None:
+        extra_env["FRONTDOOR_DEPTH_INGEST_URL"] = depth_url
+
+    out = run_probe(tmp_path, "", extra_env=extra_env)
+
+    assert out["health_status"] == 200
+
+
+def test_tick_262_ac_2_health_answers_with_bad_depth_config(tmp_path: Path) -> None:
+    out = run_probe(
+        tmp_path,
+        "",
+        extra_env={"FRONTDOOR_UPLOAD_KEY": "configured-upload-key"},
+    )
+
+    assert out["health_status"] == 200
+    assert out["health_body"] == {"status": "ok"}

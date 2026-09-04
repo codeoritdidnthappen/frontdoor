@@ -16,7 +16,7 @@ Three properties drive every structural choice here:
 1. **The demo and the error budget must run the same code.** If they diverge, Demo Day exhibits a
    system whose behaviour the numbers do not characterise.
 2. **The method must not be able to reach data it is not allowed to use.** The sealed split and the
-   LiDAR depth maps are both enforced in code, not by intention.
+   captured depth maps are both enforced in code, not by intention.
 3. **Every measurement must be reconstructable from what is committed.** An image, its metadata and
    its ground truth are one record, created at the shutter press.
 
@@ -88,16 +88,16 @@ device has no depth sensor), and one JSON sidecar:**
   "capture_id":     "uuid",
   "entrance_id":    "E-014",
   "captured_at":    "2026-08-30T14:22:31Z",
-  "device_model":   "iPhone15,3",
+  "device_model":   "iPhone18,1",
   "lens":           "builtInWideAngleCamera",
   "capture_device": "builtInDualWideCamera",
   "zoom_factor":    2.0,
   "image":          {"path": "...", "sha256": "6105d6cc76af400325e94d588ce511be5bfdbb73b437dc51eca43917d7a43e3d", "width": 4032, "height": 3024,
                      "exif_orientation": 6},
   "depth":          {"path": "...", "sha256": "ded32129b05bfc16ce501e654a169960583352cbc974824ed16ce94855904386"},
-  "intrinsics":     {"fx": 2934.1, "fy": 2934.1, "cx": 2016.4, "cy": 1512.7,
+  "intrinsics":     {"fx": 2807.7, "fy": 2807.7, "cx": 2006.4, "cy": 1503.2,
                      "distortion_table": [0.0, 0.0021, 0.0086, 0.0195, 0.0349],
-                     "distortion_center": {"x": 2016.4, "y": 1512.7}},
+                     "distortion_center": {"x": 2016.0, "y": 1512.0}},
   "gravity":        [0.02, -0.98, -0.19],
   "card_placement": "vertical",
   "ground_truth":   {"rise_in": 0.53, "instrument": "caliper"},
@@ -108,7 +108,7 @@ device has no depth sensor), and one JSON sidecar:**
 ```
 
 `lens` and `capture_device` are different claims and both are needed. The 1x main lens is the
-optics D-014 fixes; on both team phones it is reached through `builtInDualWideCamera`, because the
+optics D-014 fixes; on James's iPhone 17 Pro it is reached through `builtInDualWideCamera`, because the
 bare `builtInWideAngleCamera` delivers no calibration data at all and therefore cannot produce a
 measurable frame (TICK-020). `zoom_factor` is what makes the claim checkable: on that device the
 zoom scale is relative to the ultra-wide, so **2.00 is the 1x main lens** and 1.00 would be the
@@ -120,18 +120,22 @@ the team has** -- the optics it fixes are unchanged, the device reaching them is
 D-014's claim that this path yields LiDAR depth.
 
 The `distortion_table` above is truncated for readability. A real one is as long as the camera
-delivers -- 42 entries on both team phones (TICK-020) -- and is recorded verbatim, never resampled
+delivers -- 42 entries on James's iPhone 17 Pro -- and is recorded verbatim, never resampled
 or applied on device. `distortion_center` is deliberately separate from `cx`/`cy`: the table is
 radial about that point, and substituting the principal point biases exactly the frame-edge
 corrections the table exists to make.
+
+Existing imported records carry the marketing-name value `device_model = "iPhone 17 Pro"`, while
+new app captures carry the hardware identifier `iPhone18,1`. They name the same physical phone.
+Analysis must normalize both to `iPhone18,1` before grouping; only then is the device field constant.
 
 Three things this shape buys:
 
 > **Amended 2026-09-02 by D-036.** No caliper is used, so there is no instrument reading to bind.
 > What binds at the shutter is the entrance ID and the condition tags; ground truth for the
 > screening study is the operator's **presence labels** (#168), which need no instrument. Capture
-> runs on **one device** — James's iPhone Pro with LiDAR — so `device_model` is a constant rather
-> than a stratification variable.
+> runs on **one device** — James's iPhone 17 Pro (`iPhone18,1`) with LiDAR — so `device_model` is a
+> constant rather than a stratification variable after applying D-040's alias normalization.
 
 - **Ground truth binds at the shutter press.** The operator enters the entrance ID and the caliper
   reading in the app. There is no later reconciliation of a spreadsheet against filenames.
@@ -185,7 +189,7 @@ A single stateless endpoint on a small paid host (D-016; D-026 as amended by **D
 the server host only — object storage stays on the free tier): `POST /measure` takes the image and sidecar,
 calls the core library, returns per-arm measurement, interval, and decision.
 
-It holds no state and owns no metrology. Its only job is to be reachable from a phone on stage.
+It holds no state and owns no metrology. Its only job is to be reachable from James's iPhone 17 Pro on stage.
 
 **Deployed at https://frontdoor-measure.fly.dev** (2026-09-02): Fly.io `shared-cpu-1x`, 256 MB, one
 machine held always-on in `sjc` near the WNAM buckets. `GET /health` and `POST /measure` are live and
@@ -304,12 +308,13 @@ so a corrupted or substituted file fails loudly rather than quietly changing a n
 **Retention.** The bucket is the system of record during the sprint. At results freeze the dataset
 is published as a release artifact, satisfying deliverable #1.
 
-## 9. LiDAR quarantine (D-020)
+## 9. Depth quarantine (D-020, corrected by D-040)
 
-Every capture records a LiDAR depth map, on every entrance rather than a matched subset — with the
-capture app in place this is free, and it strengthens deliverable #5. A device without a depth
-sensor still captures: the sidecar writes `"depth": null` and the manifest leaves `depth_sha256`
-empty (TICK-023).
+Every app capture on James's iPhone 17 Pro enables AVFoundation depth delivery. The measured
+configuration delivered relative stereo disparity; supported depth data is converted to
+`DepthFloat32` before persistence. A frame with no depth-carried calibration is rejected for
+missing intrinsics; a frame whose calibrated depth cannot be persisted may write `"depth": null`.
+Imported photos also carry no depth (TICK-023).
 
 > **Amended 2026-09-02 by D-034.** The sidecar carries a `capture_mode` — `metrology`,
 > `screening` or `imported` — and each mode's required fields differ. A screening capture is
@@ -318,46 +323,35 @@ empty (TICK-023).
 > written before that entry keeps its original contract. R-3's 3 m distance cap is metrology-only:
 > the plain-photo protocol asks for a far, ~3-4 m shot.
 
-> **Amended 2026-09-02.** **D-032** puts depth capture on James's iPhone 17 Pro (`iPhone18,1`) — one LiDAR
-> device shooting every entrance satisfies "every entrance", and that phone has not yet run a
-> build, so probing it is a prerequisite. **D-039 supersedes D-033's mechanism:** Cloudflare does
+> **Corrected 2026-09-04 by D-040.** **D-032** puts depth capture on James's iPhone 17 Pro
+> (`iPhone18,1`). Its completed probe shows that normal capture receives relative stereo disparity
+> and persists relative `DepthFloat32`, not LiDAR range. **D-039 supersedes D-033's mechanism:** Cloudflare does
 > not issue a permanent write-only R2 token. Uploads still pass through the server for validation,
 > but depth is forwarded to a dedicated authenticated Worker with the R2 binding. Fly has no depth
 > credential or read route; the harness keeps the only credential that can read depth.
 
 Depth maps are stored in a **separate bucket** (D-026) that the image-only loader
 credential cannot read. A prefix inside one bucket is not enough where the provider
-scopes credentials per bucket. They are loaded only by the evaluation harness, only
-for the monocular-versus-LiDAR comparison. If depth sits where the method can reach
+scopes credentials per bucket. They are loaded only by the evaluation harness. The planned
+monocular-versus-LiDAR comparison is unavailable because the stored depth is relative disparity
+and no caliper reference exists. If depth sits where the method can reach
 it, it is eventually used to tune, and the comparison stops meaning anything — the
 same reasoning as the sealed split. Layout: `data/STORAGE.md`.
 
-LiDAR is a comparison, not ground truth. Commonly reported depth error is around ±1cm, coarser than
-the 0.25" target and comparable to the 1/2" decision line itself. ~~The caliper (±0.01") remains the
-reference (D-003).~~ **D-036 (2026-09-02) supersedes D-003: no caliper is used, so there is no
-reference to compare depth against. Deliverable #5 and R-10's bench test are not delivered in this
-window — the comparison has no subject, which is a stronger statement than "not done yet".** Whether LiDAR clears your own bar is an open empirical question — see R-10.
+The phone's LiDAR hardware is not a ground-truth source for this dataset. The normal capture path
+does not store LiDAR range, and D-036 removed the caliper reference. Deliverable #5 and R-10's
+bench test are therefore not delivered in this window: the comparison has no subject.
 
 ## 10. Assumptions
 
-- **A-1. FALSIFIED — but not in the way this said.** The device list here was wrong: the team
-  holds an iPhone 16, an iPhone 15 Pro Max and an iPhone 17 Pro (`iPhone18,1`, not the iPhone 16
-  Pro recorded), plus two Android devices that cannot run an AVFoundation capture app at all.
-  Three iPhones, spanning three generations and two camera tiers.
-
-  TICK-020 also falsified the premise underneath the assumption. LiDAR is not the thing that
-  matters: `builtInLiDARDepthCamera` delivers depth with **no calibration data at all**, so it is
-  not a route to intrinsics on any device. Intrinsics arrive through `builtInDualWideCamera`,
-  which every tested iPhone has, Pro or not — so capture capability does not track the Pro tier
-  the way this assumption presumed. `device_model` is recorded per capture, so device remains
-  visible to the error analysis. See TEAM.md §2 and docs/tick-020-capability-probe.md.
-- **A-2. Calibration-data delivery works on the team's actual devices.** Verified day one (R-9).
-  ARKit is the fallback if it does not, at the resolution cost described in §2.
-- **A-3. FALSIFIED — two capture-capable devices, one with LiDAR.** R-8 has fired; its response
-  rule is recorded in TEAM.md §4 (cut the entrance target, floor of 30, drop Arm A′ captures before
-  entrances). Note that cutting the target does not clear the binding constraint: D-020 requires
-  LiDAR on every entrance and only one device produces it, so capture serialises onto a single
-  operator regardless of target. Relaxing D-020 to a matched subset is an open protocol decision.
+- **A-1. REPLACED.** The supported hardware is exactly James's iPhone 17 Pro (`iPhone18,1`) with
+  LiDAR. No generalisation to another phone is claimed. After D-040's alias normalization,
+  `device_model` represents one physical phone in this dataset. See TEAM.md §2 and
+  docs/tick-020-capability-probe.md.
+- **A-2. Calibration-data delivery works on James's iPhone 17 Pro.** Its probe verified the
+  4032×3024 main-lens path, intrinsics, distortion table, and relative stereo disparity (R-9).
+- **A-3. REPLACED — one capture device.** R-8 has fired; its response rule is recorded in TEAM.md
+  §4. James's iPhone 17 Pro shoots every entrance, and no hardware fallback is in scope.
 - **A-4. The threshold rise presents a usable planar riser face.** Heavily bevelled or rounded
   thresholds are a documented failure class, as glass doors already are.
 
@@ -366,7 +360,7 @@ window — the comparison has no subject, which is a stronger statement than "no
 | ID | Risk | Mitigation |
 |----|------|------------|
 | R-7 | App signing is on the critical path for the whole dataset; free-provisioning builds expire after 7 days, landing mid-capture | **Accepted, not mitigated by purchase** (D-025). Managed by a committed signing calendar with no gap through Sep 11, including a mandatory re-sign by Sep 6. James runs Windows and holds the only LiDAR device, so each of his installs is a scheduled physical session with a Mac owner |
-| R-8 | Fewer capture devices than parallel field tracks assume | Detected at roster assignment (O-1); response is to cut the entrance target, not the protocol |
-| R-9 | Calibration-data delivery unavailable on target devices | Verified day one; ARKit fallback, accepting the resolution cost in §2 |
+| R-8 | One capture phone serialises field work and is a single point of failure | Cut the entrance target, not the protocol; keep James's iPhone 17 Pro signed and launch-tested; stop capture rather than switch hardware |
+| R-9 | Calibration-data delivery unavailable on James's iPhone 17 Pro | Verified by the on-device probe; no hardware fallback is in scope |
 | R-10 **(no longer testable — D-036)** | LiDAR is coarser than the 0.25" bar, so the "accuracy ceiling" sits below the success criterion | ~~Bench-test against the caliper in week one~~ — **no caliper is used (D-036), so there is nothing to bench-test against.** The risk is neither confirmed nor refuted; it is recorded as untested. |
 | R-11 | Demo app and capture app drift apart, so Demo Day exhibits uncharacterised behaviour | Demo app is the capture app plus rendering; one capture path, one metrology library |

@@ -16,6 +16,7 @@ from werkzeug.exceptions import HTTPException
 from frontdoor.metrology import ARM_NAMES
 from frontdoor.sidecar import validate_sidecar
 from frontdoor_server.map_view import map_page
+from frontdoor_server.scan_view import scan_page
 from frontdoor_server.screen_view import screen_page
 from frontdoor_server.upload_view import register_upload
 
@@ -186,6 +187,8 @@ def create_app():
     app.register_blueprint(map_page)
     # Photo-upload ADA feature screening: POST /screen (TICK-245).
     app.register_blueprint(screen_page)
+    # Scan persistence: POST /screen/publish and GET /scan/photo/<key> (TICK-262, #270).
+    app.register_blueprint(scan_page)
 
     # Capture ingest: POST /upload (TICK-029, #33). Registered via a function rather than a
     # blueprint so it can use this module's _error contract without a circular import.

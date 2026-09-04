@@ -186,12 +186,53 @@ public map renders no pins. Two ways to fix it, pick one and record it here:
 Either way, verify with `curl https://frontdoor-measure.fly.dev/map/data` and confirm
 `dataset_error` is `null` and pins are present.
 
+### Scan persistence (TICK-262)
+
+`POST /screen/publish` is the consent step after `/screen`: the same blur → audit → integrated
+assessment, and then — only when the face audit answered exactly `clear` — it stores the
+**processed** image bytes and appends one scan record. It needs two things beyond `/screen`:
+
+- **Object storage** — the same images-bucket credential the `/upload` path already uses
+  (`FRONTDOOR_IMAGES_BUCKET` / `FRONTDOOR_IMAGES_ACCESS_KEY` / `FRONTDOOR_IMAGES_SECRET_KEY`,
+  plus `FRONTDOOR_S3_ENDPOINT` / `FRONTDOOR_S3_REGION`). No new credential. Scan images land
+  under `open/scans/<place>/<uuid>.jpg`; `GET /scan/photo/scans/<place>/<uuid>.jpg` serves them
+  back (unauthenticated — every stored byte is face-blurred and EXIF-stripped by construction,
+  and only keys under the `scans/` prefix resolve).
+- **`FRONTDOOR_SCANS`** — path of the append-only JSONL scan-record store, default
+  `data/scans.jsonl` (relative, like the map dataset — same caveat: point it at a **mounted
+  volume** in `fly.toml`'s `[env]`, or the records vanish with the machine's rootfs on the next
+  deploy).
+
+`GET /map/data` merges the store into the pre-catalogue automatically; no scan store, or an
+unreadable one, changes nothing. If storage is down or misconfigured, publish degrades to a 503
+`assessed-but-not-published` response that still carries the verdicts — nothing is dropped
+silently, and no credential material ever appears in a response.
+
 ### /screen sizing note — measure before Demo Day
 
 The **69 MiB** footprint in the table was measured serving `GET /health`. It says nothing about
 `/screen`'s worst case: up to **64 MB of multipart upload buffered in memory**, base64-encoded
 (+33%) and sent as **one integrated vision call carrying up to 6 image blocks**, on a **256 MB**
 machine — with gunicorn's 30 s timeout in front of the model call.
+
+> **Superseded 2026-09-04 — the measurement below was taken before `faceblur` existed.** That
+> release did not load OpenCV. The current one decodes, blurs and re-encodes every `/screen`
+> image, and at 256 MB a **single 200 KB PNG** now OOM-kills the worker:
+>
+> ```
+> Out of memory: Killed process 644 (gunicorn) total-vm:572864kB anon-rss:140000kB
+> ```
+>
+> The client gets a **502 with an empty body** — Fly's proxy filling in for an app that died
+> mid-request — so it is not the JSON error contract and the cause shows only in `fly logs`.
+>
+> The machine is now **512 MB** (`fly.toml`, not `fly scale` — see below), and the same request
+> returns **200 in 6.4 s**. The figures below are kept because their *reasoning* still holds; the
+> numbers do not.
+>
+> **`fly scale memory` alone does not stick.** It is reverted by the next `fly deploy`, which is
+> what happened on 2026-09-04: the machine was scaled to 512, a deploy silently put it back to
+> 256, and the OOM returned looking like a new fault. The value belongs in `fly.toml`.
 
 **Measured 2026-09-03** on release `deployment-01M1MFVVXFFMPFN9XJKD49QZ8P`, in a container capped
 at 256 MB exactly as the host is, with six real captures (2.7–2.8 MB each, 17.2 MB of multipart):
@@ -274,9 +315,9 @@ Then **verify the machine count in the `fly status` output — it must list exac
 
 ## Verify, before Demo Day rather than on it
 
-**1. The endpoint answers from a phone on cellular** (#50 AC — not from laptop wifi):
+**1. The endpoint answers from James's iPhone 17 Pro on cellular** (#50 AC — not from laptop wifi):
 
-Turn wifi off on the phone, then open `https://frontdoor-measure.fly.dev/health` in Safari.
+Turn wifi off on James's iPhone 17 Pro, then open `https://frontdoor-measure.fly.dev/health` in Safari.
 HTTPS matters: iOS App Transport Security refuses plain HTTP, which is why `force_https` is set.
 
 **2. The host and the laptop run the same image digest** (#50 AC). One command:

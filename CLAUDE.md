@@ -80,7 +80,9 @@ request. When a ticket is complete, review it, fix every bug, and merge it immed
 5. **Land the PR.** Update the branch from `main`, resolve conflicts, and rerun the suite (and
    `/code-review` if conflict resolution changed the work). Then push the branch, open its pull
    request, verify CI passes, and merge it immediately. Changes discovered after merge start from
-   a ticket and land through a new pull request.
+   a ticket and land through a new pull request. Automated agents are authorized and expected to
+   perform this merge themselves once review and CI pass; do not leave a completed pull request
+   open for a separate human merge.
 6. **Land the whole ticket, or split it.** Don't land work that leaves its ticket
    incomplete. The moment an acceptance criterion turns out to need something the change
    cannot supply — hardware, a venue, another person, or work that is deliberately paused —
@@ -89,7 +91,7 @@ request. When a ticket is complete, review it, fix every bug, and merge it immed
 
    The failure this prevents is not a wrong ticket state, it is a **silent** one: a ticket
    left open with a criterion nobody can ever tick stops meaning "in progress" and starts
-   meaning nothing at all. #50 could not close because one criterion needed a phone on
+   meaning nothing at all. #50 could not close because one criterion needed James's iPhone on
    cellular; #55 could not close because two needed arms that are deprioritised. Both had
    landed, working, verified code sitting behind a checkbox.
 

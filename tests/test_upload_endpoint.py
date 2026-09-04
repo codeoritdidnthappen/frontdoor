@@ -10,6 +10,7 @@ import io
 
 import boto3
 import pytest
+from flask.testing import FlaskClient
 from moto import mock_aws
 
 from frontdoor_server.app import create_app
@@ -455,3 +456,48 @@ def test_tick_b01_programmer_error_inside_boto_client_remains_a_500(
 
     assert response.status_code == 500
     assert response.get_json()["error"] == "internal error"
+
+
+@pytest.mark.parametrize(
+    "depth_url",
+    [None, "", "not a url"],
+    ids=["absent", "empty", "malformed"],
+)
+def test_tick_262_ac_3_bad_depth_config_is_a_named_503(
+        monkeypatch: pytest.MonkeyPatch,
+        env: list[dict[str, object]],
+        depth_url: str | None) -> None:
+    if depth_url is None:
+        monkeypatch.delenv("FRONTDOOR_DEPTH_INGEST_URL", raising=False)
+    else:
+        monkeypatch.setenv("FRONTDOOR_DEPTH_INGEST_URL", depth_url)
+    client = create_app().test_client()
+
+    response = _post(client, b"depth", kind="depth")
+
+    assert response.status_code == 503
+    body = response.get_json()
+    assert body["error"] == "could not store the object"
+    assert "FRONTDOOR_DEPTH_INGEST_URL" in body["detail"]
+
+
+@mock_aws
+def test_tick_262_ac_4_image_upload_is_unaffected_by_bad_depth_config(
+        monkeypatch: pytest.MonkeyPatch, env: list[dict[str, object]]) -> None:
+    monkeypatch.delenv("FRONTDOOR_DEPTH_INGEST_URL", raising=False)
+    client = create_app().test_client()
+    _buckets()
+
+    response = _post(client, b"image", kind="image")
+
+    assert response.status_code == 201
+    assert response.get_json()["verified"] == "read-back"
+
+
+def test_tick_262_ac_5_valid_depth_config_behaves_unchanged(
+        client: FlaskClient, env: list[dict[str, object]]) -> None:
+    response = _post(client, b"depth", kind="depth")
+
+    assert response.status_code == 201
+    assert response.get_json()["verified"] == "received"
+    assert env[0]["body"] == b"depth"

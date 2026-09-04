@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 import random
 
-F_PX = 2934.1
+F_PX = 2807.7
 CARD_LONG_MM = 85.60
 CARD_SHORT_MM = 53.98
 RISE_MM = 12.7
