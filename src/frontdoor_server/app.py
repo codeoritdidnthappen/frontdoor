@@ -257,6 +257,40 @@ def create_app():
             "arms": STUB_ARMS,
         }, 200
 
+    # Browser scan clients call the screening surface cross-origin, and without
+    # Access-Control-Allow-Origin the browser DISCARDS the response after the server has
+    # already done the work: a multipart POST is a CORS "simple request", so it is sent
+    # (and burns a model call) and only the reply is dropped. `*` is safe on exactly these
+    # routes: they serve public, privacy-processed content and verdicts, use no cookies and
+    # no auth, so a wildcard exposes no credentials.
+    #
+    # An after_request hook rather than headers in the views, because the error paths
+    # matter as much as the 200s -- the 413 Flask raises before the view body runs, the
+    # JSON-ified 405 from the errorhandler below, the views' own 4xx/5xx -- and a browser
+    # client needs to read that error contract, not a blank CORS failure. One path-scoped
+    # hook covers every response on the covered routes and cannot drift between the two
+    # view modules.
+    #
+    # Scope is deliberate and closed: /screen, /screen/publish, /scan/photo/<key>.
+    # /map/data is intentionally NOT covered (unchanged scope), and /upload and /measure
+    # are not browser surfaces.
+    @app.after_request
+    def _screening_cors(response):
+        path = request.path
+        if path in ("/screen", "/screen/publish") or path.startswith("/scan/photo/"):
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            if request.method == "OPTIONS":
+                # The multipart POST itself never preflights, but a publish carrying the
+                # optional X-Frontdoor-Contributor header does -- a non-safelisted request
+                # header makes the request non-simple -- so OPTIONS answers with what the
+                # browser asks about. Flask's automatic OPTIONS supplies the response;
+                # these headers make it a valid preflight answer.
+                response.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+                response.headers["Access-Control-Allow-Headers"] = (
+                    "Content-Type, X-Frontdoor-Contributor"
+                )
+        return response
+
     # Every response this service produces carries the committed error contract, including the
     # statuses Werkzeug raises before any view runs — 404 for a typo'd path, 405 for a wrong method,
     # 413 for an oversized body (#113). The consumer is an iOS client parsing JSON over a venue
