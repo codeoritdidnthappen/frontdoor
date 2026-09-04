@@ -12,7 +12,7 @@ from types import SimpleNamespace
 import pytest
 
 from frontdoor.labels import COLUMNS as LABEL_COLUMNS
-from frontdoor.manifest import COLUMNS as MANIFEST_COLUMNS
+from frontdoor.manifest import COLUMNS as MANIFEST_COLUMNS, manifest_sha256
 from frontdoor.screening import (
     CRITERIA_KEYS,
     CriterionSummary,
@@ -24,6 +24,7 @@ from frontdoor.screening import (
 from frontdoor.screening_eval import (
     CONDITION_KEYS,
     LATENCY_BUDGET_S,
+    MARKDOWN_NAME,
     MIN_CONDITION_ENTRANCES,
     ScreeningEvalError,
     _condition_analysis,
@@ -35,6 +36,7 @@ from frontdoor.screening_eval import (
     run_eval,
     score_joins,
 )
+from frontdoor.seal_audit import AUDIT_FIELDS, SealAuditError
 
 # Split known answers under the committed seed (pinned in test_split.py and
 # recomputed here): E-001/E-003/E-007 dev, E-002/E-014 sealed, E-042 calib.
@@ -93,7 +95,7 @@ class FakeEngine:
         self._results = dict(results)
         self.calls = []
 
-    def screen_entrance(self, entrance_id, images):
+    def screen_entrance(self, entrance_id, images, *, allow_sealed=False):
         self.calls.append((entrance_id, len(images)))
         self.spent_usd += 0.05 * len(images)
         return self._results[entrance_id]
@@ -189,16 +191,19 @@ def test_score_joins_counts_per_criterion_and_skips_unlabeled():
     ]
     per_criterion, joins = score_joins(screenings, labels)
     assert per_criterion["ramp_or_bevel"] == {
-        "correct": 2, "wrong": 0, "abstained": 0, "unlabeled": 0,
+        "correct": 2, "wrong": 0, "abstained": 0, "not_visible": 0, "unlabeled": 0,
     }
     assert per_criterion["handrails"] == {
-        "correct": 0, "wrong": 1, "abstained": 0, "unlabeled": 1,
+        "correct": 0, "wrong": 1, "abstained": 0, "not_visible": 0, "unlabeled": 1,
     }
+    # This one abstained by saying not_visible ...
     assert per_criterion["accessible_door_hardware"] == {
-        "correct": 0, "wrong": 0, "abstained": 1, "unlabeled": 1,
+        "correct": 0, "wrong": 0, "abstained": 1, "not_visible": 1, "unlabeled": 1,
     }
+    # ... and this one by returning no verdict at all. Both abstain; only the
+    # first counts toward the not-visible rate.
     assert per_criterion["accessibility_signage"] == {
-        "correct": 0, "wrong": 0, "abstained": 1, "unlabeled": 1,
+        "correct": 0, "wrong": 0, "abstained": 1, "not_visible": 0, "unlabeled": 1,
     }
     assert len(joins) == 5
     assert all(join["entrance_id"] != DEV_C for join in joins)
@@ -419,8 +424,9 @@ def test_report_json_values(tmp_path):
     signage = written["criteria"]["accessibility_signage"]
     # blank label row means the pair is unlabeled, never guessed
     assert signage == {
-        "correct": 0, "wrong": 0, "abstained": 0, "unlabeled": 2,
+        "correct": 0, "wrong": 0, "abstained": 0, "not_visible": 0, "unlabeled": 2,
         "accuracy_of_committed": None, "abstention_rate": None,
+        "not_visible_rate": None,
     }
 
     overall = written["overall"]
@@ -428,6 +434,10 @@ def test_report_json_values(tmp_path):
     assert overall["abstained"] == 1
     assert overall["accuracy_of_committed"] == pytest.approx(3 / 4)
     assert overall["abstention_rate"] == pytest.approx(1 / 5)
+    # The one abstention was a not_visible, so the rates coincide here; they
+    # part company as soon as a view returns no verdict at all.
+    assert overall["not_visible"] == 1
+    assert overall["not_visible_rate"] == pytest.approx(1 / 5)
 
     flips = written["flip_rate"]
     assert flips["per_entrance"][DEV_A] == pytest.approx(0.5 / 3)
@@ -478,8 +488,9 @@ def test_report_markdown_carries_the_numbers(tmp_path):
     assert "- model: fake-screening-model" in text
     assert "- images: 3" in text
     assert "- spend estimate: $0.15" in text
-    assert "| ramp_or_bevel | 2 | 0 | 0 | 0 | 1.000 |" in text
-    assert "| handrails | 1 | 1 | 0 | 0 | 0.500 |" in text
+    assert "| ramp_or_bevel | 2 | 0 | 0 | 0 | 0 | 1.000 |" in text
+    assert "| handrails | 1 | 1 | 0 | 0 | 0 | 0.500 |" in text
+    assert "- not visible rate: 0.200" in text
     assert "0.750 (3 correct / 4 committed)" in text
     for dimension in CONDITION_KEYS:
         assert f"## Exploratory condition analysis: {dimension}" in text
@@ -490,13 +501,38 @@ def test_report_markdown_carries_the_numbers(tmp_path):
     assert SEALED_ID not in text
 
 
+def _without_runtime(text):
+    """The report minus its wall-clock runtime, which is legitimately variable.
+
+    Determinism here means the same inputs score the same way, not that two
+    runs took the same number of seconds.
+    """
+    report = json.loads(text)
+    report["run"].pop("duration_s")
+    return json.dumps(report, indent=2, sort_keys=True)
+
+
 def test_report_is_deterministic_across_runs(tmp_path):
     (tmp_path / "a").mkdir()
     (tmp_path / "b").mkdir()
     _, out_a = _run_report(tmp_path / "a")
     _, out_b = _run_report(tmp_path / "b")
-    for name in ("screening_eval.json", "screening_eval.md"):
-        assert (out_a / name).read_bytes() == (out_b / name).read_bytes()
+    assert _without_runtime(
+        (out_a / "screening_eval.json").read_text(encoding="utf-8")
+    ) == _without_runtime(
+        (out_b / "screening_eval.json").read_text(encoding="utf-8")
+    )
+    md_a, md_b = (
+        [
+            line
+            for line in (out / "screening_eval.md")
+            .read_text(encoding="utf-8")
+            .splitlines()
+            if not line.startswith("- total runtime:")
+        ]
+        for out in (out_a, out_b)
+    )
+    assert md_a == md_b
 
 
 def test_joins_are_ordered_by_entrance_then_criterion(tmp_path):
@@ -678,3 +714,520 @@ def test_cli_keyless_run_fails_clearly_before_touching_anything(
     assert "ANTHROPIC_API_KEY" in err
     assert "Nothing was read or written" in err
     assert not out_dir.exists()
+
+
+# --- the audited sealed path (TICK-079, TICK-080) ----------------------------
+#
+# The Sep 7 unsealing run is this same runner with --include-sealed added and
+# nothing else changed (TICK-079 AC2), so the flag is exercised here rather
+# than written on the morning it has to work.
+
+
+def _audit_context(tmp_path, manifest):
+    """A minimal audit mapping for record_unsealing, mirroring test_labels."""
+    return {
+        "manifest_path": manifest,
+        "audit_path": tmp_path / "SEAL_AUDIT.log",
+        "repo": tmp_path,
+        "config": {"images_bucket": "frontdoor-image", "endpoint": "default"},
+    }
+
+
+def _clean_recordable_repo(monkeypatch):
+    """Monkeypatch the git-cleanliness bits the way test_seal_audit.py does."""
+    monkeypatch.setattr("frontdoor.seal_audit._working_tree_dirty", lambda repo: False)
+    monkeypatch.setattr("frontdoor.seal_audit._git_commit", lambda repo: "b" * 40)
+    monkeypatch.setattr("frontdoor.seal_audit._operator", lambda: "qa-operator")
+
+
+def _sealed_fixture(tmp_path):
+    """A manifest and labels covering one sealed and one dev entrance."""
+    manifest = _write_manifest(
+        tmp_path / "manifest.csv", [("cap-1", SEALED_ID), ("cap-2", DEV_A)]
+    )
+    labels = _write_labels(
+        tmp_path / "labels.csv",
+        [
+            (SEALED_ID, "ramp_or_bevel", "present"),
+            (DEV_A, "ramp_or_bevel", "absent"),
+        ],
+    )
+    return manifest, labels
+
+
+SEALED_ARGV = ["python", "-m", "frontdoor.screening_eval", "--include-sealed"]
+
+
+def test_sealed_split_without_an_audit_context_is_refused(tmp_path):
+    """No audit context, no sealed run - the flag alone never unseals."""
+    manifest, labels = _sealed_fixture(tmp_path)
+
+    def _boom(capture_id):
+        raise AssertionError("no image should be read")
+
+    with pytest.raises(SealedSplitError, match="audited"):
+        run_eval(
+            manifest_path=manifest,
+            labels_path=labels,
+            out_dir=tmp_path / "out",
+            engine=FakeEngine({}),
+            get_capture=_boom,
+            split="sealed",
+        )
+    assert not (tmp_path / "out").exists()
+    assert not (tmp_path / "SEAL_AUDIT.log").exists()
+
+
+def test_sealed_run_records_one_audit_line_carrying_the_real_command(
+    tmp_path, monkeypatch
+):
+    manifest, labels = _sealed_fixture(tmp_path)
+    audit = _audit_context(tmp_path, manifest)
+    _clean_recordable_repo(monkeypatch)
+    engine = FakeEngine({SEALED_ID: _screening(SEALED_ID, {"ramp_or_bevel": "present"})})
+
+    run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=engine,
+        get_capture=_fake_get_capture,
+        split="sealed",
+        audit=audit,
+        argv=SEALED_ARGV,
+    )
+
+    lines = audit["audit_path"].read_text(encoding="utf-8").splitlines()
+    # TICK-080 AC3: exactly one line, and its command line is the command that
+    # actually ran, not a placeholder nobody can re-run.
+    assert len(lines) == 1
+    record = dict(zip(AUDIT_FIELDS, lines[0].split("\t")))
+    assert json.loads(record["command_line"]) == SEALED_ARGV
+    assert record["operator"] == "qa-operator"
+    assert record["manifest_sha256"] == manifest_sha256(manifest)
+
+
+def test_audit_line_is_written_before_any_sealed_image_is_read(tmp_path, monkeypatch):
+    manifest, labels = _sealed_fixture(tmp_path)
+    audit = _audit_context(tmp_path, manifest)
+    _clean_recordable_repo(monkeypatch)
+    seen = []
+
+    def _get_capture(capture_id):
+        # The seal's whole promise: the record exists before the first byte.
+        seen.append(audit["audit_path"].exists())
+        return _fake_get_capture(capture_id)
+
+    run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=FakeEngine(
+            {SEALED_ID: _screening(SEALED_ID, {"ramp_or_bevel": "present"})}
+        ),
+        get_capture=_get_capture,
+        split="sealed",
+        audit=audit,
+        argv=SEALED_ARGV,
+    )
+    assert seen == [True]
+
+
+def test_dirty_working_tree_aborts_the_sealed_run_and_reads_nothing(
+    tmp_path, monkeypatch
+):
+    # TICK-079 exercises this abort during the dry run, because Sep 7 is the
+    # wrong morning to discover the guard.
+    manifest, labels = _sealed_fixture(tmp_path)
+    audit = _audit_context(tmp_path, manifest)
+    monkeypatch.setattr("frontdoor.seal_audit._working_tree_dirty", lambda repo: True)
+
+    def _boom(capture_id):
+        raise AssertionError("no image should be read")
+
+    with pytest.raises(SealAuditError, match="dirty"):
+        run_eval(
+            manifest_path=manifest,
+            labels_path=labels,
+            out_dir=tmp_path / "out",
+            engine=FakeEngine({}),
+            get_capture=_boom,
+            split="sealed",
+            audit=audit,
+            argv=SEALED_ARGV,
+        )
+    assert not audit["audit_path"].exists()
+    assert not (tmp_path / "out").exists()
+
+
+def test_sealed_run_scores_the_sealed_split_only(tmp_path, monkeypatch):
+    manifest, labels = _sealed_fixture(tmp_path)
+    audit = _audit_context(tmp_path, manifest)
+    _clean_recordable_repo(monkeypatch)
+    engine = FakeEngine({SEALED_ID: _screening(SEALED_ID, {"ramp_or_bevel": "present"})})
+
+    result = run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=engine,
+        get_capture=_fake_get_capture,
+        split="sealed",
+        audit=audit,
+        argv=SEALED_ARGV,
+    )
+    assert engine.calls == [(SEALED_ID, 1)]
+    assert result["split"] == "sealed"
+    assert result["criteria"]["ramp_or_bevel"]["correct"] == 1
+
+
+def test_dev_run_writes_no_audit_line(tmp_path, monkeypatch):
+    # TICK-079 AC5: the dry run must leave SEAL_AUDIT.log untouched.
+    manifest, labels = _sealed_fixture(tmp_path)
+    _clean_recordable_repo(monkeypatch)
+    run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=FakeEngine({DEV_A: _screening(DEV_A, {"ramp_or_bevel": "absent"})}),
+        get_capture=_fake_get_capture,
+    )
+    assert not (tmp_path / "SEAL_AUDIT.log").exists()
+
+
+def test_cli_refuses_include_sealed_unless_launched_from_a_terminal(tmp_path, capsys):
+    # Same discipline as frontdoor.eval: the unsealing run is a deliberate act
+    # at a terminal, not something an import or a notebook can perform.
+    out_dir = tmp_path / "out"
+    code = main([
+        "--manifest", str(tmp_path / "manifest.csv"),
+        "--labels", str(tmp_path / "labels.csv"),
+        "--out", str(out_dir),
+        "--include-sealed",
+    ])
+    assert code == 2
+    assert "--include-sealed" in capsys.readouterr().err
+    assert not out_dir.exists()
+    assert not (tmp_path / "SEAL_AUDIT.log").exists()
+
+
+# --- runtime and the empty-group failure modes (TICK-079 AC3, AC4) -----------
+
+
+def test_report_records_total_runtime(tmp_path):
+    result, out_dir = _run_report(tmp_path)
+    # AC3: how long the run takes must not be a surprise on Sep 7.
+    assert result["run"]["duration_s"] >= 0.0
+    assert "- total runtime:" in (out_dir / MARKDOWN_NAME).read_text(encoding="utf-8")
+
+
+def test_run_with_no_entrances_writes_a_report_instead_of_dividing_by_zero(tmp_path):
+    # Manifest and labels both sealed: the scored split (dev) is empty, including
+    # no labeled-but-missing entrance that AC4 would otherwise pull in.
+    manifest = _write_manifest(tmp_path / "manifest.csv", [("cap-1", SEALED_ID)])
+    labels = _write_labels(
+        tmp_path / "labels.csv", [(SEALED_ID, "ramp_or_bevel", "present")]
+    )
+    result = run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=FakeEngine({}),
+        get_capture=_fake_get_capture,
+    )
+    assert result["run"]["entrance_count"] == 0
+    assert result["overall"]["accuracy_of_committed"] is None
+    assert result["overall"]["abstention_rate"] is None
+    assert result["flip_rate"]["mean"] is None
+    assert result["entrance_call"]["per_entrance"] == {}
+    assert result["entrance_call"]["agreement"] is None
+    assert result["latency_s"]["median"] is None
+    assert (tmp_path / "out" / MARKDOWN_NAME).exists()
+
+
+def test_entrance_with_no_views_is_reported_not_crashed(tmp_path):
+    manifest = _write_manifest(tmp_path / "manifest.csv", [("cap-1", DEV_A)])
+    labels = _write_labels(
+        tmp_path / "labels.csv", [(DEV_A, "ramp_or_bevel", "present")]
+    )
+    # One assessment came back with no valid verdict: the view was captured
+    # but the engine declined every criterion.
+    empty = _screening(DEV_A, {}, latencies=(1.0,))
+    result = run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=FakeEngine({DEV_A: empty}),
+        get_capture=_fake_get_capture,
+    )
+    assert result["flip_rate"]["per_entrance"][DEV_A] is None
+    assert result["criteria"]["ramp_or_bevel"]["abstained"] == 1
+    assert result["overall"]["accuracy_of_committed"] is None
+
+
+def test_labeled_entrance_with_no_captures_is_reported_not_vanished(tmp_path):
+    # TICK-079 AC4: "an entrance with no views". A labeled entrance that never
+    # made it into the manifest is that case — vanishing is how an incomplete
+    # capture goes unnoticed on the one run that cannot be repeated.
+    manifest = _write_manifest(tmp_path / "manifest.csv", [("cap-1", DEV_B)])
+    labels = _write_labels(
+        tmp_path / "labels.csv",
+        [
+            (DEV_A, "ramp_or_bevel", "present"),
+            (DEV_B, "ramp_or_bevel", "present"),
+        ],
+    )
+    engine = FakeEngine(
+        {
+            DEV_A: _screening(DEV_A, {}, latencies=()),
+            DEV_B: _screening(DEV_B, {"ramp_or_bevel": "present"}),
+        }
+    )
+    result = run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=engine,
+        get_capture=_fake_get_capture,
+    )
+    assert engine.calls == [(DEV_A, 0), (DEV_B, 1)]
+    assert DEV_A in result["entrance_call"]["per_entrance"]
+    assert result["criteria"]["ramp_or_bevel"]["abstained"] == 1
+    assert result["criteria"]["ramp_or_bevel"]["correct"] == 1
+
+
+def test_criterion_where_every_view_abstained_reports_no_accuracy(tmp_path):
+    manifest = _write_manifest(tmp_path / "manifest.csv", [("cap-1", DEV_A)])
+    labels = _write_labels(
+        tmp_path / "labels.csv", [(DEV_A, "ramp_or_bevel", "present")]
+    )
+    result = run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=FakeEngine({DEV_A: _screening(DEV_A, {"ramp_or_bevel": "not_visible"})}),
+        get_capture=_fake_get_capture,
+    )
+    ramp = result["criteria"]["ramp_or_bevel"]
+    assert ramp["abstained"] == 1
+    assert ramp["accuracy_of_committed"] is None
+    assert ramp["abstention_rate"] == 1.0
+
+
+def _cli_args(tmp_path, *extra):
+    return [
+        "--manifest", str(tmp_path / "manifest.csv"),
+        "--labels", str(tmp_path / "labels.csv"),
+        "--out", str(tmp_path / "out"),
+        *extra,
+    ]
+
+
+def _stub_freeze_day(monkeypatch):
+    """Everything the sealed CLI path needs except the eval itself."""
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setattr(
+        "frontdoor.eval._storage_config",
+        lambda: {"images_bucket": "frontdoor-image", "endpoint": "default"},
+    )
+
+
+def _stub_run_eval(monkeypatch):
+    """Capture run_eval kwargs; return a dummy report so main can print."""
+    captured = {}
+
+    def _capture(**kwargs):
+        captured.update(kwargs)
+        return {
+            "run": {"labels_scored": 0, "entrance_count": 0, "duration_s": 1.0},
+            "overall": {"accuracy_of_committed": None},
+        }
+
+    monkeypatch.setattr("frontdoor.screening_eval.run_eval", _capture)
+    return captured
+
+
+def test_cli_include_sealed_asks_for_the_sealed_split_with_an_audit_context(
+    tmp_path, monkeypatch
+):
+    from frontdoor.labels import AUDIT_KEYS
+
+    _stub_freeze_day(monkeypatch)
+    captured = _stub_run_eval(monkeypatch)
+    assert main(_cli_args(tmp_path, "--include-sealed"), from_cli=True) == 0
+    assert captured["split"] == "sealed"
+    assert all(key in captured["audit"] for key in AUDIT_KEYS)
+    # The recorded command is the one that ran, so the audit line names
+    # something a third party can re-run (TICK-080 AC3).
+    assert "--include-sealed" in captured["argv"]
+
+
+def test_cli_without_the_flag_asks_for_dev_and_no_audit(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    captured = _stub_run_eval(monkeypatch)
+    assert main(_cli_args(tmp_path), from_cli=True) == 0
+    assert captured["split"] == "dev"
+    assert captured["audit"] is None
+
+
+def test_cli_reports_a_refused_unsealing_instead_of_a_traceback(
+    tmp_path, monkeypatch, capsys
+):
+    # A dirty tree on Sep 7 must print what to fix and exit non-zero, not
+    # bury the reason in a stack trace.
+    _stub_freeze_day(monkeypatch)
+
+    def _refuse(**kwargs):
+        raise SealAuditError("working tree is dirty; refusing to unseal")
+
+    monkeypatch.setattr("frontdoor.screening_eval.run_eval", _refuse)
+    assert main(_cli_args(tmp_path, "--include-sealed"), from_cli=True) == 1
+    assert "dirty" in capsys.readouterr().err
+
+
+def test_not_visible_is_distinguished_from_no_verdict_at_all(tmp_path):
+    # Both abstain, and neither is ever scored correct or wrong. But TICK-079
+    # asks the sealed run for the *not visible* rate specifically: "I looked
+    # and could not see it" is a finding about the photos; "no view returned
+    # anything" is a finding about the run.
+    manifest = _write_manifest(tmp_path / "manifest.csv", [("cap-1", DEV_A)])
+    labels = _write_labels(
+        tmp_path / "labels.csv",
+        [
+            (DEV_A, "ramp_or_bevel", "present"),
+            (DEV_A, "handrails", "present"),
+        ],
+    )
+    result = run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=FakeEngine(
+            # handrails is absent from the dict, so its verdict is None.
+            {DEV_A: _screening(DEV_A, {"ramp_or_bevel": "not_visible"})}
+        ),
+        get_capture=_fake_get_capture,
+    )
+    ramp = result["criteria"]["ramp_or_bevel"]
+    hand = result["criteria"]["handrails"]
+    assert ramp["abstained"] == 1 and ramp["not_visible"] == 1
+    assert hand["abstained"] == 1 and hand["not_visible"] == 0
+    assert ramp["not_visible_rate"] == 1.0
+    assert hand["not_visible_rate"] == 0.0
+    # Two abstentions, one of them not_visible.
+    assert result["overall"]["abstention_rate"] == 1.0
+    assert result["overall"]["not_visible_rate"] == 0.5
+
+
+# --- the entrance-level call (TICK-079 AC1) ----------------------------------
+
+
+def test_entrance_call_rolls_up_each_entrance_labeled_criteria(tmp_path):
+    result, out_dir = _run_report(tmp_path)
+    calls = result["entrance_call"]["per_entrance"]
+    # DEV_A: one correct, one wrong, one abstained -> it committed to two and
+    # got one of them wrong, so the call is not correct.
+    assert calls[DEV_A] == {
+        "correct": 1, "wrong": 1, "abstained": 1,
+        "accuracy_of_committed": 0.5,
+        "all_committed_correct": False,
+    }
+    # DEV_B: committed to two, both right.
+    assert calls[DEV_B] == {
+        "correct": 2, "wrong": 0, "abstained": 0,
+        "accuracy_of_committed": 1.0,
+        "all_committed_correct": True,
+    }
+    assert result["entrance_call"]["agreement"] == 0.5
+    text = (out_dir / MARKDOWN_NAME).read_text(encoding="utf-8")
+    assert "## Entrance-level call" in text
+    assert f"| {DEV_B} | 2 | 0 | 0 | 1.000 | yes |" in text
+
+
+def test_an_abstention_never_makes_the_entrance_call_wrong(tmp_path):
+    # The honesty rule applies at entrance level too: declining to guess on one
+    # criterion must not turn a fully correct entrance into a failed call.
+    manifest = _write_manifest(tmp_path / "manifest.csv", [("cap-1", DEV_A)])
+    labels = _write_labels(
+        tmp_path / "labels.csv",
+        [
+            (DEV_A, "ramp_or_bevel", "present"),
+            (DEV_A, "handrails", "present"),
+        ],
+    )
+    result = run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=FakeEngine(
+            {DEV_A: _screening(
+                DEV_A,
+                {"ramp_or_bevel": "present", "handrails": "not_visible"},
+            )}
+        ),
+        get_capture=_fake_get_capture,
+    )
+    call = result["entrance_call"]["per_entrance"][DEV_A]
+    assert call == {
+        "correct": 1, "wrong": 0, "abstained": 1,
+        "accuracy_of_committed": 1.0,
+        "all_committed_correct": True,
+    }
+    assert result["entrance_call"]["agreement"] == 1.0
+
+
+def test_an_entrance_the_engine_committed_to_nothing_on_has_no_call(tmp_path):
+    # No call is not a failed call, so it must not drag the agreement down.
+    manifest = _write_manifest(
+        tmp_path / "manifest.csv", [("cap-1", DEV_A), ("cap-2", DEV_B)]
+    )
+    labels = _write_labels(
+        tmp_path / "labels.csv",
+        [
+            (DEV_A, "ramp_or_bevel", "present"),
+            (DEV_B, "ramp_or_bevel", "present"),
+        ],
+    )
+    result = run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=FakeEngine(
+            {
+                DEV_A: _screening(DEV_A, {"ramp_or_bevel": "not_visible"}),
+                DEV_B: _screening(DEV_B, {"ramp_or_bevel": "present"}),
+            }
+        ),
+        get_capture=_fake_get_capture,
+    )
+    calls = result["entrance_call"]["per_entrance"]
+    assert calls[DEV_A]["all_committed_correct"] is None
+    assert calls[DEV_B]["all_committed_correct"] is True
+    # DEV_A is out of the denominator entirely, not counted as a miss.
+    assert result["entrance_call"]["agreement"] == 1.0
+
+
+def test_a_screened_entrance_with_no_labels_still_appears(tmp_path):
+    manifest = _write_manifest(tmp_path / "manifest.csv", [("cap-1", DEV_A)])
+    labels = _write_labels(tmp_path / "labels.csv", [(DEV_B, "ramp_or_bevel", "present")])
+    result = run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=FakeEngine(
+            {
+                DEV_A: _screening(DEV_A, {"ramp_or_bevel": "present"}),
+                # Label for DEV_B has no captures; AC4 still screens it.
+                DEV_B: _screening(DEV_B, {}, latencies=()),
+            }
+        ),
+        get_capture=_fake_get_capture,
+    )
+    calls = result["entrance_call"]["per_entrance"]
+    # Screened but unlabeled: it appears with no call rather than vanishing.
+    assert calls[DEV_A] == {
+        "correct": 0, "wrong": 0, "abstained": 0,
+        "accuracy_of_committed": None,
+        "all_committed_correct": None,
+    }
+    assert result["entrance_call"]["agreement"] is None

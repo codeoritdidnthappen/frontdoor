@@ -4,8 +4,8 @@ Runs the vision screening engine over every captured view of each entrance in
 one unsealed split (dev by default), joins the per-criterion majority verdicts
 to the human ground-truth labels, and writes the accuracy report the results
 freeze will be judged against: per-criterion correct / wrong / abstained, the
-accuracy of committed verdicts, per-entrance cross-view flip rates, and
-latency against the 15-second budget.
+accuracy of committed verdicts, the not-visible rate, the entrance-level call,
+per-entrance cross-view flip rates, and latency against the 15-second budget.
 
 Scoring vocabulary: labels are presence-only ("present"/"absent") because the
 operator stood at the door; the engine may also answer not_visible or produce
@@ -14,13 +14,21 @@ ABSTENTION - scored separately, never counted correct or wrong, because
 declining to guess is the honest answer the engine is instructed to give.
 
 Split discipline (D-007, D-017): the split is resolved here from each entrance
-ID via the committed seed, exactly like the screening engine, and the sealed
-split is refused outright. The audited unsealing path is deliberately NOT
-implemented in this runner: freeze-day sealed scoring is a separate, audited,
-human-run process (labels_for_eval with audited=True plus a recorded
-SEAL_AUDIT.log line), and this module never passes that flag.
+ID via the committed seed, exactly like the screening engine. Day to day the
+runner scores dev or calib and refuses sealed. The sealed split is opened once,
+on results-freeze day, by the same runner with --include-sealed added - which
+appends one SEAL_AUDIT.log line naming the command that ran, before a single
+sealed byte is read, and refuses outright if the working tree is dirty.
 
-Run:  python -m frontdoor.screening_eval --manifest ... --labels ... --out ...
+The dry run (TICK-079) and the freeze-day run (TICK-080) are the same command
+apart from `--include-sealed`. `--out` also differs so the sealed report cannot
+overwrite the dry run's, which is the evidence the command was exercised
+beforehand:
+
+    python -m frontdoor.screening_eval --manifest data/manifest.csv \
+        --labels data/labels.csv --out reports/dry-run
+    python -m frontdoor.screening_eval --manifest data/manifest.csv \
+        --labels data/labels.csv --out reports/sealed --include-sealed
 """
 
 import argparse
@@ -29,9 +37,10 @@ import math
 import os
 import statistics
 import sys
+import time
 from pathlib import Path
 
-from frontdoor.labels import labels_for_eval, load_labels
+from frontdoor.labels import SPLITS, labels_for_eval, load_labels
 from frontdoor.manifest import read_manifest
 from frontdoor.screening import (
     ALLOWED_VERDICTS,
@@ -39,6 +48,7 @@ from frontdoor.screening import (
     ScreeningEngine,
     SealedSplitError,
 )
+from frontdoor.seal_audit import SealAuditError
 from frontdoor.split import assign_split, canonical_entrance_id
 
 #: Per-image latency budget (seconds); the report counts every view over it.
@@ -52,9 +62,6 @@ CONDITION_KEYS = ("distance_m", "lighting", "occlusion")
 #: but are too thin to present as findings.
 MIN_CONDITION_ENTRANCES = 3
 
-#: The splits this runner will score. sealed is refused, not merely absent.
-EVAL_SPLITS = ("dev", "calib")
-
 JSON_NAME = "screening_eval.json"
 MARKDOWN_NAME = "screening_eval.md"
 
@@ -63,26 +70,30 @@ class ScreeningEvalError(ValueError):
     """Raised when the eval cannot produce a trustworthy report."""
 
 
-def _require_unsealed_split(split):
-    """Refuse sealed before any file is read, exactly like the engine."""
-    if split == "sealed":
+def _require_permitted_split(split, *, allow_sealed=False):
+    """Raise unless this split may be scored, before any file is read.
+
+    `allow_sealed` means an audit mapping is present, not that the log line
+    has been written yet. Recording happens next, in labels_for_eval. On its
+    own the argument is not permission to read anything; it only stops this
+    check from refusing a sealed split the caller is about to audit.
+    """
+    if split not in SPLITS:
+        raise ScreeningEvalError(f"unknown split {split!r}; expected one of {SPLITS}")
+    if split == "sealed" and not allow_sealed:
         raise SealedSplitError(
-            "the sealed split is not scored by this runner; freeze-day sealed "
-            "scoring is a separate, audited run (D-007, D-017)"
-        )
-    if split not in EVAL_SPLITS:
-        raise ScreeningEvalError(
-            f"unknown split {split!r}; expected one of {EVAL_SPLITS}"
+            "the sealed split is scored once, by an audited --include-sealed "
+            "run that records the unsealing first (D-007, D-017)"
         )
 
 
-def collect_entrances(manifest_path, *, split="dev"):
-    """Entrance ID -> sorted capture IDs for one unsealed split.
+def collect_entrances(manifest_path, *, split="dev", allow_sealed=False):
+    """Entrance ID -> sorted capture IDs for one split.
 
     The split is re-derived from the committed seed per entrance; the
     manifest's split cell is a cache, not an authority.
     """
-    _require_unsealed_split(split)
+    _require_permitted_split(split, allow_sealed=allow_sealed)
     entrances = {}
     for row in read_manifest(manifest_path):
         entrance_id = canonical_entrance_id(row["entrance_id"])
@@ -119,7 +130,15 @@ def score_joins(screenings, labels):
         for label in labels
     }
     per_criterion = {
-        key: {"correct": 0, "wrong": 0, "abstained": 0, "unlabeled": 0}
+        key: {
+            "correct": 0, "wrong": 0, "abstained": 0,
+            # A sub-count of abstained, not a fifth outcome: the engine saying
+            # "I cannot see it" and the engine returning nothing at all are
+            # both abstentions, but only the first is the not-visible rate
+            # TICK-079 asks the sealed run to report.
+            "not_visible": 0,
+            "unlabeled": 0,
+        }
         for key in CRITERIA_KEYS
     }
     joins = []
@@ -133,6 +152,8 @@ def score_joins(screenings, labels):
                 continue
             outcome = classify(verdict, label)
             per_criterion[key][outcome] += 1
+            if verdict == "not_visible":
+                per_criterion[key]["not_visible"] += 1
             joins.append(
                 {
                     "entrance_id": entrance_id,
@@ -143,6 +164,38 @@ def score_joins(screenings, labels):
                 }
             )
     return per_criterion, joins
+
+
+def entrance_calls(screenings, joins):
+    """The entrance-level call: how each entrance's labeled criteria scored.
+
+    `all_committed_correct` is the call itself - True when the engine committed
+    to at least one criterion for this entrance and got every one it committed
+    to right. Abstentions are reported beside it but never make the call wrong,
+    the same rule the per-criterion numbers follow: declining to guess is not
+    an error. An entrance the engine committed to nothing on has no call, which
+    is not the same as a failed one, so it is None and stays out of the
+    agreement figure.
+
+    Every screened entrance appears, including one with no labels at all -
+    vanishing from the report is how an entrance goes unnoticed.
+    """
+    counts = {
+        entrance_id: {"correct": 0, "wrong": 0, "abstained": 0}
+        for entrance_id in screenings
+    }
+    for join in joins:
+        counts[join["entrance_id"]][join["outcome"]] += 1
+    calls = {}
+    for entrance_id in sorted(counts):
+        tally = counts[entrance_id]
+        committed = tally["correct"] + tally["wrong"]
+        calls[entrance_id] = {
+            **tally,
+            "accuracy_of_committed": accuracy_of_committed(tally),
+            "all_committed_correct": tally["wrong"] == 0 if committed else None,
+        }
+    return calls
 
 
 def _condition_joins(screenings, captures, labels):
@@ -294,10 +347,12 @@ def latency_stats(screenings, *, budget_s=LATENCY_BUDGET_S):
 
 def build_result(
     screenings, labels, *, split, engine, image_count, blank_skipped,
-    condition_joins,
+    condition_joins, duration_s,
 ):
     per_criterion, joins = score_joins(screenings, labels)
-    overall = {"correct": 0, "wrong": 0, "abstained": 0, "unlabeled": 0}
+    overall = {
+        "correct": 0, "wrong": 0, "abstained": 0, "not_visible": 0, "unlabeled": 0,
+    }
     criteria = {}
     for key in CRITERIA_KEYS:
         counts = per_criterion[key]
@@ -308,8 +363,15 @@ def build_result(
             **counts,
             "accuracy_of_committed": accuracy_of_committed(counts),
             "abstention_rate": counts["abstained"] / scored if scored else None,
+            "not_visible_rate": counts["not_visible"] / scored if scored else None,
         }
     scored = overall["correct"] + overall["wrong"] + overall["abstained"]
+    calls = entrance_calls(screenings, joins)
+    call_outcomes = [
+        call["all_committed_correct"]
+        for call in calls.values()
+        if call["all_committed_correct"] is not None
+    ]
     flip_rates = entrance_flip_rates(screenings)
     rated = [rate for rate in flip_rates.values() if rate is not None]
     return {
@@ -319,6 +381,13 @@ def build_result(
             **overall,
             "accuracy_of_committed": accuracy_of_committed(overall),
             "abstention_rate": overall["abstained"] / scored if scored else None,
+            "not_visible_rate": overall["not_visible"] / scored if scored else None,
+        },
+        "entrance_call": {
+            "per_entrance": calls,
+            "agreement": (
+                sum(call_outcomes) / len(call_outcomes) if call_outcomes else None
+            ),
         },
         "flip_rate": {
             "per_entrance": flip_rates,
@@ -333,6 +402,9 @@ def build_result(
             "spend_estimate_usd": engine.spent_usd,
             "labels_scored": len(joins),
             "labels_blank_skipped": blank_skipped,
+            # Recorded so freeze day is not a surprise: the sealed run is this
+            # run's size, and it happens once (TICK-079).
+            "duration_s": duration_s,
         },
         "joins": joins,
     }
@@ -354,6 +426,7 @@ def render_markdown(result):
         f"- spend estimate: ${run['spend_estimate_usd']:.2f}",
         f"- labeled pairs scored: {run['labels_scored']} "
         f"(blank labels skipped: {run['labels_blank_skipped']})",
+        f"- total runtime: {_fmt(run['duration_s'], 1)}s",
         "",
         "Verdicts are screening statements about what is visible in photos - "
         "never measurements, never compliance conclusions. An abstention "
@@ -361,16 +434,17 @@ def render_markdown(result):
         "",
         "## Per-criterion accuracy",
         "",
-        "| criterion | correct | wrong | abstained | unlabeled "
-        "| accuracy of committed | abstention rate |",
-        "| --- | --- | --- | --- | --- | --- | --- |",
+        "| criterion | correct | wrong | abstained | not visible | unlabeled "
+        "| accuracy of committed | abstention rate | not visible rate |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for key in CRITERIA_KEYS:
         c = result["criteria"][key]
         lines.append(
             f"| {key} | {c['correct']} | {c['wrong']} | {c['abstained']} "
-            f"| {c['unlabeled']} | {_fmt(c['accuracy_of_committed'])} "
-            f"| {_fmt(c['abstention_rate'])} |"
+            f"| {c['not_visible']} | {c['unlabeled']} "
+            f"| {_fmt(c['accuracy_of_committed'])} "
+            f"| {_fmt(c['abstention_rate'])} | {_fmt(c['not_visible_rate'])} |"
         )
     overall = result["overall"]
     lines += [
@@ -383,6 +457,25 @@ def render_markdown(result):
         f"{overall['correct'] + overall['wrong']} committed)",
         f"- abstention rate: {_fmt(overall['abstention_rate'])} "
         f"({overall['abstained']} abstained)",
+        f"- not visible rate: {_fmt(overall['not_visible_rate'])} "
+        f"({overall['not_visible']} of those said not visible)",
+        "",
+        "## Entrance-level call",
+        "",
+        "An entrance's call is correct when every verdict the engine committed "
+        "to for it was right. Abstentions are shown but never make the call "
+        "wrong; an entrance the engine committed to nothing on has no call.",
+        "",
+        "| entrance | correct | wrong | abstained | accuracy of committed "
+        "| all committed correct |",
+        "| --- | --- | --- | --- | --- | --- |",
+        *(
+            f"| {entrance_id} | {call['correct']} | {call['wrong']} "
+            f"| {call['abstained']} | {_fmt(call['accuracy_of_committed'])} "
+            f"| {'n/a' if call['all_committed_correct'] is None else ('yes' if call['all_committed_correct'] else 'no')} |"
+            for entrance_id, call in result["entrance_call"]["per_entrance"].items()
+        ),
+        f"| agreement | | | | | {_fmt(result['entrance_call']['agreement'])} |",
     ]
     condition_analysis = result["condition_analysis"]
     for dimension in CONDITION_KEYS:
@@ -447,17 +540,50 @@ def write_outputs(result, out_dir):
     return json_path, md_path
 
 
-def run_eval(*, manifest_path, labels_path, out_dir, engine, get_capture, split="dev"):
-    """Screen every entrance of one unsealed split and write the report.
+def run_eval(
+    *,
+    manifest_path,
+    labels_path,
+    out_dir,
+    engine,
+    get_capture,
+    split="dev",
+    audit=None,
+    argv=None,
+):
+    """Screen every entrance of one split and write the report.
 
     engine is any object with screen_entrance / config / spent_usd (the real
     ScreeningEngine, or a fake in tests); get_capture maps a capture_id to a
-    hash-verified Capture carrying both image bytes and its validated sidecar.
+    hash-verified Capture carrying both image bytes and its validated sidecar
+    (the real path goes through the hash-verifying DatasetLoader).
+
+    split="sealed" needs `audit`, a mapping with labels.AUDIT_KEYS. It is the
+    audit context, and it is also the permission: sealed labels are released
+    only after seal_audit.record_unsealing appends the SEAL_AUDIT.log line, so
+    the log gains exactly one line and gains it before the first sealed image
+    is fetched. `argv` is recorded as that line's command. A dirty working tree
+    raises SealAuditError here, having written and read nothing.
     """
-    _require_unsealed_split(split)
+    sealed_run = split == "sealed"
+    _require_permitted_split(split, allow_sealed=audit is not None)
+    started = time.perf_counter()
     loaded = load_labels(labels_path)
-    labels = labels_for_eval(list(loaded.labels), split=split)
-    entrances = collect_entrances(manifest_path, split=split)
+    labels = labels_for_eval(
+        list(loaded.labels),
+        split=split,
+        audited=sealed_run,
+        audit=audit,
+        argv=argv,
+    )
+    entrances = collect_entrances(
+        manifest_path, split=split, allow_sealed=sealed_run
+    )
+    # A labeled entrance with no captures is AC4's "entrance with no views":
+    # it must appear with an empty view list, not vanish from the report.
+    for label in labels:
+        entrances.setdefault(canonical_entrance_id(label["entrance_id"]), [])
+    entrances = {eid: caps for eid, caps in sorted(entrances.items())}
     screenings = {}
     captures = {}
     image_count = 0
@@ -466,7 +592,9 @@ def run_eval(*, manifest_path, labels_path, out_dir, engine, get_capture, split=
         captures[entrance_id] = entrance_captures
         image_count += len(entrance_captures)
         screenings[entrance_id] = engine.screen_entrance(
-            entrance_id, [capture.image for capture in entrance_captures]
+            entrance_id,
+            [capture.image for capture in entrance_captures],
+            allow_sealed=sealed_run,
         )
     condition_joins = _condition_joins(screenings, captures, labels)
     result = build_result(
@@ -477,17 +605,18 @@ def run_eval(*, manifest_path, labels_path, out_dir, engine, get_capture, split=
         image_count=image_count,
         blank_skipped=loaded.blank_skipped,
         condition_joins=condition_joins,
+        duration_s=round(time.perf_counter() - started, 3),
     )
     write_outputs(result, out_dir)
     return result
 
 
-def main(argv=None):
+def main(argv=None, *, from_cli=False):
     parser = argparse.ArgumentParser(
         prog="python -m frontdoor.screening_eval",
         description=(
-            "Screening accuracy eval on the dev split. Freeze-day sealed "
-            "scoring is a separate, audited run and is not available here."
+            "Screening accuracy eval. Scores the dev split by default; "
+            "--include-sealed performs the once-only, audited freeze-day run."
         ),
     )
     parser.add_argument("--manifest", required=True, help="path to data/manifest.csv")
@@ -498,7 +627,25 @@ def main(argv=None):
         default=None,
         help="sidecar directory (default: <manifest dir>/sidecars)",
     )
+    parser.add_argument(
+        "--include-sealed",
+        action="store_true",
+        help="score the sealed split instead of dev, once, recording the "
+             "unsealing in SEAL_AUDIT.log first (D-007, D-017)",
+    )
     args = parser.parse_args(argv)
+
+    # Same rule as frontdoor.eval: the unsealing is a deliberate act at a
+    # terminal. from_cli is passed only by the __main__ block below, so an
+    # import cannot reach it by arranging sys.argv.
+    if args.include_sealed and not from_cli:
+        print(
+            "--include-sealed is only accepted from the command line. "
+            "Run `python -m frontdoor.screening_eval --include-sealed` in a "
+            "terminal; the unsealing run is audited and happens once (D-017).",
+            file=sys.stderr,
+        )
+        return 2
 
     # The eval makes live model calls; a keyless run must fail here, clearly,
     # before any manifest, label, or output file is touched.
@@ -521,21 +668,59 @@ def main(argv=None):
         Path(args.sidecars) if args.sidecars else manifest_path.parent / "sidecars"
     )
     loader = DatasetLoader(manifest_path, sidecar_dir)
-    result = run_eval(
-        manifest_path=manifest_path,
-        labels_path=args.labels,
-        out_dir=args.out,
-        engine=ScreeningEngine(),
-        get_capture=loader.load,
-    )
-    overall = result["overall"]
+
+    def get_capture(capture_id):
+        # loader.load refuses sealed rows outright, so the unsealing run goes
+        # through _load_row's allow_sealed - the same doorway frontdoor.eval
+        # uses. Everything else stays on the public API.
+        if args.include_sealed:
+            return loader._load_row(loader._row(capture_id), allow_sealed=True)
+        return loader.load(capture_id)
+
+    audit = None
+    try:
+        if args.include_sealed:
+            # The audit context comes from frontdoor.eval so both unsealing
+            # doorways describe the same checkout, manifest and log. Imported
+            # here rather than at module scope because resolving the repo root
+            # raises outside a git checkout, and a dev run has no business
+            # failing on that.
+            from frontdoor.eval import AUDIT_LOG, REPO_ROOT, _storage_config
+
+            audit = {
+                "manifest_path": manifest_path,
+                "audit_path": AUDIT_LOG,
+                "repo": REPO_ROOT,
+                # Raises rather than recording a line that cannot say which
+                # bucket the one unsealing run read.
+                "config": _storage_config(),
+            }
+        result = run_eval(
+            manifest_path=manifest_path,
+            labels_path=args.labels,
+            out_dir=args.out,
+            engine=ScreeningEngine(),
+            get_capture=get_capture,
+            split="sealed" if args.include_sealed else "dev",
+            audit=audit,
+            argv=sys.argv if argv is None else [sys.argv[0], *argv],
+        )
+    except SealAuditError as exc:
+        # Nothing sealed has been read: the run is refused, not half-done.
+        print(exc, file=sys.stderr)
+        return 1
+    run = result["run"]
     print(
-        f"scored {result['run']['labels_scored']} labeled pairs over "
-        f"{result['run']['entrance_count']} entrances; accuracy of committed "
-        f"verdicts: {_fmt(overall['accuracy_of_committed'])}; report in {args.out}"
+        f"scored {run['labels_scored']} labeled pairs over "
+        f"{run['entrance_count']} entrances in {_fmt(run['duration_s'], 1)}s; "
+        f"accuracy of committed verdicts: "
+        f"{_fmt(result['overall']['accuracy_of_committed'])}; "
+        f"report in {args.out}"
     )
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    # The only place from_cli is True, so --include-sealed cannot be reached
+    # by an import however sys.argv is arranged.
+    sys.exit(main(from_cli=True))

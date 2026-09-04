@@ -1,8 +1,8 @@
 """Append-only unsealing audit log (TICK-071, D-017).
 
-Every `python -m frontdoor.eval --include-sealed` run appends one line to
-SEAL_AUDIT.log before any sealed byte is read. The file is never truncated,
-rewritten, or deleted by this module.
+Every audited `--include-sealed` run appends one line to SEAL_AUDIT.log before
+any sealed byte is read. The file is never truncated, rewritten, or deleted by
+this module.
 """
 
 from __future__ import annotations
@@ -105,12 +105,23 @@ def validate_audit_mapping(audit):
     return audit
 
 
+#: argv[0] is the module file's absolute path, which is not a command anyone can re-run, so it is
+#: mapped back to the invocation that produced it. Keyed on the whole file name rather than a
+#: suffix: `screening_eval.py` ends with `eval.py`, so suffix matching recorded the freeze-day run
+#: as `python -m frontdoor.eval` -- the wrong module, and one that rejects the arguments that were
+#: actually passed. The audit line's job is to name a run a third party can repeat.
+MODULE_INVOCATIONS = {
+    "eval.py": "python -m frontdoor.eval",
+    "screening_eval.py": "python -m frontdoor.screening_eval",
+}
+
+
 def record_unsealing(argv, manifest_path, *, audit_path, repo, config):
     """Append one audit line, or raise without writing.
 
     Fields are AUDIT_FIELDS, tab-separated. The command line is reconstructable: argv[0] is
-    normalised to the module invocation actually supported, because an absolute path to eval.py is
-    not a command anyone can re-run.
+    normalised through MODULE_INVOCATIONS, because an absolute path to a module file is not a
+    command anyone can re-run.
 
     `config` is what the run will actually read from -- bucket and endpoint, never credentials.
     The caller resolves it, because the caller is what knows how images are fetched; this module
@@ -123,8 +134,12 @@ def record_unsealing(argv, manifest_path, *, audit_path, repo, config):
             "commit SHA would not describe the code that ran"
         )
     command = list(argv)
-    if command and command[0].endswith("eval.py"):
-        command[0] = "python -m frontdoor.eval"
+    if command:
+        # Path.name uses os.sep, so a Windows argv[0] recorded on Linux (or
+        # the other way around) would keep the whole path. The filename is
+        # the last segment under either separator.
+        argv0_name = command[0].replace("\\", "/").rsplit("/", 1)[-1]
+        command[0] = MODULE_INVOCATIONS.get(argv0_name, command[0])
     line = "\t".join(
         [
             _utc_now(),
