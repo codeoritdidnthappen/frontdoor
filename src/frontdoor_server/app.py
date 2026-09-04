@@ -9,7 +9,7 @@ unchanged against it.
 import json
 from importlib import resources
 
-from flask import Flask, jsonify, request
+from flask import Flask, Response, jsonify, request
 from jsonschema import Draft202012Validator, ValidationError
 from werkzeug.exceptions import HTTPException
 
@@ -198,6 +198,26 @@ def create_app():
     def health():
         """Cheap liveness probe for the fallback chain on stage (TICK-064)."""
         return {"status": "ok"}, 200
+
+    @app.get("/app")
+    def app_page():
+        """The EntryMap app page (TICK-247): the phone-web scanner, served by this image.
+
+        Same origin as the endpoints it calls -- the page's /screen, /screen/publish,
+        /scan/photo/<key> and /map/data URLs are relative -- so there is no second host to
+        get wrong and no CORS in the way, and the page on a phone is the page that was
+        tested. The page is self-contained (its photos are embedded, ~1 MB), so the only
+        caching header is a short max-age: enough to spare a phone the download on every
+        navigation, short enough that a redeploy shows within minutes.
+        """
+        html = (
+            resources.files("frontdoor_server")
+            .joinpath("app.html")
+            .read_text(encoding="utf-8")
+        )
+        response = Response(html, mimetype="text/html")
+        response.headers["Cache-Control"] = "public, max-age=300"
+        return response
 
     @app.post("/measure")
     def measure():
