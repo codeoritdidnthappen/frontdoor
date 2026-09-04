@@ -389,13 +389,47 @@ def test_uploads_are_processed_before_the_engine_sees_them(monkeypatch):
     assert body["faces_blurred"] == 4
 
 
-def test_a_real_image_reaches_the_engine_reencoded():
+def test_a_real_image_reaches_the_engine_reencoded(monkeypatch):
+    # Self-contained on purpose (PR #243 review): this is the one endpoint
+    # test that runs the REAL blur pipeline, and that pipeline lazy-loads
+    # module-global detector singletons - so its outcome used to depend on
+    # whichever tests ran (and warmed or poisoned that state) before it.
+    # Resetting the singletons pins the worst case, a cold detector, making
+    # `-k reencoded` alone and the full file exercise the same path.
+    from frontdoor import faceblur
+
+    monkeypatch.setattr(faceblur, "_yunet", None)
+    monkeypatch.setattr(faceblur, "_cascades", None)
     engine = FakeEngine()
-    post_screen(make_client(engine), [image_part(data=real_jpeg())])
+    response = post_screen(make_client(engine), [image_part(data=real_jpeg())])
+    # Asserted before unpacking engine.calls: if ingest ever crashes again,
+    # the failure names the endpoint error instead of an unpack ValueError.
+    assert response.status_code == 200
     ((sent,), (media_type,)), = engine.calls
     assert media_type == "image/jpeg"
     assert sent[:2] == b"\xff\xd8"
     assert sent != real_jpeg()  # processed, not the raw upload
+
+
+def test_a_detector_surprise_degrades_to_the_unblurred_original_not_a_500(monkeypatch):
+    # PR #243 review, blocking item: on some OpenCV builds YuNet emits a
+    # non-finite box for a degenerate frame and _detect_yunet raised
+    # OverflowError - an ArithmeticError, which `except ValueError` did not
+    # catch, so /screen answered 500. The detector row is now skipped in
+    # faceblur (see test_faceblur), and the endpoint's degrade-catch is
+    # widened so any remaining detector surprise falls back to the
+    # unblurred-original path the undecodable-bytes case already takes.
+    from frontdoor_server import screen_view
+
+    def exploding(raw):
+        raise OverflowError("cannot convert float infinity to integer")
+
+    monkeypatch.setattr(screen_view, "process_upload", exploding)
+    engine = FakeEngine()
+    response = post_screen(make_client(engine), [image_part(data=b"jpegish-bytes")])
+    assert response.status_code == 200
+    assert engine.calls == [((b"jpegish-bytes",), ("image/jpeg",))]
+    assert response.get_json()["faces_blurred"] == 0
 
 
 def test_undecodable_bytes_pass_through_to_the_engine_unchanged():

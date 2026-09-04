@@ -31,6 +31,7 @@ EXIF policy - deliberate, read before "fixing":
     reads image metadata.
 """
 
+import math
 import threading
 from dataclasses import dataclass
 from importlib import resources
@@ -151,8 +152,15 @@ def _detect_yunet(small):
                 continue
             # Rows are [x, y, w, h, 10 landmark floats, score]; boxes can poke
             # past the frame edge - _blur clamps, so only rounding happens here.
+            # Out-of-DOMAIN is different from out-of-range: on some OpenCV
+            # builds YuNet emits non-finite coordinates for degenerate inputs
+            # (PR #243 review repro: a 32x32 featureless frame), and round(inf)
+            # raises OverflowError before _blur ever sees the box. A box that
+            # is nowhere blurs nothing - skip the row.
             for row in faces:
                 x, y, w, h, score = *row[:4], row[14]
+                if not all(math.isfinite(float(v)) for v in (x, y, w, h)):
+                    continue
                 if score >= YUNET_SCORE_THRESHOLD or max(w, h) <= small_limit:
                     boxes.append(
                         (round(float(x)), round(float(y)),

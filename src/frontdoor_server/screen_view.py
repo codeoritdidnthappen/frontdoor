@@ -156,14 +156,17 @@ def screen():
     # later storage only ever handle the processed bytes; the raw upload is dropped here.
     # Processed images are re-encoded JPEG, so their media type is image/jpeg regardless of
     # what was posted. Bytes no decoder accepts pass through unchanged: they hold no
-    # renderable face, and the engine will name the failure on that image itself.
+    # renderable face, and the engine will name the failure on that image itself. A detector
+    # surprise degrades the same way (PR #243 review): OverflowError is an ArithmeticError,
+    # not a ValueError, so catching only ValueError turned a YuNet non-finite box into an
+    # unhandled 500 on the demo endpoint instead of the unblurred-original path.
     payloads = []
     faces_blurred = 0
     for part in files:
         raw = part.read()
         try:
             processed = process_upload(raw)
-        except ValueError:
+        except (ValueError, ArithmeticError):
             payloads.append((raw, part.mimetype))
         else:
             payloads.append((processed.image_bytes, "image/jpeg"))

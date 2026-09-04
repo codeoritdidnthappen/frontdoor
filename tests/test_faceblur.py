@@ -184,6 +184,42 @@ def test_yunet_boxes_come_back_in_full_resolution_coordinates(monkeypatch):
     ), f"no box covers the face center at full resolution: {boxes}"
 
 
+def test_yunet_on_a_tiny_flat_frame_returns_no_boxes_without_raising():
+    # PR #243 review repro, verbatim: on some OpenCV builds YuNet emits
+    # non-finite box coordinates for this degenerate frame, and the old
+    # round(float(x)) raised OverflowError ("cannot convert float infinity
+    # to integer") - which escaped the endpoint's ValueError catch as a 500.
+    # Non-finite rows are now skipped before rounding, so the call returns
+    # cleanly on every build: no face in a featureless 32x32 frame.
+    assert faceblur._detect_yunet(np.full((32, 32, 3), 200, dtype=np.uint8)) == []
+
+
+def test_yunet_non_finite_rows_are_skipped_and_finite_rows_survive(monkeypatch):
+    # The guard, pinned deterministically: the repro above only produces
+    # non-finite rows on some OpenCV builds, so a fake detector feeds
+    # _detect_yunet one inf row, one nan row, and one valid high-score row.
+    # Only the valid box may come back, and nothing may raise.
+    class _FakeYuNet:
+        def setInputSize(self, size):
+            pass
+
+        def detect(self, img):
+            rows = np.zeros((3, 15), dtype=np.float32)
+            rows[0, :4] = (np.inf, 4.0, 3.0, 3.0)   # inf x: skipped
+            rows[0, 14] = 0.9
+            rows[1, :4] = (4.0, 4.0, np.nan, 3.0)   # nan w: skipped
+            rows[1, 14] = 0.9
+            rows[2, :4] = (5.0, 6.0, 4.0, 4.0)      # finite: kept
+            rows[2, 14] = 0.9
+            return None, rows
+
+    monkeypatch.setattr(faceblur, "_get_yunet", lambda: _FakeYuNet())
+    boxes = faceblur._detect_yunet(np.full((32, 32, 3), 128, dtype=np.uint8))
+    # The detector runs on the image and its contrast-boosted copy, so the
+    # surviving box is reported once per variant.
+    assert boxes == [(5, 6, 4, 4), (5, 6, 4, 4)]
+
+
 # --- detect_faces ------------------------------------------------------------
 
 
