@@ -169,20 +169,23 @@ before the sealed run — an unfrozen threshold is a dial fitted to the test set
 - **Target:** 40-60 entrances, each captured at 3-4 angles × 2 distances × available lighting.
 - **Ground truth:** ~~digital caliper to ±0.01" on threshold rise, recorded per entrance (D-003)~~.
   **Superseded 2026-09-02 by D-036: no caliper.** Ground truth is the capturing operator's
-  **presence labels** — ramp/bevel, handrails, accessible hardware, signage — recorded at the door
-  (#168). No instrument is used, and no threshold-rise measurement is taken.
+  **presence labels** — ramp/bevel, handrails, accessible hardware, signage — recorded by James
+  from his original photos and recollection (#168). Because the workflow landed after capture
+  closeout, these are retrospective labels, not capture-time or same-day observations. No
+  instrument is used, and no threshold-rise measurement is taken.
 - **Depth record:** app captures on James's iPhone 17 Pro receive relative stereo disparity and
   persist delivered data as relative `DepthFloat32`, quarantined from the metrology code path
   (D-020/D-040). It is not metric LiDAR range or ground truth, and imported photos carry no depth.
 - **Capture realism:** handheld, arbitrary angle, ambient light — deliberately not a clean protocol,
   because realistic capture is the condition under evaluation. Geometry is the one thing fixed:
   1× main lens, no digital zoom, no crop.
-- **Capture instrument:** a purpose-built app (D-014) records the still, intrinsics, gravity, depth,
-  entrance ID, caliper reading and condition tags as a single record per capture.
+- **Capture instrument:** a purpose-built app (D-014) records the still, available calibration and
+  depth metadata, entrance ID, and condition tags as a single record per capture. Labels are a
+  separate entrance-level evaluation artifact and are never required for image upload.
 - **Condition tags** recorded at capture: distance, lighting, surface material, occlusion. **Capture
   angle is derived** from the recovered plane pose rather than estimated by the operator (D-019).
-- **Ground truth binds at the shutter press** (D-018): entrance ID and caliper reading are entered in
-  the app, not reconciled against filenames afterward.
+- **Capture identity binds at the shutter press** (D-018): entrance ID and condition tags are
+  recorded with the capture. Retrospective labels join to those records through entrance ID.
 - **Split assignment happens at collection time**, before any image is processed (D-007).
 - **Constraint that drove topic choice:** storefronts are publicly observable and need no permission.
 

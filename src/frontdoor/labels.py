@@ -1,13 +1,14 @@
 """Human ground-truth labels for the screening eval (TICK-246, #168).
 
-The labels CSV is the eval reference: one row per entrance x criterion,
-recorded at capture time by the operator who stood at the door. Truth is
-presence-only ("present" or "absent") because the labeler saw the door in
-person; a criterion the operator genuinely could not observe stays blank,
-never guessed. Labels are human ground truth - never derived from, corrected
-by, or reconciled against model output.
+The labels CSV is the eval reference: one row per eligible entrance x
+criterion. For the frozen 2026-09-04 dataset, James records them
+retrospectively from his original photos and recollection; they are not
+capture-time labels. Truth is presence-only ("present" or "absent"); a
+criterion he genuinely cannot determine stays blank, never guessed. Labels
+are human ground truth - never derived from, corrected by, or reconciled
+against model output.
 
-Sealed-subset entrances are labeled at capture like every other entrance, but
+Sealed-subset entrances are labeled like every other eligible entrance, but
 their labels leave this module only through the deliberate results-freeze path
 (D-007): labels_for_eval refuses split="sealed" unless audited=True AND the
 unsealing is recorded in SEAL_AUDIT.log via seal_audit.record_unsealing
@@ -15,9 +16,12 @@ unsealing is recorded in SEAL_AUDIT.log via seal_audit.record_unsealing
 """
 
 import csv
+import os
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
+from tempfile import NamedTemporaryFile
+from typing import Mapping, Sequence
 
 from frontdoor import seal_audit
 from frontdoor.manifest import read_manifest
@@ -57,6 +61,18 @@ class LoadedLabels:
     blank_skipped: int  # rows whose truth was left blank (could not observe)
 
 
+@dataclass(frozen=True)
+class LabelingProgress:
+    """How much of an eligible entrance-level label sheet James reviewed."""
+
+    reviewed_entrances: int
+    total_entrances: int
+
+    @property
+    def complete(self) -> bool:
+        return self.reviewed_entrances == self.total_entrances
+
+
 def entrance_ids_from_manifest(manifest_path):
     """Entrance IDs from the capture manifest, deduplicated, capture order."""
     seen = {}
@@ -93,6 +109,149 @@ def write_template(path, entrance_ids):
         writer = csv.DictWriter(handle, fieldnames=COLUMNS, lineterminator="\n")
         writer.writeheader()
         writer.writerows(template_rows(entrance_ids))
+
+
+def _read_sheet(path: Path) -> list[dict[str, str]]:
+    try:
+        with path.open(encoding="utf-8", newline="") as handle:
+            reader = csv.DictReader(handle)
+            if reader.fieldnames != list(COLUMNS):
+                raise LabelError(
+                    f"label columns {reader.fieldnames!r} do not match {list(COLUMNS)!r}"
+                )
+            rows = list(reader)
+    except FileNotFoundError as exc:
+        raise LabelError(f"labels file is missing: {path}") from exc
+    if any(None in row or None in row.values() for row in rows):
+        raise LabelError("labels file has a row with the wrong number of fields")
+    return rows
+
+
+def _expected_pairs(entrance_ids: Sequence[str]) -> list[tuple[str, str]]:
+    return [
+        (row["entrance_id"], row["criterion"])
+        for row in template_rows(entrance_ids)
+    ]
+
+
+def read_labeling_sheet(
+    path: Path, entrance_ids: Sequence[str]
+) -> list[dict[str, str]]:
+    """Read a sheet only when it contains exactly the eligible label rows."""
+    rows = _read_sheet(path)
+    actual = [(row["entrance_id"], row["criterion"]) for row in rows]
+    expected = _expected_pairs(entrance_ids)
+    if actual != expected:
+        raise LabelError(
+            "labels file must contain exactly one ordered row per eligible "
+            "entrance and criterion"
+        )
+    # Reuse the evaluation boundary for truth, canonical-ID and date validation.
+    load_labels(path)
+    for line, row in enumerate(rows, start=2):
+        has_provenance = bool(row["labeled_by"] or row["labeled_at"])
+        if has_provenance and not (row["labeled_by"] and row["labeled_at"]):
+            raise LabelError(
+                f"line {line}: reviewed rows require both labeled_by and labeled_at"
+            )
+        if row["truth"] == "" and has_provenance:
+            try:
+                date.fromisoformat(row["labeled_at"])
+            except ValueError as exc:
+                raise LabelError(
+                    f"line {line}: labeled_at {row['labeled_at']!r} is not an "
+                    "ISO date (YYYY-MM-DD)"
+                ) from exc
+    return rows
+
+
+def initialize_labeling_sheet(path: Path, entrance_ids: Sequence[str]) -> None:
+    """Create the blank eligible sheet once; validate rather than replace it later."""
+    if path.exists():
+        read_labeling_sheet(path, entrance_ids)
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    write_template(path, entrance_ids)
+
+
+def _atomic_write_sheet(path: Path, rows: Sequence[Mapping[str, str]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary: Path | None = None
+    try:
+        with NamedTemporaryFile(
+            "w", encoding="utf-8", newline="", dir=path.parent, delete=False
+        ) as handle:
+            temporary = Path(handle.name)
+            writer = csv.DictWriter(handle, fieldnames=COLUMNS, lineterminator="\n")
+            writer.writeheader()
+            writer.writerows(rows)
+        os.replace(temporary, path)
+        temporary = None
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
+
+
+def save_entrance_labels(
+    path: Path,
+    entrance_ids: Sequence[str],
+    entrance_id: str,
+    answers: Mapping[str, str],
+    *,
+    labeled_by: str,
+    labeled_at: date,
+) -> None:
+    """Atomically save all four reviewed answers for one eligible entrance."""
+    if entrance_id not in entrance_ids:
+        raise LabelError(f"entrance {entrance_id!r} is not evaluation eligible")
+    if set(answers) != set(CRITERIA_KEYS):
+        raise LabelError("answers must contain each screening criterion exactly once")
+    allowed = {*ALLOWED_TRUTHS, ""}
+    for criterion, truth in answers.items():
+        if truth not in allowed:
+            raise LabelError(
+                f"answer for {criterion!r} must be present, absent, or blank"
+            )
+    if not labeled_by.strip():
+        raise LabelError("labeled_by must not be blank")
+
+    rows = read_labeling_sheet(path, entrance_ids)
+    updated = []
+    for row in rows:
+        if row["entrance_id"] == entrance_id:
+            row = {
+                **row,
+                "truth": answers[row["criterion"]],
+                "labeled_by": labeled_by.strip(),
+                "labeled_at": labeled_at.isoformat(),
+            }
+        updated.append(row)
+    _atomic_write_sheet(path, updated)
+
+
+def labeling_progress(path: Path, entrance_ids: Sequence[str]) -> LabelingProgress:
+    """Count entrances whose four choices have all been deliberately reviewed."""
+    rows = read_labeling_sheet(path, entrance_ids)
+    reviewed = {
+        entrance_id
+        for entrance_id in entrance_ids
+        if all(
+            row["labeled_by"] and row["labeled_at"]
+            for row in rows
+            if row["entrance_id"] == entrance_id
+        )
+    }
+    return LabelingProgress(len(reviewed), len(entrance_ids))
+
+
+def require_complete_labeling(path: Path, entrance_ids: Sequence[str]) -> None:
+    """Validate the sheet and refuse until every eligible entrance was reviewed."""
+    progress = labeling_progress(path, entrance_ids)
+    if not progress.complete:
+        raise LabelError(
+            f"labeling is incomplete: {progress.reviewed_entrances} of "
+            f"{progress.total_entrances} eligible entrances reviewed"
+        )
 
 
 def _require_canonical(raw, line):

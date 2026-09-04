@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>frontdoor ground-truth labels</title>
+<style>
+:root { font-family: system-ui, sans-serif; color: #172033; background: #f4f6f8; }
+body { margin: 0; } main { max-width: 1100px; margin: auto; padding: 24px; }
+header { display:flex; justify-content:space-between; gap:20px; align-items:end; }
+h1 { margin:0; font-size:24px; } #progress { color:#526071; }
+.photos { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; margin:22px 0; }
+.photos img { width:100%; max-height:360px; object-fit:contain; background:#111; border-radius:8px; }
+.criterion { background:white; border:1px solid #d9dee5; border-radius:8px; padding:14px; margin:10px 0; }
+.criterion strong { display:block; margin-bottom:10px; }
+.choices { display:flex; flex-wrap:wrap; gap:8px; }
+button { font:inherit; padding:9px 14px; border:1px solid #9aa5b1; border-radius:7px; background:white; cursor:pointer; }
+button.selected { color:white; background:#155eef; border-color:#155eef; }
+#save { margin-top:16px; background:#172033; color:white; border-color:#172033; }
+#save:disabled { opacity:.45; cursor:not-allowed; }
+nav { display:flex; justify-content:space-between; margin-top:18px; }
+#status { min-height:24px; color:#526071; } .error { color:#b42318 !important; }
+</style>
+</head>
+<body><main>
+<header><div><h1 id="title">Ground-truth labels</h1><div id="status"></div></div><div id="progress"></div></header>
+<section class="photos" id="photos"></section>
+<form id="form"></form>
+<button id="save" disabled>Save entrance</button>
+<nav><button id="previous">Previous</button><button id="next">Next</button></nav>
+</main>
+<script>
+const token = "__WRITE_TOKEN__";
+const names = {
+  ramp_or_bevel: "Ramp or beveled threshold",
+  handrails: "Handrails",
+  accessible_door_hardware: "Accessible door hardware",
+  accessibility_signage: "Accessibility signage"
+};
+const values = [["present","Present"],["absent","Absent"],["","Cannot determine"]];
+let data, index = 0, answers = {}, loadedPhotos = 0, photoFailed = false;
+const byId = id => document.getElementById(id);
+function reviewedCount() { return data.entrances.filter(item => item.reviewed).length; }
+function render() {
+  const item = data.entrances[index]; answers = item.reviewed ? {...item.answers} : {};
+  loadedPhotos = 0; photoFailed = false;
+  byId("title").textContent = `${item.entrance_id} — ground truth`;
+  byId("progress").textContent = `${reviewedCount()} of ${data.entrances.length} entrances reviewed`;
+  byId("status").textContent = item.reviewed ? "Previously saved; you may correct it before evaluation." : "Not yet reviewed";
+  byId("status").className = "";
+  byId("photos").replaceChildren(...item.photos.map(photo => {
+    const image = document.createElement("img"); image.src=photo.url; image.alt=`Capture ${photo.capture_id} of ${item.entrance_id}`;
+    image.onload=()=>{loadedPhotos++;enableSave();};
+    image.onerror=()=>{photoFailed=true;byId("status").textContent=`Cannot verify or load capture ${photo.capture_id}. Saving is disabled.`;byId("status").className="error";enableSave();};
+    return image;
+  }));
+  const groups = data.criteria.map(criterion => {
+    const section=document.createElement("fieldset"); section.className="criterion";
+    const heading=document.createElement("legend"); heading.textContent=names[criterion]; section.appendChild(heading);
+    const choices=document.createElement("div"); choices.className="choices"; choices.setAttribute("role","radiogroup");
+    values.forEach(([value,label]) => {
+      const button=document.createElement("button"); button.type="button"; button.textContent=label; button.setAttribute("role","radio");
+      const selected=item.reviewed && answers[criterion] === value; button.classList.toggle("selected",selected); button.setAttribute("aria-checked",String(selected));
+      button.onclick=() => { answers[criterion]=value; [...choices.children].forEach(x=>{x.classList.remove("selected");x.setAttribute("aria-checked","false");}); button.classList.add("selected");button.setAttribute("aria-checked","true");enableSave(); };
+      choices.appendChild(button);
+    });
+    section.appendChild(choices); return section;
+  });
+  byId("form").replaceChildren(...groups); enableSave();
+  byId("previous").disabled=index===0; byId("next").disabled=index===data.entrances.length-1;
+}
+function enableSave() { byId("save").disabled = photoFailed || loadedPhotos !== data.entrances[index].photos.length || !data.criteria.every(key => Object.hasOwn(answers,key)); }
+byId("save").onclick = async () => {
+  const item=data.entrances[index]; byId("save").disabled=true;
+  const response=await fetch(`/api/entrances/${item.entrance_id}`, {method:"POST",headers:{"Content-Type":"application/json","X-Frontdoor-Labeling-Token":token},body:JSON.stringify({answers})});
+  const body=await response.json();
+  if (!response.ok) { byId("status").textContent=body.error; byId("status").className="error"; enableSave(); return; }
+  item.answers={...answers}; item.reviewed=true; byId("status").textContent="Saved"; byId("progress").textContent=`${body.reviewed_entrances} of ${body.total_entrances} entrances reviewed`;
+  if (index < data.entrances.length-1) { index++; render(); }
+};
+byId("previous").onclick=()=>{ if(index>0){index--;render();} };
+byId("next").onclick=()=>{ if(index<data.entrances.length-1){index++;render();} };
+fetch("/api/entrances").then(response=>response.json()).then(body=>{data=body;render();}).catch(error=>{byId("status").textContent=String(error);byId("status").className="error";});
+</script></body></html>

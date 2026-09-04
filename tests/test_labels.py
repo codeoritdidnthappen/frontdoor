@@ -2,6 +2,7 @@
 
 import csv
 import json
+from datetime import date
 
 import pytest
 
@@ -13,8 +14,13 @@ from frontdoor.labels import (
     LabelError,
     SealedLabelError,
     entrance_ids_from_manifest,
+    initialize_labeling_sheet,
+    labeling_progress,
     labels_for_eval,
     load_labels,
+    read_labeling_sheet,
+    require_complete_labeling,
+    save_entrance_labels,
     template_rows,
     write_template,
 )
@@ -90,6 +96,98 @@ def test_entrance_ids_from_manifest_deduplicates_in_capture_order(tmp_path):
         encoding="utf-8",
     )
     assert entrance_ids_from_manifest(manifest) == ["E-002", "E-001"]
+
+
+def test_labeling_sheet_saves_four_button_answers_and_tracks_review(tmp_path):
+    path = tmp_path / "labels.csv"
+    eligible = ["E-001", "E-042"]
+    initialize_labeling_sheet(path, eligible)
+
+    save_entrance_labels(
+        path,
+        eligible,
+        "E-001",
+        {
+            "ramp_or_bevel": "present",
+            "handrails": "absent",
+            "accessible_door_hardware": "",
+            "accessibility_signage": "present",
+        },
+        labeled_by="James",
+        labeled_at=date(2026, 9, 4),
+    )
+
+    rows = read_labeling_sheet(path, eligible)
+    saved = [row for row in rows if row["entrance_id"] == "E-001"]
+    assert [row["truth"] for row in saved] == ["present", "absent", "", "present"]
+    assert {row["labeled_by"] for row in saved} == {"James"}
+    assert {row["labeled_at"] for row in saved} == {"2026-09-04"}
+    assert labeling_progress(path, eligible).reviewed_entrances == 1
+    assert not labeling_progress(path, eligible).complete
+
+
+@pytest.mark.parametrize(
+    "entrance_id,answers,error",
+    [
+        ("E-002", {key: "present" for key in CRITERIA_KEYS}, "not evaluation eligible"),
+        ("E-001", {"handrails": "present"}, "each screening criterion"),
+        (
+            "E-001",
+            {key: "maybe" for key in CRITERIA_KEYS},
+            "present, absent, or blank",
+        ),
+    ],
+)
+def test_invalid_labeling_submission_leaves_sheet_unchanged(
+    tmp_path, entrance_id, answers, error
+):
+    path = tmp_path / "labels.csv"
+    initialize_labeling_sheet(path, ["E-001"])
+    before = path.read_bytes()
+
+    with pytest.raises(LabelError, match=error):
+        save_entrance_labels(
+            path,
+            ["E-001"],
+            entrance_id,
+            answers,
+            labeled_by="James",
+            labeled_at=date(2026, 9, 4),
+        )
+
+    assert path.read_bytes() == before
+
+
+def test_labeling_completion_requires_every_eligible_entrance_reviewed(tmp_path):
+    path = tmp_path / "labels.csv"
+    eligible = ["E-001", "E-042"]
+    initialize_labeling_sheet(path, eligible)
+    with pytest.raises(LabelError, match="0 of 2"):
+        require_complete_labeling(path, eligible)
+    for entrance_id in eligible:
+        save_entrance_labels(
+            path,
+            eligible,
+            entrance_id,
+            {key: "" for key in CRITERIA_KEYS},
+            labeled_by="James",
+            labeled_at=date(2026, 9, 4),
+        )
+    progress = labeling_progress(path, eligible)
+    assert progress.complete
+    assert progress.reviewed_entrances == progress.total_entrances == 2
+    require_complete_labeling(path, eligible)
+
+
+def test_existing_sheet_with_ineligible_or_missing_rows_is_refused(tmp_path):
+    path = tmp_path / "labels.csv"
+    write_template(path, ["E-001", "E-002"])
+    before = path.read_bytes()
+
+    with pytest.raises(LabelError, match="exactly one ordered row"):
+        initialize_labeling_sheet(path, ["E-001"])
+
+    assert path.read_bytes() == before
 
 
 def test_load_round_trips_labeled_rows(tmp_path):
