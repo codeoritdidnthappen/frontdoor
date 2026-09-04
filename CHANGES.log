@@ -1172,3 +1172,32 @@ affected. `docs/server-deploy.md` now says so next to the deploy steps.
 
 The runbook's command order was also wrong: it had `wrangler secret put` before `wrangler deploy`,
 and the secret attaches to a Worker that already exists. Corrected to deploy first.
+
+## 2026-09-03 — Re-record the sidecar digests over the bytes git actually stores (TICK-092, #236)
+
+The 48 `sidecar_sha256` values recorded by the TICK-092 ingest matched no checkout anywhere.
+`append_capture` hashed exactly the file on disk — no ingest step wrote bytes different from the
+ones it hashed — but the ingest machine's working tree was CRLF, `.gitattributes` pinned only
+`data/manifest.csv`, and `core.autocrlf` rewrote every sidecar to LF between working tree and
+object store. The manifest sealed byte sequences that ceased to exist at `git add`. The #236
+review carries the forensic diagnosis: 0/48 committed blobs match the manifest, 48/48 CRLF
+renderings do, and the integrity test's verdict flipped with the reader's `autocrlf` setting.
+
+Two changes, one commit:
+
+- `data/sidecars/*.json text eol=lf` in `.gitattributes`, so working tree equals blob on every
+  machine and #236's checks mean one thing everywhere.
+- The 48 `sidecar_sha256` cells re-recorded from the LF blob bytes. Only that column changed;
+  `image_sha256` and `depth_sha256` are untouched (photos and depth are repo-external and never
+  passed through eol translation).
+
+This is not the digest-recomputing #236's docstring warns against. That warning guards against
+silencing a symptom before the divergent step is found; here the step is found — git's eol
+translation, not a re-serialisation or a staging path — and the old digests describe bytes that
+exist in no checkout, so the record was wrong about every row it exists to seal (D-017, D-018).
+Re-recording the same semantic content under the normalization the repo now enforces, with the
+diagnosis linked, is the correction the append-only discipline is meant to produce.
+
+Verified against the object store rather than any working tree: sha256 of each staged sidecar
+blob (`git cat-file blob :data/sidecars/<id>.json`) equals its manifest cell, 48/48, and #236's
+four checks pass against the corrected data.

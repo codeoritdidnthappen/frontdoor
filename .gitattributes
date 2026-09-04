@@ -1,1 +1,2 @@
 data/manifest.csv text eol=lf
+data/sidecars/*.json text eol=lf
