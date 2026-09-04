@@ -371,7 +371,15 @@ def real_jpeg(shade=128):
     return real_image(".jpg", shade)
 
 
-def test_response_reports_faces_blurred_even_when_zero():
+def test_response_reports_faces_blurred_even_when_zero(monkeypatch):
+    from frontdoor.faceblur import ProcessedImage
+    from frontdoor_server import screen_view
+
+    monkeypatch.setattr(
+        screen_view,
+        "process_upload",
+        lambda raw: ProcessedImage(raw, face_count=0, gps_stripped=True),
+    )
     body = post_screen(make_client(FakeEngine()), [image_part()]).get_json()
     assert body["faces_blurred"] == 0
 
