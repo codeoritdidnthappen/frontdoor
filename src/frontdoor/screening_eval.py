@@ -46,8 +46,10 @@ from frontdoor.manifest import read_manifest
 from frontdoor.screening import (
     ALLOWED_VERDICTS,
     CRITERIA_KEYS,
+    ScreeningConfig,
     ScreeningEngine,
     SealedSplitError,
+    SpendCapError,
 )
 from frontdoor.seal_audit import SealAuditError
 from frontdoor.split import assign_split, canonical_entrance_id
@@ -62,6 +64,12 @@ CONDITION_KEYS = ("distance_m", "lighting", "occlusion")
 #: Exploratory cells below this many independent entrances are still shown,
 #: but are too thin to present as findings.
 MIN_CONDITION_ENTRANCES = 3
+
+#: Eval-runner spend cap, not the live /screen default ($1). The committed
+#: closeout's largest split is 154 eligible dev captures; at the conservative
+#: $0.05/image estimate that is $7.70. A $1 cap would abort a freeze-day run
+#: after the audit line was already written (R-5, TICK-080).
+EVAL_MAX_USD_PER_RUN = 20.0
 
 JSON_NAME = "screening_eval.json"
 MARKDOWN_NAME = "screening_eval.md"
@@ -740,7 +748,9 @@ def main(argv=None, *, from_cli=False):
                 else manifest_path.parent / "dataset-closeout.json"
             ),
             sidecar_dir=sidecar_dir,
-            engine=ScreeningEngine(),
+            engine=ScreeningEngine(
+                config=ScreeningConfig(max_usd_per_run=EVAL_MAX_USD_PER_RUN)
+            ),
             get_capture=get_capture,
             split="sealed" if args.include_sealed else "dev",
             audit=audit,
@@ -749,6 +759,19 @@ def main(argv=None, *, from_cli=False):
     except (DatasetCloseoutError, SealAuditError) as exc:
         # Nothing sealed has been read: the run is refused, not half-done.
         print(exc, file=sys.stderr)
+        return 1
+    except SpendCapError as exc:
+        # The audit line is written before the first image. Hitting the cap
+        # on --include-sealed means the seal is already open; a retry is a
+        # second unsealing. A dry-run cap abort has not opened anything.
+        print(exc, file=sys.stderr)
+        if args.include_sealed:
+            print(
+                "the unsealing has already been recorded; commit "
+                "SEAL_AUDIT.log and do not re-run --include-sealed. A "
+                "recovery run is a second unsealing.",
+                file=sys.stderr,
+            )
         return 1
     run = result["run"]
     print(

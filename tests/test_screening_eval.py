@@ -7,6 +7,7 @@ parse the written JSON/markdown and check values, not exact bytes.
 
 import csv
 import json
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -22,9 +23,11 @@ from frontdoor.screening import (
     ImageAssessment,
     ScreeningConfig,
     SealedSplitError,
+    SpendCapError,
 )
 from frontdoor.screening_eval import (
     CONDITION_KEYS,
+    EVAL_MAX_USD_PER_RUN,
     LATENCY_BUDGET_S,
     MARKDOWN_NAME,
     MIN_CONDITION_ENTRANCES,
@@ -1158,6 +1161,57 @@ def test_cli_without_the_flag_asks_for_dev_and_no_audit(tmp_path, monkeypatch):
     assert main(_cli_args(tmp_path), from_cli=True) == 0
     assert captured["split"] == "dev"
     assert captured["audit"] is None
+    # Live /screen keeps ScreeningConfig's $1 default. The eval runner must
+    # not: 154 eligible dev captures at $0.05/image is already $7.70, and a
+    # cap abort after --include-sealed has written SEAL_AUDIT.log is the
+    # freeze-day failure TICK-080 exists to prevent (R-5).
+    assert captured["engine"].config.max_usd_per_run == EVAL_MAX_USD_PER_RUN
+
+
+def test_eval_spend_cap_covers_the_committed_eligible_corpus():
+    closeout = json.loads(
+        Path("data/dataset-closeout.json").read_text(encoding="utf-8")
+    )
+    worst = max(closeout["eligible"]["captures_by_split"].values())
+    needed = worst * ScreeningConfig().usd_per_image
+    assert EVAL_MAX_USD_PER_RUN >= needed
+    assert EVAL_MAX_USD_PER_RUN > ScreeningConfig().max_usd_per_run
+
+
+def test_cli_reports_a_spend_cap_hit_after_unsealing_as_a_second_unsealing(
+    tmp_path, monkeypatch, capsys
+):
+    # The audit line is written before the first image. A cap abort is not a
+    # clean refusal: the seal is already open.
+    _stub_freeze_day(monkeypatch)
+
+    def _blow_the_cap(**kwargs):
+        raise SpendCapError(
+            "next call would spend an estimated $1.05, over the $1.00 cap"
+        )
+
+    monkeypatch.setattr("frontdoor.screening_eval.run_eval", _blow_the_cap)
+    assert main(_cli_args(tmp_path, "--include-sealed"), from_cli=True) == 1
+    err = capsys.readouterr().err
+    assert "cap" in err
+    assert "second unsealing" in err
+
+
+def test_cli_spend_cap_on_dev_does_not_claim_the_seal_opened(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    def _blow_the_cap(**kwargs):
+        raise SpendCapError(
+            "next call would spend an estimated $1.05, over the $1.00 cap"
+        )
+
+    monkeypatch.setattr("frontdoor.screening_eval.run_eval", _blow_the_cap)
+    assert main(_cli_args(tmp_path), from_cli=True) == 1
+    err = capsys.readouterr().err
+    assert "cap" in err
+    assert "second unsealing" not in err
 
 
 def test_cli_reports_a_refused_unsealing_instead_of_a_traceback(

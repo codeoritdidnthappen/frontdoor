@@ -281,7 +281,9 @@ The audit log is the evidence that the sealed set was opened once, on 2026-09-07
 state of the code.
 
 **Dry run before the real one.** The full evaluation runs end to end on dev first (R-5). The
-unsealing run executes a script already exercised, not one written that morning.
+unsealing run executes a script already exercised, not one written that morning. The freeze-day
+procedure — pre-flight, the exact command, and what to do if it crashes — is
+`docs/unsealing-run.md` (TICK-080).
 
 **What the sealed split carries.** Headline MAE, classification accuracy and false-pass rate at the
 1/2" line, and the pre-registered continuous error-versus-angle model (D-019). The remaining four
