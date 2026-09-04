@@ -11,6 +11,14 @@ itself; QA proves it agrees with the requirements.** qa-agent reads the specs
 app, then designs and executes a test matrix of *requirement × actor ×
 method* — and every finding must cite captured evidence.
 
+## Project scheduling policy
+
+For the current frontdoor backlog, `/qa` and `/qa-agent` are deferred until all
+currently scoped tickets are complete. Each ticket is locally tested, passed
+through `/code-review`, fixed until no confirmed bugs remain, pushed through a
+pull request, and merged immediately. Independent QA then runs across the
+completed backlog; it is not a per-ticket pre-merge gate during this phase.
+
 ## Methods are chosen per surface, not fixed
 
 | Surface | How qa-agent tests it |

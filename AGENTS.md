@@ -60,7 +60,7 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 ## 5. Git Workflow
 
 **Never work directly on `main`. Every change uses an appropriately named branch and a pull
-request. Do not automatically merge the pull request.**
+request. When a ticket is complete, review it, fix every bug, and merge it immediately.**
 
 1. **Trace.** Start from an up-to-date `main` and a ticket. Create a short-lived branch whose prefix
    matches the work, such as `feat/`, `fix/`, `docs/`, or `chore/`.
@@ -73,10 +73,14 @@ request. Do not automatically merge the pull request.**
 3. **Test.** Before opening or updating a pull request, run the project's tests and checks locally.
    New behavior gets new tests. Never merge a state you haven't seen pass (the Windows-only
    shell-exec cases in test_ios_no_arkit.py are a known local exception; CI runs them).
-4. **Review.** Address review findings on the same branch and update the pull request. Changes
-   discovered after merge start from a ticket and land through a new pull request.
-5. **Open the PR.** Update the branch from `main`, resolve conflicts, rerun the suite, and open a
-   pull request. Leave the PR open for human review and merge; never auto-merge it.
+4. **Review.** When the ticket's work is complete, run `/code-review`. Fix every confirmed bug on
+   the same branch and repeat review as needed until no bugs remain. Do not run `/qa` or
+   `/qa-agent` as a per-ticket pre-merge gate while the current ticket backlog is in progress;
+   independent QA begins after all currently scoped tickets are complete.
+5. **Land the PR.** Update the branch from `main`, resolve conflicts, and rerun the suite (and
+   `/code-review` if conflict resolution changed the work). Then push the branch, open its pull
+   request, verify CI passes, and merge it immediately. Changes discovered after merge start from
+   a ticket and land through a new pull request.
 
 If a change can't be traced to a ticket, ask before starting.
 
