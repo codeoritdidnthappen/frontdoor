@@ -1,0 +1,210 @@
+{
+  "capture_date_range": {
+    "first": "2026-08-31",
+    "last": "2026-09-04"
+  },
+  "capture_profile": {
+    "capture_modes": [
+      "imported"
+    ],
+    "normalized_device_model": "iPhone18,1",
+    "physical_device": "James's iPhone 17 Pro",
+    "recorded_device_aliases": [
+      "iPhone 17 Pro"
+    ],
+    "recorded_lighting": [
+      "direct sun"
+    ]
+  },
+  "dataset": {
+    "capture_count": 338,
+    "capture_split_proportions": {
+      "calib": 0.21893491124260356,
+      "dev": 0.5059171597633136,
+      "sealed": 0.27514792899408286
+    },
+    "captures_by_split": {
+      "calib": 74,
+      "dev": 171,
+      "sealed": 93
+    },
+    "entrance_count": 64,
+    "entrance_split_proportions": {
+      "calib": 0.203125,
+      "dev": 0.515625,
+      "sealed": 0.28125
+    },
+    "entrances_by_split": {
+      "calib": 13,
+      "dev": 33,
+      "sealed": 18
+    }
+  },
+  "decision": {
+    "action": "stop",
+    "date": "2026-09-04",
+    "reason": "The 60-entrance goal is exceeded; remaining time is reserved for labeling, evaluation, and the deck."
+  },
+  "eligible": {
+    "capture_count": 300,
+    "capture_split_proportions": {
+      "calib": 0.23333333333333334,
+      "dev": 0.5133333333333333,
+      "sealed": 0.25333333333333335
+    },
+    "captures_by_split": {
+      "calib": 70,
+      "dev": 154,
+      "sealed": 76
+    },
+    "entrance_count": 53,
+    "entrance_ids": [
+      "E-001",
+      "E-002",
+      "E-003",
+      "E-004",
+      "E-005",
+      "E-006",
+      "E-007",
+      "E-008",
+      "E-010",
+      "E-011",
+      "E-016",
+      "E-017",
+      "E-018",
+      "E-020",
+      "E-022",
+      "E-024",
+      "E-025",
+      "E-026",
+      "E-027",
+      "E-029",
+      "E-030",
+      "E-031",
+      "E-032",
+      "E-033",
+      "E-034",
+      "E-035",
+      "E-036",
+      "E-037",
+      "E-038",
+      "E-039",
+      "E-040",
+      "E-041",
+      "E-042",
+      "E-043",
+      "E-045",
+      "E-046",
+      "E-047",
+      "E-048",
+      "E-049",
+      "E-050",
+      "E-051",
+      "E-052",
+      "E-053",
+      "E-054",
+      "E-055",
+      "E-056",
+      "E-057",
+      "E-058",
+      "E-059",
+      "E-060",
+      "E-061",
+      "E-063",
+      "E-064"
+    ],
+    "entrance_split_proportions": {
+      "calib": 0.22641509433962265,
+      "dev": 0.5283018867924528,
+      "sealed": 0.24528301886792453
+    },
+    "entrances_by_split": {
+      "calib": 12,
+      "dev": 28,
+      "sealed": 13
+    }
+  },
+  "ineligible": [
+    {
+      "capture_count": 3,
+      "entrance_id": "E-009",
+      "reason": "fewer than 5 committed captures",
+      "split": "dev"
+    },
+    {
+      "capture_count": 4,
+      "entrance_id": "E-012",
+      "reason": "fewer than 5 committed captures",
+      "split": "calib"
+    },
+    {
+      "capture_count": 3,
+      "entrance_id": "E-013",
+      "reason": "fewer than 5 committed captures",
+      "split": "dev"
+    },
+    {
+      "capture_count": 1,
+      "entrance_id": "E-014",
+      "reason": "fewer than 5 committed captures",
+      "split": "sealed"
+    },
+    {
+      "capture_count": 4,
+      "entrance_id": "E-015",
+      "reason": "fewer than 5 committed captures",
+      "split": "sealed"
+    },
+    {
+      "capture_count": 4,
+      "entrance_id": "E-019",
+      "reason": "fewer than 5 committed captures",
+      "split": "dev"
+    },
+    {
+      "capture_count": 4,
+      "entrance_id": "E-021",
+      "reason": "fewer than 5 committed captures",
+      "split": "sealed"
+    },
+    {
+      "capture_count": 3,
+      "entrance_id": "E-023",
+      "reason": "fewer than 5 committed captures",
+      "split": "dev"
+    },
+    {
+      "capture_count": 4,
+      "entrance_id": "E-028",
+      "reason": "fewer than 5 committed captures",
+      "split": "sealed"
+    },
+    {
+      "capture_count": 4,
+      "entrance_id": "E-044",
+      "reason": "fewer than 5 committed captures",
+      "split": "sealed"
+    },
+    {
+      "capture_count": 4,
+      "entrance_id": "E-062",
+      "reason": "fewer than 5 committed captures",
+      "split": "dev"
+    }
+  ],
+  "limitations": [
+    "Semantic view roles were not stored in these imported sidecars, so named-view coverage cannot be verified retroactively.",
+    "All retained captures are imported and all recorded lighting is direct sun, so lighting-condition comparisons are unavailable."
+  ],
+  "manifest_sha256": "c90a4af8d87c8cbfa384739d86277ff4a34cfbb4e0e7985067f5d448d1b4aa43",
+  "protocol": {
+    "minimum_captures_per_entrance": 5,
+    "required_condition_tags": [
+      "distance_m",
+      "lighting",
+      "occlusion"
+    ],
+    "semantic_view_roles_recorded": false
+  },
+  "schema_version": 1
+}
