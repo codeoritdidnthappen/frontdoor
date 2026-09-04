@@ -198,8 +198,9 @@ def labels_for_eval(labels, *, split="dev", audited=False, audit=None, argv=None
     eval calls get the dev split by default.
 
     `argv` is the command line to record. An entrypoint passes the one the
-    operator actually typed, so the freeze-day line names a runnable command;
-    a library call that omits it is recorded as such.
+    operator actually typed, so the freeze-day line names a runnable command.
+    A library call that omits it is recorded as `["labels", "--split", "sealed"]`
+    so the line is still well-formed.
     """
     if split not in SPLITS:
         raise LabelError(f"unknown split {split!r}; expected one of {SPLITS}")

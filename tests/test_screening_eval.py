@@ -699,9 +699,11 @@ def test_report_records_total_runtime(tmp_path):
 
 
 def test_run_with_no_entrances_writes_a_report_instead_of_dividing_by_zero(tmp_path):
+    # Manifest and labels both sealed: the scored split (dev) is empty, including
+    # no labeled-but-missing entrance that AC4 would otherwise pull in.
     manifest = _write_manifest(tmp_path / "manifest.csv", [("cap-1", SEALED_ID)])
     labels = _write_labels(
-        tmp_path / "labels.csv", [(DEV_A, "ramp_or_bevel", "present")]
+        tmp_path / "labels.csv", [(SEALED_ID, "ramp_or_bevel", "present")]
     )
     result = run_eval(
         manifest_path=manifest,
@@ -737,6 +739,37 @@ def test_entrance_with_no_views_is_reported_not_crashed(tmp_path):
     assert result["flip_rate"]["per_entrance"][DEV_A] is None
     assert result["criteria"]["ramp_or_bevel"]["abstained"] == 1
     assert result["overall"]["accuracy_of_committed"] is None
+
+
+def test_labeled_entrance_with_no_captures_is_reported_not_vanished(tmp_path):
+    # TICK-079 AC4: "an entrance with no views". A labeled entrance that never
+    # made it into the manifest is that case — vanishing is how an incomplete
+    # capture goes unnoticed on the one run that cannot be repeated.
+    manifest = _write_manifest(tmp_path / "manifest.csv", [("cap-1", DEV_B)])
+    labels = _write_labels(
+        tmp_path / "labels.csv",
+        [
+            (DEV_A, "ramp_or_bevel", "present"),
+            (DEV_B, "ramp_or_bevel", "present"),
+        ],
+    )
+    engine = FakeEngine(
+        {
+            DEV_A: _screening(DEV_A, {}, latencies=()),
+            DEV_B: _screening(DEV_B, {"ramp_or_bevel": "present"}),
+        }
+    )
+    result = run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=engine,
+        get_image=_fake_get_image,
+    )
+    assert engine.calls == [(DEV_A, 0), (DEV_B, 1)]
+    assert DEV_A in result["entrance_call"]["per_entrance"]
+    assert result["criteria"]["ramp_or_bevel"]["abstained"] == 1
+    assert result["criteria"]["ramp_or_bevel"]["correct"] == 1
 
 
 def test_criterion_where_every_view_abstained_reports_no_accuracy(tmp_path):
@@ -956,7 +989,13 @@ def test_a_screened_entrance_with_no_labels_still_appears(tmp_path):
         manifest_path=manifest,
         labels_path=labels,
         out_dir=tmp_path / "out",
-        engine=FakeEngine({DEV_A: _screening(DEV_A, {"ramp_or_bevel": "present"})}),
+        engine=FakeEngine(
+            {
+                DEV_A: _screening(DEV_A, {"ramp_or_bevel": "present"}),
+                # Label for DEV_B has no captures; AC4 still screens it.
+                DEV_B: _screening(DEV_B, {}, latencies=()),
+            }
+        ),
         get_image=_fake_get_image,
     )
     calls = result["entrance_call"]["per_entrance"]

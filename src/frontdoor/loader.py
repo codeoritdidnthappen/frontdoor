@@ -184,7 +184,7 @@ class DatasetLoader:
         if split == "sealed":
             raise LoaderError(
                 "the sealed split cannot be listed; it is opened once, by an audited "
-                "`python -m frontdoor.screening_eval --include-sealed` run (D-007, D-017)"
+                "`--include-sealed` run (D-007, D-017)"
             )
         if split is not None and split not in self.SPLITS:
             raise LoaderError(

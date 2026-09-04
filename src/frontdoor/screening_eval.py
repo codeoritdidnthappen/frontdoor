@@ -20,10 +20,10 @@ on results-freeze day, by the same runner with --include-sealed added - which
 appends one SEAL_AUDIT.log line naming the command that ran, before a single
 sealed byte is read, and refuses outright if the working tree is dirty.
 
-The dry run (TICK-079) and the freeze-day run (TICK-080) are the same command.
-Only --include-sealed changes what the run does; --out differs so the sealed
-report cannot overwrite the dry run's, which is the evidence the command was
-exercised beforehand:
+The dry run (TICK-079) and the freeze-day run (TICK-080) are the same command
+apart from `--include-sealed`. `--out` also differs so the sealed report cannot
+overwrite the dry run's, which is the evidence the command was exercised
+beforehand:
 
     python -m frontdoor.screening_eval --manifest data/manifest.csv \
         --labels data/labels.csv --out reports/dry-run
@@ -417,6 +417,11 @@ def run_eval(
     entrances = collect_entrances(
         manifest_path, split=split, allow_sealed=sealed_run
     )
+    # A labeled entrance with no captures is AC4's "entrance with no views":
+    # it must appear with an empty view list, not vanish from the report.
+    for label in labels:
+        entrances.setdefault(canonical_entrance_id(label["entrance_id"]), [])
+    entrances = {eid: caps for eid, caps in sorted(entrances.items())}
     screenings = {}
     image_count = 0
     for entrance_id, capture_ids in entrances.items():

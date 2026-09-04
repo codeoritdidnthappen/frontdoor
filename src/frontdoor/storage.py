@@ -344,7 +344,7 @@ class ObjectStore:
         if _partition_of(key) == "sealed" and not allow_sealed:
             raise SealedObjectDenied(
                 f"{key!r} is sealed; it is opened once, by an audited "
-                "`python -m frontdoor.screening_eval --include-sealed` run (D-007, D-017)"
+                "`--include-sealed` run (D-007, D-017)"
             )
         try:
             return self._client.get_object(Bucket=self.creds.bucket, Key=key)["Body"]
@@ -366,7 +366,7 @@ class ObjectStore:
         if _partition_of(key) == "sealed" and not allow_sealed:
             raise SealedObjectDenied(
                 f"{key!r} is sealed; it is opened once, by an audited "
-                "`python -m frontdoor.screening_eval --include-sealed` run (D-007, D-017)"
+                "`--include-sealed` run (D-007, D-017)"
             )
         try:
             response = self._client.get_object(Bucket=self.creds.bucket, Key=key)
