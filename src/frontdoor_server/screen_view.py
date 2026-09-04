@@ -23,7 +23,12 @@ and the response reports the total under "faces_blurred".
 The model then audits the blur itself (face_check, the TICK-257 follow-up):
 the integrated call answers one privacy question over all its views, and a
 face_visible answer QUARANTINES the request's views as a set - one call over
-all views cannot attribute the face to a single view. The verdicts still
+all views cannot attribute the face to a single view. The response reports
+the audit's answer verbatim under "face_check": "clear" (the model checked
+and saw no face), "face_visible", or "unknown" (the model never produced an
+answer - PR #243 review: "checked, clear" and "never answered" are different
+facts and a consumer must be able to tell them apart). Only face_visible
+quarantines; unknown does not. The verdicts still
 stand - the model has already seen the blurred images, so the privacy issue
 is retention, not assessment - but the response marks the result
 {"quarantined": true, "quarantine_reason": "face_check"}. Retention
@@ -205,7 +210,9 @@ def screen():
     # cannot attribute the face to a single view. The verdicts still stand
     # (assessment already happened - retention is the privacy issue), and because
     # this endpoint never persists image bytes anywhere (see the module
-    # docstring), marking the response is the whole quarantine.
+    # docstring), marking the response is the whole quarantine. The answer
+    # itself is reported below: "unknown" (the audit never produced an answer)
+    # is a different fact from "clear" and does not quarantine.
     quarantined = assessment.face_check == "face_visible"
 
     body = {
@@ -224,6 +231,10 @@ def screen():
         },
         "latency_ms": latency_ms,
         "faces_blurred": faces_blurred,
+        # The privacy audit's answer as validated: clear, face_visible, or
+        # unknown - so a consumer can tell a checked-clear from a check that
+        # never produced an answer (PR #243 review).
+        "face_check": assessment.face_check,
         "quarantined": quarantined,
         "model": engine.config.model,
         "status": "ai_estimated",

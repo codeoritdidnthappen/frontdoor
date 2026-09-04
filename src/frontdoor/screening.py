@@ -78,7 +78,17 @@ ALLOWED_VERDICTS = ("present", "absent", "not_visible")
 # the blurred image by the time it answers, so a face_visible answer is a
 # retention decision (quarantine the image), never an assessment one.
 FACE_CHECK_KEY = "face_check"
-FACE_CHECK_VALUES = ("clear", "face_visible")
+#: What the model may answer. "clear" asserts the model checked and saw no
+#: face; "face_visible" quarantines.
+FACE_CHECK_ANSWERS = ("clear", "face_visible")
+#: The third value the pipeline itself supplies: the check never produced an
+#: answer - the model skipped the key, answered out of vocabulary, or was
+#: never asked. The same distinction the verdicts already insist on
+#: (not_visible is never collapsed into absent) applied to the audit: a
+#: consumer must be able to tell "checked, clear" from "never answered"
+#: (PR #243 review). "unknown" never quarantines - only face_visible does.
+FACE_CHECK_UNKNOWN = "unknown"
+FACE_CHECK_VALUES = FACE_CHECK_ANSWERS + (FACE_CHECK_UNKNOWN,)
 FACE_CHECK_QUESTION = (
     "After the automatic blurring already applied to this image, is any "
     "identifiable human face still visible anywhere - including reflections "
@@ -133,11 +143,13 @@ class ImageAssessment:
     criteria: dict | None
     latency_s: float | None
     error: str | None = None
-    #: The privacy audit answer ("clear" or "face_visible"), separate from the
-    #: accessibility criteria. Defaults to "clear": an errored assessment has
-    #: no image retained anywhere to quarantine, and a reply missing the key
-    #: is normalized (with a logged warning) rather than crashed on.
-    face_check: str = "clear"
+    #: The privacy audit answer ("clear", "face_visible", or "unknown"),
+    #: separate from the accessibility criteria. Defaults to "unknown": an
+    #: assessment built without the field never had the question answered, and
+    #: reporting "clear" would assert a check that did not happen (PR #243
+    #: review). A reply missing the key is likewise normalized to "unknown"
+    #: (with a logged warning) rather than crashed on.
+    face_check: str = FACE_CHECK_UNKNOWN
 
 
 @dataclass(frozen=True)
@@ -256,21 +268,24 @@ def validate_verdicts(parsed):
 
 
 def validate_face_check(parsed):
-    """Normalize the privacy-audit answer to "clear" or "face_visible".
+    """Normalize the privacy-audit answer to "clear", "face_visible" or "unknown".
 
-    A missing or out-of-vocabulary answer is treated as "clear" with a logged
+    A missing or out-of-vocabulary answer becomes "unknown" with a logged
     warning, never a crash: the audit is an extra net over the blur pass, and
     a model that skips the key must not take the whole assessment down with
-    it. (The blur pass has already run regardless.)
+    it. (The blur pass has already run regardless.) It is also never "clear":
+    "clear" asserts the model checked and saw no face, and a reply that never
+    answered is a different fact a consumer must be able to see (PR #243
+    review). "unknown" does not quarantine - only face_visible does.
     """
     value = str(parsed.get(FACE_CHECK_KEY, "")).strip().lower()
-    if value in FACE_CHECK_VALUES:
+    if value in FACE_CHECK_ANSWERS:
         return value
     logger.warning(
-        "face_check missing or invalid in model reply (%r); treating as clear",
+        "face_check missing or invalid in model reply (%r); treating as unknown",
         value or None,
     )
-    return "clear"
+    return FACE_CHECK_UNKNOWN
 
 
 def aggregate_assessments(assessments):
@@ -368,9 +383,9 @@ class ScreeningEngine:
         and parse failures are recorded errors, never silent.
 
         With expect_face_check the reply's face_check privacy answer is
-        validated and carried on the result; without it (the integrated
-        prompt does not ask the question) the default "clear" stands and no
-        missing-key warning is logged."""
+        validated and carried on the result; without it the question was never
+        asked, so the answer is "unknown" - never "clear", which would assert
+        a check that did not happen - and no missing-key warning is logged."""
         t0 = time.perf_counter()
         try:
             response = self._get_client().messages.create(
@@ -391,7 +406,7 @@ class ScreeningEngine:
             parsed = parse_json_response(text)
             criteria = validate_verdicts(parsed)
             face_check = (validate_face_check(parsed) if expect_face_check
-                          else "clear")
+                          else FACE_CHECK_UNKNOWN)
         except Exception as exc:
             latency = time.perf_counter() - t0
             error = f"{type(exc).__name__}: {exc}"

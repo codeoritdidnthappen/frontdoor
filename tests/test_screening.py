@@ -176,29 +176,33 @@ def test_a_clear_face_check_is_carried_through():
     assert engine.assess_image(b"jpeg-bytes").face_check == "clear"
 
 
-def test_missing_face_check_is_clear_with_a_logged_warning_never_a_crash(caplog):
+def test_missing_face_check_is_unknown_with_a_logged_warning_never_a_crash(caplog):
+    # PR #243 review: a model that never answered must not be reported as
+    # "clear" - that would assert a check that did not happen. The reply is
+    # normalized to "unknown", logged, never crashed on.
     engine = ScreeningEngine(
         client=FakeClient([_Response(_payload(face_check=None))])
     )
     with caplog.at_level(logging.WARNING, logger="frontdoor.screening"):
         result = engine.assess_image(b"jpeg-bytes")
     assert result.error is None
-    assert result.face_check == "clear"
+    assert result.face_check == "unknown"
     assert "face_check missing or invalid" in caplog.text
 
 
-def test_out_of_vocabulary_face_check_is_clear_with_a_logged_warning(caplog):
+def test_out_of_vocabulary_face_check_is_unknown_with_a_logged_warning(caplog):
     with caplog.at_level(logging.WARNING, logger="frontdoor.screening"):
-        assert validate_face_check({FACE_CHECK_KEY: "maybe"}) == "clear"
+        assert validate_face_check({FACE_CHECK_KEY: "maybe"}) == "unknown"
     assert "face_check missing or invalid" in caplog.text
     assert validate_face_check({FACE_CHECK_KEY: " FACE_VISIBLE "}) == "face_visible"
 
 
-def test_errored_assessment_defaults_face_check_to_clear():
+def test_errored_assessment_defaults_face_check_to_unknown():
     # Nothing was retained for an errored view, so there is nothing to
-    # quarantine; the default must not invent a face_visible.
+    # quarantine; the default must not invent a face_visible - and it must
+    # not claim "clear" either, because no check produced an answer.
     engine = ScreeningEngine(client=FakeClient([RuntimeError("boom")]))
-    assert engine.assess_image(b"jpeg-bytes").face_check == "clear"
+    assert engine.assess_image(b"jpeg-bytes").face_check == "unknown"
 
 
 def test_aggregation_majority_verdict_and_flip_rate():

@@ -455,6 +455,7 @@ def test_face_visible_answer_quarantines_the_request_but_verdicts_still_stand():
     parts = [image_part(f"v{i}.jpg", data=f"v{i}".encode()) for i in range(3)]
     body = post_screen(make_client(engine), parts).get_json()
 
+    assert body["face_check"] == "face_visible"
     assert body["quarantined"] is True
     assert body["quarantine_reason"] == "face_check"
     # The quarantined result still carries its verdicts: assessment already
@@ -466,14 +467,17 @@ def test_face_visible_answer_quarantines_the_request_but_verdicts_still_stand():
 
 def test_quarantined_is_false_when_the_face_check_is_clear():
     body = post_screen(make_client(FakeEngine()), [image_part()]).get_json()
+    assert body["face_check"] == "clear"
     assert body["quarantined"] is False
     assert "quarantine_reason" not in body
 
 
-def test_an_assessment_without_face_check_defaults_to_clear_not_a_crash():
-    # An injected/legacy assessment built without the field: the dataclass
-    # default ("clear") applies, the response still carries the quarantine
-    # field, and nothing 500s.
+def test_a_missing_face_check_answer_reads_unknown_and_does_not_quarantine():
+    # PR #243 review: "checked, clear" and "never answered" are different
+    # facts. An assessment built without the field - the model never produced
+    # an answer, or the question was never asked - must reach the consumer as
+    # "unknown", never as a fabricated "clear"; quarantine stays reserved for
+    # face_visible, and nothing 500s.
     engine = FakeEngine(assessment=ImageAssessment(
         criteria={key: {"verdict": "present", "confidence": 80, "evidence": ""}
                   for key in CRITERIA_KEYS},
@@ -482,6 +486,7 @@ def test_an_assessment_without_face_check_defaults_to_clear_not_a_crash():
     response = post_screen(make_client(engine), [image_part()])
     assert response.status_code == 200
     body = response.get_json()
+    assert body["face_check"] == "unknown"
     assert body["quarantined"] is False
     assert "quarantine_reason" not in body
 
