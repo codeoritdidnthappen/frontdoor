@@ -762,14 +762,16 @@ def main(argv=None, *, from_cli=False):
         return 1
     except SpendCapError as exc:
         # The audit line is written before the first image. Hitting the cap
-        # here means the seal is already open; a retry is a second unsealing.
+        # on --include-sealed means the seal is already open; a retry is a
+        # second unsealing. A dry-run cap abort has not opened anything.
         print(exc, file=sys.stderr)
-        print(
-            "the unsealing has already been recorded; commit SEAL_AUDIT.log "
-            "and do not re-run --include-sealed. A recovery run is a second "
-            "unsealing.",
-            file=sys.stderr,
-        )
+        if args.include_sealed:
+            print(
+                "the unsealing has already been recorded; commit "
+                "SEAL_AUDIT.log and do not re-run --include-sealed. A "
+                "recovery run is a second unsealing.",
+                file=sys.stderr,
+            )
         return 1
     run = result["run"]
     print(

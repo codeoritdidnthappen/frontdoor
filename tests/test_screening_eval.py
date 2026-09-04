@@ -1197,6 +1197,23 @@ def test_cli_reports_a_spend_cap_hit_after_unsealing_as_a_second_unsealing(
     assert "second unsealing" in err
 
 
+def test_cli_spend_cap_on_dev_does_not_claim_the_seal_opened(
+    tmp_path, monkeypatch, capsys
+):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+
+    def _blow_the_cap(**kwargs):
+        raise SpendCapError(
+            "next call would spend an estimated $1.05, over the $1.00 cap"
+        )
+
+    monkeypatch.setattr("frontdoor.screening_eval.run_eval", _blow_the_cap)
+    assert main(_cli_args(tmp_path), from_cli=True) == 1
+    err = capsys.readouterr().err
+    assert "cap" in err
+    assert "second unsealing" not in err
+
+
 def test_cli_reports_a_refused_unsealing_instead_of_a_traceback(
     tmp_path, monkeypatch, capsys
 ):
