@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/codeoritdidnthappen/frontdoor/blob/main/src/frontdoor_server/measure_error.schema.json",
   "title": "Measure error",
-  "description": "Error body from POST /measure (and, once TICK-225 lands, every other path on this service). Frozen by TICK-224 so TICK-063 can code against failure as well as success. HTTP status is not a field in the body; it is paired with this shape as follows: 400 \u2014 the request is missing a required part or the sidecar is not JSON; 422 \u2014 the sidecar is JSON but fails capture_sidecar.schema.json. This SUPERSEDES TICK-060 AC4, which specified 400 for a schema-invalid sidecar; 422 distinguishes a well-formed request carrying bad content from a malformed request, which TICK-063 needs in order to tell the operator whether to re-capture or re-send. Free to change now because no client consumes it yet. TICK-225 (#113) landed: every response from this service now carries this shape, including statuses raised before any view runs \u2014 404 (unknown path), 405 (wrong method), 413 (body too large), 415 (unsupported content type) and 500 (unhandled exception). Those are registered as one general handler rather than per-status cases, so a status nobody anticipated cannot slip back to HTML.",
+  "description": "Error body from every path on this service: POST /measure, POST /upload, POST /screen, and the statuses raised before any view runs. Frozen by TICK-224 so TICK-063 can code against failure as well as success. HTTP status is not a field in the body; on /measure it is paired with this shape as follows: 400 \u2014 the request is missing a required part or the sidecar is not JSON; 422 \u2014 the sidecar is JSON but fails capture_sidecar.schema.json. This SUPERSEDES TICK-060 AC4, which specified 400 for a schema-invalid sidecar; 422 distinguishes a well-formed request carrying bad content from a malformed request, which TICK-063 needs in order to tell the operator whether to re-capture or re-send. The enum grows by APPENDING: TICK-063's MeasureClient decodes this shape and hangs its operator advice off the token, so an unrecognised token decodes to nil there, and respelling one silently changes what a phone tells the operator standing at an entrance. TICK-225 (#113) landed: every response from this service now carries this shape, including statuses raised before any view runs \u2014 404 (unknown path), 405 (wrong method), 413 (body too large), 415 (unsupported content type) and 500 (unhandled exception). Those are registered as one general handler rather than per-status cases, so a status nobody anticipated cannot slip back to HTML. TICK-264 (#264) made the enum as wide as that scope. It listed only /measure's tokens and the framework's, so every error /upload and /screen returned failed the contract that claimed to describe it, and their statuses \u2014 401, 403, 409, 502, 503 \u2014 went undocumented with them. The enum below is grouped by the path that emits a token, /measure first, and a token two paths share is listed once. tests/test_error_schema_covers_the_service.py derives the emitted set from the view sources and fails on any token this enum does not allow, so the two cannot drift apart again.",
   "type": "object",
   "properties": {
     "error": {
@@ -15,7 +15,28 @@
         "wrong method for this endpoint",
         "request body too large",
         "unsupported content type",
-        "internal error"
+        "internal error",
+        "upload not authorised",
+        "unknown upload kind",
+        "invalid capture_id",
+        "entrance_id is not a canonical entrance id",
+        "sha256 is not a hex digest",
+        "missing bytes",
+        "empty upload",
+        "upload too large",
+        "sha256 mismatch",
+        "could not build a storage key",
+        "an object is already stored under this capture id",
+        "a different object is already stored under this capture id",
+        "could not store the object",
+        "stored object could not be read back",
+        "stored object does not match its hash",
+        "too many images",
+        "invalid entrance_id",
+        "sealed entrance",
+        "invalid image",
+        "screening unavailable",
+        "screening engine failure"
       ],
       "description": "Stable class of failure. TICK-063 branches on this token, not on detail wording."
     },
