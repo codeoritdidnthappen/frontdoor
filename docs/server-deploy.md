@@ -215,6 +215,25 @@ The **69 MiB** footprint in the table was measured serving `GET /health`. It say
 (+33%) and sent as **one integrated vision call carrying up to 6 image blocks**, on a **256 MB**
 machine — with gunicorn's 30 s timeout in front of the model call.
 
+> **Superseded 2026-09-04 — the measurement below was taken before `faceblur` existed.** That
+> release did not load OpenCV. The current one decodes, blurs and re-encodes every `/screen`
+> image, and at 256 MB a **single 200 KB PNG** now OOM-kills the worker:
+>
+> ```
+> Out of memory: Killed process 644 (gunicorn) total-vm:572864kB anon-rss:140000kB
+> ```
+>
+> The client gets a **502 with an empty body** — Fly's proxy filling in for an app that died
+> mid-request — so it is not the JSON error contract and the cause shows only in `fly logs`.
+>
+> The machine is now **512 MB** (`fly.toml`, not `fly scale` — see below), and the same request
+> returns **200 in 6.4 s**. The figures below are kept because their *reasoning* still holds; the
+> numbers do not.
+>
+> **`fly scale memory` alone does not stick.** It is reverted by the next `fly deploy`, which is
+> what happened on 2026-09-04: the machine was scaled to 512, a deploy silently put it back to
+> 256, and the OOM returned looking like a new fault. The value belongs in `fly.toml`.
+
 **Measured 2026-09-03** on release `deployment-01M1MFVVXFFMPFN9XJKD49QZ8P`, in a container capped
 at 256 MB exactly as the host is, with six real captures (2.7–2.8 MB each, 17.2 MB of multipart):
 
