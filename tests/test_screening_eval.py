@@ -714,6 +714,8 @@ def test_run_with_no_entrances_writes_a_report_instead_of_dividing_by_zero(tmp_p
     assert result["overall"]["accuracy_of_committed"] is None
     assert result["overall"]["abstention_rate"] is None
     assert result["flip_rate"]["mean"] is None
+    assert result["entrance_call"]["per_entrance"] == {}
+    assert result["entrance_call"]["agreement"] is None
     assert result["latency_s"]["median"] is None
     assert (tmp_path / "out" / MARKDOWN_NAME).exists()
 
@@ -857,3 +859,111 @@ def test_not_visible_is_distinguished_from_no_verdict_at_all(tmp_path):
     # Two abstentions, one of them not_visible.
     assert result["overall"]["abstention_rate"] == 1.0
     assert result["overall"]["not_visible_rate"] == 0.5
+
+
+# --- the entrance-level call (TICK-079 AC1) ----------------------------------
+
+
+def test_entrance_call_rolls_up_each_entrance_labeled_criteria(tmp_path):
+    result, out_dir = _run_report(tmp_path)
+    calls = result["entrance_call"]["per_entrance"]
+    # DEV_A: one correct, one wrong, one abstained -> it committed to two and
+    # got one of them wrong, so the call is not correct.
+    assert calls[DEV_A] == {
+        "correct": 1, "wrong": 1, "abstained": 1,
+        "accuracy_of_committed": 0.5,
+        "all_committed_correct": False,
+    }
+    # DEV_B: committed to two, both right.
+    assert calls[DEV_B] == {
+        "correct": 2, "wrong": 0, "abstained": 0,
+        "accuracy_of_committed": 1.0,
+        "all_committed_correct": True,
+    }
+    assert result["entrance_call"]["agreement"] == 0.5
+    text = (out_dir / MARKDOWN_NAME).read_text(encoding="utf-8")
+    assert "## Entrance-level call" in text
+    assert f"| {DEV_B} | 2 | 0 | 0 | 1.000 | yes |" in text
+
+
+def test_an_abstention_never_makes_the_entrance_call_wrong(tmp_path):
+    # The honesty rule applies at entrance level too: declining to guess on one
+    # criterion must not turn a fully correct entrance into a failed call.
+    manifest = _write_manifest(tmp_path / "manifest.csv", [("cap-1", DEV_A)])
+    labels = _write_labels(
+        tmp_path / "labels.csv",
+        [
+            (DEV_A, "ramp_or_bevel", "present"),
+            (DEV_A, "handrails", "present"),
+        ],
+    )
+    result = run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=FakeEngine(
+            {DEV_A: _screening(
+                DEV_A,
+                {"ramp_or_bevel": "present", "handrails": "not_visible"},
+            )}
+        ),
+        get_image=_fake_get_image,
+    )
+    call = result["entrance_call"]["per_entrance"][DEV_A]
+    assert call == {
+        "correct": 1, "wrong": 0, "abstained": 1,
+        "accuracy_of_committed": 1.0,
+        "all_committed_correct": True,
+    }
+    assert result["entrance_call"]["agreement"] == 1.0
+
+
+def test_an_entrance_the_engine_committed_to_nothing_on_has_no_call(tmp_path):
+    # No call is not a failed call, so it must not drag the agreement down.
+    manifest = _write_manifest(
+        tmp_path / "manifest.csv", [("cap-1", DEV_A), ("cap-2", DEV_B)]
+    )
+    labels = _write_labels(
+        tmp_path / "labels.csv",
+        [
+            (DEV_A, "ramp_or_bevel", "present"),
+            (DEV_B, "ramp_or_bevel", "present"),
+        ],
+    )
+    result = run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=FakeEngine(
+            {
+                DEV_A: _screening(DEV_A, {"ramp_or_bevel": "not_visible"}),
+                DEV_B: _screening(DEV_B, {"ramp_or_bevel": "present"}),
+            }
+        ),
+        get_image=_fake_get_image,
+    )
+    calls = result["entrance_call"]["per_entrance"]
+    assert calls[DEV_A]["all_committed_correct"] is None
+    assert calls[DEV_B]["all_committed_correct"] is True
+    # DEV_A is out of the denominator entirely, not counted as a miss.
+    assert result["entrance_call"]["agreement"] == 1.0
+
+
+def test_a_screened_entrance_with_no_labels_still_appears(tmp_path):
+    manifest = _write_manifest(tmp_path / "manifest.csv", [("cap-1", DEV_A)])
+    labels = _write_labels(tmp_path / "labels.csv", [(DEV_B, "ramp_or_bevel", "present")])
+    result = run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=FakeEngine({DEV_A: _screening(DEV_A, {"ramp_or_bevel": "present"})}),
+        get_image=_fake_get_image,
+    )
+    calls = result["entrance_call"]["per_entrance"]
+    # Screened but unlabeled: it appears with no call rather than vanishing.
+    assert calls[DEV_A] == {
+        "correct": 0, "wrong": 0, "abstained": 0,
+        "accuracy_of_committed": None,
+        "all_committed_correct": None,
+    }
+    assert result["entrance_call"]["agreement"] is None

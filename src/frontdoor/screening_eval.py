@@ -4,8 +4,8 @@ Runs the vision screening engine over every captured view of each entrance in
 one unsealed split (dev by default), joins the per-criterion majority verdicts
 to the human ground-truth labels, and writes the accuracy report the results
 freeze will be judged against: per-criterion correct / wrong / abstained, the
-accuracy of committed verdicts, the not-visible rate, per-entrance cross-view
-flip rates, and latency against the 15-second budget.
+accuracy of committed verdicts, the not-visible rate, the entrance-level call,
+per-entrance cross-view flip rates, and latency against the 15-second budget.
 
 Scoring vocabulary: labels are presence-only ("present"/"absent") because the
 operator stood at the door; the engine may also answer not_visible or produce
@@ -152,6 +152,38 @@ def score_joins(screenings, labels):
     return per_criterion, joins
 
 
+def entrance_calls(screenings, joins):
+    """The entrance-level call: how each entrance's labeled criteria scored.
+
+    `all_committed_correct` is the call itself - True when the engine committed
+    to at least one criterion for this entrance and got every one it committed
+    to right. Abstentions are reported beside it but never make the call wrong,
+    the same rule the per-criterion numbers follow: declining to guess is not
+    an error. An entrance the engine committed to nothing on has no call, which
+    is not the same as a failed one, so it is None and stays out of the
+    agreement figure.
+
+    Every screened entrance appears, including one with no labels at all -
+    vanishing from the report is how an entrance goes unnoticed.
+    """
+    counts = {
+        entrance_id: {"correct": 0, "wrong": 0, "abstained": 0}
+        for entrance_id in screenings
+    }
+    for join in joins:
+        counts[join["entrance_id"]][join["outcome"]] += 1
+    calls = {}
+    for entrance_id in sorted(counts):
+        tally = counts[entrance_id]
+        committed = tally["correct"] + tally["wrong"]
+        calls[entrance_id] = {
+            **tally,
+            "accuracy_of_committed": accuracy_of_committed(tally),
+            "all_committed_correct": tally["wrong"] == 0 if committed else None,
+        }
+    return calls
+
+
 def entrance_flip_rates(screenings):
     """Mean flip rate per entrance across criteria with a valid verdict."""
     out = {}
@@ -206,6 +238,12 @@ def build_result(
             "not_visible_rate": counts["not_visible"] / scored if scored else None,
         }
     scored = overall["correct"] + overall["wrong"] + overall["abstained"]
+    calls = entrance_calls(screenings, joins)
+    called = [
+        call["all_committed_correct"]
+        for call in calls.values()
+        if call["all_committed_correct"] is not None
+    ]
     flip_rates = entrance_flip_rates(screenings)
     rated = [rate for rate in flip_rates.values() if rate is not None]
     return {
@@ -216,6 +254,10 @@ def build_result(
             "accuracy_of_committed": accuracy_of_committed(overall),
             "abstention_rate": overall["abstained"] / scored if scored else None,
             "not_visible_rate": overall["not_visible"] / scored if scored else None,
+        },
+        "entrance_call": {
+            "per_entrance": calls,
+            "agreement": sum(called) / len(called) if called else None,
         },
         "flip_rate": {
             "per_entrance": flip_rates,
@@ -286,6 +328,23 @@ def render_markdown(result):
         f"({overall['abstained']} abstained)",
         f"- not visible rate: {_fmt(overall['not_visible_rate'])} "
         f"({overall['not_visible']} of those said not visible)",
+        "",
+        "## Entrance-level call",
+        "",
+        "An entrance's call is correct when every verdict the engine committed "
+        "to for it was right. Abstentions are shown but never make the call "
+        "wrong; an entrance the engine committed to nothing on has no call.",
+        "",
+        "| entrance | correct | wrong | abstained | accuracy of committed "
+        "| all committed correct |",
+        "| --- | --- | --- | --- | --- | --- |",
+        *(
+            f"| {entrance_id} | {call['correct']} | {call['wrong']} "
+            f"| {call['abstained']} | {_fmt(call['accuracy_of_committed'])} "
+            f"| {'n/a' if call['all_committed_correct'] is None else ('yes' if call['all_committed_correct'] else 'no')} |"
+            for entrance_id, call in result["entrance_call"]["per_entrance"].items()
+        ),
+        f"| agreement | | | | | {_fmt(result['entrance_call']['agreement'])} |",
         "",
         "## Per-entrance cross-view consistency (flip rate)",
         "",
