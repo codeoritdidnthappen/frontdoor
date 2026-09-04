@@ -64,8 +64,45 @@ PAGE_TOKEN_ATTEMPTS = 4
 # is invisible from the response.
 NEARBY_SEARCH_MAX_RESULTS = 60
 
+# Storefront-relevant Places types for targeted sweeps (TICK-248 round two).
+#
+# One type=establishment sweep per block hits the 60-result cap long before it
+# runs out of businesses in the demo area: the blocks contain office towers
+# where every suite is an establishment, so the cap fills with lawyers and
+# consultancies on the 14th floor and street-level storefronts drown. Measured:
+# even a 12x12 subdivision of the demo box (~33 m cells) still truncated in 4
+# sub-blocks. Sweeping per *type* changes what competes for the 60 slots --
+# a restaurant only competes with restaurants -- and the storefront types below
+# are the businesses that have a street entrance to screen, which is the whole
+# point of the pre-catalogue.
+#
+# Curation rationale, by group:
+# - Food and drink (restaurant, cafe, bar, bakery, meal_takeaway): street
+#   entrances near-universally, the densest storefront category downtown.
+# - Retail ("store" plus specific subtypes): "store" is the umbrella type the
+#   API attaches to most retail, so it catches shops with no finer type -- but
+#   as an umbrella it can itself truncate at 60, and the specific subtypes
+#   (clothing_store, shoe_store, jewelry_store, book_store, convenience_store,
+#   liquor_store, florist) recover what the umbrella's cap drops.
+# - Street-level services (pharmacy, gym, hair_care, beauty_salon, spa,
+#   laundry, bank): walk-in premises with a door to assess.
+# - lodging and art_gallery: hotels and galleries have public street entrances
+#   worth screening even though they are not shops.
+# Deliberately excluded: establishment/point_of_interest (the umbrella noise
+# this list exists to avoid) and the office-suite types that were crowding out
+# the cap -- lawyer, doctor, dentist, accounting, insurance_agency,
+# real_estate_agency -- which have suites, not storefronts.
+STOREFRONT_PLACE_TYPES = (
+    "restaurant", "cafe", "bar", "bakery", "meal_takeaway",
+    "store", "clothing_store", "shoe_store", "jewelry_store", "book_store",
+    "convenience_store", "liquor_store", "florist",
+    "pharmacy", "gym", "hair_care", "beauty_salon", "spa", "laundry", "bank",
+    "lodging", "art_gallery",
+)
+
 DATASET_FILENAME = "precatalogue.json"
 SUMMARY_FILENAME = "precatalogue_summary.json"
+CENSUS_FILENAME = "precatalogue_census.json"
 
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("demo_area.json")
 
@@ -101,6 +138,22 @@ class DemoArea:
     # to this. None when the config defined blocks directly -- a circle is
     # then the area itself and there is nothing to filter against.
     bounds: dict | None = None
+    # Targeted per-type sweeps (TICK-248 round two). Empty means the original
+    # single type=establishment sweep -- existing configs keep behaving exactly
+    # as they did. include_establishment_sweep adds the establishment sweep on
+    # top of the typed ones: it catches oddballs the type list misses, at the
+    # cost of re-admitting the office-suite noise that fills its own 60 cap.
+    place_types: tuple = ()
+    include_establishment_sweep: bool = False
+
+    @property
+    def sweep_types(self):
+        """The Nearby Search type sweeps to run per block, in order."""
+        if not self.place_types:
+            return ("establishment",)
+        if self.include_establishment_sweep:
+            return self.place_types + ("establishment",)
+        return self.place_types
 
     def contains(self, location):
         """Is this location inside the declared area?
@@ -123,12 +176,18 @@ class DemoArea:
 
 @dataclass(frozen=True)
 class Enumeration:
-    """Businesses found, and the blocks where the API may have cut the list
-    short. Truncation is reported rather than inferred from a count that looks
-    complete."""
+    """Businesses found, and where the API may have cut the list short.
+    Truncation is reported rather than inferred from a count that looks
+    complete.
+
+    truncated_types names each (block, type) sweep that returned the API
+    maximum; truncated_blocks keeps its original meaning -- a block where any
+    sweep was cut short -- so existing consumers still get their answer.
+    """
 
     places: tuple
     truncated_blocks: tuple
+    truncated_types: tuple = ()
 
 
 def load_api_key(env=None):
@@ -244,13 +303,51 @@ def load_demo_area(path=None):
             f"max_maps_calls must be a positive integer, got {cap!r}"
         )
 
+    place_types = _validated_place_types(raw)
+    include_establishment = raw.get("include_establishment_sweep", False)
+    if not isinstance(include_establishment, bool):
+        raise ConfigError(
+            f"include_establishment_sweep must be a boolean, got "
+            f"{include_establishment!r}"
+        )
+    if include_establishment and not place_types:
+        # Without place_types the establishment sweep already is the sweep;
+        # the flag would be a silent no-op hiding a config mistake.
+        raise ConfigError(
+            "include_establishment_sweep needs 'place_types': without them "
+            "the establishment sweep is already the only sweep"
+        )
+
     return DemoArea(
         name=name,
         blocks=blocks,
         headings_per_business=headings,
         max_maps_calls=cap,
         bounds=bounds,
+        place_types=place_types,
+        include_establishment_sweep=include_establishment,
     )
+
+
+def _validated_place_types(raw):
+    """Optional 'place_types': the per-type sweep list. Absent means the
+    original establishment-only sweep, so existing configs are untouched."""
+    if "place_types" not in raw:
+        return ()
+    types = raw["place_types"]
+    if not isinstance(types, list) or not types:
+        raise ConfigError("place_types must be a non-empty list of type names")
+    seen = []
+    for entry in types:
+        if not isinstance(entry, str) or not entry.strip():
+            raise ConfigError(
+                f"place_types entries must be non-empty strings, got {entry!r}"
+            )
+        if entry in seen:
+            # A duplicate is a paid-for sweep that can find nothing new.
+            raise ConfigError(f"place_types lists {entry!r} twice")
+        seen.append(entry)
+    return tuple(seen)
 
 
 def _http_get_json(url, params):
@@ -297,46 +394,65 @@ def enumerate_places(area, api_key, counter, fetch_json=_http_get_json,
     that covers a box is close to twice its area, so roughly half of what the
     API returns for a box can sit outside the area the team actually declared
     -- and those results also consume the 60 the API is willing to give.
+
+    With place_types configured, each block gets one sweep per type instead of
+    a single type=establishment sweep, unioned by place_id. The 60-result cap
+    is per query, so what a type filter changes is what competes for the 60
+    slots: in an office tower every suite is an establishment and the untyped
+    sweep's cap fills with them, while a restaurant sweep's cap can only fill
+    with restaurants -- and the storefront types are the businesses with a
+    street entrance to screen. Each place records which sweeps returned it.
     """
     places = {}
-    truncated = []
+    truncated = []  # (block name, sweep type) pairs, in discovery order
     for block in area.blocks:
-        params = {
-            "location": f"{block['lat']},{block['lng']}",
-            "radius": int(block["radius_m"]),
-            "type": "establishment",
-            "key": api_key,
-        }
-        returned = 0
-        while True:
-            page = _fetch_places_page(
-                params, block, counter, fetch_json, sleep)
-            for result in page.get("results", []):
-                returned += 1
-                place_id = result.get("place_id")
-                if not place_id or place_id in places:
-                    continue
-                location = {
-                    "lat": result.get("geometry", {})
-                                 .get("location", {}).get("lat"),
-                    "lng": result.get("geometry", {})
-                                 .get("location", {}).get("lng"),
-                }
-                if not area.contains(location):
-                    continue
-                places[place_id] = {
-                    "place_id": place_id,
-                    "name": result.get("name", ""),
-                    "location": location,
-                }
-            token = page.get("next_page_token")
-            if not token:
-                break
-            params = {"pagetoken": token, "key": api_key}
-        if returned >= NEARBY_SEARCH_MAX_RESULTS:
-            truncated.append(block["name"])
+        for sweep_type in area.sweep_types:
+            params = {
+                "location": f"{block['lat']},{block['lng']}",
+                "radius": int(block["radius_m"]),
+                "type": sweep_type,
+                "key": api_key,
+            }
+            returned = 0
+            while True:
+                page = _fetch_places_page(
+                    params, block, counter, fetch_json, sleep)
+                for result in page.get("results", []):
+                    returned += 1
+                    place_id = result.get("place_id")
+                    if not place_id:
+                        continue
+                    if place_id in places:
+                        sweeps = places[place_id]["sweeps"]
+                        if sweep_type not in sweeps:
+                            sweeps.append(sweep_type)
+                        continue
+                    location = {
+                        "lat": result.get("geometry", {})
+                                     .get("location", {}).get("lat"),
+                        "lng": result.get("geometry", {})
+                                     .get("location", {}).get("lng"),
+                    }
+                    if not area.contains(location):
+                        continue
+                    places[place_id] = {
+                        "place_id": place_id,
+                        "name": result.get("name", ""),
+                        "location": location,
+                        "sweeps": [sweep_type],
+                    }
+                token = page.get("next_page_token")
+                if not token:
+                    break
+                params = {"pagetoken": token, "key": api_key}
+            if returned >= NEARBY_SEARCH_MAX_RESULTS:
+                truncated.append((block["name"], sweep_type))
+    # A block is truncated when any of its sweeps was; preserve first-seen
+    # order without duplicates for a block cut short in several sweeps.
+    truncated_blocks = list(dict.fromkeys(name for name, _ in truncated))
     return Enumeration(places=tuple(places.values()),
-                       truncated_blocks=tuple(truncated))
+                       truncated_blocks=tuple(truncated_blocks),
+                       truncated_types=tuple(truncated))
 
 
 def _fetch_places_page(params, block, counter, fetch_json, sleep):
@@ -491,6 +607,80 @@ def _write_json(path, payload):
     os.replace(tmp, path)
 
 
+def _truncated_types_by_block(truncated_types):
+    """Summary shape for per-sweep truncation: {block name: [types]}."""
+    by_block = {}
+    for block_name, sweep_type in truncated_types:
+        by_block.setdefault(block_name, []).append(sweep_type)
+    return by_block
+
+
+def run_census(area=None, out_dir="data", *, env=None,
+               fetch_json=_http_get_json, sleep=time.sleep):
+    """Enumerate only: list the area's places and stop before any imagery.
+
+    The cheap first half of the batch, for answering "what would a full run
+    screen, and where does the API still cut us short?" before spending on
+    Street View images or the model. No metadata, image, or engine call is
+    made and the dataset file is never written. The existing dataset (if any)
+    is read to report how many of the enumerated places are new -- the same
+    place_id keying the resumable run uses.
+
+    Writes the census (summary plus the full place list) next to where the
+    dataset would go, and returns the summary.
+    """
+    t0 = time.perf_counter()
+    if area is None:
+        area = load_demo_area()
+    api_key = load_api_key(env)
+
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dataset_path = out_dir / DATASET_FILENAME
+    existing_ids = set()
+    if dataset_path.exists():
+        existing_ids = set(
+            json.loads(dataset_path.read_text(encoding="utf-8")))
+
+    counter = MapsCallCounter(area.max_maps_calls)
+    stopped = None
+    stopped_is_error = False
+    places = ()
+    truncated_blocks = ()
+    truncated_types = ()
+    try:
+        enumeration = enumerate_places(
+            area, api_key, counter, fetch_json, sleep)
+        places = enumeration.places
+        truncated_blocks = enumeration.truncated_blocks
+        truncated_types = enumeration.truncated_types
+    except MapsCallCapError as exc:
+        stopped = f"{type(exc).__name__}: {exc}"
+    except Exception as exc:  # noqa: BLE001 - report what the calls cost
+        stopped = f"{type(exc).__name__}: {exc}"
+        stopped_is_error = True
+
+    already = sum(1 for p in places if p["place_id"] in existing_ids)
+    summary = {
+        "area": area.name,
+        "census": True,
+        "sweep_types": list(area.sweep_types),
+        "businesses_enumerated": len(places),
+        "already_catalogued": already,
+        "new_businesses": len(places) - already,
+        "maps_api_calls": {**counter.counts, "total": counter.total},
+        "maps_call_cap": area.max_maps_calls,
+        "truncated_blocks": list(truncated_blocks),
+        "truncated_types": _truncated_types_by_block(truncated_types),
+        "wall_clock_s": round(time.perf_counter() - t0, 3),
+        "stopped": stopped,
+        "stopped_is_error": stopped_is_error,
+    }
+    _write_json(out_dir / CENSUS_FILENAME,
+                {"summary": summary, "places": list(places)})
+    return summary
+
+
 def run_precatalogue(area=None, out_dir="data", *, engine=None, env=None,
                      fetch_json=_http_get_json, fetch_bytes=_http_get_bytes,
                      sleep=time.sleep):
@@ -521,11 +711,13 @@ def run_precatalogue(area=None, out_dir="data", *, engine=None, env=None,
     skipped_existing = 0
     enumerated = []
     truncated_blocks = ()
+    truncated_types = ()
     try:
         enumeration = enumerate_places(
             area, api_key, counter, fetch_json, sleep)
         enumerated = list(enumeration.places)
         truncated_blocks = enumeration.truncated_blocks
+        truncated_types = enumeration.truncated_types
         for place in enumerated:
             place_id = place["place_id"]
             if place_id in dataset:
@@ -580,8 +772,12 @@ def run_precatalogue(area=None, out_dir="data", *, engine=None, env=None,
         "maps_api_calls": {**counter.counts, "total": counter.total},
         "maps_call_cap": area.max_maps_calls,
         # Named, not inferred: a block that returned the API's maximum was cut
-        # off there, and a count that looks complete cannot show it.
+        # off there, and a count that looks complete cannot show it. With
+        # per-type sweeps the useful grain is which sweep hit the cap: a block
+        # truncated only in its establishment sweep lost office suites, one
+        # truncated in "restaurant" is still missing storefronts.
         "truncated_blocks": list(truncated_blocks),
+        "truncated_types": _truncated_types_by_block(truncated_types),
         "model_spend_usd_estimate": round(engine.spent_usd, 4),
         "wall_clock_s": round(time.perf_counter() - t0, 3),
         "stopped": stopped,
@@ -593,13 +789,19 @@ def run_precatalogue(area=None, out_dir="data", *, engine=None, env=None,
 
 def main(argv=None):
     args = sys.argv[1:] if argv is None else argv
+    census = "--census" in args
+    args = [a for a in args if a != "--census"]
     if not args or args[0] != "run" or len(args) > 2:
-        print("usage: python -m frontdoor.precatalogue run [out_dir]",
-              file=sys.stderr)
+        print("usage: python -m frontdoor.precatalogue run [--census] "
+              "[out_dir]", file=sys.stderr)
         return 2
     out_dir = args[1] if len(args) == 2 else "data"
     try:
-        summary = run_precatalogue(out_dir=out_dir)
+        if census:
+            # Enumeration only: no Street View, no model, no dataset writes.
+            summary = run_census(out_dir=out_dir)
+        else:
+            summary = run_precatalogue(out_dir=out_dir)
     except PrecatalogueError as exc:
         print(exc, file=sys.stderr)
         return 1

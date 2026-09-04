@@ -9,8 +9,10 @@ import json
 import pytest
 
 from frontdoor.precatalogue import (
+    CENSUS_FILENAME,
     DATASET_FILENAME,
     PLACES_SEARCH_URL,
+    STOREFRONT_PLACE_TYPES,
     STREETVIEW_IMAGE_URL,
     STREETVIEW_METADATA_URL,
     SUMMARY_FILENAME,
@@ -24,6 +26,7 @@ from frontdoor.precatalogue import (
     enumerate_places,
     load_api_key,
     load_demo_area,
+    run_census,
     run_precatalogue,
     storefront_headings,
 )
@@ -601,6 +604,224 @@ def test_a_cap_stop_is_not_reported_as_an_error(tmp_path, env):
     summary = run(tmp_path, fetcher, StubEngine(fail_after=0))
     assert summary["stopped_is_error"] is False
     assert "SpendCapError" in summary["stopped"]
+
+
+# ------------------------------- storefront-type sweeps (TICK-248 round two)
+# One type=establishment sweep truncates at 60 on office towers where every
+# suite is an establishment. Targeted per-type sweeps change what competes for
+# the 60 slots; these tests cover the union, the per-type truncation report,
+# and that a config without place_types behaves exactly as before.
+
+
+def test_config_without_place_types_keeps_the_establishment_sweep(tmp_path):
+    """Backward compatibility: the extended config shape is opt-in."""
+    fetcher = FakeFetcher(places_pages=[
+        {"status": "OK", "results": [place("p1")]}])
+    area = load_demo_area(write_config(tmp_path))
+    assert area.sweep_types == ("establishment",)
+    enumerate_places(area, API_KEY, MapsCallCounter(10), fetcher.fetch_json,
+                     FakeClock())
+    sweeps = fetcher.params_for(PLACES_SEARCH_URL)
+    assert [p["type"] for p in sweeps] == ["establishment"]
+
+
+def test_place_types_config_loads_and_orders_sweeps(tmp_path):
+    area = load_demo_area(write_config(
+        tmp_path, place_types=["restaurant", "cafe"]))
+    assert area.place_types == ("restaurant", "cafe")
+    assert area.sweep_types == ("restaurant", "cafe")
+    with_extra = load_demo_area(write_config(
+        tmp_path, place_types=["restaurant"],
+        include_establishment_sweep=True))
+    assert with_extra.sweep_types == ("restaurant", "establishment")
+
+
+@pytest.mark.parametrize("overrides", [
+    {"place_types": []},
+    {"place_types": ["restaurant", 7]},
+    {"place_types": ["restaurant", "  "]},
+    {"place_types": ["restaurant", "restaurant"]},  # a paid-for no-op sweep
+    {"place_types": "restaurant"},
+    {"place_types": ["restaurant"], "include_establishment_sweep": "yes"},
+    {"include_establishment_sweep": True},  # no-op without place_types
+])
+def test_invalid_place_types_config_rejected(tmp_path, overrides):
+    with pytest.raises(ConfigError):
+        load_demo_area(write_config(tmp_path, **overrides))
+
+
+def test_committed_demo_config_uses_the_curated_storefront_types():
+    """The rationale for the list lives on STOREFRONT_PLACE_TYPES in the
+    module; this keeps the committed demo config from drifting away from the
+    documented list."""
+    area = load_demo_area()
+    assert area.place_types == STOREFRONT_PLACE_TYPES
+    assert area.include_establishment_sweep is True
+
+
+def test_type_sweeps_union_and_dedupe_by_place_id(tmp_path):
+    """A cafe that is also a restaurant comes back from both sweeps; it must
+    appear once, remembering which sweeps returned it."""
+    fetcher = FakeFetcher(places_pages=[
+        {"status": "OK", "results": [place("r1"), place("both")]},
+        {"status": "OK", "results": [place("both"), place("c1")]},
+    ])
+    area = load_demo_area(write_config(
+        tmp_path, place_types=["restaurant", "cafe"]))
+    found = enumerate_places(area, API_KEY, MapsCallCounter(10),
+                             fetcher.fetch_json, FakeClock())
+    sweeps = fetcher.params_for(PLACES_SEARCH_URL)
+    assert [p["type"] for p in sweeps] == ["restaurant", "cafe"]
+    assert [p["place_id"] for p in found.places] == ["r1", "both", "c1"]
+    by_id = {p["place_id"]: p for p in found.places}
+    assert by_id["both"]["sweeps"] == ["restaurant", "cafe"]
+    assert by_id["r1"]["sweeps"] == ["restaurant"]
+
+
+def test_establishment_sweep_flag_still_catches_oddballs(tmp_path):
+    """The typed sweeps are the fix, but an untyped business the curated list
+    misses is still worth finding; the flag adds the old sweep on top."""
+    fetcher = FakeFetcher(places_pages=[
+        {"status": "OK", "results": [place("r1")]},
+        {"status": "OK", "results": [place("r1"), place("oddball")]},
+    ])
+    area = load_demo_area(write_config(
+        tmp_path, place_types=["restaurant"],
+        include_establishment_sweep=True))
+    found = enumerate_places(area, API_KEY, MapsCallCounter(10),
+                             fetcher.fetch_json, FakeClock())
+    assert [p["place_id"] for p in found.places] == ["r1", "oddball"]
+    by_id = {p["place_id"]: p for p in found.places}
+    assert by_id["oddball"]["sweeps"] == ["establishment"]
+    assert by_id["r1"]["sweeps"] == ["restaurant", "establishment"]
+
+
+def test_truncation_is_reported_per_type_sweep(tmp_path):
+    """The cap is per query, so with typed sweeps the honest report is which
+    sweep hit it -- a full restaurant sweep means storefronts are still
+    missing even when every other type came back complete."""
+    full = [place(f"r{i}") for i in range(NEARBY_SEARCH_MAX_RESULTS)]
+    fetcher = FakeFetcher(places_pages=[
+        {"status": "OK", "results": full},
+        {"status": "OK", "results": [place("c1")]},
+    ])
+    area = load_demo_area(write_config(
+        tmp_path, place_types=["restaurant", "cafe"]))
+    found = enumerate_places(area, API_KEY, MapsCallCounter(10),
+                             fetcher.fetch_json, FakeClock())
+    assert found.truncated_types == (("test-area", "restaurant"),)
+    assert found.truncated_blocks == ("test-area",)
+
+
+def test_the_summary_names_truncated_types_per_block(tmp_path, env):
+    full = [place(f"r{i}") for i in range(NEARBY_SEARCH_MAX_RESULTS)]
+    fetcher = FakeFetcher(
+        places_pages=[
+            {"status": "OK", "results": full},
+            {"status": "OK", "results": []},
+        ],
+        metadata=[{"status": "ZERO_RESULTS"}] * NEARBY_SEARCH_MAX_RESULTS,
+    )
+    config = write_config(tmp_path, place_types=["restaurant", "cafe"],
+                          max_maps_calls=200)
+    summary = run(tmp_path, fetcher, StubEngine(), config_path=config)
+    assert summary["truncated_types"] == {"test-area": ["restaurant"]}
+    assert summary["truncated_blocks"] == ["test-area"]
+
+
+def test_typed_enumeration_resumes_over_an_existing_dataset(tmp_path, env):
+    """Resume safety is unchanged by the sweep change: rows already in the
+    dataset are skipped by place_id no matter which sweep found them."""
+    fetcher = FakeFetcher(
+        places_pages=[{"status": "OK", "results": [place("p1"), place("p2")]}],
+        metadata=[metadata_ok(pano="pano-2")],
+    )
+    out = tmp_path / "out"
+    out.mkdir()
+    existing_row = {"place_id": "p1", "covered": True, "criteria": {},
+                    "source": "streetview", "status": "ai_estimated"}
+    (out / DATASET_FILENAME).write_text(
+        json.dumps({"p1": existing_row}), encoding="utf-8")
+    config = write_config(tmp_path, place_types=["restaurant"])
+    summary = run(tmp_path, fetcher, StubEngine(), config_path=config)
+    assert summary["skipped_existing"] == 1
+    dataset = json.loads((out / DATASET_FILENAME).read_text(encoding="utf-8"))
+    assert dataset["p1"] == existing_row  # untouched, not refetched
+    assert set(dataset) == {"p1", "p2"}
+
+
+# ------------------------------------------------- census mode (TICK-248 v2)
+
+
+def test_census_enumerates_without_imagery_or_dataset_writes(tmp_path, env):
+    fetcher = FakeFetcher(places_pages=[
+        {"status": "OK", "results": [place("p1"), place("p2")]},
+    ])
+    area = load_demo_area(write_config(tmp_path, place_types=["restaurant"]))
+    summary = run_census(area=area, out_dir=tmp_path / "out",
+                         fetch_json=fetcher.fetch_json, sleep=FakeClock())
+    assert summary["census"] is True
+    assert summary["businesses_enumerated"] == 2
+    assert summary["new_businesses"] == 2
+    assert summary["sweep_types"] == ["restaurant"]
+    assert summary["maps_api_calls"] == {
+        "places": 1, "metadata": 0, "image": 0, "total": 1}
+    # only the Places endpoint was touched, and the dataset was not created
+    assert {u for u, _ in fetcher.calls} == {PLACES_SEARCH_URL}
+    assert not (tmp_path / "out" / DATASET_FILENAME).exists()
+    census = json.loads(
+        (tmp_path / "out" / CENSUS_FILENAME).read_text(encoding="utf-8"))
+    assert census["summary"] == json.loads(json.dumps(summary))
+    assert [p["place_id"] for p in census["places"]] == ["p1", "p2"]
+
+
+def test_census_counts_overlap_with_the_existing_dataset(tmp_path, env):
+    """The census answers "what would a full run add?", so it counts against
+    the same place_id-keyed dataset the resumable run skips by."""
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / DATASET_FILENAME).write_text(
+        json.dumps({"p1": {"place_id": "p1"}}), encoding="utf-8")
+    fetcher = FakeFetcher(places_pages=[
+        {"status": "OK", "results": [place("p1"), place("p2"), place("p3")]},
+    ])
+    area = load_demo_area(write_config(tmp_path))
+    summary = run_census(area=area, out_dir=out,
+                         fetch_json=fetcher.fetch_json, sleep=FakeClock())
+    assert summary["already_catalogued"] == 1
+    assert summary["new_businesses"] == 2
+    # read-only against the dataset: still exactly the row it started with
+    dataset = json.loads((out / DATASET_FILENAME).read_text(encoding="utf-8"))
+    assert set(dataset) == {"p1"}
+
+
+def test_census_reports_a_cap_stop_cleanly(tmp_path, env):
+    fetcher = FakeFetcher(places_pages=[
+        {"status": "OK", "results": [place("p1")], "next_page_token": "tok"},
+    ])
+    config = write_config(tmp_path, max_maps_calls=1)
+    area = load_demo_area(config)
+    summary = run_census(area=area, out_dir=tmp_path / "out",
+                         fetch_json=fetcher.fetch_json, sleep=FakeClock())
+    assert summary["stopped"] and "MapsCallCapError" in summary["stopped"]
+    assert summary["stopped_is_error"] is False
+    assert (tmp_path / "out" / CENSUS_FILENAME).exists()
+
+
+def test_cli_census_flag_routes_to_the_census(tmp_path, monkeypatch):
+    from frontdoor import precatalogue
+
+    seen = {}
+
+    def fake_census(out_dir="data"):
+        seen["out_dir"] = out_dir
+        return {"stopped_is_error": False}
+
+    monkeypatch.setattr(precatalogue, "run_census", fake_census)
+    monkeypatch.setattr(precatalogue, "run_precatalogue",
+                        lambda **kwargs: pytest.fail("full run must not start"))
+    assert precatalogue.main(["run", "--census", str(tmp_path)]) == 0
+    assert seen["out_dir"] == str(tmp_path)
 
 
 def test_the_dataset_is_never_left_half_written(tmp_path, env):
