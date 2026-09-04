@@ -35,4 +35,19 @@ primary_region = "sjc"          # near WNAM, where the R2 buckets live (D-026)
 
 [[vm]]
   size = "shared-cpu-1x"
-  memory = "256mb"              # the image carries no depth model; A and A' only
+  # 512, not 256. At 256 a SINGLE /screen request OOM-killed the gunicorn worker -- one 200 KB
+  # PNG was enough, on 2026-09-04:
+  #   Out of memory: Killed process 644 (gunicorn) total-vm:572864kB anon-rss:140000kB
+  #   [ERROR] Worker (pid:644) was sent SIGKILL! Perhaps out of memory?
+  # The client sees a 502 with an EMPTY body -- Fly's proxy filling in for an app that died
+  # mid-request -- so it is not even the JSON error contract, and the cause is only visible in
+  # `fly logs`. At 512 the same request returns 200 in 6.4s.
+  #
+  # What changed since 256 was chosen: `frontdoor.faceblur` now loads OpenCV and runs
+  # decode -> blur -> re-encode on every /screen image. cv2's resident footprint alone is
+  # substantial, and the earlier "69 MiB serving /health" figure was measured before it existed.
+  #
+  # This value lives here and NOT only in `fly scale`: a `fly scale memory` change is reverted by
+  # the next `fly deploy`, which is exactly what happened on 2026-09-04 -- the machine was scaled,
+  # then a deploy silently put it back to 256 and the OOM returned.
+  memory = "512mb"

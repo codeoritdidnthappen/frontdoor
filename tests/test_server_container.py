@@ -28,12 +28,16 @@ from tests.test_measure_endpoint import architecture_example
 
 IMAGE = "frontdoor-server:tick062"
 
-# The size of the machine actually deployed -- Fly `shared-cpu-1x`, 256 MB (D-031). A fit
-# check against the real instance, not a ceiling probe: the server still serves on 24 MiB
-# and is OOM-killed at 16 MiB. What it would catch is the change that matters -- pulling
-# the depth model into the image, or buffering an upload in memory instead of letting
-# werkzeug spool it to disk.
-MEMORY_CAP = "256m"
+# The size of the machine actually deployed -- Fly `shared-cpu-1x`, 512 MB. A fit check against
+# the real instance, not a ceiling probe: the server still serves on 24 MiB and is OOM-killed at
+# 16 MiB. What it would catch is the change that matters -- pulling the depth model into the
+# image, or buffering an upload in memory instead of letting werkzeug spool it to disk.
+#
+# Raised from 256 on 2026-09-04. At 256 a single 200 KB PNG to /screen OOM-killed the worker:
+# `frontdoor.faceblur` loads OpenCV and runs decode -> blur -> re-encode on every image, which
+# the 256 MB figure predates. The client saw a 502 with an empty body, because the app died
+# mid-request and Fly's proxy answered instead.
+MEMORY_CAP = "512m"
 
 # A full-resolution still is a few megabytes, well above what the other tests send.
 FULL_RESOLUTION_STILL = b"\xff\xd8\xff\xe0" + b"x" * (12 * 1024 * 1024)
