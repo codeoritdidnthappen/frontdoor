@@ -181,6 +181,21 @@ struct ServerUploader: CaptureUploader {
             // drain, so the message names the status rather than reading as a transient blip.
             return refusePermanently(
                 "the server rejected this upload (\(status)). This will not fix itself")
+        case 503:
+            // Weather, not a bug. #258 made a misconfigured or still-booting deploy answer 503
+            // precisely so the client had something to branch on -- and until now the branch did
+            // not exist: 500 and 503 both fell through to `default` and read as
+            // "the server answered 503", which tells an operator nothing about whether to wait or
+            // to stop for the day.
+            return refuse("the server is temporarily unavailable. The capture is still on the "
+                          + "phone and the next drain will try again")
+        case 500...599:
+            // A fault at the far end, which retrying will probably not clear. Still a Refusal
+            // rather than a PermanentRefusal: it is a property of the server, not of this
+            // capture, so the bytes stay queued -- but the message says it is worth reporting
+            // rather than waiting out.
+            return refuse("the server failed while storing this capture (\(status)). The capture "
+                          + "is still on the phone; this is a fault worth reporting, not weather")
         default:
             return refuse("the server answered \(status)")
         }
