@@ -6,7 +6,13 @@ import subprocess
 import pytest
 
 from frontdoor.manifest import manifest_sha256
-from frontdoor.seal_audit import AUDIT_FIELDS, SealAuditError, record_unsealing
+from frontdoor.seal_audit import (
+    AUDIT_FIELDS,
+    AUDIT_KEYS,
+    SealAuditError,
+    record_unsealing,
+    validate_audit_mapping,
+)
 from tests.test_eval import _three_captures
 from tests.test_gitignore import REPO_ROOT
 
@@ -138,6 +144,25 @@ def test_the_command_line_is_reconstructable(tmp_path, monkeypatch):
     )
     fields = dict(zip(AUDIT_FIELDS, audit.read_text(encoding="utf-8").splitlines()[0].split("\t")))
     assert json.loads(fields["command_line"])[0] == "python -m frontdoor.eval"
+
+
+def test_audit_keys_are_exactly_record_unsealing_parameters():
+    """The mapping contract lives next to the signature it mirrors; equality (not subset) so a
+    new record_unsealing parameter cannot be added without extending AUDIT_KEYS too."""
+    import inspect
+
+    params = [p for p in inspect.signature(record_unsealing).parameters if p != "argv"]
+    assert params == list(AUDIT_KEYS)
+
+
+def test_validate_audit_mapping_names_every_missing_key():
+    with pytest.raises(SealAuditError, match=r"missing \['audit_path', 'config'\]"):
+        validate_audit_mapping({"manifest_path": "m", "repo": "r"})
+
+
+def test_validate_audit_mapping_returns_a_complete_mapping():
+    audit = {key: object() for key in AUDIT_KEYS}
+    assert validate_audit_mapping(audit) is audit
 
 
 def test_a_missing_repo_directory_is_named_rather_than_blamed_on_git(tmp_path):

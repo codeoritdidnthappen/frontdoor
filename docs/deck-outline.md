@@ -60,10 +60,10 @@ and #73 both flag this as the thing most likely to get silently dropped under de
   model; four other variables move to dev-split-exploratory). Date: 2026-08-29. Reason: sealed
   split sample size cannot support five-way confirmatory stratification.
   {{a1_text_and_date: CHANGES.log "AMENDMENT to the pre-registration" entry, 2026-08-29 section, and PRD.md §2}}
-- **A-2** — Arm-A-only pass/fail bar (reconstructed; date and original wording still owed by
-  whoever took the decision, tracked at #132 / TICK-231). Reported here as an amendment that
-  exists, with the caveat that its date is unconfirmed.
-  {{a2_text_and_date: CHANGES.log "Decision-log gap" section, A-2 entry — flag unconfirmed date on the slide itself}}
+- **A-2** — Arm-A-only pass/fail bar. Date: 2026-08-29. The original entry says the unnamed-arm
+  criterion could otherwise be scored against whichever arm looked best after unsealing. It was
+  committed before first capture and before any image was processed.
+  {{a2_text_and_date: CHANGES.log "Decision-log gap" section, A-2 entry recovered from commit 13e735a}}
 - **A-3 — PENDING.** The 2026-09-01 pivot from metrology (caliper/LiDAR, MAE bar) to plain-photo
   screening. Requested as a formal amendment in the #67 thread; not yet committed to
   CHANGES.log as of this skeleton. This slide must not claim A-3 is logged until it is — if it
