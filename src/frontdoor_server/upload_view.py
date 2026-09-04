@@ -137,7 +137,15 @@ def register_upload(app, error):
     """
 
     client_key = _client_key()
-    depth_config = DepthIngestConfig.from_environment() if client_key is not None else None
+    depth_config = None
+    depth_config_failure = None
+    if client_key is not None:
+        try:
+            depth_config = DepthIngestConfig.from_environment()
+        except DepthIngestError as exc:
+            # Keep liveness and image ingest available when only depth ingest is misconfigured.
+            # The depth path reports the named variable below, where the capture remains retryable.
+            depth_config_failure = str(exc)
 
     @app.post("/upload")
     def upload():
@@ -229,6 +237,8 @@ def register_upload(app, error):
                 return error("could not build a storage key", str(exc), field="capture_id")
 
             if kind == "depth":
+                if depth_config_failure is not None:
+                    return error("could not store the object", depth_config_failure, status=503)
                 assert depth_config is not None
                 try:
                     put_depth(spool, key=key, sha256=claimed, size=size, config=depth_config)
