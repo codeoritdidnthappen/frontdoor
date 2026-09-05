@@ -66,3 +66,8 @@ The app remembers James's name, retries queued labels with the existing upload c
 locks a record after the deployed server accepts it. The server supplies `labeled_at` and appends
 the same four-row entrance-level representation to `data/labels.csv`. These labels are human
 ground truth, not image-upload metadata, and image upload does not wait for them.
+
+The deployed container has no git checkout, so its default `data/labels.csv` path is a fresh
+runtime file. When running the server from a repository checkout, set `FRONTDOOR_LABELS_PATH` to a
+path outside the checkout. The endpoint refuses the default there rather than rewriting the
+committed frozen label sheet and leaving the repository dirty.

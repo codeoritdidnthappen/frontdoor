@@ -16,6 +16,7 @@ unsealing is recorded in SEAL_AUDIT.log via seal_audit.record_unsealing
 """
 
 import csv
+import fcntl
 import os
 from dataclasses import dataclass
 from datetime import date
@@ -248,8 +249,9 @@ def append_future_entrance_labels(
     """Append one immutable four-row future-capture label atomically.
 
     Returns ``True`` for a new record and ``False`` for an identical retry.
-    The deployed server is one gunicorn process with two threads, so this
-    process-wide lock serializes the complete read/compare/replace transaction.
+    The process lock covers concurrent threads and the sibling lock file covers
+    multiple server processes, serializing the complete read/compare/replace
+    transaction rather than only the final write.
     """
     canonical = _require_canonical(entrance_id, "submission")
     if set(answers) != set(CRITERIA_KEYS):
@@ -262,38 +264,43 @@ def append_future_entrance_labels(
         raise LabelError("labeled_by must not be blank")
 
     with _future_label_write_lock:
-        rows = _read_sheet(path) if path.exists() else []
-        if path.exists():
-            load_labels(path)
-        existing = [row for row in rows if row["entrance_id"] == canonical]
-        if existing:
-            by_criterion = {row["criterion"]: row for row in existing}
-            complete = (
-                len(existing) == len(CRITERIA_KEYS)
-                and set(by_criterion) == set(CRITERIA_KEYS)
-                and all(row["labeled_at"] for row in existing)
-            )
-            identical = complete and all(
-                by_criterion[criterion]["truth"] == answers[criterion]
-                and by_criterion[criterion]["labeled_by"] == operator
+        path.parent.mkdir(parents=True, exist_ok=True)
+        with path.with_name(f"{path.name}.lock").open("w", encoding="utf-8") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            rows = _read_sheet(path) if path.exists() else []
+            if path.exists():
+                load_labels(path)
+            existing = [row for row in rows if row["entrance_id"] == canonical]
+            if existing:
+                by_criterion = {row["criterion"]: row for row in existing}
+                complete = (
+                    len(existing) == len(CRITERIA_KEYS)
+                    and set(by_criterion) == set(CRITERIA_KEYS)
+                    and all(row["labeled_at"] for row in existing)
+                )
+                identical = complete and all(
+                    by_criterion[criterion]["truth"] == answers[criterion]
+                    and by_criterion[criterion]["labeled_by"] == operator
+                    for criterion in CRITERIA_KEYS
+                )
+                if identical:
+                    return False
+                raise LabelConflict(
+                    f"entrance {canonical} already has a different label"
+                )
+
+            stamped = labeled_at.isoformat()
+            rows.extend(
+                {
+                    "entrance_id": canonical,
+                    "criterion": criterion,
+                    "truth": answers[criterion],
+                    "labeled_by": operator,
+                    "labeled_at": stamped,
+                }
                 for criterion in CRITERIA_KEYS
             )
-            if identical:
-                return False
-            raise LabelConflict(f"entrance {canonical} already has a different label")
-
-        stamped = labeled_at.isoformat()
-        rows.extend(
-            {
-                "entrance_id": canonical,
-                "criterion": criterion,
-                "truth": answers[criterion],
-                "labeled_by": operator,
-                "labeled_at": stamped,
-            }
-            for criterion in CRITERIA_KEYS
-        )
-        _atomic_write_sheet(path, rows)
+            _atomic_write_sheet(path, rows)
     return True
 
 

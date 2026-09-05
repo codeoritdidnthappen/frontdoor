@@ -21,6 +21,10 @@ struct ScreenClient {
 
     enum Failure: Error, Equatable {
         case noServerConfigured
+        /// Every view of this entrance had already been uploaded and deleted from the phone
+        /// before screening ran. Named rather than surfacing as a parse error (#316).
+        case noViewsToSend
+        case tooManyViews(Int)
         case unreachable(String)
         case rejected(status: Int, error: ServerError?, detail: String)
         case unreadable(String)
@@ -32,6 +36,14 @@ struct ScreenClient {
             switch self {
             case .noServerConfigured:
                 return "No screening server is configured, so this photo was saved but not screened."
+            case .noViewsToSend:
+                // The captures are safe -- they are gone from the phone because they reached the
+                // bucket. Nothing was lost; this entrance just cannot be screened from here now.
+                return "This entrance's photos have already been uploaded and are no longer on "
+                    + "the phone, so there is nothing left here to screen. The captures are safe."
+            case .tooManyViews(let count):
+                return "\(count) photos is more than the \(ScreenClient.maxViews) this can screen "
+                    + "at once. The captures are saved and queued."
             case .unreachable(let detail):
                 return "The screening server could not be reached (\(detail)). The photo is saved and queued."
             case .rejected(_, let error, let detail):
@@ -61,9 +73,24 @@ struct ScreenClient {
     var baseURL: URL
     var session: URLSession = .shared
 
-    /// Multipart matching the endpoint: image file parts, plus `entrance_id` as a form field when
-    /// there is one. The endpoint takes no sidecar — the plain-photo protocol has nothing to send.
-    static func body(image: Data, entranceId: String?, boundary: String, filename: String) -> Data {
+    /// The most views the endpoint assesses in one call. Enforced here so an over-long set is a
+    /// local refusal rather than a 400 after the bytes have been uploaded over a venue network.
+    static let maxViews = 6
+
+    /// One photo of an entrance, ready to send.
+    struct View: Equatable {
+        let data: Data
+        let filename: String
+    }
+
+    /// Multipart matching the endpoint: one file part per view, plus `entrance_id` as a form field
+    /// when there is one. The endpoint takes no sidecar — the plain-photo protocol has nothing
+    /// to send.
+    ///
+    /// Every part is named `image`, which is what `/screen` collects: it reads every file part of
+    /// every field, so the set arrives as one request and gets ONE integrated model call across
+    /// all of it. That is the whole point of sending them together rather than one at a time.
+    static func body(views: [View], entranceId: String?, boundary: String) -> Data {
         var body = Data()
         func append(_ string: String) { body.append(Data(string.utf8)) }
         if let entranceId {
@@ -71,21 +98,33 @@ struct ScreenClient {
             append("Content-Disposition: form-data; name=\"entrance_id\"\r\n\r\n")
             append("\(entranceId)\r\n")
         }
-        append("--\(boundary)\r\n")
-        append("Content-Disposition: form-data; name=\"image\"; filename=\"\(filename)\"\r\n")
-        append("Content-Type: image/jpeg\r\n\r\n")
-        body.append(image)
-        append("\r\n--\(boundary)--\r\n")
+        for view in views {
+            append("--\(boundary)\r\n")
+            append("Content-Disposition: form-data; name=\"image\"; filename=\"\(view.filename)\"\r\n")
+            append("Content-Type: image/jpeg\r\n\r\n")
+            body.append(view.data)
+            append("\r\n")
+        }
+        append("--\(boundary)--\r\n")
         return body
     }
 
-    func screen(image: Data, entranceId: String?, filename: String) async -> Result<ScreeningResponse, Failure> {
+    /// Screen one entrance's view set. `views` is the whole set, not a single frame.
+    ///
+    /// A one-photo screening is not a cheaper version of this, it is a different and worse answer:
+    /// a hardware close-up cannot see the ground plane, so ramp/bevel and handrails come back
+    /// `not_visible` and the engine is reporting framing rather than the entrance (#316).
+    func screen(views: [View], entranceId: String?) async -> Result<ScreeningResponse, Failure> {
+        guard !views.isEmpty else { return .failure(.noViewsToSend) }
+        guard views.count <= Self.maxViews else {
+            return .failure(.tooManyViews(views.count))
+        }
         let boundary = UUID().uuidString
         var request = URLRequest(url: baseURL.appendingPathComponent("screen"))
         request.httpMethod = "POST"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.httpBody = Self.body(
-            image: image, entranceId: entranceId, boundary: boundary, filename: filename)
+            views: views, entranceId: entranceId, boundary: boundary)
         // Longer than /measure's 20 s: this waits on a vision model, and a measured single-view
         // call took 17.3 s on the host. Cutting it off early would report an unreachable server
         // for a request that was about to answer.

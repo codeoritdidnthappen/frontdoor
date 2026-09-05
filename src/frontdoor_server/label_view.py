@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import date
+import os
 from pathlib import Path
 from typing import Mapping
 
@@ -19,7 +20,24 @@ from frontdoor.split import InvalidEntranceId, canonical_entrance_id
 from frontdoor_server.upload_view import _authorised, _client_key
 
 LABELS_PATH = Path("data/labels.csv")
+LABELS_PATH_ENV = "FRONTDOOR_LABELS_PATH"
+MAX_BODY_BYTES = 8 * 1024
 MAX_OPERATOR_LENGTH = 100
+
+
+def _inside_git_checkout(path: Path) -> bool:
+    resolved = path.resolve()
+    return any((parent / ".git").exists() for parent in (resolved, *resolved.parents))
+
+
+def _configured_labels_path() -> Path:
+    path = Path(current_app.config["LABELS_PATH"])
+    if path == LABELS_PATH and _inside_git_checkout(path):
+        raise OSError(
+            f"default {LABELS_PATH} is inside a git checkout; set {LABELS_PATH_ENV} "
+            "to avoid modifying the committed frozen label sheet"
+        )
+    return path
 
 
 @dataclass(frozen=True)
@@ -76,7 +94,10 @@ def register_labels(
     """Register authenticated future-capture label submission on ``app``."""
 
     client_key = _client_key()
-    app.config.setdefault("LABELS_PATH", LABELS_PATH)
+    configured_path = os.environ.get(LABELS_PATH_ENV, "").strip()
+    app.config.setdefault(
+        "LABELS_PATH", Path(configured_path) if configured_path else LABELS_PATH
+    )
 
     @app.post("/labels")
     def labels() -> tuple[dict[str, object], int]:
@@ -85,6 +106,20 @@ def register_labels(
                 "label submission not authorised",
                 "POST /labels requires the X-Frontdoor-Upload-Key header.",
                 status=401,
+            )
+        declared = request.content_length
+        if declared is not None and declared > MAX_BODY_BYTES:
+            return error(
+                "request body too large",
+                f"POST /labels accepts at most {MAX_BODY_BYTES} bytes; got {declared}.",
+                status=413,
+            )
+        raw = request.get_data(cache=True)
+        if len(raw) > MAX_BODY_BYTES:
+            return error(
+                "request body too large",
+                f"POST /labels accepts at most {MAX_BODY_BYTES} bytes; got {len(raw)}.",
+                status=413,
             )
         if not request.is_json:
             return error(
@@ -99,7 +134,7 @@ def register_labels(
 
         try:
             created = append_future_entrance_labels(
-                Path(current_app.config["LABELS_PATH"]),
+                _configured_labels_path(),
                 submission.entrance_id,
                 submission.answers,
                 labeled_by=submission.labeled_by,

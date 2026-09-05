@@ -98,10 +98,13 @@ final class ScreeningResponseTests: XCTestCase {
 
     // MARK: - the request and the error contract
 
+    private func view(_ name: String) -> ScreenClient.View {
+        ScreenClient.View(data: Data("JPEG-\(name)".utf8), filename: name)
+    }
+
     func testTheRequestCarriesTheEntranceIdAndTheImage() {
         let body = ScreenClient.body(
-            image: Data("JPEGBYTES".utf8), entranceId: "acme-main",
-            boundary: "B", filename: "a.jpg")
+            views: [view("a.jpg")], entranceId: "acme-main", boundary: "B")
         let text = String(decoding: body, as: UTF8.self)
         XCTAssertTrue(text.contains("name=\"entrance_id\"\r\n\r\nacme-main"))
         XCTAssertTrue(text.contains("name=\"image\"; filename=\"a.jpg\""))
@@ -112,9 +115,52 @@ final class ScreeningResponseTests: XCTestCase {
     func testTheRequestOmitsTheFieldWhenThereIsNoEntranceId() {
         // An empty entrance_id is not the same as none: the server validates the field when it is
         // present, so sending a blank one would turn a capture into a 400.
-        let body = ScreenClient.body(
-            image: Data("x".utf8), entranceId: nil, boundary: "B", filename: "a.jpg")
+        let body = ScreenClient.body(views: [view("a.jpg")], entranceId: nil, boundary: "B")
         XCTAssertFalse(String(decoding: body, as: UTF8.self).contains("entrance_id"))
+    }
+
+    // MARK: - the whole view set goes in one request (#316)
+
+    func testEveryViewIsSentAsItsOwnImagePart() {
+        // /screen collects every file part and makes ONE integrated call across them. Sending
+        // only the last frame -- a hardware close-up -- answers not_visible for ramp/bevel and
+        // handrails, because that photo cannot see the ground plane.
+        let names = ["head_on.jpg", "oblique_left.jpg", "far.jpg", "hardware.jpg"]
+        let body = ScreenClient.body(
+            views: names.map(view), entranceId: "E-101", boundary: "B")
+        let text = String(decoding: body, as: UTF8.self)
+        for name in names {
+            XCTAssertTrue(text.contains("filename=\"\(name)\""), name)
+        }
+        XCTAssertEqual(text.components(separatedBy: "name=\"image\"").count - 1, names.count)
+        XCTAssertEqual(text.components(separatedBy: "name=\"entrance_id\"").count - 1, 1)
+        XCTAssertTrue(text.hasSuffix("--B--\r\n"))
+    }
+
+    func testTheBoundaryIsClosedExactlyOnce() {
+        let body = ScreenClient.body(
+            views: [view("a.jpg"), view("b.jpg")], entranceId: nil, boundary: "B")
+        let text = String(decoding: body, as: UTF8.self)
+        XCTAssertEqual(text.components(separatedBy: "--B--").count - 1, 1)
+    }
+
+    func testSendingNothingIsRefusedLocallyAndSaysTheCapturesAreSafe() async {
+        // Every view already uploaded and deleted by the drain. Nothing was lost, and the
+        // operator should be told that rather than shown a parse error.
+        let client = ScreenClient(baseURL: URL(string: "https://example.invalid")!)
+        let outcome = await client.screen(views: [], entranceId: "E-101")
+        guard case .failure(let failure) = outcome else { return XCTFail("expected a refusal") }
+        XCTAssertEqual(failure, .noViewsToSend)
+        XCTAssertTrue(failure.message.contains("captures are safe"))
+    }
+
+    func testMoreViewsThanTheEndpointTakesIsRefusedHereNotThere() async {
+        // Refused before the bytes go over a venue network, not by a 400 afterwards.
+        let client = ScreenClient(baseURL: URL(string: "https://example.invalid")!)
+        let views = (0...ScreenClient.maxViews).map { view("v\($0).jpg") }
+        let outcome = await client.screen(views: views, entranceId: "E-101")
+        guard case .failure(let failure) = outcome else { return XCTFail("expected a refusal") }
+        XCTAssertEqual(failure, .tooManyViews(ScreenClient.maxViews + 1))
     }
 
     func testASealedEntranceIsExplainedAsAPolicyNotAFault() {

@@ -1,0 +1,35 @@
+{
+  "status": "predicted before data; not an observed result",
+  "tap_error_px": 5,
+  "sources": [
+    "TICK-041 (#35): docs/rise-error-vs-angle.md",
+    "TICK-234 (#138): independent survival check",
+    "TICK-244 (#159): docs/rise-error-vs-angle-independent.md"
+  ],
+  "series": [
+    {
+      "label": "Analytical, 2 m",
+      "focal_length_px": 2934.1,
+      "focal_status": "superseded architecture example",
+      "points": [[0, 0.192], [15, 0.199], [30, 0.222], [45, 0.271]]
+    },
+    {
+      "label": "3D check, 2 m",
+      "focal_length_px": 2807.7,
+      "focal_status": "measured on James's iPhone 17 Pro",
+      "points": [[0, 0.202], [15, 0.209], [30, 0.230], [45, 0.274]]
+    },
+    {
+      "label": "Analytical, 3 m",
+      "focal_length_px": 2934.1,
+      "focal_status": "superseded architecture example",
+      "points": [[0, 0.288], [15, 0.298], [30, 0.332], [45, 0.407]]
+    },
+    {
+      "label": "3D check, 3 m",
+      "focal_length_px": 2807.7,
+      "focal_status": "measured on James's iPhone 17 Pro",
+      "points": [[0, 0.303], [15, 0.312], [30, 0.344], [45, 0.415]]
+    }
+  ]
+}
