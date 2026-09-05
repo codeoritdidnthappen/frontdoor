@@ -35,6 +35,24 @@ fly launch --no-deploy --copy-config --name frontdoor-measure
 The first phone-label version writes ephemeral CSV state inside the application container; the
 limitations below explain what must be copied before a replacement or redeploy.
 
+### Installing the app on a phone
+
+There is no paid Apple developer account on this project, so TestFlight and the App Store are
+both closed: free provisioning builds run only on a cabled device and expire in seven days. The
+app reaches a phone through the browser instead.
+
+`GET /app` is a real installable app, not a bookmark. `/app-manifest.json` gives it a name, an
+icon, a standalone display mode and the brand background; `/app-sw.js` caches the page shell so
+it opens with no signal. Together they mean **Share, then Add to Home Screen** in Safari installs
+EntryMap with its own icon and no browser chrome.
+
+The service worker caches the page, the icon and the manifest, and nothing else. Screening,
+map and photo responses are never cached: a stale verdict is a wrong answer about somebody's
+front door, which is worse than no answer. A test pins that allowlist.
+
+Both files are served from the app's own origin, and the worker is served with `no-cache` and
+`Service-Worker-Allowed: /`, so a redeploy reaches phones that already installed.
+
 ### Redeploying from CI
 
 `.github/workflows/deploy.yml` deploys this app on manual dispatch only, never on merge: Actions

@@ -222,6 +222,41 @@ def create_app():
         response.headers["Cache-Control"] = "public, max-age=300"
         return response
 
+    @app.get("/app-manifest.json")
+    def app_manifest():
+        """The web app manifest (TICK-327).
+
+        With this and the service worker, adding the page to a home screen
+        installs an app: its own icon, its own name, no browser chrome, and a
+        launch that works with no signal. There is no paid developer account
+        and no store review between this and a phone, which is the point.
+        """
+        body = (
+            resources.files("frontdoor_server")
+            .joinpath("app-manifest.json")
+            .read_text(encoding="utf-8")
+        )
+        response = Response(body, mimetype="application/manifest+json")
+        response.headers["Cache-Control"] = "public, max-age=300"
+        return response
+
+    @app.get("/app-sw.js")
+    def app_service_worker():
+        """The service worker, served from the root so its scope covers the app.
+
+        Never cached itself: the browser must be able to see a new one on the
+        next launch, or a deploy cannot reach a phone that already installed.
+        """
+        body = (
+            resources.files("frontdoor_server")
+            .joinpath("app-sw.js")
+            .read_text(encoding="utf-8")
+        )
+        response = Response(body, mimetype="text/javascript")
+        response.headers["Cache-Control"] = "no-cache"
+        response.headers["Service-Worker-Allowed"] = "/"
+        return response
+
     @app.get("/app-icon.png")
     def app_icon():
         """The home-screen icon for the app page (TICK-325).

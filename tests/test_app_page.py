@@ -98,3 +98,57 @@ def test_the_page_points_at_the_served_icon_and_not_a_data_uri():
     assert 'rel="apple-touch-icon" sizes="180x180" href="/app-icon.png"' in html
     assert 'apple-touch-icon" href="data:' not in html
     assert '<meta name="apple-mobile-web-app-title" content="EntryMap">' in html
+
+
+def test_the_manifest_makes_the_page_installable():
+    """TICK-327: manifest plus service worker is what turns the page into an app.
+
+    There is no paid Apple account on this project, so TestFlight and the App
+    Store are both closed. Installing from the browser is the only route to a
+    phone, and it needs these two files served correctly.
+    """
+    import json
+
+    response = create_app().test_client().get("/app-manifest.json")
+    assert response.status_code == 200
+    assert response.mimetype == "application/manifest+json"
+    manifest = json.loads(response.get_data(as_text=True))
+    assert manifest["name"] == "EntryMap"
+    assert manifest["start_url"] == "/app"
+    assert manifest["display"] == "standalone"
+    # Every icon the manifest names has to actually be served, or the install
+    # silently falls back to a screenshot of the page.
+    client = create_app().test_client()
+    for icon in manifest["icons"]:
+        assert client.get(icon["src"]).status_code == 200
+
+
+def test_the_service_worker_is_served_uncached_with_root_scope():
+    """A cached worker cannot be replaced, so a deploy could never reach an
+    already-installed phone. Scope has to cover /app, which is not its own path."""
+    response = create_app().test_client().get("/app-sw.js")
+    assert response.status_code == 200
+    assert "javascript" in response.mimetype
+    assert response.headers["Cache-Control"] == "no-cache"
+    assert response.headers["Service-Worker-Allowed"] == "/"
+
+
+def test_the_worker_never_caches_an_answer_about_a_real_doorway():
+    """Screening, map and photo responses must not be served from a cache.
+
+    A stale verdict is a wrong answer about somebody's front door, which is
+    worse than no answer. The worker's allowlist is the whole defence, so it
+    is pinned here rather than left to review.
+    """
+    worker = (
+        resources.files("frontdoor_server").joinpath("app-sw.js").read_text(encoding="utf-8")
+    )
+    assert 'const SHELL = ["/app", "/app-icon.png", "/app-manifest.json"];' in worker
+    for never_cached in ("/screen", "/screen/publish", "/map/data", "/scan/photo"):
+        assert f'"{never_cached}"' not in worker.split("const SHELL")[1].split("]")[0]
+
+
+def test_the_page_registers_the_worker_and_links_the_manifest():
+    html = page().get_data(as_text=True)
+    assert '<link rel="manifest" href="/app-manifest.json">' in html
+    assert 'navigator.serviceWorker.register("/app-sw.js")' in html

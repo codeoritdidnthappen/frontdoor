@@ -1,0 +1,27 @@
+{
+  "name": "EntryMap",
+  "short_name": "EntryMap",
+  "description": "Find entrances and places that fit your needs.",
+  "id": "/app",
+  "start_url": "/app",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1E1543",
+  "theme_color": "#1E1543",
+  "categories": ["navigation", "utilities", "travel"],
+  "icons": [
+    {
+      "src": "/app-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/app-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

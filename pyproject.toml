@@ -21,4 +21,4 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 frontdoor = ["*.json", "models/*.onnx", "models/README.md"]
-frontdoor_server = ["*.json", "*.html", "*.png"]
+frontdoor_server = ["*.json", "*.html", "*.png", "*.js"]
