@@ -48,6 +48,7 @@ from frontdoor.external_data import (
     ProvenanceLine,
     _haversine_m,
     _is_number,
+    load_side_file,
 )
 
 COMMONS_API_URL = "https://commons.wikimedia.org/w/api.php"
@@ -310,12 +311,8 @@ def write_commons_dataset(records, path, fetched_at, dropped=None):
 def load_commons_records(path):
     """Records from the segregated Commons side file; [] when missing or
     unreadable. Total on purpose: the map renders with or without it."""
-    try:
-        document = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, TypeError):
-        return []
-    records = document.get("records") if isinstance(document, dict) else None
-    return [r for r in records or [] if isinstance(r, dict)]
+    records, _error = load_side_file(path, "commons")
+    return records
 
 
 # --- provenance lines -------------------------------------------------------

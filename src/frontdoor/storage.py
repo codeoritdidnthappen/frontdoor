@@ -216,7 +216,7 @@ def load_image_creds():
     )
 
 
-def _client(creds):
+def _client(creds, timeout=None):
     try:
         import boto3
         from botocore.config import Config
@@ -224,14 +224,19 @@ def _client(creds):
     except ImportError as exc:
         raise StorageError("boto3 is required to talk to object storage") from exc
     # boto3 1.36+ sends CRC32 checksums by default; R2 rejects them as AccessDenied.
+    config_kw = {
+        "request_checksum_calculation": "when_required",
+        "response_checksum_validation": "when_required",
+    }
+    if timeout is not None:
+        config_kw["connect_timeout"] = timeout
+        config_kw["read_timeout"] = timeout
+        config_kw["retries"] = {"max_attempts": 1}
     kwargs = {
         "aws_access_key_id": creds.access_key,
         "aws_secret_access_key": creds.secret_key,
         "region_name": creds.region,
-        "config": Config(
-            request_checksum_calculation="when_required",
-            response_checksum_validation="when_required",
-        ),
+        "config": Config(**config_kw),
     }
     if creds.endpoint:
         try:
@@ -440,6 +445,29 @@ def missing_capture_objects(items, store=None):
 def image_store():
     """Store used by the dataset loader and the server — images only."""
     return ObjectStore(load_image_creds())
+
+
+def image_bucket_is_reachable():
+    """True when the images bucket answers a metadata probe.
+
+    Environment variables being set is not the same as the bucket existing
+    and the credential working. HeadObject on a missing key: 404 means the
+    credential can talk to the bucket (the images token is object-scoped and
+    may not be allowed to HeadBucket). Auth failure or a missing bucket is
+    False. Nothing is written. Failures log a generic line so /ready can
+    stay a boolean and never echo a value.
+    """
+    try:
+        creds = load_image_creds()
+        _client(creds, timeout=2).head_object(
+            Bucket=creds.bucket, Key=PROBE_KEY
+        )
+        return True
+    except Exception as exc:
+        if _is_not_found(exc):
+            return True
+        logger.warning("image bucket probe failed")
+        return False
 
 
 def main(argv=None):

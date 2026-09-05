@@ -439,3 +439,45 @@ def test_map_data_degrades_when_dataset_unreadable(client, tmp_path, monkeypatch
     payload = response.get_json()
     assert payload["pins"] == []
     assert "unreadable" in payload["dataset_error"]
+
+
+def test_map_data_reports_skipped_scan_lines(client, tmp_path, monkeypatch):
+    dataset = {"green": row(status="verified", source="onsite_visit")}
+    dataset_path = tmp_path / "precatalogue.json"
+    dataset_path.write_text(json.dumps(dataset), encoding="utf-8")
+    scans_path = tmp_path / "scans.jsonl"
+    scans_path.write_text(
+        json.dumps({
+            "scan_id": "abc123",
+            "place_ref": {"place_id": "green", "name": "Cafe",
+                          "lat": 30.0, "lng": -97.0},
+            "created_at": "2026-09-04T10:00:00Z",
+            "verdicts": {"ramp_or_bevel": "present"},
+            "confidences": {"ramp_or_bevel": 80},
+            "faces_blurred": 0,
+            "quarantined_count": 0,
+            "image_keys": [],
+        }) + "\nnot json at all\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("FRONTDOOR_MAP_DATASET", str(dataset_path))
+    monkeypatch.setenv("FRONTDOOR_SCANS", str(scans_path))
+    payload = client.get("/map/data").get_json()
+    assert payload["scans_error"] is None
+    assert payload["scans_loaded"] == 1
+    assert payload["scans_skipped"] == 1
+
+
+def test_map_data_reports_a_missing_scan_volume(client, tmp_path, monkeypatch):
+    dataset_path = tmp_path / "precatalogue.json"
+    dataset_path.write_text(json.dumps({"green": row()}), encoding="utf-8")
+    monkeypatch.setenv("FRONTDOOR_MAP_DATASET", str(dataset_path))
+    monkeypatch.setenv(
+        "FRONTDOOR_SCANS", str(tmp_path / "not-mounted" / "scans.jsonl")
+    )
+    payload = client.get("/map/data").get_json()
+    assert payload["pins"]
+    assert payload["scans_error"] is not None
+    assert "unreadable" in payload["scans_error"]
+    assert payload["scans_loaded"] == 0
+    assert payload["scans_skipped"] == 0

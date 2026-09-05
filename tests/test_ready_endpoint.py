@@ -33,7 +33,7 @@ def clean_env(monkeypatch):
     from frontdoor import storage
 
     storage._load_dotenv_once()
-    for name in ("ANTHROPIC_API_KEY", *STORAGE_VARS):
+    for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", *STORAGE_VARS):
         monkeypatch.delenv(name, raising=False)
     return monkeypatch
 
@@ -51,13 +51,15 @@ def test_it_reports_every_subsystem_and_answers_200_even_when_degraded(clean_env
     response = ready()
     assert response.status_code == 200
     body = response.get_json()
-    assert set(body["subsystems"]) == {"screening", "photo_storage", "map_dataset"}
+    assert set(body["subsystems"]) == {
+        "screening", "photo_storage", "map_dataset", "scan_store",
+    }
     assert body["ready"] is False
     assert "screening" in body["degraded"]
     assert "photo_storage" in body["degraded"]
 
 
-def test_photo_storage_is_false_when_a_credential_is_missing(clean_env):
+def test_photo_storage_is_false_when_a_credential_is_missing(clean_env, monkeypatch):
     """The silent failure this endpoint exists to make loud.
 
     Storage that is configured except for one variable behaves, from outside,
@@ -70,7 +72,22 @@ def test_photo_storage_is_false_when_a_credential_is_missing(clean_env):
     assert ready().get_json()["subsystems"]["photo_storage"] is False
 
     clean_env.setenv("FRONTDOOR_IMAGES_SECRET_KEY", "secret")
+    monkeypatch.setattr(
+        "frontdoor_server.app.image_bucket_is_reachable", lambda: True
+    )
     assert ready().get_json()["subsystems"]["photo_storage"] is True
+
+
+def test_photo_storage_is_false_when_the_bucket_cannot_be_reached(
+        clean_env, monkeypatch
+):
+    clean_env.setenv("FRONTDOOR_IMAGES_BUCKET", "images")
+    clean_env.setenv("FRONTDOOR_IMAGES_ACCESS_KEY", "key")
+    clean_env.setenv("FRONTDOOR_IMAGES_SECRET_KEY", "secret")
+    monkeypatch.setattr(
+        "frontdoor_server.app.image_bucket_is_reachable", lambda: False
+    )
+    assert ready().get_json()["subsystems"]["photo_storage"] is False
 
 
 def test_screening_tracks_the_model_key(clean_env):
@@ -79,13 +96,21 @@ def test_screening_tracks_the_model_key(clean_env):
     assert ready().get_json()["subsystems"]["screening"] is True
 
 
-def test_it_never_reveals_a_value_or_names_a_variable(clean_env):
+def test_screening_accepts_the_auth_token(clean_env):
+    clean_env.setenv("ANTHROPIC_AUTH_TOKEN", "tok-test")
+    assert ready().get_json()["subsystems"]["screening"] is True
+
+
+def test_it_never_reveals_a_value_or_names_a_variable(clean_env, monkeypatch):
     """The report is a status, not a map of the deployment.
 
     Naming the specific missing variable tells an anonymous caller how this
     deployment is wired. Booleans per subsystem are enough for the operator
     and useless to everyone else.
     """
+    monkeypatch.setattr(
+        "frontdoor_server.app.image_bucket_is_reachable", lambda: True
+    )
     clean_env.setenv("ANTHROPIC_API_KEY", "sk-secret-value")
     clean_env.setenv("FRONTDOOR_IMAGES_BUCKET", "private-bucket-name")
     clean_env.setenv("FRONTDOOR_IMAGES_ACCESS_KEY", "AKIAEXAMPLE")
@@ -93,16 +118,43 @@ def test_it_never_reveals_a_value_or_names_a_variable(clean_env):
     text = ready().get_data(as_text=True)
     for leaked in ("sk-secret-value", "private-bucket-name", "AKIAEXAMPLE", "shhh"):
         assert leaked not in text
-    for variable in ("ANTHROPIC_API_KEY", *STORAGE_VARS):
+    for variable in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", *STORAGE_VARS):
         assert variable not in text
 
 
-def test_ready_is_true_only_when_everything_is_configured(clean_env):
+def test_ready_is_true_only_when_everything_is_configured(clean_env, monkeypatch):
+    monkeypatch.setattr(
+        "frontdoor_server.app.image_bucket_is_reachable", lambda: True
+    )
     clean_env.setenv("ANTHROPIC_API_KEY", "sk-test")
     clean_env.setenv("FRONTDOOR_IMAGES_BUCKET", "images")
     clean_env.setenv("FRONTDOOR_IMAGES_ACCESS_KEY", "key")
     clean_env.setenv("FRONTDOOR_IMAGES_SECRET_KEY", "secret")
     body = ready().get_json()
-    if body["subsystems"]["map_dataset"]:
+    if body["subsystems"]["map_dataset"] and body["subsystems"]["scan_store"]:
         assert body["ready"] is True
         assert body["degraded"] == []
+
+
+def test_map_dataset_is_false_when_empty_or_unparseable(clean_env, tmp_path):
+    empty = tmp_path / "empty.json"
+    empty.write_text("{}", encoding="utf-8")
+    clean_env.setenv("FRONTDOOR_MAP_DATASET", str(empty))
+    assert ready().get_json()["subsystems"]["map_dataset"] is False
+
+    broken = tmp_path / "broken.json"
+    broken.write_text("{", encoding="utf-8")
+    clean_env.setenv("FRONTDOOR_MAP_DATASET", str(broken))
+    assert ready().get_json()["subsystems"]["map_dataset"] is False
+
+
+def test_scan_store_tracks_whether_the_volume_is_mounted(clean_env, tmp_path):
+    clean_env.setenv(
+        "FRONTDOOR_SCANS", str(tmp_path / "not-mounted" / "scans.jsonl")
+    )
+    assert ready().get_json()["subsystems"]["scan_store"] is False
+
+    mounted = tmp_path / "data"
+    mounted.mkdir()
+    clean_env.setenv("FRONTDOOR_SCANS", str(mounted / "scans.jsonl"))
+    assert ready().get_json()["subsystems"]["scan_store"] is True

@@ -16,6 +16,7 @@ import pytest
 
 from frontdoor import faceblur
 from frontdoor.faceblur import (
+    FaceDetectorError,
     InvalidImageError,
     ProcessedImage,
     blur_faces,
@@ -219,6 +220,30 @@ def test_yunet_non_finite_rows_are_skipped_and_finite_rows_survive(monkeypatch):
     # The detector runs on the image and its contrast-boosted copy, so the
     # surviving box is reported once per variant.
     assert boxes == [(5, 6, 4, 4), (5, 6, 4, 4)]
+
+
+def test_yunet_non_answer_is_not_a_clean_photograph(monkeypatch, caplog):
+    class _DeadYuNet:
+        def setInputSize(self, size):
+            pass
+
+        def detect(self, img):
+            return 0, None
+
+    class _BoomCascade:
+        def detectMultiScale(self, *args, **kwargs):
+            raise AssertionError("Haar must not stand in for a failed YuNet")
+
+    monkeypatch.setattr(faceblur, "_get_yunet", lambda: _DeadYuNet())
+    monkeypatch.setattr(
+        faceblur, "_get_cascades", lambda: (_BoomCascade(), _BoomCascade())
+    )
+    image = encode(np.full((64, 64, 3), 128, dtype=np.uint8))
+    with caplog.at_level("WARNING"):
+        with pytest.raises(FaceDetectorError):
+            process_upload(image)
+    assert "YunNet" not in caplog.text  # typo guard
+    assert "YuNet" in caplog.text
 
 
 # --- detect_faces ------------------------------------------------------------

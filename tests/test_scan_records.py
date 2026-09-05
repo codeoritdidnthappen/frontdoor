@@ -8,6 +8,7 @@ implementation.
 """
 
 import json
+import logging
 import threading
 
 import pytest
@@ -26,6 +27,7 @@ from frontdoor.scan_records import (
     append_scan,
     is_scan_image_key,
     load_scan_records,
+    load_scan_store,
     merge_scans,
     new_image_key,
     new_scan_record,
@@ -94,20 +96,26 @@ def test_append_writes_one_newline_terminated_json_line(tmp_path):
     assert json.loads(lines[0]) == record
 
 
-def test_append_creates_the_parent_directory(tmp_path):
-    path = tmp_path / "data" / "scans.jsonl"
-    append_scan(path, scan())
-    assert load_scan_records(path) == [scan()]
-
-
-def test_append_refuses_a_store_with_a_torn_last_line(tmp_path):
-    # The manifest's newline discipline: appending onto an unterminated line
-    # would merge two records into one silently-unparseable line.
-    path = tmp_path / "scans.jsonl"
-    path.write_bytes(b'{"scan_id": "partial"')
-    with pytest.raises(ScanRecordError):
+def test_append_does_not_create_the_parent_directory(tmp_path):
+    # A missing volume must stay missing: mkdir would invent /data inside the
+    # container, publish would 200, and every scan would die with the process.
+    path = tmp_path / "missing-volume" / "scans.jsonl"
+    with pytest.raises(FileNotFoundError):
         append_scan(path, scan())
-    assert path.read_bytes() == b'{"scan_id": "partial"'
+    assert not path.parent.exists()
+
+
+def test_append_recovers_a_store_with_a_torn_last_line(tmp_path, caplog):
+    # A worker killed mid-append leaves the file unterminated. Recover by
+    # dropping the incomplete last line, then append; do not wedge forever.
+    path = tmp_path / "scans.jsonl"
+    path.write_bytes(json.dumps(scan()).encode() + b"\n" + b'{"scan_id": "partial"')
+    with caplog.at_level(logging.WARNING):
+        append_scan(path, scan(scan_id="new"))
+    records = load_scan_records(path)
+    assert [record["scan_id"] for record in records] == ["abc123", "new"]
+    assert "partial" not in path.read_text(encoding="utf-8")
+    assert "newline" in caplog.text.lower() or "interrupted" in caplog.text.lower()
 
 
 def test_concurrent_appends_stay_line_separated(tmp_path):
@@ -138,6 +146,43 @@ def test_load_is_total_over_missing_unreadable_and_junk(tmp_path):
     )
     records = load_scan_records(path)
     assert [record["scan_id"] for record in records] == ["abc123", "s2"]
+
+
+def test_load_reports_skipped_lines_and_logs_them(tmp_path, caplog):
+    path = tmp_path / "scans.jsonl"
+    path.write_text(
+        json.dumps(scan()) + "\n"
+        + "not json at all\n"
+        + '"a bare string"\n'
+        + "\n"
+        + json.dumps(scan(scan_id="s2")) + "\n",
+        encoding="utf-8",
+    )
+    with caplog.at_level(logging.WARNING):
+        result = load_scan_store(path)
+    assert [record["scan_id"] for record in result.records] == ["abc123", "s2"]
+    assert result.skipped == 2
+    assert result.error is None
+    assert "skipped" in caplog.text.lower()
+
+
+def test_load_distinguishes_a_missing_file_from_a_missing_volume(tmp_path):
+    missing_file = load_scan_store(tmp_path / "nope.jsonl")
+    assert missing_file.records == []
+    assert missing_file.error is None
+    assert missing_file.skipped == 0
+
+    missing_volume = load_scan_store(tmp_path / "not-mounted" / "scans.jsonl")
+    assert missing_volume.records == []
+    assert missing_volume.error is not None
+    assert "unreadable" in missing_volume.error
+
+    blocked = tmp_path / "blocked-dir"
+    blocked.mkdir()
+    unreadable = load_scan_store(blocked)
+    assert unreadable.records == []
+    assert unreadable.error is not None
+    assert "unreadable" in unreadable.error
 
 
 # --- image keys --------------------------------------------------------------

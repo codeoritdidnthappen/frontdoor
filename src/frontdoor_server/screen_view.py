@@ -44,7 +44,7 @@ from importlib import resources
 
 from flask import Blueprint, Response, current_app, request
 
-from frontdoor.faceblur import InvalidImageError, process_upload
+from frontdoor.faceblur import FaceDetectorError, InvalidImageError, process_upload
 from frontdoor.screening import ScreeningError, ScreeningEngine, compute_ada_screening, integrated_summary
 from frontdoor.split import InvalidEntranceId, assign_split, canonical_entrance_id
 
@@ -182,6 +182,13 @@ def screen():
                 "invalid image",
                 f"file part {part.name!r} could not be decoded and privacy-processed.",
                 status=422,
+            )
+        except FaceDetectorError:
+            return _error(
+                "internal error",
+                "face detection did not return a result; the upload was not "
+                "sent to the model.",
+                status=500,
             )
         else:
             payloads.append((processed.image_bytes, "image/jpeg"))

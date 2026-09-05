@@ -51,7 +51,7 @@ from frontdoor.claims import (
     DEFAULT_CLAIMS_PATH,
     has_approved_claim,
 )
-from frontdoor.faceblur import InvalidImageError, process_upload
+from frontdoor.faceblur import FaceDetectorError, InvalidImageError, process_upload
 from frontdoor.scan_records import (
     CAPTURE_CAMERA_ROLL,
     CAPTURE_IN_APP,
@@ -283,6 +283,13 @@ def publish():
                 "invalid image",
                 f"file part {part.name!r} could not be decoded and privacy-processed.",
                 status=422,
+            )
+        except FaceDetectorError:
+            return _error(
+                "internal error",
+                "face detection did not return a result; the upload was not "
+                "sent to the model.",
+                status=500,
             )
         else:
             payloads.append(processed.image_bytes)
