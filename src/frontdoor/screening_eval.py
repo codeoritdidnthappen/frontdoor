@@ -92,20 +92,28 @@ class MissingCaptureObjects(ScreeningEvalError):
     #: entrance, one split, or the whole dataset -- without printing hundreds of lines.
     SHOWN = 10
 
-    def __init__(self, missing, entrances_affected, split):
+    def __init__(self, missing, entrances_affected, split, source=None, remedy=None):
         self.missing = list(missing)
         self.entrances_affected = entrances_affected
         self.split = split
+        # Named, because the run has two possible sources now (#342) and the remedy differs. The
+        # bucket wording told an operator pointed at a mistyped LOCAL directory that the bytes had
+        # never been uploaded, which sends them to chase someone else's task.
+        self.source = source or "the image bucket"
         shown = ", ".join(self.missing[: self.SHOWN])
         if len(self.missing) > self.SHOWN:
             shown += f", and {len(self.missing) - self.SHOWN} more"
         super().__init__(
-            f"{len(self.missing)} of the {split} split's captures have no object in the image "
-            f"bucket, across {entrances_affected} entrance(s): {shown}. Nothing was read and no "
-            "audit line was written. Either those bytes were never uploaded (data/STORAGE.md: "
-            "\"Bytes live here; records live in git\") or this run is pointed at the wrong "
-            "bucket or endpoint -- check FRONTDOOR_IMAGES_* before concluding the former."
+            f"{len(self.missing)} of the {split} split's captures are not in {self.source}, "
+            f"across {entrances_affected} entrance(s): {shown}. Nothing was read and no audit "
+            f"line was written. {remedy or self.DEFAULT_REMEDY}"
         )
+
+    DEFAULT_REMEDY = (
+        "Either those bytes were never uploaded (data/STORAGE.md: \"Bytes live here; records "
+        "live in git\") or this run is pointed at the wrong bucket or endpoint -- check "
+        "FRONTDOOR_IMAGES_* before concluding the former."
+    )
 
 
 def _require_permitted_split(split, *, allow_sealed=False):
@@ -592,6 +600,8 @@ def run_eval(
     engine,
     get_capture,
     verify_images=None,
+    image_source=None,
+    image_remedy=None,
     split="dev",
     audit=None,
     argv=None,
@@ -666,7 +676,9 @@ def run_eval(
                 for capture_ids in entrances.values()
                 if any(capture_id in missing for capture_id in capture_ids)
             )
-            raise MissingCaptureObjects(sorted(missing), affected, split)
+            raise MissingCaptureObjects(
+                sorted(missing), affected, split,
+                source=image_source, remedy=image_remedy)
     labels = labels_for_eval(
         list(loaded.labels),
         split=split,
@@ -727,6 +739,12 @@ def main(argv=None, *, from_cli=False):
     parser.add_argument("--labels", required=True, help="path to the labels CSV")
     parser.add_argument("--out", required=True, help="directory for the report files")
     parser.add_argument(
+        "--images",
+        help="read capture images from this local directory instead of the bucket, located by "
+             "each sidecar's own image.path. Bytes are still hash-verified against the manifest, "
+             "and a sealed capture is still refused unless this is the audited run (#342).",
+    )
+    parser.add_argument(
         "--sidecars",
         default=None,
         help="sidecar directory (default: <manifest dir>/sidecars)",
@@ -778,15 +796,31 @@ def main(argv=None, *, from_cli=False):
     )
     loader = DatasetLoader(manifest_path, sidecar_dir)
 
+    # --images points the run at the directory the photographs are already in, instead of at the
+    # bucket they have not been uploaded to (#342). The seal is enforced by the reader itself:
+    # DatasetLoader hands an injected getter the bytes before it ever reaches storage.get, so if
+    # LocalImages does not refuse a sealed capture, nothing does.
+    local_images = None
+    if args.images:
+        from frontdoor.local_images import LocalImages
+
+        local_images = LocalImages(
+            args.images, sidecar_dir, allow_sealed=args.include_sealed)
+        # The getter derives each capture's split from the manifest and uses only `_row`, so the
+        # plain loader above is what it reads through; the reading loader is built from it.
+        loader = DatasetLoader(
+            manifest_path, sidecar_dir, get_image=local_images.getter(loader))
+
     def verify_images(capture_ids, split):
-        """Which of these captures have no object in the bucket.
+        """Which of these captures cannot be read, before the audit line is written.
 
-        Existence only: nothing is downloaded, so this costs no bytes, no model spend and no
-        sealed content. It runs before the audit line -- which is the entire point of it.
-
-        Every capture in one run shares the run's split (collect_entrances filters on it), so the
-        partition comes from the caller rather than being re-derived per capture id.
+        Existence only: nothing is downloaded and no model is called, which is the entire point of
+        doing it here. Every capture in one run shares the run's split (collect_entrances filters
+        on it), so the partition comes from the caller rather than being re-derived per capture id.
         """
+        if local_images is not None:
+            return local_images.missing(capture_ids, split)
+
         from frontdoor.storage import missing_capture_objects
 
         return missing_capture_objects(
@@ -834,6 +868,11 @@ def main(argv=None, *, from_cli=False):
             ),
             get_capture=get_capture,
             verify_images=verify_images,
+            image_source=(
+                f"the local directory {args.images}" if args.images else None),
+            image_remedy=(
+                f"Check that {args.images} is the directory holding the capture photographs, and "
+                "that each is at the path its sidecar names." if args.images else None),
             split="sealed" if args.include_sealed else "dev",
             audit=audit,
             argv=sys.argv if argv is None else [sys.argv[0], *argv],
