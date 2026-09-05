@@ -156,6 +156,19 @@ def test_ac_9_concurrent_submissions_cannot_lose_or_interleave_rows(app):
         }
 
 
+def test_ac_10_concurrent_identical_submissions_record_one_entrance_once(app):
+    def submit():
+        with app.test_client() as client:
+            return _post(client).status_code
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        statuses = list(executor.map(lambda _: submit(), range(8)))
+
+    assert statuses.count(201) == 1
+    assert statuses.count(200) == 7
+    assert len(_rows(Path(app.config["LABELS_PATH"]))) == len(CRITERIA_KEYS)
+
+
 def test_ac_8_persistence_failure_returns_retryable_error_without_mutating_csv(
     app, monkeypatch
 ):
@@ -171,3 +184,54 @@ def test_ac_8_persistence_failure_returns_retryable_error_without_mutating_csv(
         response = _post(client)
     assert response.status_code == 503
     assert path.read_bytes() == original
+
+
+def test_ac_8_unreadable_server_sheet_is_retryable_and_unchanged(app):
+    path = Path(app.config["LABELS_PATH"])
+    path.write_text("wrong,header\n1,2\n", encoding="utf-8")
+    original = path.read_bytes()
+    with app.test_client() as client:
+        response = _post(client)
+    assert response.status_code == 503
+    assert path.read_bytes() == original
+
+
+def test_ac_8_oversized_body_is_refused_before_parsing(app):
+    with app.test_client() as client:
+        response = client.post(
+            "/labels",
+            data=b"{" + b"x" * 9000 + b"}",
+            content_type="application/json",
+            headers={"X-Frontdoor-Upload-Key": KEY},
+        )
+    assert response.status_code == 413
+    Draft202012Validator(ERROR_SCHEMA).validate(response.get_json())
+    assert not Path(app.config["LABELS_PATH"]).exists()
+
+
+def test_ac_9_default_path_refuses_to_modify_a_git_checkout(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setenv("FRONTDOOR_UPLOAD_KEY", KEY)
+    app = create_app()
+    app.config["TESTING"] = True
+    with app.test_client() as client:
+        response = _post(client)
+    assert response.status_code == 503
+    assert not (tmp_path / "data" / "labels.csv").exists()
+
+
+def test_ac_9_explicit_runtime_path_is_honoured_in_a_git_checkout(monkeypatch, tmp_path):
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    (checkout / ".git").mkdir()
+    runtime_path = tmp_path / "runtime" / "labels.csv"
+    monkeypatch.chdir(checkout)
+    monkeypatch.setenv("FRONTDOOR_UPLOAD_KEY", KEY)
+    monkeypatch.setenv("FRONTDOOR_LABELS_PATH", str(runtime_path))
+    app = create_app()
+    app.config["TESTING"] = True
+    with app.test_client() as client:
+        response = _post(client)
+    assert response.status_code == 201
+    assert runtime_path.exists()
