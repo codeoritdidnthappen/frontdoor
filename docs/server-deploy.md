@@ -476,3 +476,38 @@ fly apps destroy frontdoor-measure
 The image dataset lives in R2 and the frozen label artifact lives in the repo. Future-capture
 labels written by `POST /labels` are temporary container state and must be downloaded before the
 app is destroyed, replaced, or redeployed or they are lost.
+
+## Which commit is running (TICK-337, #337)
+
+`GET /version` answers, with no credentials:
+
+```sh
+curl -s https://frontdoor-measure.fly.dev/version
+# {"commit":"<40-hex>"}
+```
+
+`/health` deliberately still returns only `{"status": "ok"}` — it is the D-016 fallback chain's
+liveness probe, and a cheap check should not grow a second job.
+
+**The commit is baked in at build time.** The CI deploy passes it; a local deploy must too, or the
+server will honestly report `unknown`:
+
+```sh
+fly deploy -a frontdoor-measure --build-arg FRONTDOOR_COMMIT=$(git rev-parse HEAD)
+```
+
+`unknown` is not a soft failure. It means the running image cannot be identified, and the drift
+check treats it as an error rather than letting it compare equal to anything.
+
+**Before trusting any live probe, check for drift:**
+
+```sh
+python -m frontdoor_server.deployment drift          # against HEAD
+python -m frontdoor_server.deployment drift origin/main
+```
+
+It exits non-zero and names both sides when the server is not running what your checkout says.
+
+Why this exists: on 2026-09-05 the host served the previous day's image for a full day while `main`
+moved on. A bug that had already been fixed and merged was still live, was probed, and was reported
+a second time as a new defect. Nothing in the system could say what was running.

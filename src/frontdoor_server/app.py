@@ -7,6 +7,7 @@ unchanged against it.
 """
 
 import json
+import os
 from importlib import resources
 
 from flask import Flask, Response, jsonify, request
@@ -202,8 +203,28 @@ def create_app():
 
     @app.get("/health")
     def health():
-        """Cheap liveness probe for the fallback chain on stage (TICK-064)."""
+        """Cheap liveness probe for the fallback chain on stage (TICK-064).
+
+        Deliberately still exactly {"status": "ok"}. Version information lives on /version: this
+        body is what the fallback chain probes and what two tests pin, and widening a liveness
+        probe to carry build metadata makes the cheap check answer a second question badly.
+        """
         return {"status": "ok"}, 200
+
+    @app.get("/version")
+    def version():
+        """What commit this server is running (#337).
+
+        On 2026-09-05 the host served the previous day's image for a full day while main moved on,
+        and nothing could say so: a bug that had been fixed and merged was still live, and was
+        reported a second time. Digests in data/deployment.json answer a different question -- is
+        the laptop running the same image as the host -- and only for two recorded snapshots.
+
+        Unauthenticated on purpose. "Which commit is the demo running?" should not need a Fly
+        login, and the answer reveals nothing a public repository does not.
+        """
+        commit = os.environ.get("FRONTDOOR_COMMIT", "").strip() or "unknown"
+        return {"commit": commit}, 200
 
     @app.get("/app")
     def app_page():
