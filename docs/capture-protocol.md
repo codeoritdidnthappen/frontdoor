@@ -153,8 +153,11 @@ permission to photograph one.
 
 If a shopkeeper objects anyway: explain briefly what this is (a photo survey of entrance
 accessibility features — no measurements, nothing identifying published). If they still object
-after that: **stop immediately, delete that entrance's photos on the spot, and record the entrance
-as skipped (shopkeeper objection).** Don't argue it further. It's one entrance out of forty-plus.
+after that: **stop immediately, discard any unpublished photos on the phone, and record the
+entrance as skipped (shopkeeper objection).** Do not tell them the photographs will be wiped
+from the cloud. Discarding an unpublished capture keeps nothing; once a capture has been
+published it cannot be deleted from the phone, and a sealed-split upload cannot be deleted at
+all. Don't argue it further. It's one entrance out of forty-plus.
 
 ## Skip and failure classes — record them, don't force past them
 
