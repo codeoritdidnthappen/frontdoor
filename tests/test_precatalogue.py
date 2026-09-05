@@ -822,7 +822,7 @@ def test_cli_census_flag_routes_to_the_census(tmp_path, monkeypatch):
 
     seen = {}
 
-    def fake_census(out_dir="data"):
+    def fake_census(area=None, out_dir="data", merge=False):
         seen["out_dir"] = out_dir
         return {"stopped_is_error": False}
 
@@ -978,3 +978,154 @@ def test_enrich_fills_missing_website_without_replacing_phone(tmp_path, env):
     row = json.loads((out / DATASET_FILENAME).read_text(encoding="utf-8"))["p1"]
     assert row["phone"] == "(512) 555-0001"
     assert row["website"] == "https://kept.example"
+
+
+# --------------------------------------- gridded sweep + merged census (#346)
+
+
+def test_config_without_a_grid_keeps_the_single_covering_circle(tmp_path):
+    """Backward compatibility: the committed demo area must not move."""
+    area = load_demo_area(write_config(tmp_path))
+    assert len(area.blocks) == 1
+    assert area.blocks[0]["name"] == "test-area"
+
+
+def test_grid_subdivides_the_box_but_not_the_declared_bounds(tmp_path):
+    """The 60-result cap is per query, so a smaller circle is the only lever
+    left once a per-type sweep still truncates. What is swept changes; what
+    counts as inside the area does not."""
+    area = load_demo_area(
+        write_config(tmp_path, grid={"rows": 2, "cols": 3}))
+    assert len(area.blocks) == 6
+    assert [b["name"] for b in area.blocks] == [
+        "test-area-r0c0", "test-area-r0c1", "test-area-r0c2",
+        "test-area-r1c0", "test-area-r1c1", "test-area-r1c2"]
+    # every cell circle is smaller than the one circle covering the whole box
+    whole = load_demo_area(write_config(tmp_path)).blocks[0]["radius_m"]
+    assert all(b["radius_m"] < whole for b in area.blocks)
+    assert area.bounds == {
+        "south": 30.0, "west": -97.8, "north": 30.01, "east": -97.79}
+    # the cells tile the box: corners of the union are the box's corners
+    assert min(b["lat"] for b in area.blocks) < 30.005
+    assert max(b["lat"] for b in area.blocks) > 30.005
+
+
+def test_a_gridded_sweep_queries_every_cell(tmp_path, env):
+    fetcher = FakeFetcher(places_pages=[
+        {"status": "OK", "results": [place(f"p{i}", lat=30.005, lng=-97.795)]}
+        for i in range(4)
+    ])
+    area = load_demo_area(write_config(
+        tmp_path, grid={"rows": 2, "cols": 2}, place_types=["restaurant"]))
+    summary = run_census(area=area, out_dir=tmp_path / "out",
+                         fetch_json=fetcher.fetch_json, sleep=FakeClock())
+    assert summary["maps_api_calls"]["places"] == 4
+    locations = {p["location"] for p in fetcher.params_for(PLACES_SEARCH_URL)}
+    assert len(locations) == 4
+
+
+@pytest.mark.parametrize("grid", [
+    {"rows": 0, "cols": 1},
+    {"rows": 1, "cols": -2},
+    {"rows": 1.5, "cols": 1},
+    {"rows": True, "cols": 1},
+    {"cols": 2},
+    [2, 2],
+])
+def test_an_invalid_grid_is_rejected(tmp_path, grid):
+    with pytest.raises(ConfigError):
+        load_demo_area(write_config(tmp_path, grid=grid))
+
+
+def test_a_grid_over_blocks_is_rejected(tmp_path):
+    """'blocks' already says where to search; a grid over it means nothing,
+    and a silently ignored key hides a config mistake."""
+    with pytest.raises(ConfigError, match="grid applies to"):
+        load_demo_area(write_config(
+            tmp_path, bounding_box=None, grid={"rows": 2, "cols": 2},
+            blocks=[{"name": "b", "lat": 30.0, "lng": -97.8,
+                     "radius_m": 100}]))
+
+
+def test_merge_adds_places_to_the_census_already_on_disk(tmp_path, env):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / CENSUS_FILENAME).write_text(json.dumps({
+        "summary": {"area": "first-area", "businesses_enumerated": 1},
+        "places": [{"place_id": "p1", "name": "Kept",
+                    "location": {"lat": 1.0, "lng": 2.0},
+                    "sweeps": ["cafe"]}],
+    }), encoding="utf-8")
+    fetcher = FakeFetcher(places_pages=[
+        {"status": "OK", "results": [place("p1", name="Refound"),
+                                     place("p2", name="New")]},
+    ])
+    area = load_demo_area(write_config(tmp_path, place_types=["restaurant"]))
+    summary = run_census(area=area, out_dir=out, merge=True,
+                         fetch_json=fetcher.fetch_json, sleep=FakeClock())
+    census = json.loads((out / CENSUS_FILENAME).read_text(encoding="utf-8"))
+    assert [p["place_id"] for p in census["places"]] == ["p1", "p2"]
+    # the earlier pass's row is untouched, fingerprints and all
+    assert census["places"][0] == {
+        "place_id": "p1", "name": "Kept",
+        "location": {"lat": 1.0, "lng": 2.0}, "sweeps": ["cafe"]}
+    assert census["previous_summaries"] == [
+        {"area": "first-area", "businesses_enumerated": 1}]
+    assert summary["merged_into_existing"] == {
+        "places_added": 1, "places_already_listed": 1, "places_total": 2}
+
+
+def test_a_merged_row_stores_the_identifier_and_nothing_else(tmp_path, env):
+    """#242: nothing from Places is persisted except the place_id. The rows
+    already on disk are that ticket's open violation; this path must not add
+    to their number, so display fields resolve at render time."""
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / CENSUS_FILENAME).write_text(
+        json.dumps({"summary": {}, "places": []}), encoding="utf-8")
+    fetcher = FakeFetcher(places_pages=[
+        {"status": "OK", "results": [place("p9", name="Velvet Taco")]},
+    ])
+    area = load_demo_area(write_config(tmp_path, place_types=["restaurant"]))
+    run_census(area=area, out_dir=out, merge=True,
+               fetch_json=fetcher.fetch_json, sleep=FakeClock())
+    census = json.loads((out / CENSUS_FILENAME).read_text(encoding="utf-8"))
+    assert census["places"] == [{"place_id": "p9", "sweeps": ["restaurant"]}]
+
+
+def test_merge_without_an_existing_census_writes_the_plain_census(tmp_path, env):
+    fetcher = FakeFetcher(places_pages=[
+        {"status": "OK", "results": [place("p1")]},
+    ])
+    area = load_demo_area(write_config(tmp_path, place_types=["restaurant"]))
+    summary = run_census(area=area, out_dir=tmp_path / "out", merge=True,
+                         fetch_json=fetcher.fetch_json, sleep=FakeClock())
+    assert "merged_into_existing" not in summary
+    census = json.loads(
+        (tmp_path / "out" / CENSUS_FILENAME).read_text(encoding="utf-8"))
+    assert "previous_summaries" not in census
+
+
+def test_cli_merge_and_config_flags_reach_the_census(tmp_path, monkeypatch):
+    from frontdoor import precatalogue
+
+    seen = {}
+
+    def fake_census(area=None, out_dir="data", merge=False):
+        seen.update(area=area, out_dir=out_dir, merge=merge)
+        return {"stopped_is_error": False}
+
+    config = write_config(tmp_path, name="walk-area")
+    monkeypatch.setattr(precatalogue, "run_census", fake_census)
+    assert precatalogue.main(
+        ["run", "--census", f"--config={config}", "--merge", "out"]) == 0
+    assert seen["merge"] is True
+    assert seen["out_dir"] == "out"
+    assert seen["area"].name == "walk-area"
+
+
+def test_cli_merge_without_census_is_refused(tmp_path, capsys):
+    from frontdoor import precatalogue
+
+    assert precatalogue.main(["run", "--merge"]) == 2
+    assert "--merge" in capsys.readouterr().err
