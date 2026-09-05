@@ -444,7 +444,7 @@ def _sweep(monkeypatch, places, truncated_types=()):
     blocks = tuple(dict.fromkeys(block for block, _ in truncated_types))
     monkeypatch.setattr(
         entrance_matching, "enumerate_places",
-        lambda area, key, counter, **kwargs: Enumeration(
+        lambda area, key, counter: Enumeration(
             places=tuple(places), truncated_blocks=blocks,
             truncated_types=tuple(truncated_types)))
 
@@ -502,7 +502,7 @@ def test_the_match_cli_keeps_what_the_calls_bought_when_the_cap_stops_it(
     data = _match_fixture(tmp_path, monkeypatch)
     monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "test-maps-key")
 
-    def cap_stop(area, key, counter, **kwargs):
+    def cap_stop(area, key, counter):
         raise MapsCallCapError("over the cap")
 
     monkeypatch.setattr(entrance_matching, "enumerate_places", cap_stop)
@@ -620,3 +620,18 @@ def repo_entrances():
     path = Path(__file__).resolve().parents[1] / "data" / \
         "entrance_identification.json"
     return json.loads(path.read_text(encoding="utf-8"))["entrances"]
+
+
+def test_a_zero_length_bracket_is_still_recorded_as_a_bracket():
+    """E-050 and E-051 both read 522 Congress and share one geocode, so a door
+    bracketed by them has a 0 m span. That must not read as "no bracket"."""
+    entrances = {"E-050": identified("Scarbrough", "522 Congress Ave"),
+                 "E-051": identified("Velvet Taco", "522 Congress Ave")}
+    entrances["E-050a"] = identified("Somewhere")
+    same = anchor(30.267772, -97.743381)
+    places = [catalogued("p1", "Somewhere", 30.267772 + NEAR, -97.743381)]
+    days = {"E-050": DAY, "E-050a": DAY, "E-051": DAY}
+    how = match_entrances(
+        entrances, places, {"E-050": same, "E-051": same}, days)["E-050a"]["how"]
+    assert how["anchor"] == "walk_order_bracket"
+    assert how["bracket_span_m"] == 0.0

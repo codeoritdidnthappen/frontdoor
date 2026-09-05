@@ -82,6 +82,7 @@ from frontdoor.precatalogue import (
 
 IDENTIFICATION_PATH = Path("data/entrance_identification.json")
 ANCHORS_PATH = Path("data/external/entrance_anchors.json")
+CENSUS_PATH = Path("data") / CENSUS_FILENAME
 SIDECAR_DIR = Path("data/sidecars")
 WALK_AREA_CONFIG = Path(__file__).with_name("walk_area.json")
 
@@ -314,7 +315,11 @@ def _match_one(entrance_id, record, places, located, days, max_distance_m):
         "how": {
             "anchor": anchor["kind"],
             "anchor_between": anchor["between"],
-            "bracket_span_m": anchor["span_m"] or None,
+            # None for a geocoded door, and for a bracket only ever a real
+            # span: two anchors can share a geocode (E-050 and E-051 both read
+            # 522 Congress), and a 0.0 there must not read as "no bracket".
+            "bracket_span_m": (anchor["span_m"]
+                               if anchor["between"] else None),
             "distance_m": round(distance_m, 1),
             "matched_name": place["name"],
         },
@@ -518,8 +523,7 @@ def apply_matches(entrances, results):
     return entrances
 
 
-def _run_match(out_path, out_dir=Path("data"), *, env=None,
-               fetch_json=None, sleep=None):
+def _run_match(out_path):
     """Sweep the walked blocks and decide a place for every entrance.
 
     One pass, because the rows this ticket adds to the catalogue hold the
@@ -529,21 +533,15 @@ def _run_match(out_path, out_dir=Path("data"), *, env=None,
     """
     document = json.loads(IDENTIFICATION_PATH.read_text(encoding="utf-8"))
     entrances = document["entrances"]
-    census_path = Path(out_dir) / CENSUS_FILENAME
+    census_path = CENSUS_PATH
     census = json.loads(census_path.read_text(encoding="utf-8"))
 
     area = load_demo_area(WALK_AREA_CONFIG)
     counter = MapsCallCounter(area.max_maps_calls)
-    kwargs = {}
-    if fetch_json is not None:
-        kwargs["fetch_json"] = fetch_json
-    if sleep is not None:
-        kwargs["sleep"] = sleep
     stopped = None
     places, truncated_blocks, truncated_types = (), (), ()
     try:
-        enumeration = enumerate_places(
-            area, load_api_key(env), counter, **kwargs)
+        enumeration = enumerate_places(area, load_api_key(), counter)
         places = enumeration.places
         truncated_blocks = enumeration.truncated_blocks
         truncated_types = enumeration.truncated_types
