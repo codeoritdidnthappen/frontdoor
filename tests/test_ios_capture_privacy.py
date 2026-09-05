@@ -30,13 +30,21 @@ def body_of(source, signature):
     return source.split(signature, 1)[1].split("\n    }", 1)[0]
 
 
+#: The only byte sources a writer may be handed, and where each is proven processed.
+#: - `processed.data`     the import path, straight out of ImportedPhotoPrivacy
+#: - `pending.imageData`  the camera path, which is CapturePrivacy's output since #275 moved
+#:                        processing ahead of the review gate. Pinned by
+#:                        test_the_operator_reviews_the_image_that_will_be_published.
+PROCESSED_SOURCES = ("processed.data", "pending.imageData")
+
+
 def test_every_write_is_given_processed_bytes():
-    """The one rule. Both writers must hand the writer something a privacy step produced."""
+    """The one rule. Every writer must be handed something a privacy step produced."""
     source = controller()
     calls = re.findall(r"CaptureWriter\.write\((.{0,220})", source, re.S)
     assert calls, "no CaptureWriter.write call found; this guard is pinning nothing"
     for call in calls:
-        assert "processed.data" in call, (
+        assert any(name in call for name in PROCESSED_SOURCES), (
             f"a capture is written with bytes no privacy step produced: {call[:120]!r}"
         )
 
@@ -52,9 +60,11 @@ def test_the_raw_frame_only_ever_goes_to_the_review_holder_and_the_processor():
     Matched over a window rather than a line, because both call sites wrap.
     """
     source = controller()
+    # The raw frame now goes ONLY to the processor -- it no longer reaches the review gate at
+    # all (#275) -- and the processed bytes are what the gate and the writer both see.
     allowed = {
-        "captured.imageData": "PendingReview(",
-        "pending.imageData": "CapturePrivacy.process(",
+        "captured.imageData": "CapturePrivacy.process(",
+        "pending.imageData": "CaptureWriter.write(",
     }
     for raw, destination in allowed.items():
         uses = [m.start() for m in re.finditer(re.escape(raw), source)]
@@ -67,18 +77,37 @@ def test_the_raw_frame_only_ever_goes_to_the_review_holder_and_the_processor():
             )
 
 
-def test_the_camera_path_processes_before_it_writes():
-    body = body_of(controller(), "private func commit(")
-    assert "CapturePrivacy.process(" in body
-    assert body.index("CapturePrivacy.process(") < body.index("CaptureWriter.write(")
+def test_the_operator_reviews_the_image_that_will_be_published():
+    """Processing runs before the gate, not after it (#275).
+
+    It used to run at commit: the operator approved a raw frame and something slightly different
+    left the phone. A consent gate is only worth having if what it shows is what it publishes.
+    """
+    source = controller()
+    capture = body_of(source, "func capturePhoto()") if "func capturePhoto()" in source else source
+    assert "CapturePrivacy.process(" in source
+    # The processed bytes are what the gate is handed.
+    assert "imageData: processed.data, depthBytes:" in source
+    assert source.index("CapturePrivacy.process(") < source.index("pendingReview = pending")
 
 
-def test_a_capture_that_cannot_be_processed_is_not_written():
-    """Fails closed. An unblurred frame on disk is the thing this exists to prevent."""
+def test_commit_writes_exactly_what_was_reviewed():
+    """No second processing pass, and no chance of writing something else."""
     body = body_of(controller(), "private func commit(")
-    failure = body.split("case .failure(let failure):", 1)[1].split("}", 1)[0]
-    assert "return" in failure, "processing failure must abandon the capture, not fall through"
-    assert body.index("case .failure(let failure):") < body.index("CaptureWriter.write(")
+    assert "CapturePrivacy.process(" not in body, (
+        "processing at commit would mean the written bytes are not the reviewed ones"
+    )
+    assert "imageData: pending.imageData" in body
+
+
+def test_a_capture_that_cannot_be_processed_never_reaches_the_gate():
+    """Fails closed. An unprocessed frame must not be shown for approval, let alone written."""
+    source = controller()
+    after = source[source.index("CapturePrivacy.process("):]
+    failure = after.split("case .failure(let failure):", 1)[1].split("}", 1)[0]
+    assert "lastCaptureError" in failure, "a refusal must say why"
+    assert "return" in failure, "it must abandon the frame, not fall through to the gate"
+    assert after.index("case .failure(let failure):") < after.index("pendingReview = pending")
 
 
 # --- the design decision that keeps intrinsics honest -------------------------
