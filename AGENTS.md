@@ -86,6 +86,28 @@ request. When a ticket is complete, review it, fix every bug, and merge it immed
    a ticket and land through a new pull request. Automated agents are authorized and expected to
    perform this merge themselves once review and CI pass; do not leave a completed pull request
    open for a separate human merge.
+6. **Land the whole ticket, or split it.** Don't land work that leaves its ticket
+   incomplete. The moment an acceptance criterion turns out to need something the change
+   cannot supply — hardware, a venue, another person, or work that is deliberately paused —
+   **split that criterion into its own ticket and say what it is waiting on.** Then the
+   original closes honestly.
+
+   The failure this prevents is not a wrong ticket state, it is a **silent** one: a ticket
+   left open with a criterion nobody can ever tick stops meaning "in progress" and starts
+   meaning nothing at all. #50 could not close because one criterion needed James's iPhone on
+   cellular; #55 could not close because two needed arms that are deprioritised. Both had
+   landed, working, verified code sitting behind a checkbox.
+
+   This is not a licence to file tickets instead of doing work — that rule stands. It
+   applies only where the remaining criterion **cannot be done by whoever is holding the
+   ticket**, and it needs a named owner.
+7. **Never put a ticket number after a closing keyword — even to negate it.** GitHub closes
+   an issue on `close/closes/fixes/resolves #N` in a commit message or PR body, and it does
+   not read negation: the sentence *"Why this does not close #55"* closed #55. Write
+   "#55 stays open", "does not complete #55", or `refs #55`.
+8. **Say the ticket state on the ticket.** A PR body is read once, at merge, and never
+   again; the issue is what a teammate finds later. When work lands without completing its
+   ticket, post the criterion-by-criterion state as a comment on the **issue**.
 
 If a change can't be traced to a ticket, ask before starting.
 
