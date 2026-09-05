@@ -596,6 +596,9 @@ amendment ask that owns it.
 
 ## D-031  AMENDMENT TO D-026: the measure server is a PAID host. Object storage stays free.
 
+**Amended 2026-09-04 by D-044.** The no-silent-billing mechanism is prepaid credits, not a Fly
+spend limit. Original text below.
+
 Taken 2026-09-02, closing the hosting question D-026 left open and unblocking TICK-062 (#50).
 This amends a locked decision, so it is logged here and must be REPORTED AS AN AMENDMENT AT
 DEMO DAY (PRD section 2).
@@ -660,6 +663,9 @@ that contradicts the "bucket beside the VM" premise in ARCHITECTURE sections 7-8
 own entry rather than being assumed here.
 
 ## D-032  LiDAR depth is captured, on James's iPhone 17 Pro (`iPhone18,1`)
+
+**Amended 2026-09-04 by D-045.** Captured depth is relative stereo disparity, not LiDAR range.
+Original text below.
 
 Taken 2026-09-02 by David. Reverses the 2026-09-01 pivot's "no LiDAR depth" clause for
 capture; everything else in the pivot stands.
@@ -896,6 +902,9 @@ rather than streaming it on the day.
 
 ## D-036  One capture device, LiDAR on, no caliper
 
+**Amended 2026-09-04 by D-045.** Clause 1 restated: depth is captured; it is stereo disparity,
+not LiDAR range. Original text below.
+
 Taken 2026-09-02 by David, in the backlog sync that follows A-3. Three settings that go
 together, recorded as one entry because separating them would hide what each costs.
 
@@ -1100,9 +1109,10 @@ by reading the files are asserted alongside them and run everywhere:
   `fly.toml`'s 256 MB; a resize on one side left the fit check passing against a machine we no
   longer run.
 
-Also recorded, unfixed: D-031 still names a Fly "spend limit" that Fly does not offer, and no
-prepaid credit block has been bought -- so D-026's "billing cannot start silently" clause is
-currently satisfied by nothing. `docs/server-deploy.md` carries the procedure.
+Also recorded, now amended by D-044: D-031 had named a Fly "spend limit" that Fly does not
+offer. The mechanism is prepaid credits; whether a block has been bought remains an ops fact in
+`docs/server-deploy.md`.
+
 ## 2026-09-03 — Correct the depth-ingest boundary (TICK-249/TICK-250, #216/#217)
 
 ## D-039  Depth ingest is isolated behind an authenticated Worker
@@ -1264,3 +1274,46 @@ Spend is reserved before a model call: the public demo retains its $1 run cap an
 $20 cap. Automated verification uses injected clients and spends $0. Latency is recorded and the
 evaluation report computes p95, while the paid observed-latency result remains owned by #62.
 Human ground-truth completion remains owned by #302.
+
+## 2026-09-04 — Record what was measured for D-031, D-032 and D-036 (TICK-261, #260)
+
+## D-044  AMENDMENT TO D-031: no-silent-billing is prepaid credits, not a Fly spend limit
+
+Taken 2026-09-04. D-031's paid-host decision stands. Its stated billing mechanism does not exist.
+
+D-031 replaced D-026's "billing must be incapable of starting silently" with "an explicit spend
+limit on the Fly organisation plus a billing alert", and recorded that both were set before the
+first deploy. Fly.io documents no spend limit, cap, or budget control on an organisation (PR #200
+review F1). Alert emails are advisory. The closest real hard-stop is prepaid credits: the account
+suspends when the balance reaches zero.
+
+The 2026-09-02 "Spend limit set" line in `docs/server-deploy.md` was struck as recorded-in-error
+when the runbook was corrected. This entry amends D-031 to name the same mechanism. Whether a
+prepaid block has been bought is an ops fact recorded in that runbook, not a claim this
+amendment invents.
+
+Object storage stays free. The ~$2/month Fly machine is unchanged. **Reported as an amendment at
+Demo Day.**
+
+## D-045  AMENDMENT TO D-032 and D-036: captured depth is stereo disparity, not LiDAR range
+
+Taken 2026-09-04. The 2026-09-04 capability probe on James's iPhone 17 Pro (`iPhone18,1`) measured
+the capture path D-032 and D-036 named (PR #255, `docs/tick-020-capability-probe.md`).
+
+D-032 authorised LiDAR depth on every entrance ("LiDAR depth is captured"; "Every entrance is
+captured with LiDAR depth"). D-036 clause 1 said "LiDAR is used." What the probe recorded on
+that phone:
+
+- Normal capture uses `builtInDualWideCamera` because it is the only device that delivers the
+  intrinsics `CaptureValidation.record` requires.
+- The depth that arrives is `kCVPixelFormatType_DisparityFloat16` with
+  `AVDepthData.Accuracy.relative`: relative stereo disparity, persisted as `DepthFloat32`.
+- `builtInLiDARDepthCamera` delivers depth without calibration, so the app does not use that
+  path. The probe did not observe LiDAR range.
+
+D-040 already recorded this while fixing the phone as the sole device. This entry amends the two
+decisions whose wording was wrong: depth is captured and stored; it is not LiDAR range and it is
+not a metric ruler. D-015 and D-020 are untouched — screening still never consumes device depth.
+The planned monocular-versus-LiDAR comparison has no metric reference.
+
+**Reported as an amendment at Demo Day.**

@@ -32,7 +32,7 @@ project (PRD §11) — four accounts, not one.
 ## 2. Capture device
 
 There is exactly one capture and demo phone: **James's iPhone 17 Pro (`iPhone18,1`) with LiDAR**
-(D-032, D-036). It runs the iOS capture app and carries every entrance. No other handset is a
+(D-032, D-036, D-045). It runs the iOS capture app and carries every entrance. No other handset is a
 capture device, test device, fallback, standby, or part of the supported device pool.
 
 The in-app capability probe measured this phone on 2026-09-04; see

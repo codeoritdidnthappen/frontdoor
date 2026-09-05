@@ -198,8 +198,8 @@ It holds no state and owns no metrology. Its only job is to be reachable from Ja
 **Deployed at https://frontdoor-measure.fly.dev** (2026-09-02): Fly.io `shared-cpu-1x`, 256 MB, one
 machine held always-on in `sjc` near the WNAM buckets. `GET /health` and `POST /measure` are live and
 the response validates against the frozen contract. Plain HTTP redirects to TLS, which iOS App
-Transport Security requires of the phone. Deploy steps, secrets, spend cap and the pre-Demo-Day
-checks: [docs/server-deploy.md](docs/server-deploy.md).
+Transport Security requires of the phone. Deploy steps, secrets, prepaid-credit procedure and the
+pre-Demo-Day checks: [docs/server-deploy.md](docs/server-deploy.md).
 
 **Live arms (TICK-062).** The image serves Arms A and A′ only, and carries no depth model or
 weights — which is why it runs in 69 MiB and why the laptop fallback needs no download.
@@ -329,7 +329,7 @@ Imported photos also carry no depth (TICK-023).
 > written before that entry keeps its original contract. R-3's 3 m distance cap is metrology-only:
 > the plain-photo protocol asks for a far, ~3-4 m shot.
 
-> **Corrected 2026-09-04 by D-040.** **D-032** puts depth capture on James's iPhone 17 Pro
+> **Corrected 2026-09-04 by D-040 and D-045.** **D-032** puts depth capture on James's iPhone 17 Pro
 > (`iPhone18,1`). Its completed probe shows that normal capture receives relative stereo disparity
 > and persists relative `DepthFloat32`, not LiDAR range. **D-039 supersedes D-033's mechanism:** Cloudflare does
 > not issue a permanent write-only R2 token. Uploads still pass through the server for validation,
