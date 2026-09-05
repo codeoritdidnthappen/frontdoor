@@ -60,6 +60,9 @@ struct ScreeningResponse: Decodable, Equatable {
     let faceCheck: String
     let quarantined: Bool
     let quarantineReason: String?
+    /// Server-computed photo ADA score (#318). Optional so an older envelope still decodes;
+    /// the phone never fills this in.
+    let adaScreening: AdaScreening?
 
     private enum CodingKeys: String, CodingKey {
         case entranceId = "entrance_id"
@@ -69,6 +72,41 @@ struct ScreeningResponse: Decodable, Equatable {
         case faceCheck = "face_check"
         case quarantined
         case quarantineReason = "quarantine_reason"
+        case adaScreening = "ada_screening"
+    }
+}
+
+/// One of the eight photo ADA checks. `result` is a plain String so an unknown state is shown
+/// verbatim rather than mapped onto a familiar one.
+struct AdaCheck: Decodable, Equatable {
+    let result: String?
+    let evidence: String?
+}
+
+/// The photo-based ADA screening block. Score, counts and summary are computed on the server.
+struct AdaScreening: Decodable, Equatable {
+    let scorePercent: Double?
+    let determinedCount: Int
+    let totalCount: Int
+    let trueCount: Int
+    let falseCount: Int
+    let cannotDetermineCount: Int
+    let notApplicableCount: Int
+    let checks: [String: AdaCheck]
+    let summary: String
+    let standardsUrl: String
+    let disclaimer: String
+
+    private enum CodingKeys: String, CodingKey {
+        case scorePercent = "score_percent"
+        case determinedCount = "determined_count"
+        case totalCount = "total_count"
+        case trueCount = "true_count"
+        case falseCount = "false_count"
+        case cannotDetermineCount = "cannot_determine_count"
+        case notApplicableCount = "not_applicable_count"
+        case checks, summary, disclaimer
+        case standardsUrl = "standards_url"
     }
 }
 
@@ -92,6 +130,33 @@ enum ScreeningCriterion: String, CaseIterable, Codable, Identifiable {
         case .handrails: return "Handrails"
         case .accessibleDoorHardware: return "Accessible door hardware"
         case .accessibilitySignage: return "Accessibility signage"
+        }
+    }
+}
+
+/// The eight photo ADA checks, in the order the iPhone displays them (#318).
+enum AdaScreeningCheck: String, CaseIterable, Identifiable {
+    case entranceRoute = "entrance_route"
+    case threshold = "threshold"
+    case ramp = "ramp"
+    case doorHardware = "door_hardware"
+    case doorOpening = "door_opening"
+    case handrails = "handrails"
+    case signage = "signage"
+    case temporaryBarriers = "temporary_barriers"
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .entranceRoute: return "Entrance route"
+        case .threshold: return "Threshold"
+        case .ramp: return "Ramp"
+        case .doorHardware: return "Door hardware"
+        case .doorOpening: return "Door opening"
+        case .handrails: return "Handrails"
+        case .signage: return "Signage"
+        case .temporaryBarriers: return "Temporary barriers"
         }
     }
 }

@@ -31,6 +31,7 @@ struct ScreeningChecksView: View {
                         Divider()
                     }
                     extraCriteria
+                    adaScreening
                     footer
                 }
                 .padding()
@@ -135,6 +136,51 @@ struct ScreeningChecksView: View {
         case "absent": return .red
         default: return .blue
         }
+    }
+
+    @ViewBuilder
+    private var adaScreening: some View {
+        if case .assessed(let response) = run.outcome, let ada = response.adaScreening {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Photo ADA screening").font(.headline)
+                if let score = ada.scorePercent {
+                    Text("\(score, specifier: "%.1f")%")
+                        .font(.title2.weight(.semibold))
+                } else {
+                    Text("Not enough visible evidence")
+                        .font(.title2.weight(.semibold))
+                }
+                Text("\(ada.determinedCount) of \(ada.totalCount) checks determined")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                ForEach(AdaScreeningCheck.allCases, id: \.self) { check in
+                    adaRow(check, ada.checks[check.rawValue])
+                    Divider()
+                }
+                Text(ada.summary).font(.subheadline)
+                Text(ada.disclaimer).font(.footnote).foregroundStyle(.secondary)
+                if let url = URL(string: ada.standardsUrl) {
+                    Link("2010 ADA Standards", destination: url)
+                        .font(.footnote)
+                }
+            }
+            .padding(.top, 8)
+        }
+    }
+
+    private func adaRow(_ check: AdaScreeningCheck, _ entry: AdaCheck?) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(check.label).font(.headline)
+            if let result = entry?.result {
+                Text(result).font(.title3.weight(.semibold))
+            } else {
+                Text("no result").font(.title3.weight(.semibold)).foregroundStyle(.secondary)
+            }
+            if let evidence = entry?.evidence, !evidence.isEmpty {
+                Text(evidence).font(.subheadline).foregroundStyle(.secondary)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     @ViewBuilder

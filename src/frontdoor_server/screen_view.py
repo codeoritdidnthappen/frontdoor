@@ -45,7 +45,7 @@ from importlib import resources
 from flask import Blueprint, Response, current_app, request
 
 from frontdoor.faceblur import InvalidImageError, process_upload
-from frontdoor.screening import ScreeningEngine, integrated_summary
+from frontdoor.screening import ScreeningError, ScreeningEngine, compute_ada_screening, integrated_summary
 from frontdoor.split import InvalidEntranceId, assign_split, canonical_entrance_id
 
 ALLOWED_IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp")
@@ -89,6 +89,11 @@ def _get_engine():
     if not (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN")):
         return None
     return ScreeningEngine()
+
+
+def ada_screening_from_assessment(assessment):
+    """Server-computed ADA block, or ScreeningError if the checks are missing."""
+    return compute_ada_screening(assessment.ada_checks)
 
 
 @screen_page.get("/screen")
@@ -214,6 +219,16 @@ def screen():
             latency_ms=latency_ms,
         )
 
+    try:
+        ada_screening = ada_screening_from_assessment(assessment)
+    except ScreeningError as exc:
+        return _error(
+            "screening engine failure",
+            str(exc),
+            status=502,
+            latency_ms=latency_ms,
+        )
+
     # face_check quarantine (TICK-257 follow-up, #232): the model has audited its
     # own (already blurred) input inside the same integrated call. A face_visible
     # answer quarantines the request's views as a set - one call over all views
@@ -249,6 +264,7 @@ def screen():
         "model": engine.config.model,
         "status": "ai_estimated",
         "wording": WORDING,
+        "ada_screening": ada_screening,
     }
     if quarantined:
         body["quarantine_reason"] = "face_check"

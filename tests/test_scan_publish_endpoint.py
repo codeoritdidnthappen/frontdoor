@@ -18,7 +18,7 @@ import json
 import pytest
 
 from frontdoor.scan_records import is_scan_image_key, load_scan_records
-from frontdoor.screening import CRITERIA_KEYS, ImageAssessment
+from frontdoor.screening import CRITERIA_KEYS, ImageAssessment, ScreeningEngine, compute_ada_screening
 from frontdoor.storage import StorageError
 from frontdoor_server.app import create_app
 from frontdoor_server.scan_view import STORE_KEY
@@ -28,9 +28,11 @@ from tests.test_screen_endpoint import (
     FakeEngine,
     errored_assessment,
     image_part,
+    ok_ada_checks,
     ok_assessment,
     real_jpeg,
 )
+from tests.test_screening import FakeClient, _Response, _payload
 
 PLACE_FORM = {"place_id": "ChIJexample", "name": "Example Cafe",
               "lat": "40.0", "lng": "-75.0"}
@@ -181,6 +183,23 @@ def test_publish_response_carries_the_same_assessment_contract_as_screen(
         assert body["assessment"]["criteria"][key]["verdict"] == "present"
     wording = body["wording"].lower()
     assert "not measurements" in wording and "not compliance" in wording
+    assert body["ada_screening"] == compute_ada_screening(ok_ada_checks())
+    assert body["ada_screening"]["disclaimer"]
+    assert body["ada_screening"]["standards_url"]
+
+
+def test_publish_rejects_model_supplied_ada_aggregates(scans_path):
+    poisoned = json.loads(_payload())
+    poisoned["score_percent"] = 12.5
+    poisoned["summary"] = "this entrance passes"
+    engine = ScreeningEngine(
+        client=FakeClient([_Response(json.dumps(poisoned))])
+    )
+    response = post_publish(
+        make_client(engine=engine, store=FakeStore()), [image_part()]
+    )
+    assert response.status_code == 502
+    assert "must not supply" in response.get_json()["detail"]
 
 
 @pytest.mark.parametrize(
@@ -212,6 +231,7 @@ def test_tick_245_ac_7_publish_model_failures_record_latency(engine, scans_path)
         criteria={key: {"verdict": "present", "confidence": 80, "evidence": ""}
                   for key in CRITERIA_KEYS},
         latency_s=1.0,
+        ada_checks=ok_ada_checks(),
     ), "unknown"),
 ])
 def test_quarantined_frames_are_never_persisted(

@@ -69,6 +69,78 @@ final class ScreeningResponseTests: XCTestCase {
         XCTAssertEqual(response.faceCheck, "unknown")
     }
 
+    // MARK: - photo ADA screening (#318)
+
+    private let mixedAda = """
+    {"score_percent": 75.0, "determined_count": 4, "total_count": 8,
+     "true_count": 3, "false_count": 1, "cannot_determine_count": 2, "not_applicable_count": 2,
+     "checks": {
+       "entrance_route": {"result": "true", "evidence": "Clear approach."},
+       "threshold": {"result": "false", "evidence": "Raised transition."},
+       "ramp": {"result": "not_applicable", "evidence": "Level approach."},
+       "door_hardware": {"result": "true", "evidence": "Lever hardware."},
+       "door_opening": {"result": "cannot_determine", "evidence": "Width not measurable."},
+       "handrails": {"result": "not_applicable", "evidence": "No ramp or stairs."},
+       "signage": {"result": "cannot_determine", "evidence": "Location not fully visible."},
+       "temporary_barriers": {"result": "true", "evidence": "No obstruction."}
+     },
+     "summary": "Three of four determined photo checks were supported. A potential barrier was observed for threshold. Four checks could not be determined or were not applicable.",
+     "standards_url": "https://www.ada.gov/law-and-regs/design-standards/2010-stds/",
+     "disclaimer": "Photo-based screening only. This is not an ADA compliance or legal determination."}
+    """
+
+    private let zeroDeterminedAda = """
+    {"score_percent": null, "determined_count": 0, "total_count": 8,
+     "true_count": 0, "false_count": 0, "cannot_determine_count": 8, "not_applicable_count": 0,
+     "checks": {
+       "entrance_route": {"result": "cannot_determine", "evidence": "Not visible."},
+       "threshold": {"result": "cannot_determine", "evidence": "Not visible."},
+       "ramp": {"result": "cannot_determine", "evidence": "Not visible."},
+       "door_hardware": {"result": "cannot_determine", "evidence": "Not visible."},
+       "door_opening": {"result": "cannot_determine", "evidence": "Not visible."},
+       "handrails": {"result": "cannot_determine", "evidence": "Not visible."},
+       "signage": {"result": "cannot_determine", "evidence": "Not visible."},
+       "temporary_barriers": {"result": "cannot_determine", "evidence": "Not visible."}
+     },
+     "summary": "No photo checks were determined. Eight checks could not be determined or were not applicable.",
+     "standards_url": "https://www.ada.gov/law-and-regs/design-standards/2010-stds/",
+     "disclaimer": "Photo-based screening only. This is not an ADA compliance or legal determination."}
+    """
+
+    private func envelopeWithAda(_ ada: String) -> String {
+        let json = envelope(criteria: fourCriteria)
+        return String(json.dropLast()) + ", \"ada_screening\": \(ada)}"
+    }
+
+    func testAMixedAdaScreeningDecodesForTheResultScreen() throws {
+        let response = try decode(envelopeWithAda(mixedAda))
+        let ada = try XCTUnwrap(response.adaScreening)
+        XCTAssertEqual(ada.scorePercent, 75.0)
+        XCTAssertEqual(ada.determinedCount, 4)
+        XCTAssertEqual(ada.totalCount, 8)
+        XCTAssertEqual(ada.checks["threshold"]?.result, "false")
+        XCTAssertTrue(ada.summary.contains("potential barrier"))
+        XCTAssertFalse(ada.summary.lowercased().contains("compliant"))
+        XCTAssertEqual(AdaScreeningCheck.allCases.map(\.rawValue), [
+            "entrance_route", "threshold", "ramp", "door_hardware",
+            "door_opening", "handrails", "signage", "temporary_barriers",
+        ])
+    }
+
+    func testAZeroDeterminedAdaScreeningHasNoPercentage() throws {
+        let response = try decode(envelopeWithAda(zeroDeterminedAda))
+        let ada = try XCTUnwrap(response.adaScreening)
+        XCTAssertNil(ada.scorePercent)
+        XCTAssertEqual(ada.determinedCount, 0)
+        XCTAssertTrue(ada.summary.contains("No photo checks were determined"))
+        XCTAssertFalse(ada.disclaimer.lowercased().contains("compliant"))
+    }
+
+    func testAnOlderReplyWithoutAdaScreeningStillDecodes() throws {
+        let response = try decode(envelope(criteria: fourCriteria))
+        XCTAssertNil(response.adaScreening)
+    }
+
     // MARK: - what the run exposes to the screen
 
     private func run(_ criteria: String) throws -> ScreeningRun {

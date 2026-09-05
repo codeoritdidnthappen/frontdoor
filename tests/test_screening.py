@@ -13,6 +13,7 @@ import pytest
 
 from frontdoor.screening import (
     ALLOWED_VERDICTS,
+    ADA_CHECK_KEYS,
     CRITERIA_KEYS,
     FACE_CHECK_KEY,
     PROMPT_RESOURCE,
@@ -74,6 +75,10 @@ def _payload(verdict="present", face_check="clear", **overrides):
     body = {"criteria": criteria}
     if face_check is not None:
         body[FACE_CHECK_KEY] = face_check
+    body["ada_checks"] = {
+        key: {"result": "true", "evidence": f"{key} visible in the photos"}
+        for key in ADA_CHECK_KEYS
+    }
     return json.dumps(body)
 
 
