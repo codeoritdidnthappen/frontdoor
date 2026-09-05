@@ -289,15 +289,24 @@ def _drop_places_two_doors_claim(results):
     Two entrances reading the same business name — E-062 and E-063 both read
     "Speakeasy" — is exactly the ambiguity the ticket says to leave unmatched
     rather than guess onto one of the two storefronts.
+
+    One exception, and it runs the other way: a door #341 already resolved
+    keeps its place and the new claimant loses it. This ticket adds places; it
+    may not take one away, and a collision with a standing identification is
+    evidence against the new match, not against the old one.
     """
     claims = {}
-    for entrance_id, result in results.items():
+    for entrance_id, result in sorted(results.items()):
         if result["place_id"]:
             claims.setdefault(result["place_id"], []).append(entrance_id)
     for place_id, entrance_ids in claims.items():
         if len(entrance_ids) < 2:
             continue
-        for entrance_id in entrance_ids:
+        standing = [e for e in entrance_ids
+                    if results[e]["how"]["anchor"] == "identification"]
+        losers = entrance_ids if len(standing) != 1 else [
+            e for e in entrance_ids if e not in standing]
+        for entrance_id in losers:
             results[entrance_id] = _unmatched(
                 "place_claimed_by_another_entrance",
                 f"{', '.join(sorted(entrance_ids))} all reach {place_id}")

@@ -121,6 +121,22 @@ def test_one_place_cannot_be_two_front_doors():
         "place_claimed_by_another_entrance")
 
 
+def test_a_collision_with_a_standing_identification_loses_to_it():
+    """This ticket adds places; it may not take one away. A new match that
+    lands on a place #341 already resolved is evidence against the new
+    match, not against the standing one."""
+    entrances = {"E-013": identified("JoS. A. Bank", place_id="p1"),
+                 "E-040": identified("JoS A Bank", "700 Congress Ave")}
+    places = [catalogued("p1", "JoS. A. Bank", 30.2660 + NEAR, -97.7440)]
+    results = match_entrances(
+        entrances, places, {"E-040": anchor(30.2660, -97.7440)},
+        {"E-013": DAY, "E-040": DAY})
+    assert results["E-013"]["place_id"] == "p1"
+    assert results["E-040"]["place_id"] is None
+    assert results["E-040"]["unmatched_reason"] == (
+        "place_claimed_by_another_entrance")
+
+
 def test_an_unidentified_entrance_is_never_matched():
     entrances = {"E-027": unidentified()}
     places = [catalogued("p1", "Anything", 30.2656, -97.7433)]
