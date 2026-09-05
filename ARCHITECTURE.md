@@ -314,6 +314,16 @@ so a corrupted or substituted file fails loudly rather than quietly changing a n
 **Retention.** The bucket is the system of record during the sprint. At results freeze the dataset
 is published as a release artifact, satisfying deliverable #1.
 
+**On-site publication (TICK-333).** The map's Scanned on-site tier is fed by `data/published_scans.jsonl`, a
+committed record of one scan per non-sealed entrance: verdicts, confidences, the capture date from
+the sidecar, and a place reference — never image bytes, so no capture is republished by this path.
+`data/scan_matches.json` records, for every published entrance, which catalogue place it was
+matched to and on what basis, or why it was left unmatched; an ambiguous or distant candidate is
+left unmatched rather than guessed onto the wrong storefront. The eighteen sealed entrances are
+absent from both by construction — `frontdoor.scan_publish` derives what it may assess from
+`frontdoor.split` and has no override — and are published after results freeze as their own
+change (`docs/unsealing-run.md`).
+
 ## 9. Depth quarantine (D-020, corrected by D-040)
 
 Every app capture on James's iPhone 17 Pro enables AVFoundation depth delivery. The measured

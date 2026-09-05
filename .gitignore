@@ -169,10 +169,17 @@ vite.config.ts.timestamp-*
 .worktrees/
 
 # Community scan records (TICK-262): runtime server data, appended by POST
-# /screen/publish. Local publishes must not end up committed alongside the
-# curated dataset files.
+# /screen/publish. In production this lives on the mounted volume (TICK-337),
+# not here. Local publishes must not end up committed alongside the curated
+# dataset files.
 data/scans.jsonl
 
 # Owner claim records (TICK-259): runtime server data, appended by POST /claim.
 data/claims.jsonl
 data/claim_codes.json
+
+# The curated on-site publication (TICK-333) is deliberately NOT this file. It is
+# a reproducible dataset artifact with its own name, data/published_scans.jsonl,
+# and it is tracked. Runtime scans and a curated dataset have different
+# lifecycles and conflating them in one path made an accidental local publish
+# indistinguishable from the study's own records.
