@@ -2725,7 +2725,15 @@ async function publishScan(ref){
   if(ref.place_id) fd.append('place_id', ref.place_id);
   fd.append('name', ref.name); fd.append('lat', String(ref.lat)); fd.append('lng', String(ref.lng));
   fd.append('capture_kind', fromLibrary ? 'camera_roll' : 'in_app');
-  if(ownerAttest) fd.append('attested', '1');
+  if(ownerAttest){
+    /* the server proves the attestation against THIS claim's token, not against the
+       existence of somebody's claim, so the guided capture carries the credential */
+    const rec=claimRecord || claimSessionLoad();
+    if(!rec) return {kind:'error', detail:'the approved claim for this door is not in this session — reopen the workspace'};
+    fd.append('attested', '1');
+    fd.append('claim_id', rec.claim_id);
+    fd.append('token', rec.token);
+  }
   const ctl=('AbortController' in window) ? new AbortController() : null;
   const timer=setTimeout(()=>{if(ctl)ctl.abort();},45000);
   let r, j;
