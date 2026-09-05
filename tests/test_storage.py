@@ -1,6 +1,7 @@
 """Tests for two-bucket object storage (TICK-012, #20)."""
 
 import os
+import time
 from io import BytesIO
 from pathlib import Path
 
@@ -615,3 +616,76 @@ def test_exists_answers_for_a_sealed_key_without_returning_bytes(monkeypatch):
     # ...and reading it still is not allowed.
     with pytest.raises(SealedObjectDenied):
         store.get(sealed)
+
+
+# --- the /ready reachability probe (#353) ------------------------------------
+#
+# /ready read the environment variables and called that "photo_storage". A
+# revoked key, a rotated secret and a deleted bucket all leave the variables
+# set, so from there they are indistinguishable from working storage -- and
+# symptomatically identical to the MISSING credential that endpoint was
+# written for. Every test here fails against the variables-only check.
+
+
+@pytest.fixture
+def no_probe_cache():
+    storage._probe_cache.clear()
+    yield
+    storage._probe_cache.clear()
+
+
+@mock_aws
+def test_the_probe_answers_true_for_a_bucket_that_exists(monkeypatch, no_probe_cache):
+    _image_env(monkeypatch)
+    _create_buckets()
+    assert storage.probe_image_storage() is True
+
+
+@mock_aws
+def test_the_probe_refuses_a_bucket_that_is_not_there(monkeypatch, no_probe_cache):
+    """The deleted-bucket case: fully configured, entirely broken."""
+    _image_env(monkeypatch)
+    # deliberately no create_bucket
+    with pytest.raises(StorageError):
+        storage.probe_image_storage()
+
+
+@mock_aws
+def test_the_probe_never_repeats_the_bucket_name_in_its_error(
+        monkeypatch, no_probe_cache):
+    """/ready renders a boolean from this, and a provider's own error text is
+    the one place a bucket name could reach a public body."""
+    _image_env(monkeypatch)
+    with pytest.raises(StorageError) as raised:
+        storage.probe_image_storage()
+    assert IMAGES not in str(raised.value)
+
+
+@mock_aws
+def test_the_probe_is_cached_so_it_cannot_make_ready_expensive(
+        monkeypatch, no_probe_cache):
+    """The tension a deep check creates: a probe on every caller turns a
+    health endpoint into load, and a storage outage into a stall. One bounded
+    HEAD per PROBE_TTL_S resolves it -- failures cached too, so an outage
+    costs one request per half minute rather than one per caller."""
+    _image_env(monkeypatch)
+    _create_buckets()
+    calls = []
+    real_client = storage._client
+
+    def _counting_client(creds, **kwargs):
+        calls.append(kwargs)
+        return real_client(creds, **kwargs)
+
+    monkeypatch.setattr(storage, "_client", _counting_client)
+    assert storage.probe_image_storage() is True
+    assert storage.probe_image_storage() is True
+    assert len(calls) == 1, "the probe went to the network twice inside its TTL"
+    # ...and it is bounded, so the endpoint cannot hang on a storage outage.
+    config = calls[0]["config_kwargs"]
+    assert config["connect_timeout"] == storage.PROBE_TIMEOUT_S
+    assert config["read_timeout"] == storage.PROBE_TIMEOUT_S
+
+    # Past the TTL it asks again, so a fixed deployment recovers on its own.
+    storage.probe_image_storage(now=time.monotonic() + storage.PROBE_TTL_S + 1)
+    assert len(calls) == 2

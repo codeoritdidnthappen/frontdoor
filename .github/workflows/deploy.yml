@@ -98,7 +98,17 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
           case " $degraded " in
             *" photo_storage "*)
-              echo "::warning::Photo storage is not configured. Scans will be assessed and published, but their photographs will NOT persist." ;;
+              echo "::warning::Photo storage is not configured or the bucket did not answer. Scans will be assessed and published, but their photographs will NOT persist." ;;
+          esac
+          # The other two subsystems are reported for the same reason (#353):
+          # each one fails into a page that looks entirely normal.
+          case " $degraded " in
+            *" scan_store "*)
+              echo "::warning::The scan store is unreachable, or holds a record that cannot be read. Published scans are missing from the map, and the volume may not be mounted." ;;
+          esac
+          case " $degraded " in
+            *" map_dataset "*)
+              echo "::warning::The map dataset is missing, unparseable, or empty. /map/data is serving no pins." ;;
           esac
           case " $degraded " in
             *" screening "*)

@@ -19,6 +19,12 @@ frontal and profile cascades, the profile cascade also on the mirrored image
 (it only knows one profile), everything again on a contrast-boosted (CLAHE)
 copy for ghosted reflections. All boxes from both detectors are unioned.
 
+The supplementary net is supplementary, not a fallback: if YuNet does not
+answer, `FaceDetectionUnavailable` is raised rather than shipping a Haar-only
+result and a face count that reads as clean (#353). A non-answer and a
+negative answer are different facts, and only one of them means the
+photograph is safe.
+
 EXIF policy - deliberate, read before "fixing":
     Re-encoding through OpenCV drops the entire EXIF block, GPS included -
     which is exactly what the ticket's location-stripping AC asks for. The one
@@ -31,6 +37,7 @@ EXIF policy - deliberate, read before "fixing":
     reads image metadata.
 """
 
+import logging
 import math
 import threading
 from dataclasses import dataclass
@@ -38,6 +45,8 @@ from importlib import resources
 
 import cv2
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 #: JPEG quality for re-encoded output. High enough that screening evidence
 #: (hardware detail, surface texture) is not degraded by the privacy pass.
@@ -98,6 +107,23 @@ class InvalidImageError(ValueError):
     """The supplied bytes are not a decodable image."""
 
 
+class FaceDetectionUnavailable(RuntimeError):
+    """The primary detector did not answer, so "no faces" is not a fact.
+
+    Distinct from "no faces found" on purpose (#353). YuNet's return status
+    was discarded and a None result read as a clean photograph, so a detector
+    that failed to run produced an image processed by the supplementary Haar
+    cascade alone -- which the module docstring above records as measurably
+    missing the through-glass and reflected faces this module exists for --
+    and a response saying zero faces were blurred, which reads as clean.
+
+    Raised, never swallowed: /screen and /screen/publish already turn an
+    unexpected detector error into a bounded 5xx with a logged traceback, so
+    nothing unprocessed crosses the model or storage boundary and the failure
+    is loud at both ends.
+    """
+
+
 def _get_cascades():
     """Load the Haar cascades OpenCV ships, once."""
     global _cascades
@@ -143,15 +169,46 @@ def _detect_yunet(small):
     Runs on the image and on a contrast-boosted copy, unioned. Each detection
     passes the two-tier rule: full YUNET_SCORE_THRESHOLD for any size, or
     YUNET_SMALL_SCORE_THRESHOLD for small boxes (see the constants above).
+
+    Raises FaceDetectionUnavailable when the detector does not answer -- it
+    could not be loaded, it raised, or it returned a failure status. An empty
+    box list from here means "ran, found nothing" and nothing else.
     """
     height, width = small.shape[:2]
     small_limit = YUNET_SMALL_FACE_FRACTION * max(height, width)
     boxes = []
     with _yunet_lock:
-        detector = _get_yunet()
-        detector.setInputSize((width, height))
+        try:
+            detector = _get_yunet()
+            detector.setInputSize((width, height))
+        except Exception as exc:
+            logger.exception("YuNet is unavailable; refusing to report a "
+                             "Haar-only result as a face count")
+            raise FaceDetectionUnavailable(
+                f"the primary face detector could not be loaded: "
+                f"{type(exc).__name__}: {exc}"
+            ) from exc
         for variant in (small, _boost_luma(small)):
-            _, faces = detector.detect(variant)
+            try:
+                status, faces = detector.detect(variant)
+            except Exception as exc:
+                logger.exception("YuNet detection raised; refusing to report a "
+                                 "Haar-only result as a face count")
+                raise FaceDetectionUnavailable(
+                    f"the primary face detector did not run: "
+                    f"{type(exc).__name__}: {exc}"
+                ) from exc
+            # The status is the whole point of this fix: it separates "the
+            # detector ran and found nothing" (status truthy, faces None or
+            # empty) from "the detector did not answer" (status falsy), which
+            # were previously the same `faces is None` branch.
+            if not status:
+                logger.error("YuNet returned status %r; the image was not "
+                             "assessed for faces", status)
+                raise FaceDetectionUnavailable(
+                    "the primary face detector returned a failure status, so "
+                    "this image has not been assessed for faces"
+                )
             if faces is None:
                 continue
             # Rows are [x, y, w, h, 10 landmark floats, score]; boxes can poke

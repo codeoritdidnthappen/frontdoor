@@ -439,3 +439,92 @@ def test_map_data_degrades_when_dataset_unreadable(client, tmp_path, monkeypatch
     payload = response.get_json()
     assert payload["pins"] == []
     assert "unreadable" in payload["dataset_error"]
+
+
+# --- every degraded input names itself in the payload (#353) -----------------
+#
+# /map/data degrades over three inputs and only one of them said so. An empty
+# or thinner map is otherwise indistinguishable from a working one, which is
+# how the dataset went missing from the image for a day. Each test below fails
+# against the old code, which returned the same 200 and the same pins.
+
+
+@pytest.fixture
+def clean_side_files(tmp_path, monkeypatch):
+    """A store and side files that exist and are empty, so each test changes
+    exactly the one input it is about."""
+    (tmp_path / "external").mkdir()
+    for env, name in (
+        ("FRONTDOOR_EXTERNAL_OSM", "osm_accessibility.json"),
+        ("FRONTDOOR_EXTERNAL_COMMONS", "commons_imagery.json"),
+    ):
+        path = tmp_path / "external" / name
+        path.write_text(json.dumps({"records": []}), encoding="utf-8")
+        monkeypatch.setenv(env, str(path))
+    monkeypatch.setenv("FRONTDOOR_SCANS", str(tmp_path / "scans.jsonl"))
+    dataset = tmp_path / "precatalogue.json"
+    dataset.write_text(json.dumps({"gray": row()}), encoding="utf-8")
+    monkeypatch.setenv("FRONTDOOR_MAP_DATASET", str(dataset))
+    return monkeypatch
+
+
+def test_map_data_reports_a_clean_read_of_every_input(client, clean_side_files):
+    payload = client.get("/map/data").get_json()
+    assert payload["dataset_error"] is None
+    assert payload["scans_error"] is None
+    assert payload["provenance_error"] is None
+    assert payload["scan_count"] == 0
+    assert payload["scans_skipped"] == 0
+
+
+def test_map_data_distinguishes_no_scans_from_an_unreachable_store(
+        client, clean_side_files, tmp_path):
+    """"Nobody has published yet" and "the volume is not mounted" were the
+    same empty map."""
+    assert client.get("/map/data").get_json()["scans_error"] is None
+
+    clean_side_files.setenv(
+        "FRONTDOOR_SCANS", str(tmp_path / "not-mounted" / "scans.jsonl"))
+    payload = client.get("/map/data").get_json()
+    assert payload["scans_error"] is not None
+    assert payload["scan_count"] == 0
+
+
+def test_map_data_reports_a_scan_it_could_not_read(
+        client, clean_side_files, tmp_path):
+    """One torn line silently deleted that scan from the map forever while its
+    contributor held a 200 saying it published."""
+    store = tmp_path / "scans.jsonl"
+    store.write_text(
+        json.dumps({
+            "scan_id": "good", "created_at": "2026-09-05T12:00:00Z",
+            "place_ref": {"place_id": "gray"},
+            "verdicts": {}, "confidences": {},
+        }) + "\n" + '{"scan_id": "torn"\n',
+        encoding="utf-8",
+    )
+    clean_side_files.setenv("FRONTDOOR_SCANS", str(store))
+    payload = client.get("/map/data").get_json()
+    assert payload["scan_count"] == 1
+    assert payload["scans_skipped"] == 1
+    assert payload["scans_error"] is not None
+
+
+def test_map_data_reports_a_missing_provenance_side_file(
+        client, clean_side_files, tmp_path):
+    """Losing the side files takes every provenance and attribution line off
+    every pin, and the map looks entirely normal. Attribution is a licence
+    obligation for ODbL and CC BY records, so this cannot be silent."""
+    clean_side_files.setenv(
+        "FRONTDOOR_EXTERNAL_OSM", str(tmp_path / "external" / "gone.json"))
+    payload = client.get("/map/data").get_json()
+    assert payload["provenance_error"] is not None
+    assert payload["dataset_error"] is None
+
+
+def test_map_data_reports_an_unreadable_provenance_side_file(
+        client, clean_side_files, tmp_path):
+    broken = tmp_path / "external" / "commons_imagery.json"
+    broken.write_text("{not json", encoding="utf-8")
+    payload = client.get("/map/data").get_json()
+    assert payload["provenance_error"] is not None
