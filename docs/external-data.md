@@ -153,10 +153,19 @@ Consequently `frontdoor.external_data` contains no Google/Yelp ingest and
 must never grow one; a display-time overlay, if built, lives entirely in
 the page's render path.
 
+The pre-catalogue is the exception, and it is a known one: `name` and
+`location` from Places sit in `data/precatalogue.json` and in the Second
+Street district rows of `data/precatalogue_census.json`, against the
+criterion above. #242 owns that and has not settled it. Work since has
+been held to not deepening it — the census rows the Congress Avenue sweep
+added under #346 hold the `place_id` alone, and the names they were
+matched on were resolved in the same pass and never written down.
+
 ## Files
 
 | File | Status | Contents |
 | --- | --- | --- |
 | `data/external/osm_accessibility.json` | public-safe, segregated, ODbL-attributed | OSM wheelchair/entrance records for the demo bbox |
+| `data/external/entrance_anchors.json` | public-safe, segregated, ODbL-attributed | Nominatim geocodes of the street numbers read at the captured entrances, so the entrance-to-place distance gate (#346) has a door position to measure from. Only an address the operator actually read is geocoded, never a business name |
 | `data/external/commons_imagery.json` | public-safe, segregated, per-record CC license + artist | open-licensed Wikimedia Commons photo records for the demo bbox |
 | `data/external/disagreements.json` | INTERNAL ONLY | external-vs-AI conflicts as scan priorities; never rendered |
