@@ -10,6 +10,9 @@ import SwiftUI
 struct HomeView: View {
     @ObservedObject var controller: CaptureController
     let onStart: () -> Void
+    /// Re-open the scan primer. It is shown automatically once per install; this is what keeps
+    /// "seen" from meaning "gone" (#275).
+    let onPrimer: () -> Void
     let onImport: () -> Void
     let onDiagnostics: () -> Void
 
@@ -122,6 +125,9 @@ struct HomeView: View {
             .buttonStyle(.borderedProminent)
             .disabled(controller.readiness.blockingReason != nil)
             .padding(.horizontal, 24)
+
+            Button("How scanning works") { onPrimer() }
+                .font(.footnote)
 
             Button("Import photos already on this phone") { onImport() }
                 .font(.footnote)

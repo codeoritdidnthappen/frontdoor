@@ -10,6 +10,12 @@ struct RootView: View {
     @State private var settingUpEntrance = false
     @State private var showingDiagnostics = false
     @State private var importing = false
+    /// Shown before the first scan on this install, and on request afterwards (#275).
+    @State private var showingPrimer = false
+    /// True when the primer is standing between the operator and the viewfinder, rather than
+    /// being read from the home screen. Continuing then goes on to the entrance, not back.
+    @State private var primerLeadsToScan = false
+    private let primer = ScanPrimer()
 
     var body: some View {
         Group {
@@ -19,7 +25,18 @@ struct RootView: View {
                 HomeView(controller: controller) {
                     // Truth first, viewfinder second. There is no route to the camera that
                     // skips the entrance ID and the caliper reading (D-018, TICK-024).
-                    settingUpEntrance = true
+                    //
+                    // The primer comes before even that, once per install, and only for the scan
+                    // flow: it describes screening, and metrology is a different protocol (#275).
+                    if !controller.captureMode.carriesMetrologyTruth && !primer.hasBeenSeen {
+                        primerLeadsToScan = true
+                        showingPrimer = true
+                    } else {
+                        settingUpEntrance = true
+                    }
+                } onPrimer: {
+                    primerLeadsToScan = false
+                    showingPrimer = true
                 } onImport: {
                     importing = true
                 } onDiagnostics: {
@@ -42,6 +59,17 @@ struct RootView: View {
                 isCapturing = true
             } onCancel: {
                 settingUpEntrance = false
+            }
+        }
+        // Before the viewfinder, not over it: this is what the operator is about to do, and it
+        // is useless read through a live camera preview.
+        .sheet(isPresented: $showingPrimer) {
+            ScanPrimerView(continueTitle: primerLeadsToScan ? "Start" : "Done") {
+                // Marked seen whichever way it was opened. Reading it from the home screen is
+                // still having read it, and asking again on the next scan would be nagging.
+                primer.markSeen()
+                showingPrimer = false
+                if primerLeadsToScan { settingUpEntrance = true }
             }
         }
         .sheet(isPresented: $importing) {
