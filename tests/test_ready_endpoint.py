@@ -243,3 +243,34 @@ def test_an_auth_token_deployment_does_not_report_itself_broken(
     degraded -- a false alarm on the one endpoint whose job is alarms."""
     clean_env.setenv("ANTHROPIC_AUTH_TOKEN", "sk-ant-oat-example")
     assert ready().get_json()["subsystems"]["screening"] is True
+
+
+def test_a_degraded_subsystem_says_why_in_the_log(clean_env, storage_reachable,
+                                                  tmp_path, caplog):
+    """The body says WHICH, the log says WHY.
+
+    docs/server-deploy.md sends the operator to the log for the reason, so a
+    subsystem that reports false while logging nothing sends them to a log
+    that says nothing. `map_dataset` has five causes needing five different
+    fixes and one bit to carry them.
+    """
+    dataset = tmp_path / "precatalogue.json"
+    dataset.write_text("{ not json", encoding="utf-8")
+    clean_env.setenv("FRONTDOOR_MAP_DATASET", str(dataset))
+    with caplog.at_level("ERROR", logger="frontdoor_server.app"):
+        assert ready().get_json()["subsystems"]["map_dataset"] is False
+    assert caplog.records, "map_dataset reported false and logged nothing"
+
+    caplog.clear()
+    dataset.write_text("{}", encoding="utf-8")
+    with caplog.at_level("ERROR", logger="frontdoor_server.app"):
+        assert ready().get_json()["subsystems"]["map_dataset"] is False
+    assert caplog.records, "a dataset with no rows reported false and logged nothing"
+
+
+def test_a_missing_storage_credential_is_logged(clean_env, caplog):
+    """The original incident's own path, and it was the one branch with no
+    trace: load_image_creds raises before any request is made."""
+    with caplog.at_level("ERROR", logger="frontdoor.storage"):
+        assert ready().get_json()["subsystems"]["photo_storage"] is False
+    assert caplog.records, "an unconfigured bucket left no trace"

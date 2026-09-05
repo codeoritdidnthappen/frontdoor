@@ -198,16 +198,19 @@ def append_scan(path, record):
       a 503 that names the store as unavailable.
     * It does not refuse forever over a torn last line. A worker killed
       mid-append (gunicorn runs --timeout 30, and the 512 MB machine has an
-      OOM kill on record) leaves the file unterminated. Refusing every later
-      append wedges the store for the life of the file while reads keep
-      succeeding, so the map looks fine and each contributor is individually
-      told "saved for later". Terminating the torn line is recoverable and
+      OOM kill on record) leaves the file unterminated, and refusing every
+      later append then wedges the store for the life of the file. Reads keep
+      succeeding, so the map looks normal, and the 503 each contributor gets
+      renders in the app as "Scan saved for later" (app.html's `held` state),
+      which is not what happened. Terminating the torn line is recoverable and
       keeps the property the newline discipline exists for -- two records can
       still never merge into one line, because the torn remains stay on their
-      own line, where load counts and logs them as skipped.
+      own line, where read_scan_records counts and logs them as skipped.
 
     The check and the write happen under one lock so two threads in the same
-    worker cannot interleave them.
+    worker cannot interleave them. Both failures name the store, not the
+    deployment: the message reaches an unauthenticated publish response, so
+    the topology stays in the log.
     """
     path = Path(path)
     line = json.dumps(record, sort_keys=True, separators=(",", ":"))
@@ -215,13 +218,12 @@ def append_scan(path, record):
         if not path.parent.is_dir():
             logger.error(
                 "scan store directory %s does not exist; refusing to create it "
-                "and publish into a location that is not the mounted volume",
+                "and publish into a location that is not the mounted volume, "
+                "where every scan would be lost with the container",
                 path.parent,
             )
             raise ScanRecordError(
-                f"{path.parent} is not an existing directory, so the scan "
-                "store's volume is not mounted. Refusing to create it: a "
-                "store written inside the container is lost with the container."
+                "the scan store is not reachable; nothing was written"
             )
         if path.exists() and path.stat().st_size and path.read_bytes()[-1:] != b"\n":
             logger.error(
@@ -261,24 +263,27 @@ def read_scan_records(path):
     silent. A missing FILE under an existing directory is the legitimate
     "nobody has published yet" and is not an error; a missing DIRECTORY is the
     unmounted volume and is.
+
+    `error` is a class of failure, not a diagnosis: it is served publicly by
+    /map/data, so the path and the operating system's own message stay in the
+    log, where the operator reads them.
     """
     try:
         store = Path(path)
         text = store.read_text(encoding="utf-8")
     except FileNotFoundError:
         if not store.parent.is_dir():
-            error = f"scan store directory not found: {store.parent}"
             logger.error(
                 "scan store directory %s does not exist; the map is showing no "
                 "scans because the store is unreachable, not because none were "
                 "published", store.parent,
             )
-            return ScanStoreRead([], 0, error)
+            return ScanStoreRead([], 0, "the scan store is not reachable")
         return ScanStoreRead([], 0, None)
     except (OSError, TypeError, ValueError) as exc:
-        error = f"scan store unreadable: {type(exc).__name__}: {exc}"
-        logger.error("scan store %r unreadable: %s", path, exc)
-        return ScanStoreRead([], 0, error)
+        logger.error("scan store %r unreadable: %s: %s",
+                     path, type(exc).__name__, exc)
+        return ScanStoreRead([], 0, "the scan store could not be read")
 
     records = []
     skipped = 0

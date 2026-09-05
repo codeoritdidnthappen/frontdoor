@@ -7,6 +7,7 @@ unchanged against it.
 """
 
 import json
+import logging
 import os
 from importlib import resources
 from pathlib import Path
@@ -24,11 +25,17 @@ from frontdoor.scan_records import (
 from frontdoor.sidecar import validate_sidecar
 from frontdoor.storage import StorageError, probe_image_storage
 from frontdoor_server.claim_view import claim_page
-from frontdoor_server.map_view import map_page
+from frontdoor_server.map_view import (
+    DATASET_ENV,
+    DEFAULT_DATASET_PATH,
+    map_page,
+)
 from frontdoor_server.label_view import register_labels
 from frontdoor_server.scan_view import scan_page
 from frontdoor_server.screen_view import screen_page
 from frontdoor_server.upload_view import register_upload
+
+logger = logging.getLogger(__name__)
 
 RESPONSE_SCHEMA = json.loads(
     resources.files("frontdoor_server")
@@ -96,17 +103,29 @@ def _map_dataset_ready():
     fine. Parsing ~200 KB of JSON is the cheapest check that tells those
     apart, and /ready is a human-and-deploy-check endpoint (fly.toml polls
     /health, not this) so it is not on a 30-second timer.
+
+    The boolean says WHICH subsystem; the log says why. Absent, unreadable,
+    permission-denied, not-JSON and parses-to-zero-rows all render as the same
+    bit here and need five different fixes, so each one is logged with its
+    reason before the bit is returned.
     """
-    path = Path(os.environ.get("FRONTDOOR_MAP_DATASET", "data/precatalogue.json"))
+    path = Path(os.environ.get(DATASET_ENV, DEFAULT_DATASET_PATH))
     try:
         document = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
+    except (OSError, ValueError) as exc:
+        logger.error("map dataset %s is not usable: %s: %s",
+                     path, type(exc).__name__, exc)
         return False
     # The shape map_states.prepare_map_payload renders: a place_id-keyed
     # mapping of row objects. Anything else yields no pins.
-    return isinstance(document, dict) and any(
-        isinstance(row, dict) for row in document.values()
+    if isinstance(document, dict) and any(
+            isinstance(row, dict) for row in document.values()):
+        return True
+    logger.error(
+        "map dataset %s parsed but holds no usable rows; /map/data is serving "
+        "no pins", path,
     )
+    return False
 
 
 def _scan_store_ready():
@@ -121,6 +140,14 @@ def _scan_store_ready():
     writing to it, and a health endpoint that mutates the only state this app
     keeps is a worse trade than missing a read-only mount; append_scan's
     refusal to create its own parent is what catches the mount itself.
+
+    No log line here on purpose, unlike _map_dataset_ready: read_scan_records
+    has already logged the specific reason by the time it returns, so the
+    boolean and the log are two halves of one answer either way. A skipped
+    record keeps this false until somebody removes the unreadable line, which
+    is intended -- that line is a contributor's scan that is off the map for
+    good, and it should stay flagged until a human deals with it. /map/data's
+    scans_skipped is the count that moves when it happens again.
     """
     result = read_scan_records(os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH))
     return result.error is None and result.skipped == 0

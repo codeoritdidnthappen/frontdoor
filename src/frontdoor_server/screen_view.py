@@ -44,7 +44,11 @@ from importlib import resources
 
 from flask import Blueprint, Response, current_app, request
 
-from frontdoor.faceblur import InvalidImageError, process_upload
+from frontdoor.faceblur import (
+    FaceDetectionUnavailable,
+    InvalidImageError,
+    process_upload,
+)
 from frontdoor.screening import ScreeningError, ScreeningEngine, compute_ada_screening, integrated_summary
 from frontdoor.split import InvalidEntranceId, assign_split, canonical_entrance_id
 
@@ -168,9 +172,12 @@ def screen():
     # sees it - faces irreversibly blurred, EXIF/GPS stripped - so the model call and any
     # later storage only ever handle the processed bytes; the raw upload is dropped here.
     # Processed images are re-encoded JPEG, so their media type is image/jpeg regardless of
-    # what was posted. Invalid image bytes are a request error. An unexpected detector error
-    # becomes the service's bounded 500. Both outcomes fail closed: neither can cross the
-    # model boundary as an unblurred original (TICK-257 AC1/AC2, QA TICK-B01).
+    # what was posted. Invalid image bytes are a request error. A detector that did not
+    # ANSWER is a 503, named: it is this server's fault and it is retryable, and the caller
+    # needs to know their photograph was never assessed rather than that it was assessed and
+    # found clean (#353). Anything else still becomes the service's bounded 500. Every one of
+    # those outcomes fails closed: none can cross the model boundary as an unblurred original
+    # (TICK-257 AC1/AC2, QA TICK-B01).
     payloads = []
     faces_blurred = 0
     for part in files:
@@ -182,6 +189,15 @@ def screen():
                 "invalid image",
                 f"file part {part.name!r} could not be decoded and privacy-processed.",
                 status=422,
+            )
+        except FaceDetectionUnavailable as exc:
+            current_app.logger.error("face detection unavailable: %s", exc)
+            return _error(
+                "privacy processing unavailable",
+                "the face detector did not answer, so this image has not been "
+                "assessed for faces and nothing was sent to the model. "
+                "Nothing was retained; retry.",
+                status=503,
             )
         else:
             payloads.append((processed.image_bytes, "image/jpeg"))

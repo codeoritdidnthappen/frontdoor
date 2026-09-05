@@ -39,6 +39,7 @@
         "invalid entrance_id",
         "sealed entrance",
         "invalid image",
+        "privacy processing unavailable",
         "screening unavailable",
         "screening engine failure",
         "invalid location",

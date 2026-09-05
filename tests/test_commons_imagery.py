@@ -23,7 +23,6 @@ from frontdoor.commons_imagery import (
     build_imageinfo_params,
     commons_provenance_for_place,
     license_allowed,
-    load_commons_records,
     parse_commons_payloads,
     read_commons_records,
     strip_html,
@@ -236,17 +235,17 @@ def test_written_dataset_is_segregated_and_attributed(tmp_path):
     assert document["record_count"] == 3
     assert document["dropped_at_ingest"]["license_disallowed"] == 3
     assert all(r["source"] == COMMONS_SOURCE for r in document["records"])
-    assert load_commons_records(path) == document["records"]
+    assert read_commons_records(path) == (document["records"], None)
 
 
-def test_load_commons_records_total_over_missing_or_broken(tmp_path):
-    assert load_commons_records(tmp_path / "nope.json") == []
+def test_reading_the_commons_side_file_is_total_over_missing_or_broken(tmp_path):
+    assert read_commons_records(tmp_path / "nope.json")[0] == []
     broken = tmp_path / "broken.json"
     broken.write_text("{not json", encoding="utf-8")
-    assert load_commons_records(broken) == []
+    assert read_commons_records(broken)[0] == []
     weird = tmp_path / "weird.json"
     weird.write_text(json.dumps({"records": ["junk", 7]}), encoding="utf-8")
-    assert load_commons_records(weird) == []
+    assert read_commons_records(weird)[0] == []
 
 
 def test_a_lost_commons_side_file_says_so_and_logs(tmp_path, caplog):
@@ -254,7 +253,7 @@ def test_a_lost_commons_side_file_says_so_and_logs(tmp_path, caplog):
     licence requires us to display. A side file that fails to load takes every
     one of those lines off the map while the map looks entirely normal, so it
     cannot be silent. Fails against the old loader, which returned []."""
-    with caplog.at_level("ERROR", logger="frontdoor.external_data"):
+    with caplog.at_level("WARNING", logger="frontdoor.external_data"):
         records, error = read_commons_records(tmp_path / "nope.json")
     assert records == []
     assert error is not None

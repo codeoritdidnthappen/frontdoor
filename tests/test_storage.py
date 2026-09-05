@@ -636,16 +636,51 @@ def no_probe_cache():
 
 @mock_aws
 def test_the_probe_answers_true_for_a_bucket_that_exists(monkeypatch, no_probe_cache):
+    """The probe object need not exist. A 404 on the KEY is a fully successful
+    round trip -- signed, accepted, answered -- and requiring the object would
+    mean writing one from a health endpoint."""
     _image_env(monkeypatch)
     _create_buckets()
+    assert not image_store().exists(PROBE_KEY)
     assert storage.probe_image_storage() is True
+
+
+@mock_aws
+def test_the_probe_uses_an_object_call_not_a_bucket_call(monkeypatch, no_probe_cache):
+    """This project's tokens are scoped per bucket at the OBJECT level (D-020,
+    D-026, D-033). An object-scoped identity can be refused HeadBucket while
+    every operation the app performs works, which would put a permanent false
+    alarm on the deploy gate."""
+    _image_env(monkeypatch)
+    _create_buckets()
+    called = []
+
+    real_client = storage._client
+
+    def _recording_client(creds, **kwargs):
+        client = real_client(creds, **kwargs)
+
+        class _Recorder:
+            def __getattr__(self, name):
+                called.append(name)
+                return getattr(client, name)
+
+        return _Recorder()
+
+    monkeypatch.setattr(storage, "_client", _recording_client)
+    storage.probe_image_storage()
+    assert "head_object" in called
+    assert "head_bucket" not in called
 
 
 @mock_aws
 def test_the_probe_refuses_a_bucket_that_is_not_there(monkeypatch, no_probe_cache):
     """The deleted-bucket case: fully configured, entirely broken."""
     _image_env(monkeypatch)
-    # deliberately no create_bucket
+    # deliberately no create_bucket. head_object answers 404 for a missing
+    # BUCKET as well as a missing key, so a probe that read the status alone
+    # would report a deleted bucket as healthy -- the exact failure it exists
+    # to catch.
     with pytest.raises(StorageError):
         storage.probe_image_storage()
 

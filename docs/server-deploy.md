@@ -57,9 +57,27 @@ presence of exactly what had failed before, and every one-notch variant walked s
 | subsystem | what it proves | why presence was not enough |
 | --- | --- | --- |
 | `screening` | either `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` is set | the engine accepts either, so checking only one reported a working deployment as broken. Still presence-only: the cheapest way to verify a model key is a billed model call, on every probe |
-| `photo_storage` | one bounded `HEAD` on the bucket succeeds | a revoked key or a deleted bucket leaves every variable set, and is symptomatically identical to the missing credential this endpoint was written for |
+| `photo_storage` | one bounded `HEAD` on the bucket succeeds — the endpoint answers, the signature is accepted, and this identity can see this bucket | a revoked key or a deleted bucket leaves every variable set, and is symptomatically identical to the missing credential this endpoint was written for. It does **not** prove a `PutObject` would succeed; a read-granting, write-denying policy passes here and still arrives as `scan_view`'s 503 |
 | `map_dataset` | the file parses **and** holds at least one row | a present-but-unparseable file passed the old `stat()` while `/map/data` served zero pins |
 | `scan_store` | the store is readable and no record in it was skipped | a store nobody has written to yet is fine; a missing *directory* is the unmounted volume, and an unparseable line is a contributor's scan that is off the map for good |
+
+**Clearing a degraded `scan_store`.** A skipped record keeps this subsystem false until somebody
+removes the unreadable line, and that is deliberate: the line is a contributor's scan that is off
+the map for good, and it should stay flagged until a person has dealt with it rather than time out
+into silence. It does mean the deploy gate warns on every run until it is cleared, so clear it:
+
+```sh
+fly ssh console -a frontdoor-measure
+grep -n . /data/scans.jsonl | python3 -c 'import json,sys
+for line in sys.stdin:
+    n, _, text = line.partition(":")
+    try: json.loads(text)
+    except Exception as exc: print(n, exc)'
+```
+
+That prints the line numbers `read_scan_records` skipped and why (the same lines it logs). Copy
+the file off the machine before editing it — the torn remains may still identify which contributor
+and which place were lost — then delete those lines. `/ready` clears on the next call.
 
 The storage probe is the one check that leaves the process, so it is bounded (2 s timeouts, no
 retries) and its answer — success or failure — is cached for 30 seconds. A storage outage costs

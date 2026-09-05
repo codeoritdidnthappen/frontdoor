@@ -125,14 +125,30 @@ class FaceDetectionUnavailable(RuntimeError):
 
 
 def _get_cascades():
-    """Load the Haar cascades OpenCV ships, once."""
+    """Load the Haar cascades OpenCV ships, once.
+
+    cv2.CascadeClassifier does not raise on a missing or unreadable XML: it
+    returns an EMPTY classifier, which then finds nothing and is
+    indistinguishable from a clean image -- the same defect as YuNet's
+    discarded status, one detector over. Checked here rather than trusted,
+    and it is checked before the object is cached so a transient read failure
+    is not made permanent for the life of the process.
+    """
     global _cascades
     if _cascades is None:
         base = cv2.data.haarcascades
-        _cascades = (
-            cv2.CascadeClassifier(base + "haarcascade_frontalface_default.xml"),
-            cv2.CascadeClassifier(base + "haarcascade_profileface.xml"),
-        )
+        frontal = cv2.CascadeClassifier(base + "haarcascade_frontalface_default.xml")
+        profile = cv2.CascadeClassifier(base + "haarcascade_profileface.xml")
+        if frontal.empty() or profile.empty():
+            logger.error(
+                "a Haar cascade did not load from %s; refusing to report its "
+                "silence as no faces", base,
+            )
+            raise FaceDetectionUnavailable(
+                "the supplementary face cascades could not be loaded, so this "
+                "image has not been fully assessed for faces"
+            )
+        _cascades = (frontal, profile)
     return _cascades
 
 
@@ -172,15 +188,22 @@ def _detect_yunet(small):
 
     Raises FaceDetectionUnavailable when the detector does not answer -- it
     could not be loaded, it raised, or it returned a failure status. An empty
-    box list from here means "ran, found nothing" and nothing else.
+    box list from here means "ran, found nothing", or "ran and every box it
+    returned was unusable", and the second is logged where it happens.
     """
     height, width = small.shape[:2]
     small_limit = YUNET_SMALL_FACE_FRACTION * max(height, width)
     boxes = []
+    discarded = 0
     with _yunet_lock:
         try:
             detector = _get_yunet()
             detector.setInputSize((width, height))
+            # _boost_luma is built here, inside the guard: a cv2.error from
+            # cvtColor on an unexpected channel count is a detector that did
+            # not run, and a caller written against this contract catches
+            # FaceDetectionUnavailable, not cv2.error.
+            variants = (small, _boost_luma(small))
         except Exception as exc:
             logger.exception("YuNet is unavailable; refusing to report a "
                              "Haar-only result as a face count")
@@ -188,7 +211,7 @@ def _detect_yunet(small):
                 f"the primary face detector could not be loaded: "
                 f"{type(exc).__name__}: {exc}"
             ) from exc
-        for variant in (small, _boost_luma(small)):
+        for variant in variants:
             try:
                 status, faces = detector.detect(variant)
             except Exception as exc:
@@ -217,16 +240,28 @@ def _detect_yunet(small):
             # builds YuNet emits non-finite coordinates for degenerate inputs
             # (PR #243 review repro: a 32x32 featureless frame), and round(inf)
             # raises OverflowError before _blur ever sees the box. A box that
-            # is nowhere blurs nothing - skip the row.
+            # is nowhere blurs nothing - skip the row, and COUNT it: the
+            # detector asserted a face there, and dropping that assertion
+            # without a trace is the same silence this function exists to end.
             for row in faces:
                 x, y, w, h, score = *row[:4], row[14]
                 if not all(math.isfinite(float(v)) for v in (x, y, w, h)):
+                    discarded += 1
                     continue
                 if score >= YUNET_SCORE_THRESHOLD or max(w, h) <= small_limit:
                     boxes.append(
                         (round(float(x)), round(float(y)),
                          round(float(w)), round(float(h)))
                     )
+    if discarded:
+        # Not raised: the repro that produces these rows is a featureless
+        # frame on some OpenCV builds, and refusing it would fail closed on
+        # images that genuinely contain nothing. Logged, because a detection
+        # thrown away for bad geometry is not the same fact as no detection.
+        logger.warning(
+            "YuNet returned %d detection(s) with non-finite geometry; they "
+            "were not blurred and are not in the face count", discarded,
+        )
     return boxes
 
 
@@ -352,13 +387,25 @@ def _detect(img):
 
 
 def _blur(img, boxes):
-    """Pixelate each box (expanded by BOX_MARGIN) in place; irreversible."""
+    """Pixelate each box (expanded by BOX_MARGIN) in place; irreversible.
+
+    Returns (img, blurred count). The count is what was ACTUALLY pixelated,
+    not what was detected: a box that clamps to nothing (entirely off-frame,
+    or zero-area after rounding) is skipped here, and reporting it as blurred
+    would put a number attesting the privacy pass ran over a region where it
+    did not.
+    """
     height, width = img.shape[:2]
+    blurred = 0
     for x, y, w, h in boxes:
         mx, my = round(w * BOX_MARGIN), round(h * BOX_MARGIN)
         x0, y0 = max(0, x - mx), max(0, y - my)
         x1, y1 = min(width, x + w + mx), min(height, y + h + my)
         if x1 <= x0 or y1 <= y0:
+            logger.warning(
+                "a detected face box clamped to nothing and was not blurred; "
+                "it is not in the reported face count",
+            )
             continue
         region = img[y0:y1, x0:x1]
         rh, rw = region.shape[:2]
@@ -366,7 +413,8 @@ def _blur(img, boxes):
         th = min(max(1, round(rh * tw / rw)), rh)
         down = cv2.resize(region, (tw, th), interpolation=cv2.INTER_AREA)
         img[y0:y1, x0:x1] = cv2.resize(down, (rw, rh), interpolation=cv2.INTER_NEAREST)
-    return img
+        blurred += 1
+    return img, blurred
 
 
 def _encode(img):
@@ -382,10 +430,13 @@ def detect_faces(image_bytes):
 
 
 def blur_faces(image_bytes):
-    """Blur every detected face; return (processed JPEG bytes, face count)."""
+    """Blur every detected face; return (processed JPEG bytes, faces blurred).
+
+    The count is what was blurred, not what was detected -- see _blur.
+    """
     img = _decode(image_bytes)
-    boxes = _detect(img)
-    return _encode(_blur(img, boxes)), len(boxes)
+    blurred_img, count = _blur(img, _detect(img))
+    return _encode(blurred_img), count
 
 
 def strip_gps(image_bytes):
@@ -407,13 +458,20 @@ class ProcessedImage:
 def process_upload(image_bytes):
     """The one ingest entry point: blur faces, strip EXIF/GPS, re-encode.
 
-    Returns a ProcessedImage; raises InvalidImageError for bytes no decoder accepts
-    (the caller decides what an undecodable upload means on its path).
+    Returns a ProcessedImage; raises InvalidImageError for bytes no decoder
+    accepts (the caller decides what an undecodable upload means on its path),
+    and FaceDetectionUnavailable when a detector did not answer -- in which
+    case NOTHING is returned, so no partially-assessed bytes can reach the
+    model or storage.
+
+    face_count is the number of regions actually blurred, so the response's
+    "faces_blurred" attests work that happened rather than work that was
+    intended.
     """
     img = _decode(image_bytes)
-    boxes = _detect(img)
+    blurred_img, count = _blur(img, _detect(img))
     return ProcessedImage(
-        image_bytes=_encode(_blur(img, boxes)),
-        face_count=len(boxes),
+        image_bytes=_encode(blurred_img),
+        face_count=count,
         gps_stripped=True,
     )

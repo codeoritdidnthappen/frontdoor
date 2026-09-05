@@ -319,12 +319,6 @@ def read_commons_records(path):
     return read_side_file(path, COMMONS_SOURCE)
 
 
-def load_commons_records(path):
-    """Records from the segregated Commons side file; [] when missing or
-    unreadable. The list-only view of read_commons_records."""
-    return read_commons_records(path)[0]
-
-
 # --- provenance lines -------------------------------------------------------
 
 

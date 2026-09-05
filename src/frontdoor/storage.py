@@ -284,13 +284,38 @@ def probe_image_storage(now=None):
     key, a rotated secret and a deleted bucket are indistinguishable from
     working storage -- symptomatically identical to the MISSING credential
     that already cost this project a day of scans whose photographs did not
-    persist. One HEAD on the bucket is the cheapest question that separates
-    them.
+    persist. One HEAD is the cheapest question that separates them.
+
+    It is a HEAD on an OBJECT, not on the bucket, and the distinction is
+    load-bearing: this project's tokens are scoped per bucket at the object
+    level (D-020, D-026, D-033), and an object-scoped identity can be refused
+    HeadBucket while every operation the app actually performs works -- which
+    would put a permanent false alarm on the deploy gate. head_object is the
+    same call ObjectStore.exists makes, so it exercises the permission the app
+    really holds, and a not-found answer is a PASS: the object need not exist
+    for the request to prove the endpoint resolved, the signature was
+    accepted, and this identity can address this bucket.
+
+    What it does NOT prove is that a PutObject would succeed. Proving a write
+    means performing one, and a health endpoint that mutates the only state
+    this app keeps is a worse trade; the claim is scoped to reachability on
+    purpose, and a write failure still arrives as scan_view's 503.
 
     Raises StorageError when the credentials are absent, refused, or the
-    bucket does not answer. Never returns a value derived from the response.
+    bucket does not answer, and logs the provider's own message first -- the
+    caller renders a boolean, so the log is where the reason lives. Never
+    returns a value derived from the response.
+
+    `now` is the injection point for the TTL, used only by the tests that pin
+    the cache.
     """
-    creds = load_image_creds()
+    try:
+        creds = load_image_creds()
+    except StorageError as exc:
+        # The original incident's own path, and it was the one branch with no
+        # trace: a missing variable raises here, before any request is made.
+        logger.error("object storage is not configured: %s", exc)
+        raise
     key = (creds.bucket, creds.access_key, creds.secret_key,
            creds.region, creds.endpoint)
     now = time.monotonic() if now is None else now
@@ -303,17 +328,30 @@ def probe_image_storage(now=None):
 
     error = None
     try:
-        _client(creds, config_kwargs={
+        client = _client(creds, config_kwargs={
             "connect_timeout": PROBE_TIMEOUT_S,
             "read_timeout": PROBE_TIMEOUT_S,
             "retries": {"max_attempts": 1},
-        }).head_bucket(Bucket=creds.bucket)
+        })
+        try:
+            client.head_object(Bucket=creds.bucket, Key=PROBE_KEY)
+        except Exception as exc:
+            # A key that is not there is a fully successful round trip: the
+            # request was signed, accepted, and answered. Only a failure that
+            # is NOT "no such object" says anything is wrong -- and a missing
+            # BUCKET answers 404 too, which is why this is not _is_not_found.
+            if not _is_missing_object(exc):
+                raise
     except StorageError as exc:
+        # A client that could not be built at all: no boto3, a malformed
+        # endpoint, a bad region. Distinct causes, one boolean at the caller,
+        # so the distinguishing text goes here.
+        logger.error("object storage client could not be built: %s", exc)
         error = str(exc)
     except Exception as exc:
-        # The message says what failed, never which variable or value: /ready
-        # renders a boolean from this and the operator reads the log.
         logger.error("object storage probe failed: %s: %s", type(exc).__name__, exc)
+        # The raised message says what failed, never which variable or value:
+        # /ready renders a boolean from it and the operator reads the log.
         error = f"object storage did not answer: {type(exc).__name__}"
     with _probe_lock:
         _probe_cache[key] = (now + PROBE_TTL_S, error)
@@ -338,6 +376,26 @@ def _is_not_found(exc):
     code = str(response.get("Error", {}).get("Code", ""))
     status = response.get("ResponseMetadata", {}).get("HTTPStatusCode")
     return code in ("404", "NoSuchKey", "NotFound") or status == 404
+
+
+#: Codes a 404 can carry that mean the BUCKET is wrong, not the key.
+_BUCKET_LEVEL_CODES = ("NoSuchBucket", "InvalidBucketName", "PermanentRedirect")
+
+
+def _is_missing_object(exc):
+    """A 404 that means "no such KEY", never "no such bucket".
+
+    head_object answers 404 for both, so treating every 404 as a missing key
+    would let a DELETED BUCKET pass the readiness probe -- reintroducing
+    exactly the failure the probe exists to catch. Only used by the probe:
+    every other caller already knows its bucket exists because it just wrote
+    to it.
+    """
+    code = str((getattr(exc, "response", None) or {})
+               .get("Error", {}).get("Code", ""))
+    if code in _BUCKET_LEVEL_CODES:
+        return False
+    return _is_not_found(exc)
 
 
 def _raise_from_client(exc, action, bucket, key):

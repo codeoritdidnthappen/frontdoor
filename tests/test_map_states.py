@@ -528,3 +528,15 @@ def test_map_data_reports_an_unreadable_provenance_side_file(
     broken.write_text("{not json", encoding="utf-8")
     payload = client.get("/map/data").get_json()
     assert payload["provenance_error"] is not None
+
+
+def test_the_map_page_reads_the_fields_the_payload_reports(client):
+    """A JSON key nobody reads is not an observation channel (#353).
+
+    The page banners dataset_error only when the pin list is EMPTY, so a
+    dropped scan store or a lost attribution side file -- both of which leave
+    a full map of pins -- had no reader anywhere on the page.
+    """
+    page = client.get("/map").get_data(as_text=True)
+    for field in ("scans_error", "provenance_error"):
+        assert field in page, f"/map never reads {field}"

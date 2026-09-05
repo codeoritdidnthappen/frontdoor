@@ -19,7 +19,6 @@ from frontdoor.external_data import (
     build_overpass_query,
     find_disagreements,
     load_demo_bbox,
-    load_osm_records,
     match_records,
     parse_overpass_payload,
     provenance_for_place,
@@ -126,17 +125,19 @@ def test_written_dataset_is_segregated_and_attributed(tmp_path):
     assert "segregated" in document["segregation"].lower()
     assert document["record_count"] == 4
     assert all(r["source"] == "openstreetmap" for r in document["records"])
-    assert load_osm_records(path) == document["records"]
+    assert read_osm_records(path) == (document["records"], None)
 
 
-def test_load_osm_records_total_over_missing_or_broken(tmp_path):
-    assert load_osm_records(tmp_path / "nope.json") == []
+def test_reading_a_side_file_is_total_over_missing_or_broken(tmp_path):
+    """Still total: the map renders with or without external data. What
+    changed is that each of these now says which of them happened."""
+    assert read_osm_records(tmp_path / "nope.json")[0] == []
     broken = tmp_path / "broken.json"
     broken.write_text("{not json", encoding="utf-8")
-    assert load_osm_records(broken) == []
+    assert read_osm_records(broken)[0] == []
     weird = tmp_path / "weird.json"
     weird.write_text(json.dumps({"records": ["junk", 7]}), encoding="utf-8")
-    assert load_osm_records(weird) == []
+    assert read_osm_records(weird)[0] == []
 
 
 def test_a_side_file_that_cannot_be_read_says_so_and_logs(tmp_path, caplog):
@@ -149,7 +150,7 @@ def test_a_side_file_that_cannot_be_read_says_so_and_logs(tmp_path, caplog):
     disappearance is not only an observability problem. Fails against the old
     loader, which returned [] and said nothing.
     """
-    with caplog.at_level("ERROR", logger="frontdoor.external_data"):
+    with caplog.at_level("WARNING", logger="frontdoor.external_data"):
         records, error = read_osm_records(tmp_path / "nope.json")
     assert records == []
     assert error is not None
@@ -364,3 +365,42 @@ def test_map_data_unchanged_without_external_file(client, tmp_path, monkeypatch)
     (pin,) = payload["pins"]
     assert "provenance" not in pin
     assert pin["state"] == STATE_NEUTRAL
+
+
+def test_a_records_array_with_no_usable_record_is_not_a_clean_read(tmp_path, caplog):
+    """The double-encoded refresh: a records ARRAY full of non-records.
+
+    It takes every attribution line off the map exactly as thoroughly as a
+    missing file, and returning ([], None) for it would be the same silence
+    one level in.
+    """
+    path = tmp_path / "double-encoded.json"
+    path.write_text(json.dumps({"records": ["junk", 7]}), encoding="utf-8")
+    with caplog.at_level("ERROR", logger="frontdoor.external_data"):
+        records, error = read_osm_records(path)
+    assert records == []
+    assert error is not None
+    assert caplog.records
+
+
+def test_a_partial_drop_is_reported_rather_than_thinning_attribution(tmp_path):
+    """400 good records and 100 bad ones is not a clean read either."""
+    path = tmp_path / "partial.json"
+    path.write_text(
+        json.dumps({"records": [{"source": "openstreetmap"}, "junk"]}),
+        encoding="utf-8",
+    )
+    records, error = read_osm_records(path)
+    assert len(records) == 1
+    assert error is not None
+
+
+def test_a_non_list_records_field_does_not_escape_as_an_exception(tmp_path):
+    """`{"records": 5}` used to reach the list comprehension and raise a
+    TypeError out of a function documented as total, which /map/data would
+    have served as an unattributed 500."""
+    path = tmp_path / "weird.json"
+    path.write_text(json.dumps({"records": 5}), encoding="utf-8")
+    records, error = read_osm_records(path)
+    assert records == []
+    assert error is not None

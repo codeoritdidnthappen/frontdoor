@@ -647,3 +647,32 @@ def test_screen_never_returns_unsafe_model_authored_evidence(unsafe_evidence):
     assert response.status_code == 502
     assert "ada_screening" not in response.get_json()
     assert unsafe_evidence not in response.get_data(as_text=True)
+
+
+# --- a detector that did not answer (#353) -----------------------------------
+
+
+def test_a_face_detector_that_does_not_answer_is_a_named_503(monkeypatch):
+    """Not a generic 500.
+
+    The catch-all handler is bounded and logs, so this was already fail-closed
+    -- but the caller was told "internal error / Nothing was measured", which
+    is /measure's wording, says nothing about the photograph never having been
+    privacy-assessed, and does not say it is worth retrying. Relying on a
+    generic handler for a specifically named exception is also how the next
+    refactor re-silences it.
+    """
+    from frontdoor import faceblur
+
+    def _no_detector(_bytes):
+        raise faceblur.FaceDetectionUnavailable("the detector did not answer")
+
+    monkeypatch.setattr("frontdoor_server.screen_view.process_upload", _no_detector)
+    engine = FakeEngine()
+    response = post_screen(make_client(engine), [image_part()])
+    assert response.status_code == 503
+    body = response.get_json()
+    assert body["error"] == "privacy processing unavailable"
+    ERROR_VALIDATOR.validate(body)
+    # Fail closed: the model was never called with anything.
+    assert engine.calls == []

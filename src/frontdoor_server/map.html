@@ -810,6 +810,19 @@ async function init() {
     return;
   }
 
+  // A map that is MISSING something still renders, and used to render as if
+  // nothing were wrong (#353). A dropped scan store takes published scans off
+  // the map; a dropped side file takes every provenance and attribution line
+  // off it, and that attribution is a licence obligation rather than a
+  // nicety. Both look exactly like a working map from here, so the payload's
+  // own report is shown instead of being left to whoever reads the server log.
+  var incomplete = [];
+  if (payload.scans_error) incomplete.push(payload.scans_error);
+  if (payload.provenance_error) incomplete.push(payload.provenance_error);
+  if (incomplete.length) {
+    banner("This map is incomplete — " + incomplete.join("; ") + ".");
+  }
+
   var bounds = new google.maps.LatLngBounds();
   var contents = [];
   pins.forEach(function (pin, index) {

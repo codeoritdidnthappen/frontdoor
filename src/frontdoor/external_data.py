@@ -217,44 +217,59 @@ def read_side_file(path, label):
     observability problem.
 
     Shared by both side files rather than copied, so neither can be made
-    observable while the other stays quiet.
+    observable while the other stays quiet. It reports the records it dropped
+    as well as the file it could not open: a document whose records array
+    holds no usable record -- the classic double-encoded refresh -- takes every
+    attribution line off the map just as thoroughly as a missing file, and
+    returning ([], None) for it would be the same silence one level in.
+
+    A missing file logs at WARNING, not ERROR: outside the container the side
+    files are genuinely optional, and an ERROR on every local request is how
+    the channel gets filtered and takes the real failures with it. Everything
+    that should be impossible in a built image stays ERROR.
+
+    `error` names the source and the class of failure and stops there: it is
+    served publicly by /map/data, so the path and the operating system's own
+    message stay in the log.
     """
     try:
         document = json.loads(Path(path).read_text(encoding="utf-8"))
     except FileNotFoundError:
-        logger.error(
+        logger.warning(
             "%s side file %s is missing; every %s provenance and attribution "
             "line is absent from the map", label, path, label,
         )
-        return [], f"{label} side file not found: {path}"
+        return [], f"the {label} side file is not present"
     except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
         logger.error(
-            "%s side file %r unreadable (%s); every %s provenance and "
-            "attribution line is absent from the map", label, path, exc, label,
+            "%s side file %r unreadable (%s: %s); every %s provenance and "
+            "attribution line is absent from the map",
+            label, path, type(exc).__name__, exc, label,
         )
-        return [], f"{label} side file unreadable: {type(exc).__name__}: {exc}"
+        return [], f"the {label} side file could not be read"
     records = document.get("records") if isinstance(document, dict) else None
-    if records is None:
+    if not isinstance(records, list):
         logger.error(
             "%s side file %s carries no records array; every %s provenance and "
             "attribution line is absent from the map", label, path, label,
         )
-        return [], f"{label} side file has no records array: {path}"
-    return [r for r in records if isinstance(r, dict)], None
+        return [], f"the {label} side file carries no records"
+    usable = [r for r in records if isinstance(r, dict)]
+    dropped = len(records) - len(usable)
+    if dropped:
+        logger.error(
+            "%s side file %s: %d of %d entries are not records and carry no "
+            "attribution to the map", label, path, dropped, len(records),
+        )
+        return usable, (
+            f"{dropped} of {len(records)} {label} entries are not records"
+        )
+    return usable, None
 
 
 def read_osm_records(path):
     """(records, error) from a segregated OSM side file."""
     return read_side_file(path, OSM_SOURCE)
-
-
-def load_osm_records(path):
-    """Records from a segregated OSM side file; [] when missing/unreadable.
-
-    The list-only view of read_osm_records. /map/data uses the pair instead,
-    so a missing side file is reported rather than rendering as "no matches".
-    """
-    return read_osm_records(path)[0]
 
 
 # --- provenance lines -------------------------------------------------------
