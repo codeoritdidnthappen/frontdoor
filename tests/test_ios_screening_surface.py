@@ -105,3 +105,46 @@ def test_a_renamed_label_is_noticed():
     renamed = criterion_enum().replace(
         'case .handrails: return "Handrails"', 'case .handrails: return "Rails"')
     assert labels_in(renamed) != html_labels()
+
+
+# --- an entrance is screened on its view set, not on one frame (#316) ---------
+
+CLIENT = APP_TREE / "Screening" / "ScreenClient.swift"
+CONTROLLER = APP_TREE / "Capture" / "CaptureController.swift"
+
+
+def test_the_client_sends_a_set_and_has_no_single_image_route_left():
+    """A one-photo screening is a different and worse answer, not a cheaper one.
+
+    /screen makes ONE integrated call across everything it is given. The set is walked head-on,
+    obliques, near, far, hardware close-up -- so the last frame is a close-up of a door handle,
+    and screening it alone answers `not_visible` for ramp/bevel, handrails and signage. The engine
+    is then reporting framing rather than the entrance, which is the pilot finding the far view's
+    coaching already carries.
+    """
+    source = CLIENT.read_text(encoding="utf-8")
+    assert "func screen(views:" in source
+    assert "static func body(views:" in source
+    assert "func screen(image:" not in source, "the single-image route is still reachable"
+    assert "static func body(image:" not in source
+
+
+def test_the_release_after_labeling_sends_every_held_view():
+    source = CONTROLLER.read_text(encoding="utf-8")
+    assert "screen(views: pending.views" in source
+    assert "latestScreeningCapture" not in source, "the last-frame-only field is still there"
+
+
+def test_a_view_the_upload_drain_removed_does_not_fail_the_whole_set():
+    """The drain deletes a capture once the bucket confirms it, and labeling takes minutes.
+
+    A missing file means the capture is safe, not lost. Reading it with `try?` and dropping it is
+    what lets the rest of the set still be screened.
+    """
+    body = _body_of(CONTROLLER.read_text(encoding="utf-8"), "private func screen(views urls:")
+    assert "compactMap" in body
+    assert "try? Data(contentsOf: url)" in body
+
+
+def _body_of(source, signature):
+    return source.split(signature, 1)[1].split("\n    }", 1)[0]
