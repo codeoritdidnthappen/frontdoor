@@ -32,7 +32,11 @@ struct ScreeningReviewView: View {
                     .font(.headline)
                 // Says what publishing MEANS, rather than assuming the operator infers it. The
                 // honesty rule the screening wording follows applies to the consent question too.
-                Text("It will be uploaded and screened. Discarding keeps nothing — the photo is "
+                // Says what the operator is looking at, now that it is the published image and
+                // not the raw frame (#275). Without this line the blur reads as a rendering
+                // artefact rather than as the thing we did on purpose.
+                Text("This is the photo that will be published: faces blurred, location removed. "
+                     + "It will be uploaded and screened. Discarding keeps nothing — the photo is "
                      + "not saved and nothing is counted.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)

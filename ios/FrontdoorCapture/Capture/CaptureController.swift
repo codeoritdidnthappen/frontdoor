@@ -474,10 +474,40 @@ final class CaptureController: ObservableObject {
         case .success(let validated):
             var record = validated
             record.captureMode = captureMode
+
+            // Privacy processing happens BEFORE the gate, so the operator reviews the photo that
+            // will actually be published (#275). It used to run at commit, which meant they
+            // approved a raw frame and something slightly different left the phone -- faces
+            // blurred, location stripped. A consent gate is only worth having if what it shows is
+            // what it publishes.
+            //
+            // Fails closed, and there is no gate yet to keep the frame on: a frame that cannot be
+            // processed never becomes a capture, and the operator is told why so they can shoot
+            // again.
+            let processed: CapturePrivacy.Processed
+            switch CapturePrivacy.process(
+                captured.imageData, exifOrientation: record.imageExifOrientation
+            ) {
+            case .success(let result):
+                processed = result
+            case .failure(let failure):
+                lastCaptureError = failure.message
+                return
+            }
+            // The grid is untouched by design, so these must not have moved. If they ever do, the
+            // sidecar's intrinsics would describe a grid the file no longer has, and the ROI taps
+            // placed on the reviewed image would land somewhere else.
+            record.pixelWidth = processed.pixelWidth
+            record.pixelHeight = processed.pixelHeight
+
+            guard let reviewImage = UIImage(data: processed.data) else {
+                lastCaptureError = CapturePrivacy.Failure.encodingFailed.message
+                return
+            }
             lastCaptureError = nil
             let pending = PendingReview(
-                record: record, image: captured.image,
-                imageData: captured.imageData, depthBytes: depth?.bytes)
+                record: record, image: reviewImage,
+                imageData: processed.data, depthBytes: depth?.bytes)
             // Both modes pause here now. The reason differs, and the earlier comment -- that a
             // screening review would be "a gate with nothing behind it" -- was right about ROI
             // taps and wrong about consent (#275): metrology stops to collect six points,
@@ -584,31 +614,9 @@ final class CaptureController: ObservableObject {
         var record = pending.record
         record.roi = taps
 
-        // Privacy processing happens HERE, before the write, so the bytes on disk, the bytes the
-        // sidecar hashes and the bytes /upload stores are all the same processed bytes (#328).
-        // Doing it server-side is structurally impossible: the upload's hash contract is computed
-        // over what the phone sent, so anything the server changed would fail its own check.
-        //
-        // Fails closed. A capture that could not be processed is not written at all -- an
-        // unblurred frame on disk is the thing this exists to prevent, and "saved anyway" would
-        // be worse than losing the shot.
-        let processed: CapturePrivacy.Processed
-        switch CapturePrivacy.process(
-            pending.imageData, exifOrientation: record.imageExifOrientation
-        ) {
-        case .success(let result):
-            processed = result
-        case .failure(let failure):
-            // The frame STAYS under review, the same rule a failed write follows: the operator
-            // can look at the error and decide to retry or discard, instead of the shot vanishing
-            // with nothing on disk and nothing on screen.
-            lastCaptureError = failure.message
-            return
-        }
-        // The grid is untouched by design, so these must not have moved. If they ever do, the
-        // sidecar's intrinsics would describe a grid the file no longer has.
-        record.pixelWidth = processed.pixelWidth
-        record.pixelHeight = processed.pixelHeight
+        // No processing here. The bytes under review are already the processed ones -- blurred,
+        // stripped, hashed by the sidecar and sent to /upload unchanged (#328, #275). What the
+        // operator approved is byte-for-byte what is written and uploaded.
 
         // Write before counting. `photosTaken` and `lastRecord` are the operator's evidence
         // that the capture exists, and until this call they were the ONLY evidence: the record
@@ -617,7 +625,7 @@ final class CaptureController: ObservableObject {
         // directory (TICK-028, QA B02).
         let written = CaptureWriter.write(
             record,
-            imageData: processed.data,
+            imageData: pending.imageData,
             depthData: pending.depthBytes,
             into: Self.capturesDirectory)
 
