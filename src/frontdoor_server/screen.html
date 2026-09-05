@@ -118,6 +118,17 @@ const CRITERION_LABELS = {
   accessibility_signage: "Accessibility signage",
 };
 
+const ADA_CHECK_LABELS = {
+  entrance_route: "Entrance route",
+  threshold: "Threshold",
+  ramp: "Ramp",
+  door_hardware: "Door hardware",
+  door_opening: "Door opening",
+  handrails: "Handrails",
+  signage: "Signage",
+  temporary_barriers: "Temporary barriers",
+};
+
 const el = (tag, cls, text) => {
   const n = document.createElement(tag);
   if (cls) n.className = cls;
@@ -183,6 +194,41 @@ function renderResult(body) {
     "One integrated assessment across " + body.images.length +
     (body.images.length === 1 ? " view: " : " views: ") + names));
   panel.appendChild(criteriaTable((body.assessment || {}).criteria));
+
+  const ada = body.ada_screening;
+  if (ada) {
+    panel.appendChild(el("h3", null, "Photo ADA screening"));
+    if (ada.score_percent === null || ada.score_percent === undefined) {
+      panel.appendChild(el("p", "score", "Not enough visible evidence"));
+    } else {
+      panel.appendChild(el("p", "score", Number(ada.score_percent).toFixed(1) + "%"));
+    }
+    panel.appendChild(el("p", "sub",
+      ada.determined_count + " of " + ada.total_count + " checks determined"));
+    const table = el("table");
+    const head = el("tr");
+    ["Check", "Result", "Evidence"].forEach(h => head.appendChild(el("th", null, h)));
+    table.appendChild(head);
+    Object.keys(ADA_CHECK_LABELS).forEach(key => {
+      const entry = (ada.checks || {})[key] || {};
+      const row = el("tr");
+      row.appendChild(el("td", "crit", ADA_CHECK_LABELS[key]));
+      row.appendChild(el("td", null, entry.result || "no result"));
+      row.appendChild(el("td", null, entry.evidence || "—"));
+      table.appendChild(row);
+    });
+    panel.appendChild(table);
+    panel.appendChild(el("p", null, ada.summary || ""));
+    panel.appendChild(el("p", "wording", ada.disclaimer || ""));
+    if (ada.standards_url) {
+      const link = document.createElement("a");
+      link.href = ada.standards_url;
+      link.textContent = "2010 ADA Standards";
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      panel.appendChild(link);
+    }
+  }
 
   // Printed from the response, not hardcoded here, so this page cannot drift from the
   // wording the API commits to.

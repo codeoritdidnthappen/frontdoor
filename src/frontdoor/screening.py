@@ -54,6 +54,42 @@ CRITERIA_KEYS = (
 
 ALLOWED_VERDICTS = ("present", "absent", "not_visible")
 
+# Eight photo-assessable ADA checks (#318). Separate from CRITERIA_KEYS: those
+# four remain the evaluation vocabulary. These eight are a photo evidence
+# assessment, not a compliance determination. The model returns states; the
+# server alone computes score, counts, and summary.
+ADA_CHECK_KEYS = (
+    "entrance_route",
+    "threshold",
+    "ramp",
+    "door_hardware",
+    "door_opening",
+    "handrails",
+    "signage",
+    "temporary_barriers",
+)
+ADA_RESULTS = ("true", "false", "cannot_determine", "not_applicable")
+ADA_STANDARDS_URL = (
+    "https://www.ada.gov/law-and-regs/design-standards/2010-stds/"
+)
+ADA_DISCLAIMER = (
+    "Photo-based screening only. This is not an ADA compliance or legal "
+    "determination."
+)
+ADA_MODEL_AGGREGATE_KEYS = frozenset({
+    "score_percent",
+    "determined_count",
+    "total_count",
+    "true_count",
+    "false_count",
+    "cannot_determine_count",
+    "not_applicable_count",
+    "summary",
+})
+_COUNT_WORDS = (
+    "zero", "one", "two", "three", "four", "five", "six", "seven", "eight",
+)
+
 # The automatic privacy audit (TICK-257 follow-up, #232). NOT an accessibility
 # criterion: it never joins CRITERIA, never votes in aggregate_assessments,
 # and is carried separately on ImageAssessment. The model has already seen
@@ -95,11 +131,11 @@ class SpendCapError(ScreeningError):
 class ScreeningConfig:
     # Offline eval on the 12-entrance pilot set: claude-sonnet-5 matches opus at
     # 97% committed accuracy in integrated multi-view mode, at a median 7.2s vs
-    # 20.6s per entrance and roughly 2.5x cheaper. max_tokens must be >= 4000:
-    # at 2000, adaptive thinking consumes the budget on hard entrances and
-    # sonnet's JSON output truncates mid-object.
+    # 20.6s per entrance and roughly 2.5x cheaper. max_tokens must cover
+    # thinking plus the four criteria and the eight ADA checks: at 2000,
+    # adaptive thinking used to consume the budget and truncate mid-object.
     model: str = "claude-sonnet-5"
-    max_tokens: int = 4000
+    max_tokens: int = 6000
     max_usd_per_run: float = 1.00
     usd_per_image: float = 0.05  # conservative per-image estimate (cents-order)
 
@@ -118,6 +154,10 @@ class ImageAssessment:
     #: review). A reply missing the key is likewise normalized to "unknown"
     #: (with a logged warning) rather than crashed on.
     face_check: str = FACE_CHECK_UNKNOWN
+    #: The eight photo ADA checks after validation, or None when the model
+    #: reply was rejected. Score, counts and summary are never stored here:
+    #: callers compute them with compute_ada_screening.
+    ada_checks: dict | None = None
 
 
 @dataclass(frozen=True)
@@ -226,6 +266,154 @@ def validate_verdicts(parsed: object) -> dict[str, dict[str, object]]:
             "evidence": evidence,
         }
     return out
+
+
+def validate_ada_checks(parsed: object) -> dict[str, dict[str, str]]:
+    """Return the eight photo checks or reject the whole model response.
+
+    Aggregate fields (score, counts, summary) and a wrapping ada_screening
+    object are forbidden here: the server computes those after validation.
+    """
+    if not isinstance(parsed, dict):
+        raise ScreeningError("model response must be a JSON object")
+    if "ada_screening" in parsed:
+        raise ScreeningError("model must not supply ada_screening")
+    supplied = ADA_MODEL_AGGREGATE_KEYS & parsed.keys()
+    if supplied:
+        raise ScreeningError(
+            f"model must not supply aggregate field {sorted(supplied)[0]}"
+        )
+    checks = parsed.get("ada_checks")
+    if not isinstance(checks, dict) or set(checks) != set(ADA_CHECK_KEYS):
+        raise ScreeningError(
+            "model response must contain exactly the eight photo checks"
+        )
+    supplied = ADA_MODEL_AGGREGATE_KEYS & checks.keys()
+    if supplied:
+        raise ScreeningError(
+            f"model must not supply aggregate field {sorted(supplied)[0]}"
+        )
+    out = {}
+    for key in ADA_CHECK_KEYS:
+        entry = checks[key]
+        if not isinstance(entry, dict):
+            raise ScreeningError(f"check {key} must be an object")
+        result = entry.get("result")
+        if isinstance(result, bool) or not isinstance(result, str):
+            raise ScreeningError(f"check {key} has invalid result {result!r}")
+        result = result.strip().lower()
+        if result not in ADA_RESULTS:
+            raise ScreeningError(f"check {key} has invalid result {result!r}")
+        evidence = entry.get("evidence")
+        if not isinstance(evidence, str) or not evidence.strip():
+            raise ScreeningError(f"check {key} evidence must be non-empty text")
+        evidence = evidence.strip()
+        if "\n" in evidence or "\r" in evidence or len(evidence) > 200:
+            raise ScreeningError(
+                f"check {key} evidence must be one line of at most 200 characters"
+            )
+        out[key] = {"result": result, "evidence": evidence}
+    return out
+
+
+def _count_word(n: int) -> str:
+    return _COUNT_WORDS[n]
+
+
+def _join_check_names(keys: list[str]) -> str:
+    if len(keys) == 1:
+        return keys[0]
+    if len(keys) == 2:
+        return f"{keys[0]} and {keys[1]}"
+    return ", ".join(keys[:-1]) + f", and {keys[-1]}"
+
+
+def _ada_summary(true_count, false_count, undetermined_count, false_keys):
+    parts = []
+    determined = true_count + false_count
+    if determined == 0:
+        parts.append("No photo checks were determined.")
+    else:
+        parts.append(
+            f"{_count_word(true_count).capitalize()} of {_count_word(determined)} "
+            "determined photo checks were supported."
+        )
+    if false_keys:
+        names = _join_check_names(false_keys)
+        if len(false_keys) == 1:
+            parts.append(f"A potential barrier was observed for {names}.")
+        else:
+            parts.append(f"Potential barriers were observed for {names}.")
+    if undetermined_count == 1:
+        parts.append(
+            "One check could not be determined or was not applicable."
+        )
+    elif undetermined_count > 1:
+        parts.append(
+            f"{_count_word(undetermined_count).capitalize()} checks could not "
+            "be determined or were not applicable."
+        )
+    return " ".join(parts)
+
+
+def compute_ada_screening(checks: object) -> dict:
+    """Server-side score, counts and summary from validated check states."""
+    if not isinstance(checks, dict) or set(checks) != set(ADA_CHECK_KEYS):
+        raise ScreeningError(
+            "ada_checks must contain exactly the eight photo checks"
+        )
+    true_count = false_count = cannot_determine_count = not_applicable_count = 0
+    false_keys = []
+    normalized = {}
+    for key in ADA_CHECK_KEYS:
+        entry = checks[key]
+        if not isinstance(entry, dict):
+            raise ScreeningError(f"check {key} must be an object")
+        result = entry.get("result")
+        if isinstance(result, bool) or not isinstance(result, str):
+            raise ScreeningError(f"check {key} has invalid result {result!r}")
+        result = result.strip().lower()
+        evidence = entry.get("evidence")
+        if result not in ADA_RESULTS:
+            raise ScreeningError(f"check {key} has invalid result {result!r}")
+        if not isinstance(evidence, str) or not evidence.strip():
+            raise ScreeningError(f"check {key} evidence must be non-empty text")
+        evidence = evidence.strip()
+        if result == "true":
+            true_count += 1
+        elif result == "false":
+            false_count += 1
+            false_keys.append(key)
+        elif result == "cannot_determine":
+            cannot_determine_count += 1
+        else:
+            not_applicable_count += 1
+        normalized[key] = {"result": result, "evidence": evidence}
+    determined = true_count + false_count
+    total = (
+        true_count + false_count + cannot_determine_count + not_applicable_count
+    )
+    if total != 8:
+        raise ScreeningError("ada_screening counts must sum to 8")
+    score = None if determined == 0 else round(true_count / determined * 100, 1)
+    return {
+        "score_percent": score,
+        "determined_count": determined,
+        "total_count": 8,
+        "true_count": true_count,
+        "false_count": false_count,
+        "cannot_determine_count": cannot_determine_count,
+        "not_applicable_count": not_applicable_count,
+        "checks": normalized,
+        "summary": _ada_summary(
+            true_count,
+            false_count,
+            cannot_determine_count + not_applicable_count,
+            false_keys,
+        ),
+        "standards_url": ADA_STANDARDS_URL,
+        "disclaimer": ADA_DISCLAIMER,
+    }
 
 
 def validate_face_check(parsed):
@@ -366,6 +554,7 @@ class ScreeningEngine:
             text = next((b.text for b in response.content if b.type == "text"), "")
             parsed = parse_json_response(text)
             criteria = validate_verdicts(parsed)
+            ada_checks = validate_ada_checks(parsed)
             face_check = (validate_face_check(parsed) if expect_face_check
                           else FACE_CHECK_UNKNOWN)
         except Exception as exc:
@@ -375,7 +564,7 @@ class ScreeningEngine:
             return ImageAssessment(criteria=None, latency_s=round(latency, 3),
                                    error=error)
         return ImageAssessment(criteria=criteria, latency_s=round(latency, 3),
-                               face_check=face_check)
+                               face_check=face_check, ada_checks=ada_checks)
 
     def assess_image(self, image, *, media_type="image/jpeg"):
         """One model call over one image; refusals and parse failures are

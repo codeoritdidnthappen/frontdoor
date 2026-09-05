@@ -18,8 +18,7 @@ from pathlib import Path
 
 import pytest
 
-from frontdoor.screening import CRITERIA_KEYS
-from frontdoor_server.screen_view import WORDING
+from frontdoor.screening import ADA_CHECK_KEYS, ADA_DISCLAIMER, ADA_STANDARDS_URL, CRITERIA_KEYS
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 APP_TREE = REPO_ROOT / "ios" / "FrontdoorCapture"
@@ -39,7 +38,19 @@ def criterion_enum(source=None):
     """The `enum ScreeningCriterion` block, so the parsing cannot pick up another enum."""
     if source is None:
         source = CRITERION_SWIFT.read_text(encoding="utf-8")
-    return source[source.index("enum ScreeningCriterion") :]
+    start = source.index("enum ScreeningCriterion")
+    rest = source[start:]
+    nxt = rest.find("\nenum ", 1)
+    return rest if nxt == -1 else rest[:nxt]
+
+
+def ada_enum(source=None):
+    if source is None:
+        source = CRITERION_SWIFT.read_text(encoding="utf-8")
+    start = source.index("enum AdaScreeningCheck")
+    rest = source[start:]
+    nxt = rest.find("\nenum ", 1)
+    return rest if nxt == -1 else rest[:nxt]
 
 
 def keys_in(swift):
@@ -54,6 +65,12 @@ def labels_in(swift):
 def html_labels():
     html = SCREEN_HTML.read_text(encoding="utf-8")
     start = html.index("const CRITERION_LABELS")
+    return dict(HTML_LABEL_RE.findall(html[start : html.index("}", start)]))
+
+
+def html_ada_labels():
+    html = SCREEN_HTML.read_text(encoding="utf-8")
+    start = html.index("const ADA_CHECK_LABELS")
     return dict(HTML_LABEL_RE.findall(html[start : html.index("}", start)]))
 
 
@@ -73,7 +90,15 @@ def test_the_phone_and_the_laptop_page_name_the_criteria_identically():
 
 def test_the_honesty_wording_is_not_copied_into_the_app():
     """It is printed from the response, so it cannot drift from what the API commits to."""
-    fragment = WORDING[:40]
+    source = (REPO_ROOT / "src" / "frontdoor_server" / "screen_view.py").read_text(
+        encoding="utf-8"
+    )
+    match = re.search(
+        r'WORDING = \(\s*"([^"]+)"\s*"([^"]+)"\s*"([^"]+)"\s*\)',
+        source,
+    )
+    assert match, "WORDING assignment not found in screen_view.py"
+    fragment = "".join(match.groups())[:40]
     offenders = [
         path.relative_to(REPO_ROOT)
         for path in swift_sources()
@@ -105,6 +130,47 @@ def test_a_renamed_label_is_noticed():
     renamed = criterion_enum().replace(
         'case .handrails: return "Handrails"', 'case .handrails: return "Rails"')
     assert labels_in(renamed) != html_labels()
+
+
+def test_the_phone_has_a_case_for_every_ada_check_the_server_scores():
+    assert keys_in(ada_enum()) == list(ADA_CHECK_KEYS), (
+        "AdaScreeningCheck and frontdoor.screening.ADA_CHECK_KEYS disagree. A check the "
+        "server scores and the phone has no case for is simply not shown."
+    )
+    assert labels_in(ada_enum()) == html_ada_labels()
+
+
+def test_the_ada_score_is_not_turned_into_a_compliance_badge():
+    """The percentage is a coverage score, not a pass/fail stamp (#318)."""
+    banned = (
+        "is ADA compliant",
+        "is ada compliant",
+        "noncompliant",
+        "compliance badge",
+        "passes ADA",
+        "fails ADA",
+    )
+    surfaces = [
+        APP_TREE / "UI" / "ScreeningChecksView.swift",
+        APP_TREE / "Screening" / "ScreeningResponse.swift",
+        SCREEN_HTML,
+    ]
+    offenders = []
+    for path in surfaces:
+        text = path.read_text(encoding="utf-8")
+        for phrase in banned:
+            if phrase.lower() in text.lower():
+                offenders.append((path.relative_to(REPO_ROOT), phrase))
+    assert offenders == []
+
+
+def test_the_phone_does_not_compute_the_ada_score():
+    """Score, counts and summary come from the server. The phone only renders them."""
+    view = (APP_TREE / "UI" / "ScreeningChecksView.swift").read_text(encoding="utf-8")
+    assert "score_percent" not in view
+    assert "true_count /" not in view
+    assert ADA_DISCLAIMER not in view, "print the disclaimer from the response"
+    assert ADA_STANDARDS_URL not in view, "the tappable link is the URL the server sent"
 
 
 # --- an entrance is screened on its view set, not on one frame (#316) ---------

@@ -17,7 +17,12 @@ UPLOADER = APP / "Upload" / "LabelUploader.swift"
 
 def test_ac_11_swift_criteria_match_python_keys_and_order():
     source = CONTRACT.read_text(encoding="utf-8")
-    block = source[source.index("enum ScreeningCriterion") :]
+    # Stop at the next enum. AdaScreeningCheck lives in the same file and its
+    # eight keys are not labeling criteria (#318).
+    start = source.index("enum ScreeningCriterion")
+    rest = source[start:]
+    nxt = rest.find("\nenum ", 1)
+    block = rest if nxt == -1 else rest[:nxt]
     keys = re.findall(r'case\s+\w+\s*=\s*"([a-z_]+)"', block)
     assert keys == list(CRITERIA_KEYS)
 

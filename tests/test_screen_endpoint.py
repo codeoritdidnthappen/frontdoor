@@ -11,7 +11,16 @@ from importlib import resources
 import pytest
 from jsonschema import Draft202012Validator
 
-from frontdoor.screening import CRITERIA_KEYS, ImageAssessment, ScreeningConfig
+from frontdoor.screening import (
+    ADA_CHECK_KEYS,
+    ADA_DISCLAIMER,
+    ADA_STANDARDS_URL,
+    CRITERIA_KEYS,
+    ImageAssessment,
+    ScreeningConfig,
+    ScreeningEngine,
+    compute_ada_screening,
+)
 from frontdoor_server.app import create_app
 from frontdoor_server.screen_view import ENGINE_KEY, MAX_IMAGES, WORDING
 
@@ -27,7 +36,14 @@ ERROR_SCHEMA = json.loads(
 ERROR_VALIDATOR = Draft202012Validator(ERROR_SCHEMA)
 
 
-def ok_assessment(verdict="present", face_check="clear"):
+def ok_ada_checks(result="true"):
+    return {
+        key: {"result": result, "evidence": f"{key} visible in the photos"}
+        for key in ADA_CHECK_KEYS
+    }
+
+
+def ok_assessment(verdict="present", face_check="clear", ada_checks=None):
     return ImageAssessment(
         criteria={
             key: {"verdict": verdict, "confidence": 80, "evidence": f"{key} seen"}
@@ -35,6 +51,7 @@ def ok_assessment(verdict="present", face_check="clear"):
         },
         latency_s=1.234,
         face_check=face_check,
+        ada_checks=ok_ada_checks() if ada_checks is None else ada_checks,
     )
 
 
@@ -514,6 +531,7 @@ def test_ac_4_a_missing_face_check_answer_is_unknown_and_quarantined():
         criteria={key: {"verdict": "present", "confidence": 80, "evidence": ""}
                   for key in CRITERIA_KEYS},
         latency_s=1.0,
+        ada_checks=ok_ada_checks(),
     ))
     response = post_screen(make_client(engine), [image_part()])
     assert response.status_code == 200
@@ -568,3 +586,44 @@ def test_a_full_batch_of_views_is_exactly_one_engine_call_in_posted_order():
     ]
     assert observed_shades == list(range(80, 80 + MAX_IMAGES))
     assert media_types == ("image/jpeg",) * MAX_IMAGES
+
+
+def test_successful_screen_carries_server_computed_ada_screening():
+    checks = ok_ada_checks()
+    checks["threshold"] = {"result": "false", "evidence": "A raised lip is visible."}
+    body = post_screen(
+        make_client(FakeEngine(assessment=ok_assessment(ada_checks=checks))),
+        [image_part()],
+    ).get_json()
+    assert body["ada_screening"] == compute_ada_screening(checks)
+    assert body["ada_screening"]["disclaimer"] == ADA_DISCLAIMER
+    assert body["ada_screening"]["standards_url"] == ADA_STANDARDS_URL
+    for key in CRITERIA_KEYS:
+        assert body["assessment"]["criteria"][key]["verdict"] == "present"
+
+
+def test_zero_determined_ada_score_is_null_on_screen():
+    checks = {
+        key: {"result": "cannot_determine", "evidence": f"{key} not visible"}
+        for key in ADA_CHECK_KEYS
+    }
+    ada = post_screen(
+        make_client(FakeEngine(assessment=ok_assessment(ada_checks=checks))),
+        [image_part()],
+    ).get_json()["ada_screening"]
+    assert ada["score_percent"] is None
+    assert ada["determined_count"] == 0
+
+
+def test_screen_rejects_model_supplied_ada_aggregates():
+    from tests.test_screening import FakeClient, _Response, _payload
+
+    poisoned = json.loads(_payload())
+    poisoned["score_percent"] = 12.5
+    poisoned["summary"] = "this entrance passes"
+    engine = ScreeningEngine(
+        client=FakeClient([_Response(json.dumps(poisoned))])
+    )
+    response = post_screen(make_client(engine), [image_part()])
+    assert response.status_code == 502
+    assert "must not supply" in response.get_json()["detail"]

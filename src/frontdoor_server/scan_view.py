@@ -57,7 +57,7 @@ from frontdoor.scan_records import (
     new_scan_record,
     physical_key,
 )
-from frontdoor.screening import integrated_summary
+from frontdoor.screening import ScreeningError, integrated_summary
 from frontdoor.split import InvalidEntranceId, assign_split, canonical_entrance_id
 from frontdoor.storage import StorageError, image_store
 from frontdoor_server.screen_view import (
@@ -66,6 +66,7 @@ from frontdoor_server.screen_view import (
     WORDING,
     _error,
     _get_engine,
+    ada_screening_from_assessment,
 )
 
 #: app.config key tests use to inject a fake object store; production leaves
@@ -270,6 +271,16 @@ def publish():
             latency_ms=latency_ms,
         )
 
+    try:
+        ada_screening = ada_screening_from_assessment(assessment)
+    except ScreeningError as exc:
+        return _error(
+            "screening engine failure",
+            str(exc),
+            status=502,
+            latency_ms=latency_ms,
+        )
+
     # Only an explicit "clear" may persist. The audit answers once for the
     # whole set of views, so anything else quarantines every frame: the
     # request stays assessed (the verdicts below still stand) but nothing is
@@ -296,6 +307,7 @@ def publish():
         "model": engine.config.model,
         "status": "ai_estimated",
         "wording": WORDING,
+        "ada_screening": ada_screening,
     }
     if len(files) > 1:
         body["aggregate"] = {
