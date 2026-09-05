@@ -75,6 +75,15 @@ Three things about these labels that are easy to get wrong:
   Ground truth that can be revised after the verdicts are known is not ground truth.
 - **`labeled_at` is the server's date, not the phone's.** A phone's clock is settable.
 
+### Point it somewhere, or it refuses
+
+The server appends to `$FRONTDOOR_LABELS_PATH`. With that unset it falls back to
+`data/labels.csv` — and **refuses to start writing if that resolves inside a git checkout**,
+because an append rewrites the whole sheet and would modify a tracked file. Nothing breaks the day
+it happens; it breaks on freeze day, when the unsealing run aborts on a dirty working tree and the
+cause is a file nobody remembers touching. In the container there is no checkout and no `data/`,
+so the fallback is a fresh file and the guard never fires.
+
 ### v1 storage is ephemeral, deliberately
 
 The deployed server appends to `data/labels.csv` **inside its own container**. Replacing or

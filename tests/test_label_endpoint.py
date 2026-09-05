@@ -259,3 +259,81 @@ def test_the_response_carries_the_contract_the_phone_bundles(client, labels_csv)
     body = post(client).get_json()
     assert body["criteria"] == list(CRITERIA_KEYS)
     assert body["allowed_truths"] == ["present", "absent", ""]
+
+
+# --- review findings ---------------------------------------------------------
+
+
+def test_the_same_entrance_submitted_twice_at_once_records_it_once(labels_csv):
+    """The sharper race than twenty different entrances: both callers see an empty sheet.
+
+    Narrowing the lock to cover only the write would keep every other test green while letting
+    both append four rows -- eight rows for one entrance, both requests reporting success, and an
+    entrance whose ground truth is doubled.
+    """
+    outcomes = []
+
+    def submit():
+        try:
+            outcomes.append(append_entrance_labels(
+                labels_csv, "E-101", ANSWERS, labeled_by="James",
+                labeled_at=date(2026, 9, 5)))
+        except LabelsLocked:
+            outcomes.append("locked")
+
+    threads = [threading.Thread(target=submit) for _ in range(8)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert len(rows_of(labels_csv)) == 4
+    assert outcomes.count(APPEND_ACCEPTED) == 1
+    assert outcomes.count(APPEND_IDENTICAL) == 7
+
+
+def test_an_unreadable_sheet_is_the_servers_fault_not_the_phones(client, labels_csv):
+    """A 400 would tell the phone its own answers were rejected, and it would drop them."""
+    labels_csv.write_text("wrong,header\n1,2\n", encoding="utf-8")
+    response = post(client)
+    assert response.status_code == 500
+    assert response.get_json()["error"] == "internal error"
+
+
+def test_an_oversized_body_is_refused_on_its_declared_length(client, labels_csv):
+    """Before it is buffered: the app allows 64 MB and the worker has 512 MB (#233)."""
+    response = client.post(
+        "/labels",
+        data=b"x" * 9000,
+        content_type="application/json",
+        headers={"X-Frontdoor-Upload-Key": KEY, "Content-Length": "9000"},
+    )
+    assert response.status_code == 413
+    assert not labels_csv.exists()
+
+
+def test_the_response_echoes_the_id_that_was_written(client, labels_csv):
+    """Canonicalised once, by the writer -- not spelled a second way for the reply."""
+    response = post(client, entrance_id="  e-101  ")
+    assert response.get_json()["entrance_id"] == "E-101"
+    assert {row["entrance_id"] for row in rows_of(labels_csv)} == {"E-101"}
+
+
+def test_the_default_path_refuses_to_write_inside_a_checkout(monkeypatch):
+    """One POST against a server started from a checkout rewrites the committed template.
+
+    Nothing breaks that day. It breaks on Sep 7, when record_unsealing aborts on a dirty working
+    tree and the cause is a tracked file nobody remembers touching.
+    """
+    from frontdoor_server.label_view import LabelsPathRefused, labels_path
+
+    monkeypatch.delenv(PATH_ENV, raising=False)
+    with pytest.raises(LabelsPathRefused):
+        labels_path()
+
+
+def test_an_explicit_path_is_always_honoured(tmp_path, monkeypatch):
+    from frontdoor_server.label_view import labels_path
+
+    monkeypatch.setenv(PATH_ENV, str(tmp_path / "elsewhere.csv"))
+    assert labels_path() == tmp_path / "elsewhere.csv"

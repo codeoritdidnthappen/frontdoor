@@ -234,11 +234,19 @@ def save_entrance_labels(
 #: rule -- accepted once, then locked -- is stated where the rows are written rather than in a view.
 APPEND_ACCEPTED = "accepted"
 APPEND_IDENTICAL = "identical"
-APPEND_LOCKED = "locked"
 
 #: Longest operator name accepted. Long enough for a real name, short enough that a runaway
 #: client cannot grow the CSV a megabyte at a time.
 LABELED_BY_MAX = 64
+
+
+class LabelsUnreadable(LabelError):
+    """The stored sheet could not be read. A fault in the server's own state, not in the request.
+
+    Kept distinct because the caller turns these into HTTP: a client told "labels failed
+    validation" for a file it cannot see, and did not cause, will treat its own good answers as
+    permanently rejected and throw them away.
+    """
 
 
 class LabelsLocked(LabelError):
@@ -305,6 +313,11 @@ def append_entrance_labels(
 
     Serialised with an exclusive lock on a sibling file, because this is a read-modify-write and
     two phones finishing an entrance at once would otherwise interleave or lose rows.
+
+    The lock only binds callers that take it. `save_entrance_labels`, the Mac workflow's writer,
+    does not -- today they never share a file (the container's sheet and James's checkout are
+    different paths), but pointing both at one path, as a persistent volume would, needs that
+    fixed first.
     """
     entrance_id = canonical_entrance_id(entrance_id)
     cleaned = normalise_answers(answers)
@@ -316,7 +329,14 @@ def append_entrance_labels(
     with open(lock_path, "w", encoding="utf-8") as lock:
         fcntl.flock(lock, fcntl.LOCK_EX)
         try:
-            rows = _read_sheet(path) if path.exists() else []
+            try:
+                rows = _read_sheet(path) if path.exists() else []
+            except LabelError as exc:
+                # The sheet on disk is malformed. That is the server's problem, not the
+                # submitter's, and it must not be reported as bad input.
+                raise LabelsUnreadable(
+                    f"the stored labels sheet at {path} could not be read: {exc}"
+                ) from exc
             existing = [row for row in rows if row["entrance_id"] == entrance_id]
             if existing:
                 recorded = {row["criterion"]: row["truth"] for row in existing}
