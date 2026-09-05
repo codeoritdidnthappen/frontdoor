@@ -1381,6 +1381,51 @@ The census catalogue is now the binding constraint on #333, not identification: 
 over the Second Street district and holds only 6 of these 46 doors, so 23 of the 29
 identifications carry a business name and no `place_id`. That gap is #346.
 
+## 2026-09-05 — A failed scan is reported as a failed scan (TICK-351, #351)
+
+The served app treated *any* rejection of the `/screen` POST as "there is no server" and
+substituted the simulated pipeline. `liveNetFail` was set by the 30-second client abort and by a
+throw inside the response handler, not only by an unreachable host — and the client aborts at 30 s
+while gunicorn runs `--timeout 30`, so a slow model call on a venue network was precisely the case
+that collided. The staged verdicts then survived the "simulated" labelling in three ways: the pin
+took the marigold Scanned on-site tier, it entered the "N of M entrances scanned" count, and its
+evidence made first-person claims about the user's own photograph — *"Sidewalk runs level to the
+threshold with no riser shadow in your photo"*, at 86% confidence, about a door nothing had read.
+A disabled person standing at a door with a four-inch step could be shown that, having done
+nothing wrong except be on a network that dropped one request.
+
+The simulated pipeline now runs only where there is genuinely nothing to talk to: a `file://`
+open, where no relative POST can reach anywhere. Every real failure — transport, the 30 s timeout,
+a bad answer, a throw while reading one — lands on the review screen as a scan that could not be
+completed, says which of those happened, keeps the photograph, and offers both retake and publish
+as the retry. Transport failure and a throw in the handler are now separated deliberately, because
+conflating them is how a handler bug became a verdict. A simulated run additionally cannot take
+the Scanned tier, cannot enter the scanned count, and its evidence strings say what they are.
+
+The module docstring already described this behaviour. It now matches the code.
+
+## 2026-09-05 — Owner attestation proves who is asking (TICK-352, #352)
+
+`attested=1` on `/screen/publish` was gated on `has_approved_claim(path, place_id)` — "does
+anybody hold an approved claim for this place". The endpoint has no authentication, so that
+answer did not depend on the caller: once one claim for a place had been approved by a person, any
+anonymous client could POST `place_id=X&capture_kind=in_app&attested=1` with any photographs and
+set the permanent `owner_confirmed` flag on that pin. The most authoritative tier in the product
+was reachable without being the owner, or anyone.
+
+The credential that does depend on the caller already existed — `submit_claim` mints
+`secrets.token_urlsafe(32)` and `token_matches` compares it with `hmac.compare_digest` — and was
+simply never consulted on this path. An attested publish now presents `claim_id` and `token`, and
+the gate checks the claim's `approved` status, its `place_id`, and the token together. Absent,
+wrong, and another door's token all fail identically, so the response is no longer an oracle for
+which places are claimed either. The app's guided owner capture sends the credential it already
+holds in the workspace session.
+
+`tests/test_claims.py` asserted exactly the property the code had, which is why this passed
+review; it now carries the two negatives it lacked — an attested publish with no token, and one
+carrying an approved token for a *different* place, both against a place that does have an
+approved claim.
+
 ## 2026-09-05 — Extend the pre-catalogue to the blocks the walk covered (TICK-346, #346)
 
 The catalogue was swept over the Second Street district; the 2026-09-04 walk went up Congress

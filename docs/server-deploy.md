@@ -78,9 +78,28 @@ Both files are served from the app's own origin, and the worker is served with `
 
 `.github/workflows/deploy.yml` deploys this app on manual dispatch only, never on merge: Actions
 tab, **deploy**, **Run workflow**, and a one-line reason that the run records alongside the commit
-and the actor. It runs `flyctl deploy --remote-only`, then fails the run unless `/health`, `/app`
-and `/app-icon.png` all answer 200, so a green run means the path a phone uses is actually serving.
-A concurrency group keeps two deploys off the same machine.
+and the actor. It runs `flyctl deploy --remote-only`, then fails the run unless `/health`, `/app`,
+`/app-icon.png`, `/app-manifest.json`, `/app-sw.js` and `/version` all answer 200, so a green run
+means the path a phone uses — including the two files the home-screen install depends on — is
+actually serving. A concurrency group keeps two deploys off the same machine.
+
+**Pick `main` in the branch box.** The Run workflow dialog offers every branch, and the workflow
+now refuses anything but `refs/heads/main` on its first step, before the checkout. It used to
+deploy whichever branch was picked and still go green, because the post-deploy check compares
+`/version` against that same branch's commit.
+
+Four rules the workflow file keeps, pinned by `tests/test_workflow_hardening.py` so they survive
+the next edit:
+
+- Both workflows declare `permissions: contents: read`. Without a block, a job runs with the
+  organisation's default token scope — a setting this repository cannot see and did not choose.
+- Third-party actions are pinned to a full commit SHA, never a tag or a branch. `setup-flyctl` was
+  on `@master`, and the step after it runs the binary that action installs with the production
+  deploy token in the environment.
+- No `${{ }}` inside any `run:` block. An expression is pasted in as text before the shell parses
+  it, so a free-text `reason` could run commands. Values go through `env:` and are read as quoted
+  shell variables.
+- The ref guard runs before the checkout, not after it.
 
 It needs one repository secret, created once by whoever holds the Fly account:
 
@@ -270,6 +289,31 @@ unreadable one, changes nothing. If storage is down or misconfigured, publish de
 `assessed-but-not-published` response that still carries the verdicts — nothing is dropped
 silently, and no credential material ever appears in a response.
 
+### What the running server writes, and where it survives
+
+Three stores, and the difference between them is the difference between a durable record and a
+silent loss. `Dockerfile` redirects the first two onto the volume `fly.toml` mounts at `/data`;
+a test pins that list against both files.
+
+| Store | Variable | In the image | Survives a deploy |
+|---|---|---|---|
+| Community scans | `FRONTDOOR_SCANS` | `/data/scans.jsonl` | yes |
+| Owner claims | `FRONTDOOR_CLAIMS` | `/data/claims.jsonl` | yes |
+| Future-capture labels | `FRONTDOOR_LABELS_PATH` | not set — `data/labels.csv` in the container | **no**, by design (TICK-282) |
+
+**Claims lost is a credential lost, not a record lost.** The claim record holds the only bearer
+token for an approved workspace, so an unmounted claims path means every redeploy 404s every
+workspace that existed and no claimant can get back in. Worse, the `owner_confirmed` flag that
+an approved claim authorises lives in the *scan* store, which is on the volume — so the map goes
+on showing Owner-confirmed pins backed by claims that no longer exist. And `load_claims` answers
+a missing file with an empty list, exactly as it answers a store with no claims in it, so
+nothing anywhere reports the difference. That was live until this was set.
+
+`FRONTDOOR_CLAIM_CODES` (default `data/claim_codes.json`) is read-only team-issued config, not
+run-time state. It is **not** copied into the image, so the `in_store_code` claim channel is
+unavailable on the host; `listed_phone` and `business_email` are unaffected. Ship that file if
+in-store codes are wanted live.
+
 ### EntryMap app page (TICK-247)
 
 **`GET /app`** — `https://frontdoor-measure.fly.dev/app` — is the phone-web scanner: the map, the
@@ -284,9 +328,20 @@ The page itself needs nothing — it loads with no key and no storage, and `/map
 `dataset_error` only means the embedded pins show. **Live publishes need what `/screen/publish`
 needs**: `ANTHROPIC_API_KEY` (or the page shows the 503 "screening unavailable" detail on the
 review screen) **and the object-storage credential plus `FRONTDOOR_SCANS`** above (or a publish
-comes back assessed-but-not-published, which the page shows as "saved for later"). When the phone
-cannot reach the server at all, the page falls back to a simulated scan and labels it *Simulated*
-everywhere it appears; it never presents that as a publish.
+comes back assessed-but-not-published, which the page shows as "saved for later").
+
+A request to `/screen` that **fails, times out, or answers badly** is shown as a scan that could
+not be completed, with the reason and a retry — never as verdicts. That matters because the
+page's own abort is 30 s and gunicorn's `--timeout` is 30 s, so a slow model call on a venue
+network is exactly the case that collides. The simulated pipeline runs only where there is no
+server to talk to at all — the page opened from a `file://` URL — and a simulated run is
+labelled *Simulated*, keeps the pin's existing tier, and stays out of the "N of M entrances
+scanned" count.
+
+**Owner-confirmed publishes** (`attested=1`) additionally need the `claim_id` and `token` of an
+approved claim for that same `place_id`; the app sends them from the workspace session. Without
+them the publish is refused with 422 `no approved claim` — the endpoint is otherwise
+unauthenticated, so the token is the only thing that says who is asking.
 
 The page is served from the image, so **a change to `app.html` ships with the next
 `fly deploy --ha=false`** and the phone picks it up within the page's five-minute `max-age`

@@ -65,6 +65,76 @@ def test_the_page_targets_this_origin_only():
     assert "fly.dev" not in html
 
 
+# --- a failed scan is a failed scan (TICK-351, #351) -------------------------
+#
+# The scan flow is client-side JavaScript with no runner in this suite, so these read
+# the served source. They are deliberately pinned to the few expressions that decide
+# whether a person is shown a verdict or a failure, because that decision is the whole
+# defect: any rejection of the /screen POST — including the 30 s client abort that
+# collides exactly with gunicorn's --timeout 30 — used to select the simulated
+# pipeline, whose staged verdicts then took the Scanned tier, the scanned count, and a
+# first-person sentence about a photograph nothing had read.
+
+
+def simulated_predicate(html):
+    return html.split("const liveSimulated =", 1)[1].split("\n", 1)[0]
+
+
+def test_only_the_absence_of_a_server_selects_the_simulated_pipeline():
+    html = page().get_data(as_text=True)
+    predicate = simulated_predicate(html)
+    assert "liveNetFail" not in predicate  # a failed request is not "there is no server"
+    assert "HAS_SERVER" in predicate
+    assert "const HAS_SERVER = location.protocol.startsWith('http');" in html
+
+
+def test_a_failed_or_timed_out_scan_says_so_and_offers_a_retry():
+    html = page().get_data(as_text=True)
+    assert "The scan could not be completed" in html
+    assert "publish to try again, or retake" in html
+    assert "the scan timed out" in html
+    assert "could not reach the server" in html
+    # ...and it does not reassure the user about an upload that never happened
+    failed = html.split("The scan could not be completed", 1)[0].rsplit("} else {", 1)[1]
+    assert "Not checked — this photo has not left your phone" in failed
+    assert "Faces blurred at upload" not in failed
+
+
+def test_a_simulated_run_writes_nothing_to_the_map():
+    """No tier, no verdicts, no date, no outcome stamp — and no new pin either.
+
+    upgradePin is what moves a pin to Scanned on-site and so what the "N of M entrances
+    scanned" count counts. The simulated branch must not reach it, must not reach
+    placeForRef (which pushes a pin onto the map), and must not invent a verdict.
+    """
+    html = page().get_data(as_text=True)
+    simulated = html.split("\n  if(simulated){", 1)[1].split("\n  } else {", 1)[0]
+    assert "upgradePin(" not in simulated
+    assert "placeForRef(" not in simulated
+    assert "present" not in simulated  # no fabricated verdict survives here at all
+    assert "riser shadow" not in simulated
+    assert "p=ref.place || {" in simulated  # an existing pin is reused, untouched
+    # ...and nothing anywhere in the page speaks about the user's own photograph in the
+    # first person, which only fabricated evidence ever did.
+    assert "in your photo" not in html
+
+
+def test_the_done_screen_is_told_the_outcome_rather_than_reading_it_off_the_pin():
+    """A simulated run must not relabel an earlier real publish on the same pin."""
+    html = page().get_data(as_text=True)
+    assert "function doneHeading(p, simulated){" in html
+    assert "function runDone(p, simulated){" in html
+    assert "runDone(p, simulated);" in html
+    done = html.split("function runDone(p, simulated){", 1)[1].split("\n}", 1)[0]
+    assert "p.publish" not in done  # the outcome comes from the run, not from the pin
+
+
+def test_the_scan_docstring_matches_what_the_code_does():
+    html = page().get_data(as_text=True)
+    assert "Only an outright network failure" not in html  # the claim that was untrue
+    assert "The simulated pipeline runs only where there is no server to talk to" in html
+
+
 def test_the_page_carries_a_short_max_age_and_nothing_else_about_caching():
     response = page()
     assert response.headers["Cache-Control"] == "public, max-age=300"

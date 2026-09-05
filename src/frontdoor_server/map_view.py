@@ -41,16 +41,13 @@ from pathlib import Path
 
 from flask import Blueprint, Response
 
-from frontdoor.commons_imagery import (
-    commons_provenance_for_place,
-    load_commons_records,
-)
-from frontdoor.external_data import load_osm_records, provenance_for_place
+from frontdoor.commons_imagery import commons_provenance_for_place
+from frontdoor.external_data import load_side_file, provenance_for_place
 from frontdoor.map_states import prepare_map_payload
 from frontdoor.scan_records import (
     DEFAULT_SCANS_PATH,
     SCANS_ENV,
-    load_scan_records,
+    load_scan_store,
     merge_scans,
 )
 
@@ -91,11 +88,16 @@ def map_data():
     # pin or raise one — never lower a state, an observation, or a date
     # (frontdoor.scan_records' never-negative contract) — and no scan store,
     # or an unreadable one, changes nothing at all.
-    scans = load_scan_records(os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH))
-    dataset, scan_meta = merge_scans(dataset, scans)
+    scans = load_scan_store(os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH))
+    dataset, scan_meta = merge_scans(dataset, scans.records)
     payload = prepare_map_payload(dataset)
     payload["dataset_error"] = dataset_error
-    _attach_provenance(payload["pins"])
+    payload["scans_error"] = scans.error
+    payload["scans_loaded"] = len(scans.records)
+    payload["scans_skipped"] = scans.skipped
+    osm_error, commons_error = _attach_provenance(payload["pins"])
+    payload["osm_error"] = osm_error
+    payload["commons_error"] = commons_error
     _attach_scan_provenance(payload["pins"], scan_meta)
     return payload
 
@@ -105,25 +107,29 @@ def _attach_provenance(pins):
 
     States and labels are already computed; this only ever appends
     source+date lines (positive-only by frontdoor.external_data's
-    never-negative rule) and touches nothing else. No external file, no
-    change at all.
+    never-negative rule) and touches nothing else. Load failures are
+    returned so /map/data can name them the way it names a missing
+    dataset; an empty successful file is not a failure.
     """
-    osm_records = load_osm_records(
-        os.environ.get(EXTERNAL_OSM_ENV, DEFAULT_EXTERNAL_OSM_PATH))
-    commons_records = load_commons_records(
-        os.environ.get(EXTERNAL_COMMONS_ENV, DEFAULT_EXTERNAL_COMMONS_PATH))
-    if not osm_records and not commons_records:
-        return
-    for pin in pins:
-        location = pin["location"]
-        lines = provenance_for_place(
-            pin.get("name"), location["lat"], location["lng"], osm_records
-        )
-        lines += commons_provenance_for_place(
-            location["lat"], location["lng"], commons_records
-        )
-        if lines:
-            pin["provenance"] = lines
+    osm_records, osm_error = load_side_file(
+        os.environ.get(EXTERNAL_OSM_ENV, DEFAULT_EXTERNAL_OSM_PATH), "osm"
+    )
+    commons_records, commons_error = load_side_file(
+        os.environ.get(EXTERNAL_COMMONS_ENV, DEFAULT_EXTERNAL_COMMONS_PATH),
+        "commons",
+    )
+    if osm_records or commons_records:
+        for pin in pins:
+            location = pin["location"]
+            lines = provenance_for_place(
+                pin.get("name"), location["lat"], location["lng"], osm_records
+            )
+            lines += commons_provenance_for_place(
+                location["lat"], location["lng"], commons_records
+            )
+            if lines:
+                pin["provenance"] = lines
+    return osm_error, commons_error
 
 
 def _attach_scan_provenance(pins, scan_meta):

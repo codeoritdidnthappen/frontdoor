@@ -6,7 +6,7 @@ the upload key reviews it. The workspace exists only after approval.
 
 import os
 
-from flask import Blueprint, request
+from flask import Blueprint, current_app, request
 
 from frontdoor.claims import (
     CLAIMS_ENV,
@@ -58,6 +58,53 @@ def _place_row(place_id):
     dataset = _catalogue()
     row = dataset.get(place_id)
     return row if isinstance(row, dict) else None
+
+
+#: Where a claimant's bearer token is meant to travel.
+#:
+#: These handlers used to read it from `?token=`. That token is the SOLE credential for an
+#: approved workspace, and a query string is written down along the way: the access log, the
+#: proxy's log, and -- for any client that puts one in a DOCUMENT url rather than a fetch --
+#: the browser's history and the Referer of everything that page then loads.
+#:
+#: Our own page keeps the token in storage rather than the address bar, so the live exposure
+#: today is the two logs. Which of the rest apply is a property of the client, not of the
+#: credential, and that is the reason the rule is "not in a URL at all" rather than a list of
+#: clients to check. None of those places can be revoked.
+#:
+#: A header rather than only a body because two of these are GETs, and a browser cannot put a
+#: body on a GET.
+CLAIM_TOKEN_HEADER = "X-Frontdoor-Claim-Token"
+
+
+def _presented_token():
+    """The claimant's token, from the header, else the JSON body, else the query string.
+
+    The query string is DEPRECATED and kept for exactly one release, so that the shipped
+    `/app` page keeps working while its request is changed to send the header instead. Every
+    use of it is logged -- without the token -- so the decision to delete this fallback can be
+    made from evidence rather than from hope. Delete it, and this comment, once that log is
+    quiet.
+    """
+    header = request.headers.get(CLAIM_TOKEN_HEADER, "").strip()
+    if header:
+        return header
+
+    body = request.get_json(silent=True)
+    if isinstance(body, dict) and isinstance(body.get("token"), str) and body["token"]:
+        return body["token"]
+
+    in_url = request.args.get("token")
+    if in_url:
+        # The token itself is never logged. What is worth recording is that one arrived in a URL
+        # at all, and on which path, because that is what says whether the client has moved.
+        current_app.logger.warning(
+            "claim token presented in the query string on %s; "
+            "send it as the %s header instead (deprecated, removed next release)",
+            request.path,
+            CLAIM_TOKEN_HEADER,
+        )
+    return in_url
 
 
 def _claimant_record(claim_id, token):
@@ -124,7 +171,7 @@ def claim_submit():
 
 @claim_page.get("/claim/<claim_id>")
 def claim_get(claim_id):
-    record = _claimant_record(claim_id, request.args.get("token"))
+    record = _claimant_record(claim_id, _presented_token())
     if record is None:
         return _error("claim not found", "no claim matches that id and token.", status=404)
     return public_claim_view(record)
@@ -159,7 +206,7 @@ def claim_review(claim_id):
 
 @claim_page.post("/claim/<claim_id>/abandon")
 def claim_abandon(claim_id):
-    record = _claimant_record(claim_id, request.args.get("token") or (request.get_json(silent=True) or {}).get("token"))
+    record = _claimant_record(claim_id, _presented_token())
     if record is None:
         return _error("claim not found", "no claim matches that id and token.", status=404)
     try:
@@ -171,7 +218,7 @@ def claim_abandon(claim_id):
 
 @claim_page.get("/claim/<claim_id>/workspace")
 def claim_workspace(claim_id):
-    record = _claimant_record(claim_id, request.args.get("token"))
+    record = _claimant_record(claim_id, _presented_token())
     if record is None or record.get("status") != "approved":
         return _error("workspace not found", "no approved workspace for that claim.", status=404)
     pin = _public_pin(record["place_id"])
@@ -196,7 +243,7 @@ def claim_dispute(claim_id):
             "POST /claim/<id>/dispute requires an application/json body.",
             status=415,
         )
-    record = _claimant_record(claim_id, body.get("token") or request.args.get("token"))
+    record = _claimant_record(claim_id, _presented_token())
     if record is None:
         return _error("claim not found", "no claim matches that id and token.", status=404)
     try:

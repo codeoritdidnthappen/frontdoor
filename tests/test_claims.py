@@ -19,7 +19,9 @@ from frontdoor.claims import (
 )
 from frontdoor.map_states import STATE_NEUTRAL, STATE_VERIFIED, STATES, pin_for_row
 from frontdoor.scan_records import load_scan_records, merge_scans, new_scan_record
+from frontdoor_server import claim_view
 from frontdoor_server.app import create_app
+from frontdoor_server.claim_view import CLAIM_TOKEN_HEADER
 from frontdoor_server.scan_view import STORE_KEY
 from frontdoor_server.screen_view import ENGINE_KEY
 from tests.test_scan_publish_endpoint import FakeStore, post_publish
@@ -377,25 +379,87 @@ def test_camera_roll_attested_publish_is_refused(env):
     assert pin_state(http)["owner_confirmed"] is False
 
 
-def test_in_app_attested_publish_requires_an_approved_claim(env):
-    http = _publish_client()
+def attested_form(place_id=PLACE, name="Royal Blue Grocery", **fields):
     form = {
-        "place_id": PLACE, "name": "Royal Blue Grocery",
+        "place_id": place_id, "name": name,
         "lat": "30.267", "lng": "-97.743",
         "capture_kind": "in_app", "attested": "1",
     }
+    form.update(fields)
+    return form
+
+
+def add_place(env, place_id, name):
+    """A second catalogue row, so a claim's token can be aimed at the wrong door."""
+    dataset = json.loads(env["catalogue"].read_text(encoding="utf-8"))
+    dataset[place_id] = cafe_row(place_id=place_id, name=name)
+    env["catalogue"].write_text(json.dumps(dataset), encoding="utf-8")
+
+
+def test_in_app_attested_publish_requires_an_approved_claim(env):
+    http = _publish_client()
+    form = attested_form()
     response = post_publish(http, [image_part("door.jpg")], form=form)
     assert response.status_code == 422
     created = submit(http).get_json()
-    still = post_publish(http, [image_part("door.jpg")], form=form)
-    assert still.status_code == 422
+    held = attested_form(claim_id=created["claim_id"], token=created["token"])
+    still = post_publish(http, [image_part("door.jpg")], form=held)
+    assert still.status_code == 422  # the claim exists, but nobody has approved it
     approve(http, created["claim_id"])
-    published = post_publish(http, [image_part("door.jpg")], form=form)
+    published = post_publish(http, [image_part("door.jpg")], form=held)
     assert published.status_code == 200
     assert published.get_json()["published"] is True
     pin = pin_state(http)
     assert pin["owner_confirmed"] is True
     assert pin["state"] == STATE_VERIFIED
+
+
+def test_an_approved_claim_does_not_let_an_anonymous_client_attest(env):
+    """The gate is the caller's claim token, not the existence of somebody's claim.
+
+    /screen/publish is unauthenticated, so gating on "does this place have an approved
+    claim" made the most authoritative tier in the product settable by anyone with an
+    HTTP client, once one owner anywhere had been approved.
+    """
+    http = _publish_client()
+    created = submit(http).get_json()
+    approve(http, created["claim_id"])
+    assert has_approved_claim(env["claims"], PLACE) is True
+
+    no_token = post_publish(http, [image_part("door.jpg")], form=attested_form())
+    assert no_token.status_code == 422
+    wrong_token = post_publish(http, [image_part("door.jpg")], form=attested_form(
+        claim_id=created["claim_id"], token="not-the-token"))
+    assert wrong_token.status_code == 422
+    unknown_claim = post_publish(http, [image_part("door.jpg")], form=attested_form(
+        claim_id="0" * 32, token=created["token"]))
+    assert unknown_claim.status_code == 422
+
+    assert load_scan_records(env["scans"]) == []
+    assert pin_state(http)["owner_confirmed"] is False
+
+
+def test_a_claim_token_for_another_place_cannot_attest(env):
+    """An approved claim is proof about one door, not a key to the map.
+
+    Both places are claimed and approved here, so the neighbour's pin is eligible under
+    the old place-scoped gate; only binding the token's own place_id refuses it.
+    """
+    other = "ChIJneighbour"
+    add_place(env, other, "Sweetgreen")
+    http = _publish_client()
+    mine = submit(http).get_json()
+    theirs = submit(http, place_id=other).get_json()
+    approve(http, mine["claim_id"])
+    approve(http, theirs["claim_id"])
+    assert has_approved_claim(env["claims"], other) is True
+
+    response = post_publish(http, [image_part("door.jpg")], form=attested_form(
+        place_id=other, name="Sweetgreen",
+        claim_id=mine["claim_id"], token=mine["token"]))
+    assert response.status_code == 422
+    assert load_scan_records(env["scans"]) == []
+    assert pin_state(http, other)["owner_confirmed"] is False
 
 
 def test_in_app_without_attestation_stays_community_scanned(env):
@@ -427,11 +491,103 @@ def test_has_approved_claim_is_place_scoped(env):
     assert has_approved_claim(env["claims"], "ChIJother") is False
 
 
+def test_the_app_page_sends_the_claim_credential_on_an_attested_publish():
+    """The honest owner path has to carry what the server now demands of it."""
+    html = create_app().test_client().get("/app").get_data(as_text=True)
+    attest = html.split("if(ownerAttest){", 1)[1].split("\n  }", 1)[0]
+    assert "fd.append('attested', '1');" in attest
+    assert "fd.append('claim_id', rec.claim_id);" in attest
+    assert "fd.append('token', rec.token);" in attest
+
+
 def test_map_page_links_owners_into_the_claim_flow(env):
     html = client().get("/map").get_data(as_text=True)
     assert 'id="owner-entry"' in html
     assert 'href="/app#claim"' in html
     assert "For business owners" in html
+
+
+# --- the claimant's token must not have to travel in the URL -----------------
+#
+# It is the SOLE credential for an approved workspace, and a query string is written down along
+# the way: the access log, the proxy's log, and -- for a client that puts one in a document URL
+# rather than a fetch -- the browser's history and the Referer of everything that page loads.
+# None of those can be revoked. Which of them apply is a property of the client, which is why
+# the rule is "not in a URL at all" rather than a list of clients to keep checking.
+
+
+def test_the_claim_token_never_has_to_travel_in_the_url(env):
+    """Every claimant-authenticated handler accepts the token out of band.
+
+    `/dispute` already read it from the body. `GET /claim/<id>` and `GET .../workspace` are
+    GETs, which a browser cannot put a body on, so the header is what makes those two possible
+    at all -- and it is then the one way that works for all four.
+    """
+    http = client()
+    created = submit(http).get_json()
+    claim_id = created["claim_id"]
+    approve(http, claim_id)
+    auth = {CLAIM_TOKEN_HEADER: created["token"]}
+
+    got = http.get(f"/claim/{claim_id}", headers=auth)
+    assert got.status_code == 200
+    assert got.get_json()["status"] == "approved"
+
+    workspace = http.get(f"/claim/{claim_id}/workspace", headers=auth)
+    assert workspace.status_code == 200
+    assert workspace.get_json()["pin"]["place_id"] == PLACE
+
+    disputed = http.post(
+        f"/claim/{claim_id}/dispute",
+        json={"note": "The ramp photo is from the alley door."},
+        headers=auth,
+    )
+    assert disputed.status_code == 200
+
+    abandoned = http.post(f"/claim/{claim_id}/abandon", headers=auth)
+    assert abandoned.status_code == 200
+    assert abandoned.get_json()["status"] == "abandoned"
+
+
+def test_a_wrong_token_in_the_header_is_refused_exactly_as_one_in_the_url_was(env):
+    """The new route in must not be a way around the check it replaced."""
+    http = client()
+    claim_id = submit(http).get_json()["claim_id"]
+    approve(http, claim_id)
+    for header in ({CLAIM_TOKEN_HEADER: "nope"}, {CLAIM_TOKEN_HEADER: ""}, {}):
+        assert http.get(f"/claim/{claim_id}", headers=header).status_code == 404
+        assert http.get(f"/claim/{claim_id}/workspace", headers=header).status_code == 404
+
+
+def test_the_query_string_token_still_works_for_exactly_one_release(env):
+    """Deliberate, and deliberately temporary.
+
+    The shipped `/app` page still sends `?token=`, and that page is not changed here. Removing
+    the fallback in the same change would 404 every live workspace. This test is what makes the
+    removal a decision someone takes rather than a line someone forgets: delete it together
+    with the fallback, and not before the client sends the header.
+    """
+    http = client()
+    created = submit(http).get_json()
+    claim_id, token = created["claim_id"], created["token"]
+    approve(http, claim_id)
+    assert http.get(f"/claim/{claim_id}", query_string={"token": token}).status_code == 200
+    assert http.get(
+        f"/claim/{claim_id}/workspace", query_string={"token": token}
+    ).status_code == 200
+
+
+def test_the_url_is_read_in_one_place_so_the_fallback_can_be_deleted_in_one_edit():
+    """Four handlers read the token; only the shared helper may look at the URL for it."""
+    source = inspect.getsource(claim_view)
+    assert source.count('request.args.get("token")') == 1, (
+        "a handler reads the token straight out of the query string; the deprecated fallback "
+        "has to live in one place or it will not all be removed at once"
+    )
+    assert source.count("_claimant_record(claim_id, _presented_token())") == 4, (
+        "every claimant-authenticated handler must go through the shared reader: "
+        "GET /claim/<id>, /abandon, /workspace and /dispute"
+    )
 
 
 def test_app_page_has_no_hardcoded_listings_and_opens_claim_from_hash():

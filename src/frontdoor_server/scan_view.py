@@ -19,6 +19,10 @@ face_check audit); what differs is only what happens after:
     EXIF/GPS stripped, re-encoded JPEG. The raw upload dies with the request
     here exactly as it does on /screen (#243's guarantee, preserved on both
     paths).
+  * attested=1 — the Owner-confirmed tier — needs the claim_id and token of an
+    APPROVED claim whose place_id is the one being published against. The
+    endpoint has no other notion of who is calling, so the token is what makes
+    the attestation an attestation rather than an anonymous assertion.
   * Storage or record-store failure degrades to 503 assessed-but-not-published
     with the verdicts still in the body — never a silent drop, and never a
     stored image the caller was not told about without the record that would
@@ -49,9 +53,10 @@ from flask import Blueprint, Response, current_app, request
 from frontdoor.claims import (
     CLAIMS_ENV,
     DEFAULT_CLAIMS_PATH,
-    has_approved_claim,
+    get_claim,
+    token_matches,
 )
-from frontdoor.faceblur import InvalidImageError, process_upload
+from frontdoor.faceblur import FaceDetectorError, InvalidImageError, process_upload
 from frontdoor.scan_records import (
     CAPTURE_CAMERA_ROLL,
     CAPTURE_IN_APP,
@@ -111,6 +116,27 @@ def _contributor():
     ):
         return value
     return None
+
+
+def _holds_the_approved_claim(place_id):
+    """Does THIS caller hold the approved claim for THIS place?
+
+    /screen/publish is unauthenticated, so the question "does an approved claim exist
+    for this place" is one anybody can satisfy: the answer does not depend on who is
+    asking. The claim token minted at submit is the only credential in the system that
+    does, so an attested publish presents it, and it is checked against the claim's own
+    status and place_id. A wrong, absent, or another door's token all fail the same way,
+    which also stops the response being an oracle for which places are claimed.
+    """
+    claim = get_claim(
+        os.environ.get(CLAIMS_ENV, DEFAULT_CLAIMS_PATH),
+        (request.form.get("claim_id") or "").strip(),
+    )
+    if claim is None or claim.get("status") != "approved":
+        return False
+    if not place_id or claim.get("place_id") != place_id:
+        return False
+    return token_matches(claim, request.form.get("token"))
 
 
 def _parse_place_ref(form):
@@ -234,16 +260,13 @@ def publish():
             "attested=1 is only valid with capture_kind=in_app.",
             status=422,
         )
-    if attested:
-        place_id = place_ref.get("place_id")
-        if not has_approved_claim(
-            os.environ.get(CLAIMS_ENV, DEFAULT_CLAIMS_PATH), place_id
-        ):
-            return _error(
-                "no approved claim",
-                "Owner-confirmed capture needs an approved claim for this place.",
-                status=422,
-            )
+    if attested and not _holds_the_approved_claim(place_ref.get("place_id")):
+        return _error(
+            "no approved claim",
+            "Owner-confirmed capture needs the claim_id and token of an approved "
+            "claim for this place.",
+            status=422,
+        )
 
     entrance_id = request.form.get("entrance_id")
     if entrance_id is not None:
@@ -283,6 +306,13 @@ def publish():
                 "invalid image",
                 f"file part {part.name!r} could not be decoded and privacy-processed.",
                 status=422,
+            )
+        except FaceDetectorError:
+            return _error(
+                "internal error",
+                "face detection did not return a result; the upload was not "
+                "sent to the model.",
+                status=500,
             )
         else:
             payloads.append(processed.image_bytes)

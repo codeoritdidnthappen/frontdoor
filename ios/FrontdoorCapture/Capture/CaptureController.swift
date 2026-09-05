@@ -505,9 +505,26 @@ final class CaptureController: ObservableObject {
                 return
             }
             lastCaptureError = nil
+
+            // A depth map of a face IS the face, in geometry. Pixellating the colour frame and
+            // then writing the raw depth beside it publishes the very thing the blur removed, in
+            // the one format nothing downstream looks at -- and both files are uploaded together.
+            //
+            // So a frame with a blurred face is written with NO depth at all. Masking the depth
+            // grid instead would mean trusting that a rectangle in the stored colour grid lands
+            // on the same pixels in a differently sized sensor-native depth grid; a mistake there
+            // leaves the geometry in place and looks exactly like a success. Withholding cannot
+            // be wrong in that way, and it costs nothing that matters: depth is quarantined from
+            // the method (D-020) and its absence is recorded rather than punished (TICK-023).
+            //
+            // `record.depth` goes with the bytes. It is metadata about a file that is now not
+            // being written, and a record that describes one is a record that is not true.
+            let depthBytes = processed.blurredFaceCount > 0 ? nil : depth?.bytes
+            if depthBytes == nil { record.depth = nil }
+
             let pending = PendingReview(
                 record: record, image: reviewImage,
-                imageData: processed.data, depthBytes: depth?.bytes)
+                imageData: processed.data, depthBytes: depthBytes)
             // Both modes pause here now. The reason differs, and the earlier comment -- that a
             // screening review would be "a gate with nothing behind it" -- was right about ROI
             // taps and wrong about consent (#275): metrology stops to collect six points,

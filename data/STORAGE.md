@@ -208,6 +208,28 @@ required -- the read-back is what proves it, and the refusal only makes it legib
 probe objects are now permanently undeletable and stay where they are: that is the standing
 evidence the rule is on, and it costs twenty bytes.
 
+## Shopkeeper-objection deletion (#331)
+
+Probed 2026-09-05 with `FRONTDOOR_IMAGES_*` through `ObjectStore.delete` (S3 `DeleteObject`).
+`GetObjectLockConfiguration` and Cloudflare `GET /accounts/.../r2/buckets/.../lock` both
+return AccessDenied / 403 to the tokens we hold, so the dashboard rule is still the source
+of the lock itself (`lock-sealed-indefinite` on prefix `sealed/`, applied 2026-09-03
+above). This probe is what that rule does to the images token:
+
+| Prefix | `DeleteObject` with `FRONTDOOR_IMAGES_*` |
+|---|---|
+| `sealed/` | refused: `ObjectLockedByBucketPolicy` |
+| `open/` | succeeds |
+
+No S3 credential we hold can delete `sealed/` while that lock stands — not
+`FRONTDOOR_IMAGES_*`, and not `FRONTDOOR_DEPTH_*` (different bucket). Retention is
+indefinite. The only delete path is the Cloudflare account login: remove rule
+`lock-sealed-indefinite`, then delete. Depth-write credentials can delete unlocked
+objects on `frontdoor-depth` (Emily, #331); that is not a photograph path.
+
+The capture protocol therefore does not promise on-the-spot cloud deletion: unpublished
+frames are discarded on the phone; published `sealed/` photographs cannot be deleted.
+
 **Against the free tier.** A lock rule stores no bytes and costs no operations, and a
 locked object is billed as ordinary storage against the same 10 GB in **Provider** above
 (R2 bills GB-month — peak stored bytes per day, averaged over the month). With no

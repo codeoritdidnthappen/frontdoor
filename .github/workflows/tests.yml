@@ -11,6 +11,14 @@ on:
   push:
     branches: [main]
 
+# Read the tree and nothing else. Without this block the job runs with the
+# repository's DEFAULT token scope, which is whatever the org setting happens to
+# be -- often write to contents, packages, issues and pull requests. This
+# workflow runs on `pull_request`, so that token would be sitting in a job that
+# has just installed and executed code from a contributor's branch.
+permissions:
+  contents: read
+
 jobs:
   pytest:
     runs-on: ubuntu-latest
