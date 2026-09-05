@@ -328,9 +328,20 @@ The page itself needs nothing — it loads with no key and no storage, and `/map
 `dataset_error` only means the embedded pins show. **Live publishes need what `/screen/publish`
 needs**: `ANTHROPIC_API_KEY` (or the page shows the 503 "screening unavailable" detail on the
 review screen) **and the object-storage credential plus `FRONTDOOR_SCANS`** above (or a publish
-comes back assessed-but-not-published, which the page shows as "saved for later"). When the phone
-cannot reach the server at all, the page falls back to a simulated scan and labels it *Simulated*
-everywhere it appears; it never presents that as a publish.
+comes back assessed-but-not-published, which the page shows as "saved for later").
+
+A request to `/screen` that **fails, times out, or answers badly** is shown as a scan that could
+not be completed, with the reason and a retry — never as verdicts. That matters because the
+page's own abort is 30 s and gunicorn's `--timeout` is 30 s, so a slow model call on a venue
+network is exactly the case that collides. The simulated pipeline runs only where there is no
+server to talk to at all — the page opened from a `file://` URL — and a simulated run is
+labelled *Simulated*, keeps the pin's existing tier, and stays out of the "N of M entrances
+scanned" count.
+
+**Owner-confirmed publishes** (`attested=1`) additionally need the `claim_id` and `token` of an
+approved claim for that same `place_id`; the app sends them from the workspace session. Without
+them the publish is refused with 422 `no approved claim` — the endpoint is otherwise
+unauthenticated, so the token is the only thing that says who is asking.
 
 The page is served from the image, so **a change to `app.html` ships with the next
 `fly deploy --ha=false`** and the phone picks it up within the page's five-minute `max-age`
