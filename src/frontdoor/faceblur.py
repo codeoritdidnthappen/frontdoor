@@ -31,6 +31,7 @@ EXIF policy - deliberate, read before "fixing":
     reads image metadata.
 """
 
+import logging
 import math
 import threading
 from dataclasses import dataclass
@@ -92,10 +93,15 @@ _yunet = None
 #: FaceDetectorYN is stateful (setInputSize before each detect), so the shared
 #: instance is guarded; concurrent /screen requests must not interleave it.
 _yunet_lock = threading.Lock()
+logger = logging.getLogger(__name__)
 
 
 class InvalidImageError(ValueError):
     """The supplied bytes are not a decodable image."""
+
+
+class FaceDetectorError(RuntimeError):
+    """YuNet did not answer; Haar-alone is not a clean photograph."""
 
 
 def _get_cascades():
@@ -147,11 +153,18 @@ def _detect_yunet(small):
     height, width = small.shape[:2]
     small_limit = YUNET_SMALL_FACE_FRACTION * max(height, width)
     boxes = []
+    answered = False
     with _yunet_lock:
         detector = _get_yunet()
         detector.setInputSize((width, height))
         for variant in (small, _boost_luma(small)):
-            _, faces = detector.detect(variant)
+            retval, faces = detector.detect(variant)
+            # OpenCV returns 1 on success. Some test fakes return None as the
+            # unused status. 0 is the non-answer this module used to treat as
+            # "no faces", then fall through to Haar alone.
+            if retval == 0:
+                continue
+            answered = True
             if faces is None:
                 continue
             # Rows are [x, y, w, h, 10 landmark floats, score]; boxes can poke
@@ -170,6 +183,9 @@ def _detect_yunet(small):
                         (round(float(x)), round(float(y)),
                          round(float(w)), round(float(h)))
                     )
+    if not answered:
+        logger.warning("YuNet did not return a detection result")
+        raise FaceDetectorError("YuNet did not return a detection result")
     return boxes
 
 
@@ -350,8 +366,10 @@ class ProcessedImage:
 def process_upload(image_bytes):
     """The one ingest entry point: blur faces, strip EXIF/GPS, re-encode.
 
-    Returns a ProcessedImage; raises InvalidImageError for bytes no decoder accepts
-    (the caller decides what an undecodable upload means on its path).
+    Returns a ProcessedImage; raises InvalidImageError for bytes no decoder
+    accepts, and FaceDetectorError when the primary detector does not answer
+    (the caller decides what either means on its path). Haar-alone is not
+    treated as a clean photograph.
     """
     img = _decode(image_bytes)
     boxes = _detect(img)

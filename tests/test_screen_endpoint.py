@@ -458,9 +458,13 @@ def test_a_real_image_reaches_the_engine_reencoded(monkeypatch):
     assert sent != real_jpeg()  # processed, not the raw upload
 
 
+from frontdoor.faceblur import FaceDetectorError
+
+
 @pytest.mark.parametrize("failure", [
     OverflowError("cannot convert float infinity to integer"),
     ValueError("detector returned an invalid tensor"),
+    FaceDetectorError("YuNet did not return a detection result"),
 ])
 def test_ac_1_ac_2_detector_surprise_never_sends_the_unblurred_original(
     monkeypatch, failure
@@ -477,6 +481,8 @@ def test_ac_1_ac_2_detector_surprise_never_sends_the_unblurred_original(
     response = post_screen(make_client(engine), [image_part(data=real_jpeg())])
     assert response.status_code == 500
     assert engine.calls == []
+    if isinstance(failure, FaceDetectorError):
+        assert "face detection" in response.get_json()["detail"]
 
 
 @pytest.mark.parametrize("raw", [b"", b"not-an-image"])

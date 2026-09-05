@@ -9,6 +9,7 @@ without altering states.
 """
 
 import json
+import logging
 
 import pytest
 
@@ -128,11 +129,15 @@ def test_written_dataset_is_segregated_and_attributed(tmp_path):
     assert load_osm_records(path) == document["records"]
 
 
-def test_load_osm_records_total_over_missing_or_broken(tmp_path):
-    assert load_osm_records(tmp_path / "nope.json") == []
+def test_load_osm_records_total_over_missing_or_broken(tmp_path, caplog):
+    with caplog.at_level(logging.WARNING):
+        assert load_osm_records(tmp_path / "nope.json") == []
+    assert "not found" in caplog.text.lower()
     broken = tmp_path / "broken.json"
     broken.write_text("{not json", encoding="utf-8")
-    assert load_osm_records(broken) == []
+    with caplog.at_level(logging.WARNING):
+        assert load_osm_records(broken) == []
+    assert "unreadable" in caplog.text.lower()
     weird = tmp_path / "weird.json"
     weird.write_text(json.dumps({"records": ["junk", 7]}), encoding="utf-8")
     assert load_osm_records(weird) == []
@@ -329,3 +334,5 @@ def test_map_data_unchanged_without_external_file(client, tmp_path, monkeypatch)
     (pin,) = payload["pins"]
     assert "provenance" not in pin
     assert pin["state"] == STATE_NEUTRAL
+    assert payload["osm_error"] is not None
+    assert "not found" in payload["osm_error"]

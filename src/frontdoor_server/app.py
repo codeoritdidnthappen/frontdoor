@@ -16,8 +16,9 @@ from jsonschema import Draft202012Validator, ValidationError
 from werkzeug.exceptions import HTTPException
 
 from frontdoor.metrology import ARM_NAMES
+from frontdoor.scan_records import DEFAULT_SCANS_PATH, SCANS_ENV
 from frontdoor.sidecar import validate_sidecar
-from frontdoor.storage import StorageError, load_image_creds
+from frontdoor.storage import StorageError, load_image_creds, image_bucket_is_reachable
 from frontdoor_server.claim_view import claim_page
 from frontdoor_server.map_view import map_page
 from frontdoor_server.label_view import register_labels
@@ -79,6 +80,17 @@ def _error(message, detail, field=None, status=400):
     if field is not None:
         body["field"] = field
     return body, status
+
+
+def _map_dataset_ready(path):
+    """True only when the map dataset is a non-empty JSON object on disk."""
+    if not path.is_file():
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeError):
+        return False
+    return isinstance(data, dict) and bool(data)
 
 # Fixed placeholder values. The repdigit rises are deliberately synthetic so nobody reads stub
 # output as a measurement. TICK-062 serves A and A' live on the free-tier image; B and C need
@@ -240,29 +252,42 @@ def create_app():
         assessment succeeds, and the image quietly does not persist. That has
         already happened once on this project.
 
-        Reports configuration presence only. It never reveals a value, and it
-        never reveals which specific variable is missing, because that is a map
-        of the deployment for anyone who asks. Names of subsystems, booleans,
-        nothing else.
+        Reports configuration presence and a cheap reachability probe, never a
+        value, and never which specific variable is missing, because that is a
+        map of the deployment for anyone who asks. Names of subsystems,
+        booleans, nothing else.
         """
         subsystems = {}
 
-        # The model: an assessment cannot happen without it.
-        subsystems["screening"] = bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
+        # The model: an assessment cannot happen without it. The engine accepts
+        # either credential; reporting only one would call a working deploy
+        # broken.
+        subsystems["screening"] = bool(
+            os.environ.get("ANTHROPIC_API_KEY", "").strip()
+            or os.environ.get("ANTHROPIC_AUTH_TOKEN", "").strip()
+        )
 
-        # Object storage: the difference between a published scan that keeps
-        # its photograph and one that silently does not.
+        # Object storage: env vars present is not the same as a reachable
+        # bucket. A revoked key or a deleted bucket looks identical to the
+        # missing-credential incident from outside.
         try:
             load_image_creds()
-            subsystems["photo_storage"] = True
         except StorageError:
             subsystems["photo_storage"] = False
+        else:
+            subsystems["photo_storage"] = image_bucket_is_reachable()
 
-        # The map dataset, which is what /map/data serves.
-        dataset_path = Path(
-            os.environ.get("FRONTDOOR_MAP_DATASET", "data/precatalogue.json")
+        # The map dataset, which is what /map/data serves. Existence alone
+        # is not enough: an empty or unparseable file still yields zero pins.
+        subsystems["map_dataset"] = _map_dataset_ready(
+            Path(os.environ.get("FRONTDOOR_MAP_DATASET", "data/precatalogue.json"))
         )
-        subsystems["map_dataset"] = dataset_path.is_file()
+
+        # The scan store's parent directory is the volume. A missing file
+        # inside a mounted volume is the empty store; a missing parent is
+        # the unmounted-volume incident.
+        scans_path = Path(os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH))
+        subsystems["scan_store"] = scans_path.parent.is_dir()
 
         ready_state = all(subsystems.values())
         return {

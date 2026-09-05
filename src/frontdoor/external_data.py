@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import logging
 import math
 import re
 import sys
@@ -52,6 +53,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+logger = logging.getLogger(__name__)
 
 DEFAULT_CONFIG_PATH = Path(__file__).with_name("demo_area.json")
 DEFAULT_OUT_DIR = Path("data/external")
@@ -201,17 +203,34 @@ def write_osm_dataset(records, path, fetched_at):
     return document
 
 
+def load_side_file(path, kind):
+    """(records, error) for a segregated external JSON file.
+
+    Total: the map still renders when the side file fails. `kind` is only
+    the short label in the log and the payload error string (osm, commons).
+    """
+    try:
+        document = json.loads(Path(path).read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        error = f"{kind} not found: {path}"
+        logger.warning(error)
+        return [], error
+    except (OSError, json.JSONDecodeError, TypeError) as exc:
+        error = f"{kind} unreadable: {exc}"
+        logger.warning(error)
+        return [], error
+    records = document.get("records") if isinstance(document, dict) else None
+    return [r for r in records or [] if isinstance(r, dict)], None
+
+
 def load_osm_records(path):
     """Records from a segregated OSM side file; [] when missing/unreadable.
 
     Total on purpose: the map must render with or without external data.
+    Failures are logged; callers that need the error string use load_side_file.
     """
-    try:
-        document = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, TypeError):
-        return []
-    records = document.get("records") if isinstance(document, dict) else None
-    return [r for r in records or [] if isinstance(r, dict)]
+    records, _error = load_side_file(path, "osm")
+    return records
 
 
 # --- provenance lines -------------------------------------------------------
