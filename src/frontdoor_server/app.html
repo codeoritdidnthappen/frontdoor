@@ -2715,6 +2715,7 @@ function renderReview(){
       }
     } else if(liveSimulated()){
       tagText.textContent='Simulated — nothing leaves this phone';
+      note.classList.remove('on');   /* nothing is uploaded here, so nothing is blurred here */
       hint.textContent='This page was opened with no server to check the photo, so the chips are staged examples rather than anything read from it, and nothing will be published.';
     } else {
       /* say only what happened: on a transport failure or an early 503 the frame never
@@ -2780,20 +2781,16 @@ async function publishScan(ref){
 function placeForRef(ref, id){
   if(ref.place) return ref.place;
   const p={id, name:ref.name, lat:ref.lat, lng:ref.lng, crit:{}, tier:'est'};
-  p.f=featsOf(p);   /* renderable on its own: a run that writes nothing still leaves a valid pin */
   places.push(p);
   return p;
 }
+/* Only a run the server actually read gets here: it is what moves a pin to Scanned on-site,
+   and therefore what the "N of M entrances scanned" count is counting. A simulated run never
+   calls this — see the publish handler. */
 function upgradePin(p, crit, publish, photo, note){
-  p.publish=publish; p.note=note;
-  /* Scanned on-site means the server read this photograph. A simulated run read nothing, so
-     it moves no tier, no date, no verdict and no photo on the pin — which is also what keeps
-     it out of the "N of M entrances scanned" count. The staged chips stay on the review
-     screen, where they carry the Simulated tag. */
-  if(publish.state==='simulated') return;
   if(p.tier!=='owner') p.tier='scan';
   p.views=(p.views|0)+1; p.staged=true; p.date=new Date().toISOString().slice(0,10);
-  p.crit=crit; p.livePhoto=photo;
+  p.crit=crit; p.publish=publish; p.livePhoto=photo; p.note=note;
   p.f=featsOf(p);
 }
 document.getElementById('btn-publish').addEventListener('click',async ()=>{
@@ -2804,13 +2801,13 @@ document.getElementById('btn-publish').addEventListener('click',async ()=>{
     document.getElementById('entrance-name').focus();
     return;
   }
-  let p;
-  if(liveSimulated()){
-    /* no frame, or no server at all. Nothing read a photograph, so nothing is published and
-       nothing is written onto the pin — no verdicts to pass, and none invented. */
-    p=placeForRef(ref, 'scan:sim-'+Date.now());
-    upgradePin(p, null, {state:'simulated'}, null,
-      'Simulated scan: there was no server to check a photo, so nothing was read, nothing was published, and this entrance is unchanged.');
+  let p, simulated=liveSimulated();
+  if(simulated){
+    /* No frame, or no server at all. Nothing read a photograph, so nothing is published and
+       nothing is written anywhere: an entrance already on the map is shown exactly as it was,
+       and one that is not on the map stays off it. The done screen is told the outcome
+       directly, so it never has to read it back off a pin this run did not touch. */
+    p=ref.place || {id:null, name:ref.name, lat:ref.lat, lng:ref.lng, tier:'est'};
   } else {
     btn.disabled=true; btn.textContent='Publishing…';
     let out;
@@ -2839,22 +2836,21 @@ document.getElementById('btn-publish').addEventListener('click',async ()=>{
   }
   scanTarget=p;
   showScreen('scan-done');
-  runDone(p);
+  runDone(p, simulated);
 });
-function doneHeading(p){
+function doneHeading(p, simulated){
+  if(simulated) return 'Simulated scan — nothing was published';
   const s=p.publish&&p.publish.state;
   return s==='published' ? 'Scan published — thanks for helping your neighbors'
     : s==='quarantined' ? 'Privacy hold — the photo stays off the map'
-    : s==='held' ? 'Scan saved for later — not published yet'
-    : 'Simulated scan — nothing was published';
+    : 'Scan saved for later — not published yet';
 }
-function runDone(p){
-  document.getElementById('done-h').textContent=doneHeading(p);
+function runDone(p, simulated){
+  document.getElementById('done-h').textContent=doneHeading(p, simulated);
   const scans = places.filter(q=>q.tier!=='est').length;
-  document.getElementById('counter-line').textContent =
-    (p.publish && p.publish.state==='simulated')
-      ? `${esc(p.name)} is unchanged — a simulated run publishes nothing · ${scans} of ${places.length} entrances scanned downtown`
-      : `${esc(p.name)} just moved up a tier · ${scans} of ${places.length} entrances scanned downtown`;
+  document.getElementById('counter-line').textContent = simulated
+    ? `${esc(p.name)} is unchanged — a simulated run publishes nothing · ${scans} of ${places.length} entrances scanned downtown`
+    : `${esc(p.name)} just moved up a tier · ${scans} of ${places.length} entrances scanned downtown`;
   document.getElementById('done-legend').innerHTML =
     `<span class="lg">${pinSVG('est',20)} Estimated</span>
      <span class="lg">${pinSVG('scan',24)} Scanned on-site</span>
@@ -2887,7 +2883,8 @@ document.getElementById('btn-done-map').addEventListener('click',()=>{
   /* bounce the upgraded pin on the real map too */
   const b=pinsEl.querySelector(`[data-id="${scanTarget.id}"]`);
   if(b&&!REDUCED){b.classList.add('pin-drop');const r=document.createElement('span');r.className='rippler';b.appendChild(r);setTimeout(()=>{b.classList.remove('pin-drop');r.remove();},2200);}
-  after(600,()=>openCard(scanTarget.id));
+  /* a simulated run against an entrance that is not on the map has no card to open */
+  if(places.some(q=>q.id===scanTarget.id)) after(600,()=>openCard(scanTarget.id));
 });
 
 /* ===================== onboarding (guest-first; every step skippable) ===================== */

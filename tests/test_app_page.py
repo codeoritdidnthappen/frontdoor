@@ -100,25 +100,33 @@ def test_a_failed_or_timed_out_scan_says_so_and_offers_a_retry():
     assert "Faces blurred at upload" not in failed
 
 
-def test_a_simulated_run_leaves_the_pin_alone():
-    """No tier, no date, no verdicts, no photo — so no scanned count either."""
-    html = page().get_data(as_text=True)
-    upgrade = html.split("function upgradePin(", 1)[1].split("\n}", 1)[0]
-    body = upgrade.split("if(publish.state==='simulated') return;", 1)
-    assert len(body) == 2, "the simulated path must return before the pin is touched"
-    for written in ("p.tier='scan'", "p.date=", "p.crit=", "p.livePhoto=", "p.staged=true"):
-        assert written in body[1] and written not in body[0]
+def test_a_simulated_run_writes_nothing_to_the_map():
+    """No tier, no verdicts, no date, no outcome stamp — and no new pin either.
 
-
-def test_a_simulated_run_invents_no_verdicts_about_a_photograph():
+    upgradePin is what moves a pin to Scanned on-site and so what the "N of M entrances
+    scanned" count counts. The simulated branch must not reach it, must not reach
+    placeForRef (which pushes a pin onto the map), and must not invent a verdict.
+    """
     html = page().get_data(as_text=True)
-    simulated = html.split("\n  if(liveSimulated()){", 1)[1].split("\n  } else {", 1)[0]
-    assert "upgradePin(p, null, {state:'simulated'}, null," in simulated
+    simulated = html.split("\n  if(simulated){", 1)[1].split("\n  } else {", 1)[0]
+    assert "upgradePin(" not in simulated
+    assert "placeForRef(" not in simulated
     assert "present" not in simulated  # no fabricated verdict survives here at all
     assert "riser shadow" not in simulated
+    assert "p=ref.place || {" in simulated  # an existing pin is reused, untouched
     # ...and nothing anywhere in the page speaks about the user's own photograph in the
     # first person, which only fabricated evidence ever did.
     assert "in your photo" not in html
+
+
+def test_the_done_screen_is_told_the_outcome_rather_than_reading_it_off_the_pin():
+    """A simulated run must not relabel an earlier real publish on the same pin."""
+    html = page().get_data(as_text=True)
+    assert "function doneHeading(p, simulated){" in html
+    assert "function runDone(p, simulated){" in html
+    assert "runDone(p, simulated);" in html
+    done = html.split("function runDone(p, simulated){", 1)[1].split("\n}", 1)[0]
+    assert "p.publish" not in done  # the outcome comes from the run, not from the pin
 
 
 def test_the_scan_docstring_matches_what_the_code_does():
