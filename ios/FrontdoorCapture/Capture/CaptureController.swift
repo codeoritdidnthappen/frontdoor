@@ -584,6 +584,32 @@ final class CaptureController: ObservableObject {
         var record = pending.record
         record.roi = taps
 
+        // Privacy processing happens HERE, before the write, so the bytes on disk, the bytes the
+        // sidecar hashes and the bytes /upload stores are all the same processed bytes (#328).
+        // Doing it server-side is structurally impossible: the upload's hash contract is computed
+        // over what the phone sent, so anything the server changed would fail its own check.
+        //
+        // Fails closed. A capture that could not be processed is not written at all -- an
+        // unblurred frame on disk is the thing this exists to prevent, and "saved anyway" would
+        // be worse than losing the shot.
+        let processed: CapturePrivacy.Processed
+        switch CapturePrivacy.process(
+            pending.imageData, exifOrientation: record.imageExifOrientation
+        ) {
+        case .success(let result):
+            processed = result
+        case .failure(let failure):
+            // The frame STAYS under review, the same rule a failed write follows: the operator
+            // can look at the error and decide to retry or discard, instead of the shot vanishing
+            // with nothing on disk and nothing on screen.
+            lastCaptureError = failure.message
+            return
+        }
+        // The grid is untouched by design, so these must not have moved. If they ever do, the
+        // sidecar's intrinsics would describe a grid the file no longer has.
+        record.pixelWidth = processed.pixelWidth
+        record.pixelHeight = processed.pixelHeight
+
         // Write before counting. `photosTaken` and `lastRecord` are the operator's evidence
         // that the capture exists, and until this call they were the ONLY evidence: the record
         // lived in memory, the encoded bytes were discarded with the delegate, and nothing
@@ -591,7 +617,7 @@ final class CaptureController: ObservableObject {
         // directory (TICK-028, QA B02).
         let written = CaptureWriter.write(
             record,
-            imageData: pending.imageData,
+            imageData: processed.data,
             depthData: pending.depthBytes,
             into: Self.capturesDirectory)
 
