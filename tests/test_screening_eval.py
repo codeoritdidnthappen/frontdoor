@@ -1405,16 +1405,18 @@ def test_a_capture_with_no_object_refuses_the_run_before_the_audit_line(
             out_dir=tmp_path / "out",
             engine=FakeEngine({}),
             get_capture=_boom,
-            verify_images=lambda capture_ids, split: [
-                f"{split}/{capture_id}" for capture_id in capture_ids
-            ],
+            verify_images=lambda capture_ids, split: list(capture_ids),
             split="sealed",
             audit=audit,
             argv=SEALED_ARGV,
         )
     assert not audit["audit_path"].exists(), "the seal must survive a missing object"
     assert not (tmp_path / "out").exists()
+    # The message offers the upload as one cause, not the only one: a wrong bucket or endpoint
+    # produces exactly the same missing objects, and sending the operator to chase an upload that
+    # already happened costs the morning this guard was meant to save.
     assert "never uploaded" in str(caught.value)
+    assert "wrong bucket or endpoint" in str(caught.value)
 
 
 def test_the_preflight_is_asked_only_about_this_runs_captures(tmp_path, monkeypatch):
@@ -1464,3 +1466,33 @@ def test_the_cli_always_supplies_a_preflight(tmp_path, monkeypatch):
     captured = _stub_run_eval(monkeypatch)
     assert main(_cli_args(tmp_path, "--include-sealed"), from_cli=True) == 0
     assert captured["verify_images"] is not None
+
+
+def test_the_dev_run_refuses_too_and_names_only_the_entrances_affected(
+    tmp_path, monkeypatch
+):
+    """The dry run takes this path, and it is the one #62 exists to make safe.
+
+    Also pins the count: `across N entrance(s)` is the entrances that actually own a missing
+    capture. Reporting the run's total instead reads as a dataset-wide outage when one file is
+    absent, which is the difference between "wait for James" and "re-upload one capture".
+    """
+    manifest, labels = _sealed_fixture(tmp_path)
+    _clean_recordable_repo(monkeypatch)
+
+    def _boom(capture_id):
+        raise AssertionError("no image may be read when the preflight failed")
+
+    with pytest.raises(MissingCaptureObjects) as caught:
+        run_eval(
+            manifest_path=manifest,
+            labels_path=labels,
+            out_dir=tmp_path / "out",
+            engine=FakeEngine({}),
+            get_capture=_boom,
+            verify_images=lambda capture_ids, split: [capture_ids[0]],
+            split="dev",
+        )
+    assert caught.value.entrances_affected == 1
+    assert caught.value.split == "dev"
+    assert not (tmp_path / "out").exists()

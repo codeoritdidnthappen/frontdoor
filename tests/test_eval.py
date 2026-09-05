@@ -42,8 +42,19 @@ def _three_captures(tmp_path):
 class _FakeStore:
     """Stands in for ObjectStore, and enforces the seal the same way it does."""
 
-    def __init__(self, get_image):
+    def __init__(self, get_image, missing=()):
         self._get_image = get_image
+        self._missing = set(missing)
+
+    def exists(self, key):
+        """Existence, answered without reading -- the same split the real store makes.
+
+        Kept independent of `get_image` on purpose: `test_crash_mid_unseal_leaves_the_audit_line`
+        has a getter that raises for every capture, and that is a read failure MID-run, not an
+        absent object. Collapsing the two would make the preflight swallow the crash it is
+        supposed to let through.
+        """
+        return key.split("/", 1)[1] not in self._missing
 
     def get(self, key, *, allow_sealed=False):
         if key.startswith(storage.SEALED_PREFIX) and not allow_sealed:
@@ -52,7 +63,7 @@ class _FakeStore:
         return self._get_image(capture_id)
 
 
-def _point_harness(monkeypatch, tmp_path, manifest, sidecar_dir, get_image):
+def _point_harness(monkeypatch, tmp_path, manifest, sidecar_dir, get_image, missing=()):
     monkeypatch.setattr(eval_mod, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(eval_mod, "MANIFEST", manifest)
     monkeypatch.setattr(eval_mod, "SIDECARS", sidecar_dir)
@@ -60,7 +71,8 @@ def _point_harness(monkeypatch, tmp_path, manifest, sidecar_dir, get_image):
     # Intercept at the store, not at a loader argument. eval used to inject a
     # capture_id-keyed getter, which walked straight past the partitioned key the
     # loader now builds -- so patching that seam would have tested nothing (#182).
-    monkeypatch.setattr(storage, "image_store", lambda: _FakeStore(get_image))
+    monkeypatch.setattr(
+        storage, "image_store", lambda: _FakeStore(get_image, missing=missing))
     monkeypatch.setattr(seal_audit, "_working_tree_dirty", lambda repo: False)
     monkeypatch.setattr(seal_audit, "_git_commit", lambda repo: "a" * 40)
     # The audit line records which bucket the run read; there is no storage in a temp repo,
@@ -156,3 +168,25 @@ def test_a_notebook_cannot_unseal_however_it_shapes_the_call(monkeypatch, tmp_pa
     monkeypatch.setattr(sys, "argv", ["frontdoor.eval", "--include-sealed"])
     assert main() == 2, "setting sys.argv must not grant an unsealing run"
     assert main(["--include-sealed"]) == 2, "passing argv must not grant one either"
+
+
+def test_a_capture_with_no_object_refuses_before_the_audit_line(monkeypatch, tmp_path):
+    """The other unsealing doorway needs the same guard as screening_eval (#62).
+
+    Both write their audit line before their first fetch, and both read from the same bucket. On
+    2026-09-04 the committed dataset was 338 captures and the bucket held 7 objects -- running
+    this one in that state recorded the unsealing and then died on the first NoSuchKey, leaving
+    the seal open with nothing produced and only a second unsealing to try again.
+    """
+    manifest, sidecar_dir, images = _three_captures(tmp_path)
+    reads = []
+
+    def get_image(capture_id):
+        reads.append(capture_id)
+        return images[capture_id]
+
+    _point_harness(
+        monkeypatch, tmp_path, manifest, sidecar_dir, get_image, missing=images.keys())
+    assert _run_cli(monkeypatch, "--include-sealed") == 1
+    assert reads == [], "no capture may be read when the preflight failed"
+    assert not (tmp_path / "SEAL_AUDIT.log").exists(), "the seal must survive missing objects"

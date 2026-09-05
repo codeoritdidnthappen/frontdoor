@@ -398,11 +398,17 @@ class ObjectStore:
         _partition_of(key)
         try:
             self._client.head_object(Bucket=self.creds.bucket, Key=key)
+            return True
         except Exception as exc:
             if _is_not_found(exc):
                 return False
+            # Inside the except, so there is no path out of here that reports an object as
+            # present. `_raise_from_client` always raises today; if it ever stopped, falling
+            # through to `return True` would tell the freeze-day preflight that every key is
+            # fine and wave the run straight through to the audit line -- the exact failure
+            # this method was added to prevent, arriving silently.
             _raise_from_client(exc, "head", self.creds.bucket, key)
-        return True
+            raise AssertionError("unreachable: _raise_from_client must raise")
 
     def delete(self, key):
         _partition_of(key)
@@ -410,6 +416,25 @@ class ObjectStore:
             self._client.delete_object(Bucket=self.creds.bucket, Key=key)
         except Exception as exc:
             _raise_from_client(exc, "delete", self.creds.bucket, key)
+
+
+def missing_capture_objects(items, store=None):
+    """Which of these captures have no object behind them, as (capture_id, split) pairs.
+
+    Existence only -- nothing is downloaded, so this costs no bytes and no model spend. It is
+    what lets a run refuse BEFORE it records an unsealing: both unsealing doorways
+    (`frontdoor.eval` and `frontdoor.screening_eval`) write their audit line before their first
+    fetch, so a capture whose bytes were never uploaded otherwise costs the seal.
+
+    It does NOT prove the stored bytes are the committed ones; only the loader's hash check does
+    that, and that needs the bytes. A run can still fail later on a mismatch.
+    """
+    store = store if store is not None else image_store()
+    return [
+        capture_id
+        for capture_id, split in items
+        if not store.exists(storage_key(capture_id, split))
+    ]
 
 
 def image_store():

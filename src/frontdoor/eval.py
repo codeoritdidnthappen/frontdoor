@@ -15,6 +15,7 @@ from pathlib import Path
 from frontdoor.loader import DatasetLoader
 from frontdoor.manifest import read_manifest
 from frontdoor.seal_audit import SealAuditError, record_unsealing
+from frontdoor.storage import missing_capture_objects
 
 class EvalError(Exception):
     """The harness cannot establish where it is running, so it must not run."""
@@ -104,6 +105,27 @@ def main(argv=None, *, from_cli=False):
     loader = DatasetLoader(MANIFEST, SIDECARS)
     if include_sealed:
         cmdline = sys.argv if argv is None else [sys.argv[0], *args]
+        # BEFORE the audit line, for the same reason screening_eval checks before its own: this
+        # loop reads every capture, and on 2026-09-04 the committed dataset was 338 captures with
+        # 7 objects in the bucket. Recording the unsealing and then dying on the first NoSuchKey
+        # leaves the seal open with nothing produced, and a retry is a second unsealing (R-5).
+        # Existence only -- no bytes, sealed or otherwise, are fetched here.
+        rows = list(read_manifest(MANIFEST))
+        missing = missing_capture_objects(
+            (row["capture_id"], DatasetLoader.derived_split(row)) for row in rows
+        )
+        if missing:
+            shown = ", ".join(missing[:10])
+            if len(missing) > 10:
+                shown += f", and {len(missing) - 10} more"
+            print(
+                f"{len(missing)} of {len(rows)} committed captures have no object in the image "
+                f"bucket: {shown}. Nothing was read and no audit line was written. Either those "
+                "bytes were never uploaded or this run is pointed at the wrong bucket or "
+                "endpoint -- check FRONTDOOR_IMAGES_* before concluding the former.",
+                file=sys.stderr,
+            )
+            return 1
         try:
             record_unsealing(
                 argv=cmdline,

@@ -92,17 +92,19 @@ class MissingCaptureObjects(ScreeningEvalError):
     #: entrance, one split, or the whole dataset -- without printing hundreds of lines.
     SHOWN = 10
 
-    def __init__(self, missing, entrance_count):
+    def __init__(self, missing, entrances_affected, split):
         self.missing = list(missing)
-        self.entrance_count = entrance_count
+        self.entrances_affected = entrances_affected
+        self.split = split
         shown = ", ".join(self.missing[: self.SHOWN])
         if len(self.missing) > self.SHOWN:
             shown += f", and {len(self.missing) - self.SHOWN} more"
         super().__init__(
-            f"{len(self.missing)} of this run's captures have no object in the image bucket, "
-            f"across {entrance_count} entrance(s): {shown}. The manifest and sidecars are "
-            "committed but the bytes were never uploaded (data/STORAGE.md: \"Bytes live here; "
-            "records live in git\"). Nothing was read and no audit line was written."
+            f"{len(self.missing)} of the {split} split's captures have no object in the image "
+            f"bucket, across {entrances_affected} entrance(s): {shown}. Nothing was read and no "
+            "audit line was written. Either those bytes were never uploaded (data/STORAGE.md: "
+            "\"Bytes live here; records live in git\") or this run is pointed at the wrong "
+            "bucket or endpoint -- check FRONTDOOR_IMAGES_* before concluding the former."
         )
 
 
@@ -601,10 +603,14 @@ def run_eval(
     hash-verified Capture carrying both image bytes and its validated sidecar
     (the real path goes through the hash-verifying DatasetLoader).
 
-    verify_images, when given, takes this run's capture IDs and its split, and returns the keys
-    whose object is not in the bucket. It is checked BEFORE the audit line, so a dataset whose bytes were
-    never uploaded refuses the run instead of burning the seal on the first fetch. None skips the
-    check, which is for tests that inject their own captures; the CLI always supplies one.
+    verify_images, when given, takes this run's capture IDs and its split and returns the ones
+    with no object in the bucket. It is checked BEFORE the audit line, so a dataset whose bytes
+    were never uploaded refuses the run instead of burning the seal on the first fetch. None skips
+    the check, which is for tests that inject their own captures; the CLI always supplies one.
+
+    It proves the objects EXIST, not that they are the committed bytes -- only the loader's hash
+    check does that, and that needs the bytes themselves. A run can still fail after the audit
+    line on a hash mismatch; existence is the part that can be settled cheaply and in advance.
 
     split="sealed" needs `audit`, a mapping with labels.AUDIT_KEYS. It is the
     audit context, and it is also the permission: sealed labels are released
@@ -644,16 +650,23 @@ def run_eval(
         allow_sealed=sealed_run,
     )
     if verify_images is not None:
-        missing = verify_images(
+        missing = set(verify_images(
             sorted(
                 capture_id
                 for capture_ids in entrances.values()
                 for capture_id in capture_ids
             ),
             split,
-        )
+        ))
         if missing:
-            raise MissingCaptureObjects(missing, len(entrances))
+            # The entrances actually affected, not the run's total. "1 capture missing across 28
+            # entrances" reads as a dataset-wide outage when it is one file.
+            affected = sum(
+                1
+                for capture_ids in entrances.values()
+                if any(capture_id in missing for capture_id in capture_ids)
+            )
+            raise MissingCaptureObjects(sorted(missing), affected, split)
     labels = labels_for_eval(
         list(loaded.labels),
         split=split,
@@ -774,11 +787,11 @@ def main(argv=None, *, from_cli=False):
         Every capture in one run shares the run's split (collect_entrances filters on it), so the
         partition comes from the caller rather than being re-derived per capture id.
         """
-        from frontdoor.storage import image_store, storage_key
+        from frontdoor.storage import missing_capture_objects
 
-        store = image_store()
-        keys = [storage_key(capture_id, split) for capture_id in capture_ids]
-        return [key for key in keys if not store.exists(key)]
+        return missing_capture_objects(
+            (capture_id, split) for capture_id in capture_ids
+        )
 
     def get_capture(capture_id):
         # loader.load refuses sealed rows outright, so the unsealing run goes
