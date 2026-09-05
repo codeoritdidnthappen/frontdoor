@@ -57,11 +57,9 @@ So the real procedure is:
 **Recorded in error** — Fly offers no spend-limit setting, so this line cannot have described a
 real control; it is struck rather than deleted so the record stays honest.
 
-> **D-031's stated mechanism needs amending — owed to its author (see PR #200 review F1).**
-> D-031 says D-026's no-silent-billing clause is "replaced by an explicit spend limit on the Fly
-> organisation plus a billing alert". No such limit exists; the entry should be amended to name
-> prepaid credits (hard stop at zero balance) as the mechanism. That amendment is the decision
-> author's to make in CHANGES.log, not this runbook's.
+**D-044 amends D-031.** The no-silent-billing mechanism is prepaid credits (hard stop at zero
+balance) plus an advisory billing alert, not a Fly spend limit. Evidence: PR #200 review F1. This
+runbook already named that mechanism; the decision record now matches it.
 
 ### Credentials
 
