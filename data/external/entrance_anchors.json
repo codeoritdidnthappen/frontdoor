@@ -1,0 +1,211 @@
+{
+  "anchors": {
+    "E-001": {
+      "address": "301 Lavaca St, Ste 200, Austin, TX 78701",
+      "display_name": "Bob's Steak & Chop House, 301, Lavaca Street, Warehouse District, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-001",
+      "lat": 30.2660914,
+      "lng": -97.7459212,
+      "osm_id": 134807229,
+      "osm_type": "way",
+      "query": "301 Lavaca St, Austin, TX 78701"
+    },
+    "E-003": {
+      "address": "247 W 3rd St, Austin, TX 78701",
+      "display_name": "Which Wich?, 247, West 3rd Street, Warehouse District, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-003",
+      "lat": 30.2657109,
+      "lng": -97.7459756,
+      "osm_id": 3245051653,
+      "osm_type": "node",
+      "query": "247 W 3rd St, Austin, TX 78701"
+    },
+    "E-004": {
+      "address": "241 W 3rd St, Austin, TX 78701",
+      "display_name": "Royal Blue Grocery, 241, West 3rd Street, Warehouse District, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-004",
+      "lat": 30.2656885,
+      "lng": -97.7458792,
+      "osm_id": 3245054362,
+      "osm_type": "node",
+      "query": "241 W 3rd St, Austin, TX 78701"
+    },
+    "E-007": {
+      "address": "201 W 3rd St, Austin, TX 78701",
+      "display_name": "Red Farm, 201, West 3rd Street, Warehouse District, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-007",
+      "lat": 30.2655408,
+      "lng": -97.7453907,
+      "osm_id": 3849776337,
+      "osm_type": "node",
+      "query": "201 W 3rd St, Austin, TX 78701"
+    },
+    "E-008": {
+      "address": "208 Colorado St, Austin, TX 78701",
+      "display_name": "SEV Laser, 208, Colorado Street, Downtown, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-008",
+      "lat": 30.2653514,
+      "lng": -97.7454543,
+      "osm_id": 3849776773,
+      "osm_type": "node",
+      "query": "208 Colorado St, Austin, TX 78701"
+    },
+    "E-009": {
+      "address": "203 Colorado St, Austin, TX 78701",
+      "display_name": "203, Colorado Street, Downtown, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-009",
+      "lat": 30.26493,
+      "lng": -97.745192,
+      "osm_id": 3849776344,
+      "osm_type": "node",
+      "query": "203 Colorado St, Austin, TX 78701"
+    },
+    "E-010": {
+      "address": "200 W 2nd St, Austin, TX 78701",
+      "display_name": "Sweetgreen, 200, West 2nd Street, Warehouse District, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-010",
+      "lat": 30.2648865,
+      "lng": -97.7456318,
+      "osm_id": 3849776321,
+      "osm_type": "node",
+      "query": "200 W 2nd St, Austin, TX 78701"
+    },
+    "E-012": {
+      "address": "101 Colorado St, Austin, TX 78701",
+      "display_name": "101, Colorado Street, Downtown, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-012",
+      "lat": 30.263882,
+      "lng": -97.74537,
+      "osm_id": 3849775778,
+      "osm_type": "node",
+      "query": "101 Colorado St, Austin, TX 78701"
+    },
+    "E-020": {
+      "address": "315 Congress Ave",
+      "display_name": "Swift Building, 315, Congress Avenue, Downtown, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-020",
+      "lat": 30.26558,
+      "lng": -97.7432709,
+      "osm_id": 328634450,
+      "osm_type": "way",
+      "query": "315 Congress Ave, Austin, TX"
+    },
+    "E-023": {
+      "address": "323 Congress Ave, Suite 100",
+      "display_name": "McKean-Eilers Building, 323, Congress Avenue, Downtown, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-023",
+      "lat": 30.2657907,
+      "lng": -97.7431921,
+      "osm_id": 328634462,
+      "osm_type": "way",
+      "query": "323 Congress Ave, Austin, TX"
+    },
+    "E-024": {
+      "address": "327 Congress Ave",
+      "display_name": "327, Congress Avenue, Downtown, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-024",
+      "lat": 30.2659116,
+      "lng": -97.7431468,
+      "osm_id": 328634456,
+      "osm_type": "way",
+      "query": "327 Congress Ave, Austin, TX"
+    },
+    "E-030": {
+      "address": "515 Congress Ave",
+      "display_name": "515, Congress Avenue, Downtown, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-030",
+      "lat": 30.2676762,
+      "lng": -97.7424845,
+      "osm_id": 99725036,
+      "osm_type": "way",
+      "query": "515 Congress Ave, Austin, TX"
+    },
+    "E-033": {
+      "address": "609 Congress Ave",
+      "display_name": "HokkaiSan, 609, Congress Avenue, Downtown, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-033",
+      "lat": 30.268325,
+      "lng": -97.742301,
+      "osm_id": 1213502014,
+      "osm_type": "way",
+      "query": "609 Congress Ave, Austin, TX"
+    },
+    "E-034": {
+      "address": "613 Congress Ave",
+      "display_name": "7-Eleven, 613, Congress Avenue, Downtown, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-034",
+      "lat": 30.2684493,
+      "lng": -97.7422556,
+      "osm_id": 1213502016,
+      "osm_type": "way",
+      "query": "613 Congress Ave, Austin, TX"
+    },
+    "E-037": {
+      "address": "721 Congress Ave",
+      "display_name": "Hyatt Centric Congress Avenue Austin, 721, Congress Avenue, Downtown, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-037",
+      "lat": 30.2696522,
+      "lng": -97.7417611,
+      "osm_id": 328526440,
+      "osm_type": "way",
+      "query": "721 Congress Ave, Austin, TX"
+    },
+    "E-050": {
+      "address": "522 Congress Ave",
+      "display_name": "Punch Bowl Social, 522, Congress Avenue, Downtown, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-050",
+      "lat": 30.267772,
+      "lng": -97.743381,
+      "osm_id": 1020754976,
+      "osm_type": "way",
+      "query": "522 Congress Ave, Austin, TX"
+    },
+    "E-051": {
+      "address": "522 Congress Ave",
+      "display_name": "Punch Bowl Social, 522, Congress Avenue, Downtown, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-051",
+      "lat": 30.267772,
+      "lng": -97.743381,
+      "osm_id": 1020754976,
+      "osm_type": "way",
+      "query": "522 Congress Ave, Austin, TX"
+    },
+    "E-053": {
+      "address": "506 Congress Ave",
+      "display_name": "Downtown Austin Space Activation, 506, Congress Avenue, Downtown, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-053",
+      "lat": 30.2676673,
+      "lng": -97.7435561,
+      "osm_id": 1020754975,
+      "osm_type": "way",
+      "query": "506 Congress Ave, Austin, TX"
+    },
+    "E-055": {
+      "address": "504 Congress Ave",
+      "display_name": "Robinson\u2013Rosner Building, 504, Congress Avenue, Downtown, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-055",
+      "lat": 30.2675129,
+      "lng": -97.7434933,
+      "osm_id": 1020754973,
+      "osm_type": "way",
+      "query": "504 Congress Ave, Austin, TX"
+    },
+    "E-058": {
+      "address": "415 Colorado St",
+      "display_name": "415 Colorado, 415, Colorado Street, Downtown, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-058",
+      "lat": 30.2670874,
+      "lng": -97.7442433,
+      "osm_id": 328631279,
+      "osm_type": "way",
+      "query": "415 Colorado St, Austin, TX"
+    }
+  },
+  "attribution": "Geocodes from OpenStreetMap via Nominatim (\u00a9 OpenStreetMap contributors), licensed under the Open Database License (ODbL) 1.0. https://www.openstreetmap.org/copyright",
+  "fetched_at": "2026-09-05T22:04:46Z",
+  "license": "ODbL-1.0",
+  "purpose": "Door positions for the entrance-to-place distance gate (#346). Derived from the street numbers recorded on foot or read off the transom in data/entrance_identification.json \u2014 never from a business name, which would make the gate circular.",
+  "record_count": 20,
+  "segregation": "ODbL-licensed data stored as a segregated side table per the ODbL Collective Database Guideline. Do not merge these records into any proprietary dataset.",
+  "source": "openstreetmap_nominatim"
+}
