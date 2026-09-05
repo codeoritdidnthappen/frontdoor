@@ -569,3 +569,49 @@ def test_opening_the_seal_must_be_spelled_out_at_the_call_site(monkeypatch):
 
     with pytest.raises(TypeError):
         store.get(key, True)
+
+
+# --- existence, for the freeze-day preflight (#62) ---------------------------
+
+
+@mock_aws
+def test_exists_is_true_for_a_stored_object_and_false_for_a_missing_one(monkeypatch):
+    _image_env(monkeypatch)
+    _create_buckets()
+    store = image_store()
+    store.put(storage_key("cap-1", "dev"), b"jpeg-bytes")
+    assert store.exists(storage_key("cap-1", "dev")) is True
+    assert store.exists(storage_key("cap-2", "dev")) is False
+
+
+@mock_aws
+def test_a_missing_object_is_false_rather_than_an_error(monkeypatch):
+    """`get` raises for a missing key; the preflight has to be able to ask without handling it.
+
+    The whole point is to answer the question before the seal is opened, so a 404 is an answer,
+    not a failure.
+    """
+    _image_env(monkeypatch)
+    _create_buckets()
+    assert image_store().exists(storage_key("never-uploaded", "calib")) is False
+
+
+@mock_aws
+def test_exists_answers_for_a_sealed_key_without_returning_bytes(monkeypatch):
+    """Deliberate, and the reason is in the method's docstring.
+
+    Existence is metadata, and the capture ids asked about come from the committed manifest, so
+    nothing is revealed that the repository does not already state. `put` already writes sealed
+    keys with no audit line because ingest must; a HEAD is strictly less than that. What it buys
+    is that a sealed capture whose bytes were never uploaded refuses the run instead of costing
+    the seal.
+    """
+    _image_env(monkeypatch)
+    _create_buckets()
+    store = image_store()
+    sealed = storage_key("cap-9", "sealed")
+    store.put(sealed, b"jpeg-bytes")
+    assert store.exists(sealed) is True
+    # ...and reading it still is not allowed.
+    with pytest.raises(SealedObjectDenied):
+        store.get(sealed)

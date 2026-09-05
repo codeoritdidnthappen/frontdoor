@@ -79,6 +79,35 @@ class ScreeningEvalError(ValueError):
     """Raised when the eval cannot produce a trustworthy report."""
 
 
+class MissingCaptureObjects(ScreeningEvalError):
+    """The run would read captures whose bytes are not in the bucket.
+
+    Raised before the audit line, never after: on 2026-09-04 the committed dataset was 338
+    captures and the image bucket held 7 objects, none of them a dataset capture. Reaching the
+    first fetch in that state on freeze day means the seal is open, no report exists, and the
+    only way to try again is a second unsealing (R-5).
+    """
+
+    #: How many missing keys to name before summarising. Enough to see the pattern -- one
+    #: entrance, one split, or the whole dataset -- without printing hundreds of lines.
+    SHOWN = 10
+
+    def __init__(self, missing, entrances_affected, split):
+        self.missing = list(missing)
+        self.entrances_affected = entrances_affected
+        self.split = split
+        shown = ", ".join(self.missing[: self.SHOWN])
+        if len(self.missing) > self.SHOWN:
+            shown += f", and {len(self.missing) - self.SHOWN} more"
+        super().__init__(
+            f"{len(self.missing)} of the {split} split's captures have no object in the image "
+            f"bucket, across {entrances_affected} entrance(s): {shown}. Nothing was read and no "
+            "audit line was written. Either those bytes were never uploaded (data/STORAGE.md: "
+            "\"Bytes live here; records live in git\") or this run is pointed at the wrong "
+            "bucket or endpoint -- check FRONTDOOR_IMAGES_* before concluding the former."
+        )
+
+
 def _require_permitted_split(split, *, allow_sealed=False):
     """Raise unless this split may be scored, before any file is read.
 
@@ -562,6 +591,7 @@ def run_eval(
     sidecar_dir=None,
     engine,
     get_capture,
+    verify_images=None,
     split="dev",
     audit=None,
     argv=None,
@@ -572,6 +602,15 @@ def run_eval(
     ScreeningEngine, or a fake in tests); get_capture maps a capture_id to a
     hash-verified Capture carrying both image bytes and its validated sidecar
     (the real path goes through the hash-verifying DatasetLoader).
+
+    verify_images, when given, takes this run's capture IDs and its split and returns the ones
+    with no object in the bucket. It is checked BEFORE the audit line, so a dataset whose bytes
+    were never uploaded refuses the run instead of burning the seal on the first fetch. None skips
+    the check, which is for tests that inject their own captures; the CLI always supplies one.
+
+    It proves the objects EXIST, not that they are the committed bytes -- only the loader's hash
+    check does that, and that needs the bytes themselves. A run can still fail after the audit
+    line on a hash mismatch; existence is the part that can be settled cheaply and in advance.
 
     split="sealed" needs `audit`, a mapping with labels.AUDIT_KEYS. It is the
     audit context, and it is also the permission: sealed labels are released
@@ -592,14 +631,15 @@ def run_eval(
         if closeout_path
         else manifest_path.parent / "dataset-closeout.json"
     )
+    # EVERYTHING THAT CAN FAIL AND READS NOTHING SEALED HAPPENS BEFORE THE AUDIT LINE.
+    #
+    # `labels_for_eval` is what appends to SEAL_AUDIT.log, and that append is irreversible: a
+    # crash after it means the seal is open, no report exists, and a retry is a SECOND unsealing
+    # (R-5). Until now the closeout load and the manifest walk ran AFTER it, so a stale closeout
+    # -- exactly the failure #69 added a hash check for -- burned the seal on its way to being
+    # reported. Reading labels, the closeout and the manifest touches no capture bytes and no
+    # sealed object, so all of it belongs on this side of the line.
     loaded = load_labels(labels_path)
-    labels = labels_for_eval(
-        list(loaded.labels),
-        split=split,
-        audited=sealed_run,
-        audit=audit,
-        argv=argv,
-    )
     eligible_entrances = load_eligible_entrances(
         closeout_path, manifest_path, sidecar_dir
     )
@@ -608,6 +648,31 @@ def run_eval(
         eligible_entrances=eligible_entrances,
         split=split,
         allow_sealed=sealed_run,
+    )
+    if verify_images is not None:
+        missing = set(verify_images(
+            sorted(
+                capture_id
+                for capture_ids in entrances.values()
+                for capture_id in capture_ids
+            ),
+            split,
+        ))
+        if missing:
+            # The entrances actually affected, not the run's total. "1 capture missing across 28
+            # entrances" reads as a dataset-wide outage when it is one file.
+            affected = sum(
+                1
+                for capture_ids in entrances.values()
+                if any(capture_id in missing for capture_id in capture_ids)
+            )
+            raise MissingCaptureObjects(sorted(missing), affected, split)
+    labels = labels_for_eval(
+        list(loaded.labels),
+        split=split,
+        audited=sealed_run,
+        audit=audit,
+        argv=argv,
     )
     # A labeled entrance with no captures is AC4's "entrance with no views":
     # it must appear with an empty view list, not vanish from the report.
@@ -712,6 +777,22 @@ def main(argv=None, *, from_cli=False):
         Path(args.sidecars) if args.sidecars else manifest_path.parent / "sidecars"
     )
     loader = DatasetLoader(manifest_path, sidecar_dir)
+
+    def verify_images(capture_ids, split):
+        """Which of these captures have no object in the bucket.
+
+        Existence only: nothing is downloaded, so this costs no bytes, no model spend and no
+        sealed content. It runs before the audit line -- which is the entire point of it.
+
+        Every capture in one run shares the run's split (collect_entrances filters on it), so the
+        partition comes from the caller rather than being re-derived per capture id.
+        """
+        from frontdoor.storage import missing_capture_objects
+
+        return missing_capture_objects(
+            (capture_id, split) for capture_id in capture_ids
+        )
+
     def get_capture(capture_id):
         # loader.load refuses sealed rows outright, so the unsealing run goes
         # through _load_row's allow_sealed - the same doorway frontdoor.eval
@@ -752,11 +833,12 @@ def main(argv=None, *, from_cli=False):
                 config=ScreeningConfig(max_usd_per_run=EVAL_MAX_USD_PER_RUN)
             ),
             get_capture=get_capture,
+            verify_images=verify_images,
             split="sealed" if args.include_sealed else "dev",
             audit=audit,
             argv=sys.argv if argv is None else [sys.argv[0], *argv],
         )
-    except (DatasetCloseoutError, SealAuditError) as exc:
+    except (DatasetCloseoutError, MissingCaptureObjects, SealAuditError) as exc:
         # Nothing sealed has been read: the run is refused, not half-done.
         print(exc, file=sys.stderr)
         return 1
