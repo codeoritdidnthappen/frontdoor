@@ -8,6 +8,7 @@ and condition-tag requirements, and makes that decision reproducible.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import sys
 from collections import Counter, defaultdict
@@ -42,6 +43,34 @@ def _string(value: object, label: str) -> str:
     if not isinstance(value, str) or not value:
         raise DatasetCloseoutError(f"{label} must be a non-empty string")
     return value
+
+
+def _line_ending_hint(path: Path, expected_sha256: str) -> str:
+    """Name CRLF as the cause when that alone explains a sidecar mismatch.
+
+    .gitattributes pins these files to LF, but git does not renormalize a
+    working tree that was checked out before the attribute existed, so an
+    older Windows clone holds CRLF sidecars whose bytes hash differently.
+    The content is fine; only the line endings differ. Without this the
+    error reads like data corruption and sends the reader after the wrong
+    problem (TICK-323).
+    """
+    try:
+        raw = path.read_bytes()
+    except OSError:  # unreadable is a different failure; say nothing extra
+        return ""
+    if b"\r\n" not in raw:
+        return ""
+    normalized = hashlib.sha256(raw.replace(b"\r\n", b"\n")).hexdigest()
+    if normalized != expected_sha256:
+        return ""
+    return (
+        ". The file holds CRLF line endings and matches the manifest once they "
+        "are LF, so only the line endings differ. This working tree predates "
+        "the eol=lf attribute; restore it with "
+        "'git rm -r --cached data/sidecars data/manifest.csv' followed by "
+        "'git checkout -- data/sidecars data/manifest.csv', or re-clone"
+    )
 
 
 def _read_sidecar(path: Path, capture_id: str) -> dict[str, object]:
@@ -114,6 +143,7 @@ def build_closeout(manifest_path: Path, sidecar_dir: Path) -> dict[str, object]:
         if sidecar_path.is_file() and sha256_file(sidecar_path) != row["sidecar_sha256"]:
             raise DatasetCloseoutError(
                 f"capture {capture_id} sidecar hash does not match the manifest"
+                + _line_ending_hint(sidecar_path, row["sidecar_sha256"])
             )
         sidecar = _read_sidecar(sidecar_path, capture_id)
         if sidecar.get("capture_id") != capture_id:
