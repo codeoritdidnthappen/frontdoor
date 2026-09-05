@@ -1,0 +1,30 @@
+{
+  "area": "second-street-district-demo-blocks",
+  "businesses_enumerated": 186,
+  "covered": 186,
+  "maps_api_calls": {
+    "image": 540,
+    "metadata": 180,
+    "places": 34,
+    "total": 754
+  },
+  "maps_call_cap": 1200,
+  "model_spend_usd_estimate": 27.0,
+  "screened": 186,
+  "skipped_existing": 6,
+  "stopped": null,
+  "stopped_is_error": false,
+  "truncated_blocks": [
+    "second-street-district-demo-blocks"
+  ],
+  "truncated_types": {
+    "second-street-district-demo-blocks": [
+      "restaurant",
+      "store",
+      "lodging",
+      "establishment"
+    ]
+  },
+  "uncovered": 0,
+  "wall_clock_s": 2208.488
+}

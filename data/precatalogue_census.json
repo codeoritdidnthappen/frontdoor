@@ -1,0 +1,2180 @@
+{
+  "places": [
+    {
+      "location": {
+        "lat": 30.2651679,
+        "lng": -97.7463598
+      },
+      "name": "Taverna",
+      "place_id": "ChIJMazVpAi1RIYRjhmcLjSvho8",
+      "sweeps": [
+        "restaurant",
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2659685,
+        "lng": -97.74531999999999
+      },
+      "name": "Truluck's Ocean's Finest Seafood and Crab",
+      "place_id": "ChIJ5e4J-wi1RIYR0VuNKIr8jbs",
+      "sweeps": [
+        "restaurant",
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2641922,
+        "lng": -97.746646
+      },
+      "name": "III Forks",
+      "place_id": "ChIJqe38AQa1RIYRh8jExRIRmZc",
+      "sweeps": [
+        "restaurant",
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.264824,
+        "lng": -97.744512
+      },
+      "name": "Fogo de Ch\u00e3o Brazilian Steakhouse",
+      "place_id": "ChIJ7_1MCai1RIYRsFrrp7OT0zI",
+      "sweeps": [
+        "restaurant",
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2669598,
+        "lng": -97.7456922
+      },
+      "name": "Halcyon",
+      "place_id": "ChIJCRB94Ai1RIYRNvGk25HweQA",
+      "sweeps": [
+        "restaurant",
+        "cafe",
+        "bar",
+        "store",
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.265017,
+        "lng": -97.746089
+      },
+      "name": "Jo's Coffee \u2013 Downtown",
+      "place_id": "ChIJk7GZvAi1RIYRarD04SJiU6k",
+      "sweeps": [
+        "restaurant",
+        "cafe",
+        "meal_takeaway",
+        "store",
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2652839,
+        "lng": -97.74559479999999
+      },
+      "name": "BarChi Sushi",
+      "place_id": "ChIJk5k9kQi1RIYRO2s3u2CYNBs",
+      "sweeps": [
+        "restaurant",
+        "bar",
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2668708,
+        "lng": -97.7452131
+      },
+      "name": "P\u00e9ch\u00e9",
+      "place_id": "ChIJgQvl4wi1RIYRh6Ylqescww0",
+      "sweeps": [
+        "restaurant",
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26606009999999,
+        "lng": -97.7460415
+      },
+      "name": "Bob's Steak & Chop House - Downtown Austin",
+      "place_id": "ChIJvWhqwgi1RIYRtEeUwGoh-Gk",
+      "sweeps": [
+        "restaurant",
+        "bar",
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26570219999999,
+        "lng": -97.74494089999999
+      },
+      "name": "Red Ash",
+      "place_id": "ChIJWfpBiwi1RIYRvg4iIbIE2go",
+      "sweeps": [
+        "restaurant"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26587000000001,
+        "lng": -97.74643999999999
+      },
+      "name": "Starbucks Coffee Company",
+      "place_id": "ChIJaeaZyAi1RIYRyHTG48_FDMc",
+      "sweeps": [
+        "restaurant",
+        "cafe",
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.266248,
+        "lng": -97.74458899999999
+      },
+      "name": "RA Sushi - Austin",
+      "place_id": "ChIJkRamZgi1RIYRunh_5JKEl1Y",
+      "sweeps": [
+        "restaurant",
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2662705,
+        "lng": -97.7444668
+      },
+      "name": "The Capital Grille",
+      "place_id": "ChIJIcQ99wi1RIYRDk-jP8lZ0fw",
+      "sweeps": [
+        "restaurant",
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26302179999999,
+        "lng": -97.74445209999999
+      },
+      "name": "Veracruz All Natural",
+      "place_id": "ChIJ5ST765DLRIYRastGozc0GnY",
+      "sweeps": [
+        "restaurant"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2636937,
+        "lng": -97.7437856
+      },
+      "name": "Shawarma Point",
+      "place_id": "ChIJN4QMZKa1RIYRaAv37rSVINc",
+      "sweeps": [
+        "restaurant"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2665127,
+        "lng": -97.7465643
+      },
+      "name": "Mac's Meals",
+      "place_id": "ChIJKc-G1Ai1RIYRjvyK9osGNbo",
+      "sweeps": [
+        "restaurant"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2649421,
+        "lng": -97.7457
+      },
+      "name": "sweetgreen - Healthy Salads, Wraps, and Bowls",
+      "place_id": "ChIJQ4yXW8q1RIYRCkM0yr1OLso",
+      "sweeps": [
+        "restaurant",
+        "meal_takeaway"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2650269,
+        "lng": -97.74595169999999
+      },
+      "name": "VanHorn's",
+      "place_id": "ChIJlRf_CPq1RIYRHX0vJ5pJxGI",
+      "sweeps": [
+        "restaurant"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2656435,
+        "lng": -97.745661
+      },
+      "name": "Bill's Oyster",
+      "place_id": "ChIJ5_gMvNe1RIYRsn6AxNEpiOM",
+      "sweeps": [
+        "restaurant"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2651679,
+        "lng": -97.7463598
+      },
+      "name": "Taverana Ristorante",
+      "place_id": "ChIJn7T7QgC1RIYRW4N-CLihO-k",
+      "sweeps": [
+        "restaurant"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2647142,
+        "lng": -97.7446034
+      },
+      "name": "Mason's Famous Lobster Rolls",
+      "place_id": "ChIJjces5h-1RIYRLrcssNoiQyE",
+      "sweeps": [
+        "restaurant",
+        "meal_takeaway"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2653727,
+        "lng": -97.7467933
+      },
+      "name": "Serenade",
+      "place_id": "ChIJ0zCFXgC1RIYRbR-HJvVBe2c",
+      "sweeps": [
+        "restaurant"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2659871,
+        "lng": -97.7448345
+      },
+      "name": "Chi'Lantro",
+      "place_id": "ChIJHyJkAzm1RIYR3-HMvjRGzLA",
+      "sweeps": [
+        "restaurant"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2661718,
+        "lng": -97.7451377
+      },
+      "name": "Traphouse Caribbean",
+      "place_id": "ChIJ7XkuTuW1RIYRYQNxV48NEng",
+      "sweeps": [
+        "restaurant"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2655858,
+        "lng": -97.7444247
+      },
+      "name": "Food Club",
+      "place_id": "ChIJb3jLJ2W1RIYRtZMZKRdqcDs",
+      "sweeps": [
+        "restaurant"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.266317,
+        "lng": -97.74595939999999
+      },
+      "name": "DeSano Pizzeria Napoletana - Downtown Austin",
+      "place_id": "ChIJH1vZsj21RIYR9QNowHxmpDU",
+      "sweeps": [
+        "restaurant",
+        "meal_takeaway"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2639807,
+        "lng": -97.7448532
+      },
+      "name": "Patika",
+      "place_id": "ChIJkVhdkjS1RIYRxyEx6drnj0w",
+      "sweeps": [
+        "restaurant",
+        "cafe",
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2665382,
+        "lng": -97.7455322
+      },
+      "name": "Method Three Hospitality - Austin Event Management & Event Venues",
+      "place_id": "ChIJ__-PKcu1RIYRbxasfVoQPG8",
+      "sweeps": [
+        "restaurant",
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2662488,
+        "lng": -97.74459139999999
+      },
+      "name": "Hibachi Ko",
+      "place_id": "ChIJG-1DjJ-1RIYR2h2kzvn1zWc",
+      "sweeps": [
+        "restaurant"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.265718,
+        "lng": -97.7439904
+      },
+      "name": "Mort Subite European Bar",
+      "place_id": "ChIJi0ZEZwi1RIYRSpGdWA3gZiI",
+      "sweeps": [
+        "restaurant",
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2657117,
+        "lng": -97.7439832
+      },
+      "name": "Austhentico",
+      "place_id": "ChIJdRoWVyVNW4YR0TSK09tbXSQ",
+      "sweeps": [
+        "restaurant"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2649418,
+        "lng": -97.7437436
+      },
+      "name": "Cooper's Old Time Pit Bar-B-Que",
+      "place_id": "ChIJoZsHcQi1RIYRfyBnp0UxNMI",
+      "sweeps": [
+        "restaurant",
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2640272,
+        "lng": -97.7440597
+      },
+      "name": "Ellis",
+      "place_id": "ChIJ2T178CS1RIYRlMNn-0R1seA",
+      "sweeps": [
+        "restaurant",
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26396,
+        "lng": -97.744068
+      },
+      "name": "Golden Boy",
+      "place_id": "ChIJzUzPLgy1RIYRWP75VNo_Ly8",
+      "sweeps": [
+        "restaurant"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26396,
+        "lng": -97.744068
+      },
+      "name": "JABS",
+      "place_id": "ChIJa_RNkmS1RIYRcnv-OO_oalw",
+      "sweeps": [
+        "restaurant"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26396,
+        "lng": -97.744068
+      },
+      "name": "Fareground Austin",
+      "place_id": "ChIJQ1AaxQe1RIYRoCgJZk6oZ5c",
+      "sweeps": [
+        "restaurant"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26685200000001,
+        "lng": -97.7453635
+      },
+      "name": "Hanghart",
+      "place_id": "ChIJcW5t1Um1RIYRpTZ-JIhCciQ",
+      "sweeps": [
+        "restaurant",
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2665443,
+        "lng": -97.7443354
+      },
+      "name": "SUSHI ROKU AUSTIN",
+      "place_id": "ChIJtxx1fZO1RIYRR1Gn6q4Rwe8",
+      "sweeps": [
+        "restaurant"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2669961,
+        "lng": -97.7453625
+      },
+      "name": "The Pub - Downtown",
+      "place_id": "ChIJKXF6xXO1RIYRm1Mk86PvJak",
+      "sweeps": [
+        "restaurant",
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2671074,
+        "lng": -97.74642349999999
+      },
+      "name": "Group Therapy",
+      "place_id": "ChIJ-TmN7pO1RIYRM-BV0neKLJA",
+      "sweeps": [
+        "restaurant",
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2636937,
+        "lng": -97.7437856
+      },
+      "name": "Four Brothers Venezuelan Kitchen",
+      "place_id": "ChIJS5VjWv-1RIYRzaWGFMzjNvA",
+      "sweeps": [
+        "restaurant"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2672286,
+        "lng": -97.7455959
+      },
+      "name": "Nobody's Business",
+      "place_id": "ChIJfVLzTNG1RIYRuVCaqRQs4zo",
+      "sweeps": [
+        "restaurant"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2657008,
+        "lng": -97.7460431
+      },
+      "name": "Royal Blue Grocery",
+      "place_id": "ChIJq6qqqgm1RIYRGCbJhx17hBA",
+      "sweeps": [
+        "cafe",
+        "store",
+        "convenience_store",
+        "liquor_store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2653727,
+        "lng": -97.7467933
+      },
+      "name": "2nd & Roast",
+      "place_id": "ChIJSTKvuZ21RIYRuY570IXeUtk",
+      "sweeps": [
+        "cafe",
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2655858,
+        "lng": -97.7444247
+      },
+      "name": "Mudhouse Cafe (f.k.a Tamiya's Tasty Treats)",
+      "place_id": "ChIJexHa5Zu1RIYRHsOdswIvHyE",
+      "sweeps": [
+        "cafe",
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2639778,
+        "lng": -97.7440548
+      },
+      "name": "Desnudo Coffee: Downtown",
+      "place_id": "ChIJzT97VBu1RIYRUH2mWokHNcM",
+      "sweeps": [
+        "cafe"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2675879,
+        "lng": -97.7459566
+      },
+      "name": "Manny's",
+      "place_id": "ChIJ5Z-wFgC1RIYRZDq_uKQ9mfM",
+      "sweeps": [
+        "cafe",
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2668628,
+        "lng": -97.745295
+      },
+      "name": "Cedar Street Courtyard",
+      "place_id": "ChIJgQvl4wi1RIYRc2XFfKL_VaU",
+      "sweeps": [
+        "bar",
+        "lodging",
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2671465,
+        "lng": -97.7456424
+      },
+      "name": "Lavaca Street Bar",
+      "place_id": "ChIJbVP_3wi1RIYR17jn9Oqcj6w",
+      "sweeps": [
+        "bar",
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2666069,
+        "lng": -97.74563739999999
+      },
+      "name": "Rain",
+      "place_id": "ChIJPbEf5wi1RIYRa9i2-rqjWd0",
+      "sweeps": [
+        "bar",
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2665701,
+        "lng": -97.74537000000001
+      },
+      "name": "Oilcan Harry\u2019s",
+      "place_id": "ChIJ4_Uy5Ai1RIYR-qUCjJoOjOU",
+      "sweeps": [
+        "bar",
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2650204,
+        "lng": -97.7457981
+      },
+      "name": "Upstairs Circus ATX",
+      "place_id": "ChIJuZA2vQi1RIYRsngxe4KVQZE",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26582250000001,
+        "lng": -97.7440044
+      },
+      "name": "Texas Toy Museum and Arcade",
+      "place_id": "ChIJn8iXZa61RIYRf5Bc4f5jtZs",
+      "sweeps": [
+        "bar",
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26765739999999,
+        "lng": -97.74629619999999
+      },
+      "name": "The Eleanor",
+      "place_id": "ChIJpfMYJQm1RIYRyu_45Gfk52A",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2664078,
+        "lng": -97.7450866
+      },
+      "name": "Neon Grotto",
+      "place_id": "ChIJYWXDCXW1RIYRYqLgw9JtYu8",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2664706,
+        "lng": -97.74521229999999
+      },
+      "name": "LUXX",
+      "place_id": "ChIJ305VDgC1RIYR59l0_EOVmU0",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2662488,
+        "lng": -97.74459139999999
+      },
+      "name": "Alibi Social Bar",
+      "place_id": "ChIJcZ5UFf61RIYReqQ-r-w1IoA",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2662467,
+        "lng": -97.7445297
+      },
+      "name": "Nica on 4th",
+      "place_id": "ChIJN9tQnxS1RIYRPkp7eAs2l4I",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2666103,
+        "lng": -97.7457797
+      },
+      "name": "Twins Rooftop",
+      "place_id": "ChIJrX4ev361RIYRsk8HlvAmbiA",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26625629999999,
+        "lng": -97.7445144
+      },
+      "name": "Hen House",
+      "place_id": "ChIJq018atG1RIYRGHTlklSwB08",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2663958,
+        "lng": -97.7447294
+      },
+      "name": "Driftwood Downtown",
+      "place_id": "ChIJ404U66S1RIYRgapAPlRGAh4",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26628949999999,
+        "lng": -97.7445544
+      },
+      "name": "Parker Jazz Club",
+      "place_id": "ChIJ2QP79gi1RIYRSa8m_MIQtPI",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2666338,
+        "lng": -97.74580809999999
+      },
+      "name": "Twins Nightclub",
+      "place_id": "ChIJhTOcHRW1RIYRiFR8AY6Xy9g",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2668732,
+        "lng": -97.7454326
+      },
+      "name": "DuMont's Down Low",
+      "place_id": "ChIJ77Ft_s21RIYRfbiAvSW26iA",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2668844,
+        "lng": -97.7449805
+      },
+      "name": "Frosty\u2019s Christmas Bar Austin",
+      "place_id": "ChIJLyB8fgC1RIYRhQY5JLjh-Nk",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26712199999999,
+        "lng": -97.7456062
+      },
+      "name": "Lavaca Street Bar",
+      "place_id": "ChIJzcbRLgC1RIYRNTtGcMF7Enw",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2629122,
+        "lng": -97.7441937
+      },
+      "name": "The LINE Austin",
+      "place_id": "ChIJA0Pwa_G1RIYRR1g97SPhn9k",
+      "sweeps": [
+        "bar",
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2675879,
+        "lng": -97.7459566
+      },
+      "name": "Powder Room",
+      "place_id": "ChIJz4YxIwm1RIYRlKgOqoQHlR4",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2671127,
+        "lng": -97.743771
+      },
+      "name": "Kelly's Corner",
+      "place_id": "ChIJP5drpsK1RIYRksb28shp9sQ",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26773009999999,
+        "lng": -97.74620259999999
+      },
+      "name": "Roosevelt Bar",
+      "place_id": "ChIJI8y7SgC1RIYR7ghw6X1KamQ",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2627097,
+        "lng": -97.74411380000001
+      },
+      "name": "Arlo Grey by Kristen Kish",
+      "place_id": "ChIJAc2DMIe1RIYRLq9Zr7joMNU",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26274129999999,
+        "lng": -97.7439004
+      },
+      "name": "P6 at the LINE Austin",
+      "place_id": "ChIJxULFGve1RIYRqn-dJTCFLrM",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2675505,
+        "lng": -97.7439407
+      },
+      "name": "LUNA Rooftop",
+      "place_id": "ChIJSU81s8i1RIYRJv1gDoushNU",
+      "sweeps": [
+        "bar"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2648019,
+        "lng": -97.7445985
+      },
+      "name": "Fairground Plaza",
+      "place_id": "ChIJzySALgC1RIYRot6a3YulNCg",
+      "sweeps": [
+        "bakery",
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2664047,
+        "lng": -97.7475899
+      },
+      "name": "Sugarwolf Bakery",
+      "place_id": "ChIJT6rIjYq1RIYRrP4nT2hz5qk",
+      "sweeps": [
+        "bakery"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2677418,
+        "lng": -97.744098
+      },
+      "name": "A1 Bakery",
+      "place_id": "ChIJC8PTEQC1RIYR4F1542VQRb8",
+      "sweeps": [
+        "bakery"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2676536,
+        "lng": -97.7465196
+      },
+      "name": "Domino's Pizza",
+      "place_id": "ChIJQyGZUhK1RIYRjxQRL6JUfLE",
+      "sweeps": [
+        "meal_takeaway"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2654227,
+        "lng": -97.7473723
+      },
+      "name": "Urban Outfitters",
+      "place_id": "ChIJnaaXTA-1RIYRDSyGtUDAodE",
+      "sweeps": [
+        "store",
+        "clothing_store",
+        "shoe_store",
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2659645,
+        "lng": -97.7438133
+      },
+      "name": "Patagonia",
+      "place_id": "ChIJAWPLQgi1RIYRZUsZxtASSpE",
+      "sweeps": [
+        "store",
+        "clothing_store",
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2660751,
+        "lng": -97.744018
+      },
+      "name": "JoS. A. Bank",
+      "place_id": "ChIJlyD0Wwi1RIYRs8d4z8UUzSs",
+      "sweeps": [
+        "store",
+        "clothing_store",
+        "shoe_store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2646727,
+        "lng": -97.74622339999999
+      },
+      "name": "Eliza Page",
+      "place_id": "ChIJf_-qugi1RIYRbNWbNDv9nKM",
+      "sweeps": [
+        "store",
+        "jewelry_store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26400690000001,
+        "lng": -97.7447988
+      },
+      "name": "Lone Star Office Solutions",
+      "place_id": "ChIJg6RFKQa1RIYRsKEAlViJ_e4",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2647799,
+        "lng": -97.74649360000001
+      },
+      "name": "United Apparel Liquidators",
+      "place_id": "ChIJASu_Sg-1RIYRc1SVvvsZVDE",
+      "sweeps": [
+        "store",
+        "clothing_store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.264294,
+        "lng": -97.744044
+      },
+      "name": "FedEx Office Print & Ship Center",
+      "place_id": "ChIJvxoI1ge1RIYRpnpQq1UkDlE",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2664356,
+        "lng": -97.7465084
+      },
+      "name": "plodes studio",
+      "place_id": "ChIJAQBA0Ai1RIYRdcJ7WjEhyUo",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2648683,
+        "lng": -97.7442284
+      },
+      "name": "Urban Wine + Liquor",
+      "place_id": "ChIJEfmCgwi1RIYRRaXH9uKcJH8",
+      "sweeps": [
+        "store",
+        "liquor_store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2659049,
+        "lng": -97.7471917
+      },
+      "name": "DEN Property Group",
+      "place_id": "ChIJLWsXeaW1RIYRbTe_iOLqyYk",
+      "sweeps": [
+        "store",
+        "art_gallery"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2645761,
+        "lng": -97.7457656
+      },
+      "name": "Brandy Melville - Austin 2",
+      "place_id": "ChIJK0Hbyry1RIYRdE92ONQIGCk",
+      "sweeps": [
+        "store",
+        "clothing_store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2646861,
+        "lng": -97.7460543
+      },
+      "name": "Sunglass Hut",
+      "place_id": "ChIJcZFOrrS1RIYRpUtfsDYev_o",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2646824,
+        "lng": -97.7460957
+      },
+      "name": "Sneaker Politics",
+      "place_id": "ChIJFUx7ltW1RIYRyRK0gQb-xSM",
+      "sweeps": [
+        "store",
+        "clothing_store",
+        "shoe_store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2656168,
+        "lng": -97.74577629999999
+      },
+      "name": "Bounce Luggage Storage (Reserve Online)",
+      "place_id": "ChIJE-riwQ61RIYR6q5cSI1omiY",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2645739,
+        "lng": -97.7459449
+      },
+      "name": "Mugsy",
+      "place_id": "ChIJf_x9K361RIYRdYOmLIK6Sp4",
+      "sweeps": [
+        "store",
+        "clothing_store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2646058,
+        "lng": -97.7460203
+      },
+      "name": "Atown",
+      "place_id": "ChIJaaP3Eqe1RIYR3QxlCidxvkk",
+      "sweeps": [
+        "store",
+        "clothing_store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.264566,
+        "lng": -97.7459354
+      },
+      "name": "Stella Dallas Austin",
+      "place_id": "ChIJKQXqA5u1RIYRwnSvb_A9Jsc",
+      "sweeps": [
+        "store",
+        "clothing_store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2656435,
+        "lng": -97.745661
+      },
+      "name": "Apoth\u0113ke @ Finley's",
+      "place_id": "ChIJRVlMlQi1RIYR6fv3Yt4NxwI",
+      "sweeps": [
+        "store",
+        "pharmacy"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2656083,
+        "lng": -97.746082
+      },
+      "name": "Love, Tito's",
+      "place_id": "ChIJncvhNQe1RIYRuLbirExLZQA",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.264686,
+        "lng": -97.74628799999999
+      },
+      "name": "Hemline Austin",
+      "place_id": "ChIJ-2_hpAi1RIYRLrV4qSKOjxY",
+      "sweeps": [
+        "store",
+        "clothing_store",
+        "shoe_store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2648308,
+        "lng": -97.74645579999999
+      },
+      "name": "Live Ride Laugh",
+      "place_id": "ChIJExAiwGW1RIYRy5trZYKIBW8",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2657285,
+        "lng": -97.7461582
+      },
+      "name": "CardVault by Tom Brady",
+      "place_id": "ChIJAVyosoS1RIYRuVurdInfTi0",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.264936,
+        "lng": -97.74682949999999
+      },
+      "name": "The Austinite Market - 2nd Street",
+      "place_id": "ChIJ2_INNFa1RIYRZy9wdibX3DM",
+      "sweeps": [
+        "store",
+        "convenience_store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.265559,
+        "lng": -97.74443
+      },
+      "name": "IQOS Pop-up",
+      "place_id": "ChIJN8WXD5-1RIYRW1ssxAjc0b4",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2647934,
+        "lng": -97.74701689999999
+      },
+      "name": "PrintWithMe Print Kiosk at The Austinite Market - 2nd Street",
+      "place_id": "ChIJERB292u1RIYRQUOfdhx8kVg",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2655858,
+        "lng": -97.7444247
+      },
+      "name": "Smoke Paradise - Vape and Hemp Dispensary",
+      "place_id": "ChIJNctMcey1RIYRyUbSqzzRm2U",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2654097,
+        "lng": -97.7470732
+      },
+      "name": "Happy Caapi",
+      "place_id": "ChIJD06hBgC1RIYR19mJoSDD2RE",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2639807,
+        "lng": -97.7448532
+      },
+      "name": "More Coffee Design",
+      "place_id": "ChIJZRlLvLe1RIYRR4ly-PFlEeQ",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26536399999999,
+        "lng": -97.7472738
+      },
+      "name": "ACL Live Shop",
+      "place_id": "ChIJ89ich7S1RIYRKTEepTHuLLE",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2666103,
+        "lng": -97.7457797
+      },
+      "name": "Cozy Cannabis",
+      "place_id": "ChIJx2UmQym1RIYRl-hXgpmnZyI",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2650663,
+        "lng": -97.74747939999999
+      },
+      "name": "Sears Heating and Air Conditioning",
+      "place_id": "ChIJsQ82w6i1RIYRJCFH5R5ZoYA",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2666338,
+        "lng": -97.74580809999999
+      },
+      "name": "Sweetness",
+      "place_id": "ChIJecIE4Ya1RIYRDZbx7KW_rCY",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2651781,
+        "lng": -97.7475319
+      },
+      "name": "Akiba Texas",
+      "place_id": "ChIJWxAIFVK1RIYR5ZHd3LrvBDs",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26397459999999,
+        "lng": -97.7440671
+      },
+      "name": "Slavik Ralph Design Studio",
+      "place_id": "ChIJWXvgDRy3eoURUvqM4UvtVqs",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26397459999999,
+        "lng": -97.7440671
+      },
+      "name": "The CRAVEN Co",
+      "place_id": "ChIJT6iDGk21RIYRXgIm10S4_p8",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26397459999999,
+        "lng": -97.7440671
+      },
+      "name": "Xenia Events",
+      "place_id": "ChIJSyKRAdO0RIYRwM-Kqjmme9Y",
+      "sweeps": [
+        "store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2640453,
+        "lng": -97.74757149999999
+      },
+      "name": "Virence",
+      "place_id": "ChIJS2eoYeW1RIYR012mLJy4Zv0",
+      "sweeps": [
+        "clothing_store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2673745,
+        "lng": -97.7450229
+      },
+      "name": "Dokotoo",
+      "place_id": "ChIJ8_ze1MC1RIYR7cFTr_crv_s",
+      "sweeps": [
+        "clothing_store"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2651775,
+        "lng": -97.7456261
+      },
+      "name": "[solidcore] Downtown Austin",
+      "place_id": "ChIJq6pOlgi1RIYRVLnCaTjJoao",
+      "sweeps": [
+        "gym"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2644392,
+        "lng": -97.7465394
+      },
+      "name": "Shine Hot Pilates + Sculpt Downtown Austin",
+      "place_id": "ChIJexVw9Xy1RIYRagVpSTNtuvU",
+      "sweeps": [
+        "gym"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26577309999999,
+        "lng": -97.7439481
+      },
+      "name": "Pvolve Austin - Downtown",
+      "place_id": "ChIJK1Ec_la1RIYRyJlbJU2Y9K8",
+      "sweeps": [
+        "gym"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2655518,
+        "lng": -97.74584779999999
+      },
+      "name": "Finley\u2019s Barbershop",
+      "place_id": "ChIJU_wGwAi1RIYRccF8OlCKjlg",
+      "sweeps": [
+        "hair_care",
+        "beauty_salon"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2650973,
+        "lng": -97.7456048
+      },
+      "name": "Drybar - Downtown Austin",
+      "place_id": "ChIJnT0JM_61RIYRobSDQgMUmXs",
+      "sweeps": [
+        "hair_care",
+        "beauty_salon"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2653485,
+        "lng": -97.7455286
+      },
+      "name": "SEV Laser",
+      "place_id": "ChIJj29QlJe1RIYRrFSOVy2A4Xs",
+      "sweeps": [
+        "hair_care",
+        "beauty_salon",
+        "spa"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2645894,
+        "lng": -97.746135
+      },
+      "name": "SUGARED + BRONZED (Austin Downtown)",
+      "place_id": "ChIJB3mghwO1RIYReIrIN6Bjq3s",
+      "sweeps": [
+        "hair_care",
+        "beauty_salon",
+        "spa"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2642048,
+        "lng": -97.74531549999999
+      },
+      "name": "ZoiaqHair Water Hub",
+      "place_id": "ChIJcRNRAMi1RIYRbEj5Bnntm5s",
+      "sweeps": [
+        "hair_care"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2662819,
+        "lng": -97.7458525
+      },
+      "name": "Twins Barber Shop",
+      "place_id": "ChIJ78QiV7C1RIYRrKvSaF7NVGg",
+      "sweeps": [
+        "hair_care"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2654139,
+        "lng": -97.7467581
+      },
+      "name": "AWAY Spa",
+      "place_id": "ChIJQyUitgi1RIYR8pkUdIMUh6M",
+      "sweeps": [
+        "beauty_salon",
+        "spa"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2665382,
+        "lng": -97.7455322
+      },
+      "name": "The Wellness House",
+      "place_id": "ChIJGx4y_fK1RIYR0aJqwHCYZIc",
+      "sweeps": [
+        "beauty_salon",
+        "spa"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2671524,
+        "lng": -97.7459817
+      },
+      "name": "Keen Salon",
+      "place_id": "ChIJ20aOrce1RIYRGHdclkxlBK8",
+      "sweeps": [
+        "beauty_salon"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26469640000001,
+        "lng": -97.7443289
+      },
+      "name": "Rossi massage and spa wellness\u2019s",
+      "place_id": "ChIJrYf3gz61RIYR7vBv3VO4NUI",
+      "sweeps": [
+        "spa"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2671524,
+        "lng": -97.7459817
+      },
+      "name": "ZaSpa Austin Downtown",
+      "place_id": "ChIJQ_MJOCG1RIYRvJfBQBQmVvE",
+      "sweeps": [
+        "spa"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2677304,
+        "lng": -97.74604529999999
+      },
+      "name": "Gabby aesthetics and beauty massage spa",
+      "place_id": "ChIJmWj9m961RIYRKEf_jDvZK-4",
+      "sweeps": [
+        "spa"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26557979999999,
+        "lng": -97.74578679999999
+      },
+      "name": "Cathy's Cleaners Downtown",
+      "place_id": "ChIJpYqs6gi1RIYRaaeGil6GIXs",
+      "sweeps": [
+        "laundry"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26560379999999,
+        "lng": -97.745779
+      },
+      "name": "EcoClean Green Dry Cleaner & Laundry",
+      "place_id": "ChIJZ0jg43O1RIYRtQHultP4z0g",
+      "sweeps": [
+        "laundry"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2660671,
+        "lng": -97.7454478
+      },
+      "name": "Sew Fresh & So Clean ATX",
+      "place_id": "ChIJwZ1vGqO1RIYR66KoURmd9gg",
+      "sweeps": [
+        "laundry"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2640003,
+        "lng": -97.7440507
+      },
+      "name": "Nonstop Air Duct Cleaning Austin",
+      "place_id": "ChIJJU92M1u1RIYR-L-JH7COCm4",
+      "sweeps": [
+        "laundry"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26737379999999,
+        "lng": -97.7467997
+      },
+      "name": "Gilt and Linen",
+      "place_id": "ChIJD1OzZle1RIYRI5tE61COxaY",
+      "sweeps": [
+        "laundry"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2639807,
+        "lng": -97.7448532
+      },
+      "name": "Lancaster Pollard",
+      "place_id": "ChIJg6RFKQa1RIYRrQSPg5oELA0",
+      "sweeps": [
+        "bank"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.264936,
+        "lng": -97.74682949999999
+      },
+      "name": "CoinFlip Bitcoin ATM - The Austinite Market (Austin)",
+      "place_id": "ChIJxQiINLK1RIYR0TU0HunOunQ",
+      "sweeps": [
+        "bank"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26582960000001,
+        "lng": -97.744641
+      },
+      "name": "First Citizens Bank - Corporate Office",
+      "place_id": "ChIJ1fzamf-1RIYReFOGF0T-mbE",
+      "sweeps": [
+        "bank"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26582960000001,
+        "lng": -97.744641
+      },
+      "name": "Invesco",
+      "place_id": "ChIJVVWV9Ai1RIYRUnf2Gauf9lw",
+      "sweeps": [
+        "bank"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2668883,
+        "lng": -97.7443502
+      },
+      "name": "Western Alliance Bank Loan Production Office",
+      "place_id": "ChIJi3YqHp-1RIYREptRQjmhbLk",
+      "sweeps": [
+        "bank"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2654636,
+        "lng": -97.7467252
+      },
+      "name": "W Austin",
+      "place_id": "ChIJF9-xywi1RIYRLTdVOm_2ebk",
+      "sweeps": [
+        "lodging",
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2646829,
+        "lng": -97.7462896
+      },
+      "name": "Parking Spot",
+      "place_id": "ChIJ9fVErwi1RIYRI6oRqdHpOBU",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2649192,
+        "lng": -97.7458419
+      },
+      "name": "Kasa Downtown Austin",
+      "place_id": "ChIJafuKuQi1RIYRK_hottucj50",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2652879,
+        "lng": -97.7463226
+      },
+      "name": "Kasa Downtown Austin",
+      "place_id": "ChIJeSXpBHK1RIYReKlfYplT44A",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2652893,
+        "lng": -97.7463226
+      },
+      "name": "Austin | Executive 1BD /1BA Downtown Apartment",
+      "place_id": "ChIJpziKuQi1RIYRV8t0NCviTtg",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2652893,
+        "lng": -97.7463226
+      },
+      "name": "Kasa | Downtown 1BD, Close to Nightlife | Austin",
+      "place_id": "ChIJpziKuQi1RIYRPq6c0YvGOF8",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2645073,
+        "lng": -97.7454681
+      },
+      "name": "Stellar Downtown 1BR w/ Gym & Pool, nr Lady Bird Lake, by Blueground",
+      "place_id": "ChIJuaeWngi1RIYRv0oNuc8GmFE",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2645073,
+        "lng": -97.7454681
+      },
+      "name": "Sunlit Downtown 2BR w/ Gym, W/D & Deck, nr Town Lake Park, by Blueground",
+      "place_id": "ChIJuaeWngi1RIYRyMYz4uB6b7U",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2644996,
+        "lng": -97.7454605
+      },
+      "name": "Sunlit Downtown 2BR w / Gym, W /D Deck, nr Town Lake Park, by Blueground",
+      "place_id": "ChIJ1yKRngi1RIYRmoP8pnGwdYc",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2644996,
+        "lng": -97.7454605
+      },
+      "name": "Amazing Downtown 1BR w / Gym W /D, nr Lady Bird Lake, by Blueground",
+      "place_id": "ChIJ1yKRngi1RIYRPpy1QuXuBbY",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2641296,
+        "lng": -97.7453613
+      },
+      "name": "Blueground Downtown Austin pool nr Congress Ave ATX-336",
+      "place_id": "ChIJsVQlJwa1RIYR7O_aC7QvGy4",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2641296,
+        "lng": -97.7453613
+      },
+      "name": "Blueground | Downtown Austin, pool, nr Lady Bird Lake",
+      "place_id": "ChIJsVQlJwa1RIYRdVHrUjIH3HU",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2641296,
+        "lng": -97.7453613
+      },
+      "name": "Blueground | Downtown Austin, pool, nr Congress Ave",
+      "place_id": "ChIJsVQlJwa1RIYRnlDCYCQsGGQ",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2641296,
+        "lng": -97.7453613
+      },
+      "name": "Blueground | Downtown 2bd apartment",
+      "place_id": "ChIJsVQlJwa1RIYRA8Ski8zBd74",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2634792,
+        "lng": -97.7457809
+      },
+      "name": "Rock Royalty 4 bedroom Suite",
+      "place_id": "ChIJK8r6Fwa1RIYR_4oCefoSg2w",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2647416,
+        "lng": -97.7438353
+      },
+      "name": "Habitat Suites",
+      "place_id": "ChIJc7xY_cG1RIYRGCpdlm9HWcM",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2667504,
+        "lng": -97.7456588
+      },
+      "name": "Austin Modern Loft - Downtown Doorman Condo.",
+      "place_id": "ChIJ1V415wi1RIYRL0L3K16wi7E",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2636203,
+        "lng": -97.7440872
+      },
+      "name": "Bardot Hotel Downtown ATX",
+      "place_id": "ChIJJwX4zQe1RIYRm5aWUh-YqVE",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2636203,
+        "lng": -97.7440872
+      },
+      "name": "Bardot Hotel Downtown ATX",
+      "place_id": "ChIJJwX4zQe1RIYRrujiphJMXrk",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2671524,
+        "lng": -97.7459817
+      },
+      "name": "Hotel ZaZa Austin Downtown",
+      "place_id": "ChIJy-WuW_i1RIYRlr7FmeRD7uk",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26675979999999,
+        "lng": -97.7474518
+      },
+      "name": "Large 1BD, Best Location in Austin.",
+      "place_id": "ChIJJeRjKQ-1RIYRXidlzveiDuY",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26283069999999,
+        "lng": -97.7450409
+      },
+      "name": "Beautiful downtown condo - amazing views!",
+      "place_id": "ChIJs-8DSAa1RIYRG6-iPNWrhnA",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2671476,
+        "lng": -97.7469811
+      },
+      "name": "Warehouse District, Austin, TX",
+      "place_id": "ChIJ3eoiDwC1RIYRi6foqAZUa-s",
+      "sweeps": [
+        "lodging"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2650663,
+        "lng": -97.74747939999999
+      },
+      "name": "The People's Gallery @ City Hall",
+      "place_id": "ChIJ-ZzJsgi1RIYR1--KN-hGgmQ",
+      "sweeps": [
+        "art_gallery"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2647004,
+        "lng": -97.74595169999999
+      },
+      "name": "Nebula",
+      "place_id": "ChIJfSpAwcK1RIYRbSwaQVjQKD8",
+      "sweeps": [
+        "art_gallery"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2641637,
+        "lng": -97.7453287
+      },
+      "name": "OFC Creatives",
+      "place_id": "ChIJdZjEx6y1RIYRrf8wIxNEgv0",
+      "sweeps": [
+        "art_gallery"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2645078,
+        "lng": -97.7454648
+      },
+      "name": "Ashton Austin",
+      "place_id": "ChIJn6pkHwa1RIYRs_xMkNBHkdg",
+      "sweeps": [
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.265293,
+        "lng": -97.7463092
+      },
+      "name": "AMLI Downtown",
+      "place_id": "ChIJVSpIsAi1RIYRFTBTIgQIlww",
+      "sweeps": [
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26397459999999,
+        "lng": -97.7440671
+      },
+      "name": "Entourage Model and Talent Agency",
+      "place_id": "ChIJf_g5LkdeXIYRA5Ka2dwkA0c",
+      "sweeps": [
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2669009,
+        "lng": -97.7443227
+      },
+      "name": "Cushman & Wakefield - Commercial Real Estate Services",
+      "place_id": "ChIJNYKCKdlKW4YRc--pCFUZgwU",
+      "sweeps": [
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.264133,
+        "lng": -97.744771
+      },
+      "name": "Jackson Walker LLP",
+      "place_id": "ChIJg6RFKQa1RIYRGkEw9Mi28hQ",
+      "sweeps": [
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26400690000001,
+        "lng": -97.7447988
+      },
+      "name": "Texas Water Exchange",
+      "place_id": "ChIJg6RFKQa1RIYRBbxzCKbz3Ac",
+      "sweeps": [
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26400690000001,
+        "lng": -97.7447988
+      },
+      "name": "Hr Q",
+      "place_id": "ChIJg6RFKQa1RIYRF-rH6-8Ditk",
+      "sweeps": [
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26400690000001,
+        "lng": -97.7447988
+      },
+      "name": "Gonzales Alex MD",
+      "place_id": "ChIJg6RFKQa1RIYRGs69QDBA4dc",
+      "sweeps": [
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26400690000001,
+        "lng": -97.7447988
+      },
+      "name": "Shades of Green",
+      "place_id": "ChIJg6RFKQa1RIYRlfkuf6hN6TA",
+      "sweeps": [
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26400690000001,
+        "lng": -97.7447988
+      },
+      "name": "Surrex Solutions Corporation",
+      "place_id": "ChIJg6RFKQa1RIYR0cEfHUQEmDo",
+      "sweeps": [
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2639257,
+        "lng": -97.7449307
+      },
+      "name": "Lawyers Escrow Company",
+      "place_id": "ChIJg6RFKQa1RIYRWbsAI0SEAQU",
+      "sweeps": [
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26400690000001,
+        "lng": -97.7447988
+      },
+      "name": "PTC",
+      "place_id": "ChIJg6RFKQa1RIYRT1rxd5k-djk",
+      "sweeps": [
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26400690000001,
+        "lng": -97.7447988
+      },
+      "name": "Brainard Capital Management LLC",
+      "place_id": "ChIJg6RFKQa1RIYRyczcEx08KEc",
+      "sweeps": [
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2659685,
+        "lng": -97.74531999999999
+      },
+      "name": "McGuireWoods LLP - Austin",
+      "place_id": "ChIJtZg4QAi1RIYRbvLr8v24b0E",
+      "sweeps": [
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2639257,
+        "lng": -97.7449307
+      },
+      "name": "Mikeska Monahan & Peckham",
+      "place_id": "ChIJg6RFKQa1RIYRAp6gpKTL4Zw",
+      "sweeps": [
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26400690000001,
+        "lng": -97.7447988
+      },
+      "name": "Martin Capital Advisors LLP",
+      "place_id": "ChIJg6RFKQa1RIYRT4jaJH6Bitc",
+      "sweeps": [
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2648691,
+        "lng": -97.74458299999999
+      },
+      "name": "The Austonian",
+      "place_id": "ChIJc1mJgAi1RIYRhgcaUlxY1D4",
+      "sweeps": [
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2640672,
+        "lng": -97.7448495
+      },
+      "name": "Austin Ventures",
+      "place_id": "ChIJ2V3VYAm1RIYRbVIQiP4bM10",
+      "sweeps": [
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.2639427,
+        "lng": -97.74486449999999
+      },
+      "name": "Law Office of David Moore",
+      "place_id": "ChIJg6RFKQa1RIYRfqgKQUdtiD8",
+      "sweeps": [
+        "establishment"
+      ]
+    },
+    {
+      "location": {
+        "lat": 30.26400690000001,
+        "lng": -97.7447988
+      },
+      "name": "Abraham Trading",
+      "place_id": "ChIJg6RFKQa1RIYRO7W9urTUP1w",
+      "sweeps": [
+        "establishment"
+      ]
+    }
+  ],
+  "summary": {
+    "already_catalogued": 0,
+    "area": "second-street-district-demo-blocks",
+    "businesses_enumerated": 186,
+    "census": true,
+    "maps_api_calls": {
+      "image": 0,
+      "metadata": 0,
+      "places": 34,
+      "total": 34
+    },
+    "maps_call_cap": 1200,
+    "new_businesses": 186,
+    "stopped": null,
+    "stopped_is_error": false,
+    "sweep_types": [
+      "restaurant",
+      "cafe",
+      "bar",
+      "bakery",
+      "meal_takeaway",
+      "store",
+      "clothing_store",
+      "shoe_store",
+      "jewelry_store",
+      "book_store",
+      "convenience_store",
+      "liquor_store",
+      "florist",
+      "pharmacy",
+      "gym",
+      "hair_care",
+      "beauty_salon",
+      "spa",
+      "laundry",
+      "bank",
+      "lodging",
+      "art_gallery",
+      "establishment"
+    ],
+    "truncated_blocks": [
+      "second-street-district-demo-blocks"
+    ],
+    "truncated_types": {
+      "second-street-district-demo-blocks": [
+        "restaurant",
+        "store",
+        "lodging",
+        "establishment"
+      ]
+    },
+    "wall_clock_s": 37.127
+  }
+}
