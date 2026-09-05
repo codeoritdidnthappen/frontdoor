@@ -195,3 +195,28 @@ entrances, and there are not many left. Schedule and steps: [signing-calendar.md
 - [ ] Tap **Finish capture** after all six named views, then explicitly label all four presence
       criteria before viewing any screening result
 - [ ] If skipped: entrance and reason recorded before moving on
+
+## When an estimate can be trusted
+
+When can a number from this door be believed, and past which angle or
+distance should it not?
+
+TICK-075 was going to answer that from the sealed split. It did not run —
+there is no caliper (A-3, D-036). What follows is the predicted budget that
+run would have been compared against (`docs/rise-error-budget.json`,
+TICK-041). Status: **predicted before data; not an observed result**.
+Full table: [findings.md](findings.md). Use `fx = 2807.7` (James's iPhone),
+not the 2934.1 example.
+
+**Arm A (paused).** Predicted error on a 0.5″ rise, δ = 5 px: at 2 m it stays
+under 0.25″ through 30° and goes over by 45°; at 3 m it is already over
+head-on. The JSON has no 2.5 m row. F-004's **2.5 m** cap is analytical-series
+guidance for a measurement attempt, not a sealed result. The far screening
+view (~3-4 m) is allowed to sit past that because screening does not measure
+rise.
+
+**Screening.** A presence call depends on the six-view set actually showing
+the feature — including the ground at the threshold. If it does not, the
+answer is **not visible**, never **absent**. Glass doors, heavily bevelled
+or rounded thresholds, and occlusion in the ROI are documented failure
+classes (see above), not reasons to skip a capturable entrance.
