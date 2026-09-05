@@ -1129,3 +1129,18 @@ def test_cli_merge_without_census_is_refused(tmp_path, capsys):
 
     assert precatalogue.main(["run", "--merge"]) == 2
     assert "--merge" in capsys.readouterr().err
+
+
+def test_cli_config_reaches_the_full_run_too(tmp_path, monkeypatch):
+    """A --config the full run ignored would be a flag that silently does
+    nothing, which is worse than not having one."""
+    from frontdoor import precatalogue
+
+    seen = {}
+    config = write_config(tmp_path, name="walk-area")
+    monkeypatch.setattr(precatalogue, "run_precatalogue",
+                        lambda area=None, out_dir="data": (
+                            seen.update(area=area, out_dir=out_dir)
+                            or {"stopped_is_error": False}))
+    assert precatalogue.main(["run", f"--config={config}"]) == 0
+    assert seen["area"].name == "walk-area"

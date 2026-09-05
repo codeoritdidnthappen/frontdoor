@@ -1064,7 +1064,7 @@ def main(argv=None):
             # Enumeration only: no Street View, no model, no dataset writes.
             summary = run_census(area=area, out_dir=out_dir, merge=merge)
         else:
-            summary = run_precatalogue(out_dir=out_dir)
+            summary = run_precatalogue(area=area, out_dir=out_dir)
     except PrecatalogueError as exc:
         print(exc, file=sys.stderr)
         return 1
