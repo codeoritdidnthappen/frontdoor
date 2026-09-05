@@ -35,6 +35,27 @@ fly launch --no-deploy --copy-config --name frontdoor-measure
 The first phone-label version writes ephemeral CSV state inside the application container; the
 limitations below explain what must be copied before a replacement or redeploy.
 
+### Checking what a deployment can actually do
+
+`GET /ready` answers the question `/health` does not: whether a scan taken on a phone will be
+assessed, and whether its photograph will be stored.
+
+```json
+{"ready": false, "subsystems": {"screening": true, "photo_storage": false, "map_dataset": true},
+ "degraded": ["photo_storage"]}
+```
+
+`photo_storage` is the one that matters most, because its failure is invisible. Without those
+credentials the endpoint still answers, the assessment still succeeds, and the image simply does
+not persist. That is how `FRONTDOOR_UPLOAD_KEY` went missing for days: nothing was broken enough
+to notice. The deploy workflow now reads this endpoint and raises a warning when photo storage is
+degraded, and fails the run outright when the model key is absent, since nothing works at all
+without it.
+
+It reports presence, never values, and never names the missing variable: a status is enough for
+an operator and useless to anyone else. To find out which credential is missing, look at the
+secrets on the host.
+
 ### Installing the app on a phone
 
 There is no paid Apple developer account on this project, so TestFlight and the App Store are

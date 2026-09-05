@@ -7,7 +7,9 @@ unchanged against it.
 """
 
 import json
+import os
 from importlib import resources
+from pathlib import Path
 
 from flask import Flask, Response, jsonify, request
 from jsonschema import Draft202012Validator, ValidationError
@@ -15,6 +17,7 @@ from werkzeug.exceptions import HTTPException
 
 from frontdoor.metrology import ARM_NAMES
 from frontdoor.sidecar import validate_sidecar
+from frontdoor.storage import StorageError, load_image_creds
 from frontdoor_server.claim_view import claim_page
 from frontdoor_server.map_view import map_page
 from frontdoor_server.label_view import register_labels
@@ -204,6 +207,50 @@ def create_app():
     def health():
         """Cheap liveness probe for the fallback chain on stage (TICK-064)."""
         return {"status": "ok"}, 200
+
+    @app.get("/ready")
+    def ready():
+        """What this deployment can actually do right now (TICK-335).
+
+        /health says the process is alive, which is not the question anyone
+        actually has. The question is whether a scan taken on a phone will be
+        assessed and whether its photograph will be stored, and until now the
+        only way to find out was to take one and see. A missing storage
+        credential is invisible from outside: the endpoint answers, the
+        assessment succeeds, and the image quietly does not persist. That has
+        already happened once on this project.
+
+        Reports configuration presence only. It never reveals a value, and it
+        never reveals which specific variable is missing, because that is a map
+        of the deployment for anyone who asks. Names of subsystems, booleans,
+        nothing else.
+        """
+        subsystems = {}
+
+        # The model: an assessment cannot happen without it.
+        subsystems["screening"] = bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
+
+        # Object storage: the difference between a published scan that keeps
+        # its photograph and one that silently does not.
+        try:
+            load_image_creds()
+            subsystems["photo_storage"] = True
+        except StorageError:
+            subsystems["photo_storage"] = False
+
+        # The map dataset, which is what /map/data serves.
+        dataset_path = Path(
+            os.environ.get("FRONTDOOR_MAP_DATASET", "data/precatalogue.json")
+        )
+        subsystems["map_dataset"] = dataset_path.is_file()
+
+        ready_state = all(subsystems.values())
+        return {
+            "ready": ready_state,
+            "subsystems": subsystems,
+            # Named so a deploy check can assert on it without parsing prose.
+            "degraded": sorted(name for name, ok in subsystems.items() if not ok),
+        }, 200
 
     @app.get("/app")
     def app_page():
