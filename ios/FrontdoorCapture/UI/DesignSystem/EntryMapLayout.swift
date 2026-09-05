@@ -121,11 +121,4 @@ extension View {
             .entryMapElevation(elevation)
     }
 
-    /// Guarantee the 48 pt minimum in both dimensions without changing what the control looks like.
-    func entryMapTouchTarget() -> some View {
-        frame(
-            minWidth: EntryMapLayout.touchTargetMinimum,
-            minHeight: EntryMapLayout.touchTargetMinimum)
-            .contentShape(Rectangle())
-    }
 }

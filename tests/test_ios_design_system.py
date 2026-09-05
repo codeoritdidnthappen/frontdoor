@@ -231,6 +231,18 @@ def test_reduce_motion_stops_the_animation_rather_than_shortening_it():
         "a duration is being scaled somewhere in the reduced path")
 
 
+def test_only_the_design_system_decides_what_reduce_motion_means():
+    """Two screens each reading the setting is how it comes to mean two different things. A screen
+    asks the layer for an animation; the layer is the only thing that reads the environment."""
+    offenders = [
+        swift.name
+        for swift in (ROOT / "ios" / "FrontdoorCapture" / "UI").glob("*.swift")
+        if "accessibilityReduceMotion" in read(swift)
+    ]
+    assert offenders == [], (
+        f"{offenders} reads the Reduce Motion setting directly instead of asking EntryMapMotion")
+
+
 def test_the_layer_produces_exactly_one_delay_and_it_cannot_gate_visibility():
     """A delay that decides when something exists is what broke focus into every sheet."""
     delaying = {

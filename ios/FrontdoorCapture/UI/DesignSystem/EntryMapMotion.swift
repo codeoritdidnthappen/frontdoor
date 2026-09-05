@@ -181,6 +181,12 @@ enum EntryMapMotion {
 
 extension View {
     /// Animate `value` with a named step, honouring the reader's Reduce Motion setting.
+    ///
+    /// The reason this exists at all is so that a screen never reads
+    /// `accessibilityReduceMotion` itself. One place decides what the setting means, so it cannot
+    /// come to mean two things in two screens — which is the shape of the web build's defect, where
+    /// one place shortened durations and another left its delays alone. A guard test keeps the
+    /// environment key inside this directory.
     func entryMapAnimation<V: Equatable>(_ step: EntryMapMotion.Step, value: V) -> some View {
         modifier(EntryMapAnimationModifier(step: step, value: value))
     }
