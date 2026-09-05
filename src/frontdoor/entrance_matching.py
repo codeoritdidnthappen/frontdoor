@@ -342,6 +342,11 @@ def _drop_places_two_doors_claim(results):
     keeps its place and the new claimant loses it. This ticket adds places; it
     may not take one away, and a collision with a standing identification is
     evidence against the new match, not against the old one.
+
+    Two standing identifications on one place would break the same invariant
+    and this function will not fix it, because unpicking one of them is
+    exactly the re-deciding this ticket is not allowed to do. It is left
+    alone and named by ``standing_collisions`` so it cannot pass unnoticed.
     """
     claims = {}
     for entrance_id, result in sorted(results.items()):
@@ -360,6 +365,23 @@ def _drop_places_two_doors_claim(results):
                 "place_claimed_by_another_entrance",
                 f"{', '.join(sorted(entrance_ids))} all reach {place_id}")
     return results
+
+
+def standing_collisions(results):
+    """Places two of #341's own identifications both claim, if any.
+
+    _drop_places_two_doors_claim deliberately leaves these standing rather
+    than re-deciding a door, so this is the only thing that says they exist.
+    Empty on today's data; a silent breach of "a place cannot be two front
+    doors" is the failure this exists to prevent.
+    """
+    claims = {}
+    for entrance_id, result in sorted(results.items()):
+        how = result.get("how") or {}
+        if result["place_id"] and how.get("anchor") == "identification":
+            claims.setdefault(result["place_id"], []).append(entrance_id)
+    return {place_id: doors
+            for place_id, doors in claims.items() if len(doors) > 1}
 
 
 def coverage(results):
@@ -528,8 +550,16 @@ def _run_match(out_path):
 
     One pass, because the rows this ticket adds to the catalogue hold the
     place_id alone: the names the match compares against exist only for as
-    long as this process runs. A cap stop is reported rather than raised, the
-    same way run_census reports one — the calls were still paid for.
+    long as this process runs.
+
+    A cap stop is reported rather than raised, the same way run_census reports
+    one — the calls were still paid for, and the census still records what
+    they bought. But it does NOT rewrite the decision file. enumerate_places
+    raises out of its own accumulator, so a stop leaves nothing at all to
+    match against, and matching 29 identified doors against an empty
+    supplement would replace every honest verdict with "no catalogued place
+    carries this business name" — the one claim a cut-off list must never be
+    read as. The file stays as it was and the run exits non-zero.
     """
     document = json.loads(IDENTIFICATION_PATH.read_text(encoding="utf-8"))
     entrances = document["entrances"]
@@ -546,13 +576,15 @@ def _run_match(out_path):
         truncated_blocks = enumeration.truncated_blocks
         truncated_types = enumeration.truncated_types
     except MapsCallCapError as exc:
-        # Match against what the calls did buy; the report says it was partial.
         stopped = f"{type(exc).__name__}: {exc}"
 
     # Keep the committed catalogue a superset of what this pass matched
-    # against, still identifier-only.
+    # against, still identifier-only. The summary is rewritten whenever this
+    # pass has something to say about the sweep, not only when it added a row:
+    # a truncated sweep that re-finds nothing new would otherwise leave the
+    # census describing an earlier, complete one.
     merged = _merged_census(census, places)
-    if merged["added"]:
+    if merged["added"] or stopped or truncated_types:
         census = {
             "summary": {
                 "area": area.name,
@@ -576,6 +608,14 @@ def _run_match(out_path):
         }
         _write_json(census_path, census)
 
+    if stopped:
+        print(json.dumps({"sweep_stopped": stopped,
+                          "maps_api_calls": counter.total,
+                          "decision_file_written": False}, indent=2))
+        print("the sweep stopped before it finished, so there was nothing to "
+              f"match against; {out_path} is unchanged", file=sys.stderr)
+        return 1
+
     results = match_entrances(
         entrances, catalogue_places(census, places),
         load_anchors(), walk_days())
@@ -587,7 +627,7 @@ def _run_match(out_path):
     # A "no catalogue entry" verdict is only as complete as the sweep behind
     # it, and a truncated sweep is a cut-off list, not a finished one.
     report["sweep_truncated_in"] = _truncated_types_by_block(truncated_types)
-    report["sweep_stopped"] = stopped
+    report["collisions_left_to_341"] = standing_collisions(results)
     print(json.dumps(report, indent=2))
     return 0
 

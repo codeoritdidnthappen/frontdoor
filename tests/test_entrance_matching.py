@@ -23,6 +23,7 @@ from frontdoor.entrance_matching import (
     door_anchor,
     match_entrances,
     name_candidates,
+    standing_collisions,
     walk_days,
 )
 from frontdoor.precatalogue import Enumeration, MapsCallCapError
@@ -495,23 +496,70 @@ def test_the_match_cli_reports_that_the_sweep_was_cut_short(
     assert report["resolved_to_a_place"] == 0
 
 
-def test_the_match_cli_keeps_what_the_calls_bought_when_the_cap_stops_it(
+def test_the_match_cli_does_not_pass_off_an_empty_sweep_as_a_verdict(
         tmp_path, monkeypatch, capsys):
+    """enumerate_places raises out of its own accumulator, so a cap stop
+    leaves nothing to match against. Writing then would replace every honest
+    verdict with "no catalogued place carries this business name" - the one
+    claim a cut-off list must never be read as."""
     from frontdoor import entrance_matching
 
     data = _match_fixture(tmp_path, monkeypatch)
     monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "test-maps-key")
+    before = (data / "entrance_identification.json").read_text(encoding="utf-8")
 
     def cap_stop(area, key, counter):
         raise MapsCallCapError("over the cap")
 
     monkeypatch.setattr(entrance_matching, "enumerate_places", cap_stop)
+    assert entrance_matching.main(["match"]) == 1
+    captured = capsys.readouterr()
+    assert "MapsCallCapError" in json.loads(captured.out)["sweep_stopped"]
+    assert "unchanged" in captured.err
+    assert (data / "entrance_identification.json").read_text(
+        encoding="utf-8") == before
+
+
+def test_a_cut_short_sweep_still_says_so_in_the_catalogue(
+        tmp_path, monkeypatch, capsys):
+    """A truncated sweep that re-finds nothing new adds no row, and the census
+    would otherwise keep a summary describing an earlier, complete one."""
+    from frontdoor import entrance_matching
+
+    data = _match_fixture(tmp_path, monkeypatch)
+    monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "test-maps-key")
+    _sweep(monkeypatch, [{"place_id": "known", "name": "Swift's Attic",
+                          "location": {"lat": 30.26559, "lng": -97.743272},
+                          "sweeps": ["restaurant"]}],
+           truncated_types=(("cell-a", "restaurant"),))
     assert entrance_matching.main(["match"]) == 0
-    report = json.loads(capsys.readouterr().out)
-    assert "MapsCallCapError" in report["sweep_stopped"]
-    written = json.loads(
-        (data / "entrance_identification.json").read_text(encoding="utf-8"))
-    assert written["entrances"]["E-020"]["place_id"] is None
+    census = json.loads(
+        (data / "precatalogue_census.json").read_text(encoding="utf-8"))
+    assert census["summary"]["truncated_types"] == {"cell-a": ["restaurant"]}
+    assert census["summary"]["merged_into_existing"]["places_added"] == 0
+    # and the row it re-found is still the one that was already there
+    assert census["places"] == [{"place_id": "known", "sweeps": ["restaurant"]}]
+
+
+def test_two_standing_identifications_on_one_place_are_named_not_unpicked():
+    """Unpicking one of #341's own resolutions is the re-deciding this ticket
+    may not do; going quiet about it is how the invariant dies."""
+    entrances = {"E-013": identified("A", place_id="p1"),
+                 "E-060": identified("B", place_id="p1")}
+    results = match_entrances(entrances, [], {},
+                              {"E-013": DAY, "E-060": DAY})
+    assert results["E-013"]["place_id"] == "p1"
+    assert results["E-060"]["place_id"] == "p1"
+    assert standing_collisions(results) == {"p1": ["E-013", "E-060"]}
+
+
+def test_no_standing_collision_in_the_committed_file(repo_entrances):
+    from frontdoor.entrance_matching import _match_one
+    results = {
+        entrance_id: _match_one(entrance_id, record, [], {}, {},
+                                DEFAULT_MATCH_DISTANCE_M)
+        for entrance_id, record in repo_entrances.items()}
+    assert standing_collisions(results) == {}
 
 
 def test_the_match_cli_reports_a_missing_key_instead_of_a_traceback(
