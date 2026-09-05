@@ -13,6 +13,7 @@ from frontdoor.labels import (
     CRITERIA_KEYS,
     LabelError,
     SealedLabelError,
+    append_future_entrance_labels,
     entrance_ids_from_manifest,
     initialize_labeling_sheet,
     labeling_progress,
@@ -437,3 +438,34 @@ def test_eval_filter_rejects_unknown_split(tmp_path):
     loaded = load_labels(_write_labels(tmp_path / "labels.csv", _mixed_split_labels()))
     with pytest.raises(LabelError, match="unknown split"):
         labels_for_eval(loaded.labels, split="test")
+
+
+def test_the_write_lock_is_taken_and_released_on_this_platform(tmp_path):
+    # TICK-321: the lock shim is the only platform-specific code in this
+    # module, and it used to be POSIX-only, which stopped the module from
+    # importing at all on Windows. Whatever platform CI or an operator's
+    # machine is, taking the lock twice in a row must work: the second
+    # acquisition proves the first one released.
+    from frontdoor.labels import _exclusive_lock
+
+    lock_path = tmp_path / "labels.csv.lock"
+    for _ in range(2):
+        with lock_path.open("w", encoding="utf-8") as handle:
+            with _exclusive_lock(handle):
+                assert not handle.closed
+
+
+def test_submitting_a_future_label_writes_through_the_lock(tmp_path):
+    # The end-to-end proof that the shim works where it is actually used:
+    # one submission lands four rows and a second identical one is a no-op,
+    # which only happens if the locked read-modify-write completed.
+    path = tmp_path / "labels.csv"
+    answers = {criterion: "present" for criterion in CRITERIA_KEYS}
+    assert append_future_entrance_labels(
+        path, "E-001", answers, labeled_by="operator", labeled_at=date(2026, 9, 5)
+    )
+    rows = list(csv.DictReader(path.read_text(encoding="utf-8").splitlines()))
+    assert len(rows) == len(CRITERIA_KEYS)
+    assert not append_future_entrance_labels(
+        path, "E-001", answers, labeled_by="operator", labeled_at=date(2026, 9, 5)
+    )
