@@ -2,3 +2,9 @@
 !pyproject.toml
 !src
 !src/**
+# The map's own data. Without these the image builds, the server starts, /map/data
+# answers 200 -- and returns zero pins, because the dataset it names is not in the
+# image. That is what shipped until TICK-337.
+!data/precatalogue.json
+!data/external
+!data/external/**
