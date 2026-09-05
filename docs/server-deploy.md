@@ -242,7 +242,10 @@ assessment, and then — only when the face audit answered exactly `clear` — i
 - **`FRONTDOOR_SCANS`** — path of the append-only JSONL scan-record store, default
   `data/scans.jsonl` (relative, like the map dataset — same caveat: point it at a **mounted
   volume** in `fly.toml`'s `[env]`, or the records vanish with the machine's rootfs on the next
-  deploy).
+  deploy). Since TICK-333 the committed `data/scans.jsonl` also carries the on-site publication of
+  the 46 non-sealed entrances, so it ships with the repository the way the map dataset does: if
+  you point this variable at a volume, the demo map loses those records unless the file is seeded
+  there too.
 
 `GET /map/data` merges the store into the pre-catalogue automatically; no scan store, or an
 unreadable one, changes nothing. If storage is down or misconfigured, publish degrades to a 503
