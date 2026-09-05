@@ -11,6 +11,8 @@ import pytest
 from frontdoor.precatalogue import (
     CENSUS_FILENAME,
     DATASET_FILENAME,
+    DETAILS_FIELDS,
+    PLACES_DETAILS_URL,
     PLACES_SEARCH_URL,
     STOREFRONT_PLACE_TYPES,
     STREETVIEW_IMAGE_URL,
@@ -23,6 +25,7 @@ from frontdoor.precatalogue import (
     MapsCallCounter,
     PrecatalogueError,
     bearing_deg,
+    enrich_contacts,
     enumerate_places,
     load_api_key,
     load_demo_area,
@@ -88,15 +91,20 @@ class FakeFetcher:
     """Records calls; answers by URL from queues (metadata/places) or a
     constant (images)."""
 
-    def __init__(self, places_pages=(), metadata=()):
+    def __init__(self, places_pages=(), metadata=(), details=None):
         self.places_pages = list(places_pages)
         self.metadata = list(metadata)
+        self.details = None if details is None else list(details)
         self.calls = []
 
     def fetch_json(self, url, params):
         self.calls.append((url, dict(params)))
         if url == PLACES_SEARCH_URL:
             return self.places_pages.pop(0)
+        if url == PLACES_DETAILS_URL:
+            if self.details is not None:
+                return self.details.pop(0)
+            return {"status": "OK", "result": {}}
         if url == STREETVIEW_METADATA_URL:
             return self.metadata.pop(0)
         raise AssertionError(f"unexpected JSON fetch: {url}")
@@ -376,9 +384,10 @@ def test_rerun_is_idempotent_and_resumes(tmp_path, env):
     assert dataset2["p1"] == dataset1["p1"]
     assert dataset2["p2"]["imagery_date"] == "2024-01"
     assert summary2["skipped_existing"] == 1
-    # second run made no metadata/image calls for p1
+    # second run made no metadata/image/details calls for p1
     assert len(second.params_for(STREETVIEW_METADATA_URL)) == 1
     assert len(second.params_for(STREETVIEW_IMAGE_URL)) == 3
+    assert len(second.params_for(PLACES_DETAILS_URL)) == 1
     assert len(engine2.images) == 3
     assert summary2["stopped"] is None
 
@@ -399,7 +408,7 @@ def test_summary_math_and_call_counts(tmp_path, env):
     assert summary["covered"] + summary["uncovered"] == \
         summary["businesses_enumerated"]
     assert summary["maps_api_calls"] == {
-        "places": 1, "metadata": 3, "image": 6, "total": 10}
+        "places": 1, "details": 3, "metadata": 3, "image": 6, "total": 13}
     assert summary["model_spend_usd_estimate"] == pytest.approx(0.30)
     assert summary["wall_clock_s"] >= 0
     assert summary["stopped"] is None
@@ -411,8 +420,8 @@ def test_summary_math_and_call_counts(tmp_path, env):
 
 def test_maps_call_cap_stops_cleanly_and_is_resumable(tmp_path, env):
     config = write_config(tmp_path, max_maps_calls=6)
-    # 1 places + (1 metadata + 3 images) for p1 = 5; p2's metadata would be 6
-    # (allowed) but its first image would be call 7 - over the cap of 6.
+    # 1 places + 1 details + 1 metadata + 3 images for p1 = 6. p2's details
+    # would be call 7 — over the cap.
     fetcher = FakeFetcher(
         places_pages=[{"status": "OK", "results": [place("p1"), place("p2")]}],
         metadata=[metadata_ok(), metadata_ok(pano="pano-2")],
@@ -589,10 +598,10 @@ def test_an_unexpected_failure_still_writes_the_summary(tmp_path, env):
     summary = run(tmp_path, fetcher, StubEngine())
     assert summary["stopped_is_error"] is True
     assert "TimeoutError" in summary["stopped"]
-    # places + metadata + the image call that was billed before it failed.
+    # places + details + metadata + the image call that was billed before it failed.
     # Preserving exactly this is why the summary must survive a crash.
     assert summary["maps_api_calls"] == {
-        "places": 1, "metadata": 1, "image": 1, "total": 3}
+        "places": 1, "details": 1, "metadata": 1, "image": 1, "total": 4}
     assert (tmp_path / "out" / SUMMARY_FILENAME).exists()
 
 
@@ -765,7 +774,7 @@ def test_census_enumerates_without_imagery_or_dataset_writes(tmp_path, env):
     assert summary["new_businesses"] == 2
     assert summary["sweep_types"] == ["restaurant"]
     assert summary["maps_api_calls"] == {
-        "places": 1, "metadata": 0, "image": 0, "total": 1}
+        "places": 1, "details": 0, "metadata": 0, "image": 0, "total": 1}
     # only the Places endpoint was touched, and the dataset was not created
     assert {u for u, _ in fetcher.calls} == {PLACES_SEARCH_URL}
     assert not (tmp_path / "out" / DATASET_FILENAME).exists()
@@ -824,6 +833,24 @@ def test_cli_census_flag_routes_to_the_census(tmp_path, monkeypatch):
     assert seen["out_dir"] == str(tmp_path)
 
 
+def test_cli_enrich_routes_to_enrich(tmp_path, monkeypatch):
+    from frontdoor import precatalogue
+
+    seen = {}
+
+    def fake_enrich(out_dir="data"):
+        seen["out_dir"] = out_dir
+        return {"stopped_is_error": False}
+
+    monkeypatch.setattr(precatalogue, "enrich_contacts", fake_enrich)
+    monkeypatch.setattr(precatalogue, "run_precatalogue",
+                        lambda **kwargs: pytest.fail("full run must not start"))
+    monkeypatch.setattr(precatalogue, "run_census",
+                        lambda **kwargs: pytest.fail("census must not start"))
+    assert precatalogue.main(["enrich", str(tmp_path)]) == 0
+    assert seen["out_dir"] == str(tmp_path)
+
+
 def test_the_dataset_is_never_left_half_written(tmp_path, env):
     """The dataset is rewritten after every row. A plain write truncates
     first, so an interrupt in any of those windows would leave invalid JSON --
@@ -836,3 +863,118 @@ def test_the_dataset_is_never_left_half_written(tmp_path, env):
     out = tmp_path / "out"
     assert list(out.glob("*.tmp")) == [], "temp files must be renamed away"
     json.loads((out / DATASET_FILENAME).read_text())
+
+
+# ------------------------------------------------- listing contact (Place Details)
+
+
+def details_ok(phone="(512) 555-0100", website="https://shop.example"):
+    result = {}
+    if phone:
+        result["formatted_phone_number"] = phone
+    if website:
+        result["website"] = website
+    return {"status": "OK", "result": result}
+
+
+def test_new_row_copies_listing_phone_and_website(tmp_path, env):
+    fetcher = FakeFetcher(
+        places_pages=[{"status": "OK", "results": [place("p1")]}],
+        metadata=[metadata_ok()],
+        details=[details_ok()],
+    )
+    run(tmp_path, fetcher, StubEngine())
+    row = json.loads(
+        (tmp_path / "out" / DATASET_FILENAME).read_text(encoding="utf-8"))["p1"]
+    assert row["phone"] == "(512) 555-0100"
+    assert row["website"] == "https://shop.example"
+    assert fetcher.params_for(PLACES_DETAILS_URL) == [{
+        "place_id": "p1",
+        "fields": DETAILS_FIELDS,
+        "key": API_KEY,
+    }]
+    assert "formatted_phone_number" in DETAILS_FIELDS
+    assert "website" in DETAILS_FIELDS
+
+
+def test_empty_details_omits_contact_fields(tmp_path, env):
+    fetcher = FakeFetcher(
+        places_pages=[{"status": "OK", "results": [place("p1")]}],
+        metadata=[metadata_ok()],
+    )
+    run(tmp_path, fetcher, StubEngine())
+    row = json.loads(
+        (tmp_path / "out" / DATASET_FILENAME).read_text(encoding="utf-8"))["p1"]
+    assert "phone" not in row
+    assert "website" not in row
+
+
+def test_details_not_found_is_not_a_failed_run(tmp_path, env):
+    fetcher = FakeFetcher(
+        places_pages=[{"status": "OK", "results": [place("p1")]}],
+        metadata=[metadata_ok()],
+        details=[{"status": "NOT_FOUND"}],
+    )
+    summary = run(tmp_path, fetcher, StubEngine())
+    assert summary["stopped"] is None
+    row = json.loads(
+        (tmp_path / "out" / DATASET_FILENAME).read_text(encoding="utf-8"))["p1"]
+    assert "phone" not in row
+    assert "website" not in row
+
+
+def test_details_denied_stops_the_run(tmp_path, env):
+    fetcher = FakeFetcher(
+        places_pages=[{"status": "OK", "results": [place("p1")]}],
+        metadata=[metadata_ok()],
+        details=[{"status": "REQUEST_DENIED"}],
+    )
+    summary = run(tmp_path, fetcher, StubEngine())
+    assert summary["stopped_is_error"] is True
+    assert "REQUEST_DENIED" in summary["stopped"]
+    assert not (tmp_path / "out" / DATASET_FILENAME).exists()
+
+
+def test_enrich_fills_existing_rows_and_skips_complete(tmp_path, env):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / DATASET_FILENAME).write_text(json.dumps({
+        "p1": {"place_id": "p1", "name": "A",
+               "phone": "(512) 555-0001", "website": "https://a.example"},
+        "p2": {"place_id": "p2", "name": "B"},
+        "p3": {"place_id": "p3", "name": "C"},
+    }), encoding="utf-8")
+    fetcher = FakeFetcher(details=[
+        details_ok(phone="(512) 555-0200", website="https://b.example"),
+        {"status": "NOT_FOUND"},
+    ])
+    area = load_demo_area(write_config(tmp_path))
+    summary = enrich_contacts(
+        out_dir=out, area=area, fetch_json=fetcher.fetch_json)
+    assert summary["skipped_complete"] == 1
+    assert summary["updated"] == 1
+    assert summary["unchanged_after_details"] == 1
+    assert summary["stopped"] is None
+    written = json.loads((out / DATASET_FILENAME).read_text(encoding="utf-8"))
+    assert written["p1"]["phone"] == "(512) 555-0001"
+    assert written["p2"]["phone"] == "(512) 555-0200"
+    assert written["p2"]["website"] == "https://b.example"
+    assert "phone" not in written["p3"]
+    assert [p["place_id"] for p in fetcher.params_for(PLACES_DETAILS_URL)] == [
+        "p2", "p3"]
+
+
+def test_enrich_fills_missing_website_without_replacing_phone(tmp_path, env):
+    out = tmp_path / "out"
+    out.mkdir()
+    (out / DATASET_FILENAME).write_text(json.dumps({
+        "p1": {"place_id": "p1", "phone": "(512) 555-0001"},
+    }), encoding="utf-8")
+    fetcher = FakeFetcher(details=[
+        details_ok(phone="(512) 555-9999", website="https://kept.example"),
+    ])
+    area = load_demo_area(write_config(tmp_path))
+    enrich_contacts(out_dir=out, area=area, fetch_json=fetcher.fetch_json)
+    row = json.loads((out / DATASET_FILENAME).read_text(encoding="utf-8"))["p1"]
+    assert row["phone"] == "(512) 555-0001"
+    assert row["website"] == "https://kept.example"
