@@ -173,6 +173,23 @@ def test_the_phone_does_not_compute_the_ada_score():
     assert ADA_STANDARDS_URL not in view, "the tappable link is the URL the server sent"
 
 
+def test_the_phone_renders_the_tested_ada_render_model():
+    """XCTest pins the model contents; this guard pins every field into SwiftUI."""
+    view = (APP_TREE / "UI" / "ScreeningChecksView.swift").read_text(encoding="utf-8")
+    for token in (
+        "ada.renderModel",
+        "presentation.score",
+        "presentation.coverage",
+        "presentation.rows",
+        "row.evidence",
+        "presentation.summary",
+        "presentation.disclaimer",
+        "presentation.standardsURL",
+        "Link(",
+    ):
+        assert token in view
+
+
 # --- an entrance is screened on its view set, not on one frame (#316) ---------
 
 CLIENT = APP_TREE / "Screening" / "ScreenClient.swift"

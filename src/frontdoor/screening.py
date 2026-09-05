@@ -33,6 +33,7 @@ constructed on first use, and tests inject a fake client.
 import base64
 import json
 import logging
+import re
 import threading
 import time
 from collections import Counter
@@ -89,6 +90,17 @@ ADA_MODEL_AGGREGATE_KEYS = frozenset({
 _COUNT_WORDS = (
     "zero", "one", "two", "three", "four", "five", "six", "seven", "eight",
 )
+_ADA_UNSAFE_CLAIM_RE = re.compile(
+    r"\b(?:compliant|noncompliant|non-compliant|compliance|passes?|passed|passing|"
+    r"fails?|failed|failing)\b",
+    re.IGNORECASE,
+)
+_ADA_NUMERIC_MEASUREMENT_RE = re.compile(
+    r"(?:\b\d+(?:\.\d+)?\s*(?:inches?|inch|feet|foot|ft|cm|mm|meters?|metres?|"
+    r"degrees?|percent|px)\b|\d+(?:\.\d+)?\s*[%\"\u2032\u2033\u00b0])",
+    re.IGNORECASE,
+)
+_LINE_BREAKS = "\n\r\v\f\x1c\x1d\x1e\x85\u2028\u2029"
 
 # The automatic privacy audit (TICK-257 follow-up, #232). NOT an accessibility
 # criterion: it never joins CRITERIA, never votes in aggregate_assessments,
@@ -280,9 +292,7 @@ def validate_ada_checks(parsed: object) -> dict[str, dict[str, str]]:
         raise ScreeningError("model must not supply ada_screening")
     supplied = ADA_MODEL_AGGREGATE_KEYS & parsed.keys()
     if supplied:
-        raise ScreeningError(
-            f"model must not supply aggregate field {sorted(supplied)[0]}"
-        )
+        raise ScreeningError("model must not supply aggregate fields")
     checks = parsed.get("ada_checks")
     if not isinstance(checks, dict) or set(checks) != set(ADA_CHECK_KEYS):
         raise ScreeningError(
@@ -290,30 +300,42 @@ def validate_ada_checks(parsed: object) -> dict[str, dict[str, str]]:
         )
     supplied = ADA_MODEL_AGGREGATE_KEYS & checks.keys()
     if supplied:
-        raise ScreeningError(
-            f"model must not supply aggregate field {sorted(supplied)[0]}"
-        )
+        raise ScreeningError("model must not supply aggregate fields")
     out = {}
     for key in ADA_CHECK_KEYS:
-        entry = checks[key]
-        if not isinstance(entry, dict):
-            raise ScreeningError(f"check {key} must be an object")
-        result = entry.get("result")
-        if isinstance(result, bool) or not isinstance(result, str):
-            raise ScreeningError(f"check {key} has invalid result {result!r}")
-        result = result.strip().lower()
-        if result not in ADA_RESULTS:
-            raise ScreeningError(f"check {key} has invalid result {result!r}")
-        evidence = entry.get("evidence")
-        if not isinstance(evidence, str) or not evidence.strip():
-            raise ScreeningError(f"check {key} evidence must be non-empty text")
-        evidence = evidence.strip()
-        if "\n" in evidence or "\r" in evidence or len(evidence) > 200:
-            raise ScreeningError(
-                f"check {key} evidence must be one line of at most 200 characters"
-            )
-        out[key] = {"result": result, "evidence": evidence}
+        out[key] = _validate_ada_entry(key, checks[key])
     return out
+
+
+def _validate_ada_entry(key: str, entry: object) -> dict[str, str]:
+    """Validate one check without echoing model-authored values into errors."""
+    if not isinstance(entry, dict):
+        raise ScreeningError(f"check {key} must be an object")
+    result = entry.get("result")
+    if isinstance(result, bool) or not isinstance(result, str):
+        raise ScreeningError(f"check {key} has an invalid result")
+    result = result.strip().lower()
+    if result not in ADA_RESULTS:
+        raise ScreeningError(f"check {key} has an invalid result")
+    evidence = entry.get("evidence")
+    if not isinstance(evidence, str) or not evidence.strip():
+        raise ScreeningError(f"check {key} evidence must be non-empty text")
+    if any(character in evidence for character in _LINE_BREAKS):
+        raise ScreeningError(
+            f"check {key} evidence must be one line of at most 200 characters"
+        )
+    evidence = evidence.strip()
+    if len(evidence) > 200:
+        raise ScreeningError(
+            f"check {key} evidence must be one line of at most 200 characters"
+        )
+    if _ADA_UNSAFE_CLAIM_RE.search(evidence):
+        raise ScreeningError(f"check {key} evidence contains a prohibited claim")
+    if _ADA_NUMERIC_MEASUREMENT_RE.search(evidence):
+        raise ScreeningError(
+            f"check {key} evidence contains an unsupported numeric measurement"
+        )
+    return {"result": result, "evidence": evidence}
 
 
 def _count_word(n: int) -> str:
@@ -366,19 +388,8 @@ def compute_ada_screening(checks: object) -> dict:
     false_keys = []
     normalized = {}
     for key in ADA_CHECK_KEYS:
-        entry = checks[key]
-        if not isinstance(entry, dict):
-            raise ScreeningError(f"check {key} must be an object")
-        result = entry.get("result")
-        if isinstance(result, bool) or not isinstance(result, str):
-            raise ScreeningError(f"check {key} has invalid result {result!r}")
-        result = result.strip().lower()
-        evidence = entry.get("evidence")
-        if result not in ADA_RESULTS:
-            raise ScreeningError(f"check {key} has invalid result {result!r}")
-        if not isinstance(evidence, str) or not evidence.strip():
-            raise ScreeningError(f"check {key} evidence must be non-empty text")
-        evidence = evidence.strip()
+        normalized_entry = _validate_ada_entry(key, checks[key])
+        result = normalized_entry["result"]
         if result == "true":
             true_count += 1
         elif result == "false":
@@ -388,7 +399,7 @@ def compute_ada_screening(checks: object) -> dict:
             cannot_determine_count += 1
         else:
             not_applicable_count += 1
-        normalized[key] = {"result": result, "evidence": evidence}
+        normalized[key] = normalized_entry
     determined = true_count + false_count
     total = (
         true_count + false_count + cannot_determine_count + not_applicable_count

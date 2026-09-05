@@ -5,6 +5,7 @@ the score, counts, and summary. No live model calls.
 """
 
 import json
+import logging
 
 import pytest
 
@@ -152,12 +153,53 @@ def test_invalid_state_rejects_the_whole_block(result):
         validate_ada_checks(parsed)
 
 
-@pytest.mark.parametrize("evidence", ["", "  ", "first\nsecond", "line\rwith cr"])
+@pytest.mark.parametrize(
+    "evidence",
+    ["", "  ", "first\nsecond", "\nvisible\n", "one\u2028two", "line\rwith cr"],
+)
 def test_blank_or_multiline_evidence_rejects_the_whole_block(evidence):
     parsed = {"ada_checks": _checks()}
     parsed["ada_checks"]["ramp"]["evidence"] = evidence
     with pytest.raises(ScreeningError, match="ramp evidence"):
         validate_ada_checks(parsed)
+
+
+@pytest.mark.parametrize(
+    "evidence",
+    [
+        "This entrance is ADA compliant.",
+        "The doorway passes ADA requirements.",
+        "Door is 36 inches wide.",
+        "The slope is 7.5%.",
+    ],
+)
+def test_unsafe_model_authored_evidence_is_rejected(evidence):
+    parsed = {"ada_checks": _checks()}
+    parsed["ada_checks"]["door_opening"]["evidence"] = evidence
+    with pytest.raises(ScreeningError, match="door_opening evidence"):
+        validate_ada_checks(parsed)
+
+
+def test_explicit_nonnumeric_measurement_uncertainty_is_allowed():
+    parsed = {"ada_checks": _checks()}
+    parsed["ada_checks"]["door_opening"]["evidence"] = (
+        "Exact clear width cannot be measured from these photographs."
+    )
+    assert validate_ada_checks(parsed)["door_opening"]["evidence"].startswith(
+        "Exact clear width"
+    )
+
+
+def test_invalid_state_does_not_leak_model_authored_text(caplog):
+    secret = "James visible through the window"
+    poisoned = json.loads(_payload())
+    poisoned["ada_checks"]["threshold"]["result"] = secret
+    engine = ScreeningEngine(client=FakeClient([_Response(json.dumps(poisoned))]))
+    with caplog.at_level(logging.WARNING):
+        result = engine.assess_image(b"jpeg-bytes")
+    assert result.criteria is None
+    assert secret not in (result.error or "")
+    assert secret not in caplog.text
 
 
 @pytest.mark.parametrize("field", [
