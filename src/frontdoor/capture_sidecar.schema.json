@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/codeoritdidnthappen/frontdoor/blob/main/src/frontdoor/capture_sidecar.schema.json",
   "title": "Capture sidecar",
-  "description": "One record per capture, written by the capture app at the shutter press. Shape defined in ARCHITECTURE.md section 4. Records what was captured, never what was computed.",
+  "description": "One record per capture. Its CONTENTS bind at the shutter press -- entrance ID, condition tags and captured_at are fixed then (D-018) -- but the FILE is written atomically after the image and depth are fully written, and each sha256 is taken over those written bytes (TICK-028, #32). The two are different moments and the ordering is the point: a sidecar written at the shutter would hash files that do not exist yet, and a crash mid-capture would leave a record pointing at a truncated one. Shape defined in ARCHITECTURE.md section 4. Records what was captured, never what was computed.",
   "type": "object",
   "properties": {
     "capture_id": {

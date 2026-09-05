@@ -302,9 +302,13 @@ restored below.
          corrected ordering, not with "hashed at the shutter press". AMENDED IN PRACTICE by the
          2026-09-01 pivot (#67, #9 thread): capture is plain photos -- no caliper, no LiDAR depth,
          no ROI taps -- so this record shape describes the pre-pivot instrument; the post-pivot
-         record is the foldered E-NNN photo set validated in #66. NOTE: the schema's own
-         description line still says the sidecar is "written by the capture app at the shutter
-         press" -- loose in the same way the old D-024 text was; noted here, not yet fixed.
+         record is the foldered E-NNN photo set validated in #66.
+         2026-09-05 (#183): the schema's description line, noted above as still saying the sidecar
+         is "written by the capture app at the shutter press", is FIXED. It now separates the two
+         moments the old wording conflated -- the record's contents bind at the shutter (D-018),
+         the file is written after the image and depth are closed (#32 AC4) -- and a test keeps
+         the old phrasing from returning. That was the last live instance of D-024's original
+         error outside this log.
 
 - A-2    The success criterion names its arm. "MAE <= 0.25 inch on the sealed test split" did not
          say which of four arms it judged; it is fixed to Arm A. Reason: an unnamed arm lets the

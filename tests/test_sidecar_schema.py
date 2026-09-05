@@ -509,3 +509,34 @@ def test_the_depth_map_carries_no_orientation(record):
     record["depth"] = {"path": "x.depth", "sha256": "0" * 64, "exif_orientation": 6}
     with pytest.raises(ValidationError):
         validate_sidecar(record)
+
+
+# --- the schema must not repeat the error D-024 was corrected for (#183) -------
+
+
+def test_the_schema_does_not_say_the_sidecar_is_written_at_the_shutter():
+    """D-024 carried this claim, was corrected against TICK-028, and the schema kept it.
+
+    The distinction is real and load-bearing. The record's CONTENTS bind at the shutter -- entrance
+    ID, condition tags, captured_at (D-018) -- but the FILE is written after the image and depth
+    are closed, because #32 requires each sha256 to be taken over the written bytes. A sidecar
+    written at the shutter would hash files that do not exist yet.
+
+    CHANGES.log flagged this line on 2026-09-02 as "loose in the same way the old D-024 text was;
+    noted here, not yet fixed". This is the fix, and this is what stops it coming back.
+    """
+    import json
+    from importlib import resources
+
+    schema = json.loads(
+        resources.files("frontdoor")
+        .joinpath("capture_sidecar.schema.json")
+        .read_text(encoding="utf-8")
+    )
+    description = schema["description"]
+    assert "written by the capture app at the shutter press" not in description
+    assert "after the image and depth are fully written" in description, (
+        "the schema must state the ordering #32 requires, not merely avoid contradicting it"
+    )
+    # The other half stays true: the contents really do bind at the shutter (D-018).
+    assert "shutter press" in description
