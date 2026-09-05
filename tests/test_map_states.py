@@ -154,6 +154,7 @@ def test_pin_carries_state_label_and_freshness():
     assert pin["ai_estimated"] is True
     assert pin["imagery_date"] == "2024-06"
     assert pin["location"] == {"lat": 40.0, "lng": -75.0}
+    assert pin["owner_confirmed"] is False
 
 
 def test_pin_without_usable_location_is_dropped():
@@ -218,14 +219,15 @@ def test_tier_mapping_honesty(client):
     # The client-side tier mapping mirrors the server's two-state contract:
     # total and default-Estimated. Only the exact server-computed verified
     # state (human, non-imagery confirmation) renders the Scanned tier;
-    # ai_estimated and every other input render Estimated, and nothing can
-    # reach the Owner tier from today's data — tierClass cannot return it.
+    # ai_estimated and every other input render Estimated. Owner-confirmed is
+    # an extra pin field, never a third legal stamp.
     html = page(client)
-    match = re.search(r"function tierClass\(state\) \{([^}]*)\}", html)
+    match = re.search(r"function tierClass\(pin\) \{([\s\S]*?)\n\}", html)
     assert match, "tierClass mapping function must exist"
     body = match.group(1)
+    assert "pin.owner_confirmed" in body
+    assert '"tier-owner"' in body
     assert 'state === VERIFIED_STATE ? "tier-scanned" : "tier-estimated"' in body
-    assert "tier-owner" not in body
     assert '"verified_accessible"' in html  # the exact server token, nothing looser
 
 

@@ -172,3 +172,7 @@ vite.config.ts.timestamp-*
 # /screen/publish. Local publishes must not end up committed alongside the
 # curated dataset files.
 data/scans.jsonl
+
+# Owner claim records (TICK-259): runtime server data, appended by POST /claim.
+data/claims.jsonl
+data/claim_codes.json

@@ -46,7 +46,18 @@
         "invalid place_id",
         "missing place reference",
         "no such scan photo",
-        "scan photos unavailable"
+        "scan photos unavailable",
+        "claim review not authorised",
+        "invalid claim",
+        "invalid review",
+        "invalid dispute",
+        "claim not found",
+        "unknown place",
+        "workspace not found",
+        "invalid capture_kind",
+        "camera-roll cannot attest",
+        "attestation requires in-app capture",
+        "no approved claim"
       ],
       "description": "Stable class of failure. TICK-063 branches on this token, not on detail wording."
     },
