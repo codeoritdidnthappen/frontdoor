@@ -2409,7 +2409,8 @@ const liveSimulated = ()=> !HAS_SERVER || !liveFrame;
 function liveFailure(){
   if(liveError) return 'the server could not check this photo — '+String(liveError).replace(/\.$/,'');
   if(liveTimedOut) return 'the scan timed out after 30 seconds';
-  return 'this phone could not reach the server';
+  if(liveNetFail) return 'this phone could not reach the server';
+  return 'the scan did not finish';
 }
 
 function stopCamera(){
@@ -2449,13 +2450,16 @@ function captureFrame(){
 }
 function errorText(j, status){ return (j && (j.detail || j.error)) || ('HTTP '+status); }
 function startLiveUpload(frame){
+  liveRun++;                                  /* a second shutter supersedes the first */
+  if(liveAbort) liveAbort.abort();
   liveResult=null; liveError=null; liveNetFail=false; liveTimedOut=false; liveSettled=false;
   liveAbort = ('AbortController' in window) ? new AbortController() : null;
   const run=liveRun, mine=()=>run===liveRun;
   const fd=new FormData();
   fd.append('images', frame.blob, 'scan.jpg');
   /* no entrance_id: map places are place ids, not frontdoor entrance ids — an invalid id would 400 */
-  const timer=setTimeout(()=>{if(mine())liveTimedOut=true; if(liveAbort)liveAbort.abort();},30000);
+  const ctl=liveAbort;
+  const timer=setTimeout(()=>{if(!mine())return; liveTimedOut=true; if(ctl)ctl.abort();},30000);
   /* the two outcomes are kept apart on purpose: the rejection handler is the TRANSPORT
      failing, and a throw inside the fulfilled handler falls to the .catch below as a
      server-side failure. Neither one is evidence that no server exists, so neither
@@ -2713,7 +2717,10 @@ function renderReview(){
       tagText.textContent='Simulated — nothing leaves this phone';
       hint.textContent='This page was opened with no server to check the photo, so the chips are staged examples rather than anything read from it, and nothing will be published.';
     } else {
-      tagText.textContent='Faces blurred at upload';
+      /* say only what happened: on a transport failure or an early 503 the frame never
+         reached the blur step, so "faces blurred at upload" would be its own small lie */
+      tagText.textContent='Not checked — this photo has not left your phone';
+      note.classList.remove('on');
       hint.textContent='The scan could not be completed — '+liveFailure()+'. Nothing was read from your photo. It is still here: publish to try again, or retake.';
     }
   } else {
@@ -2773,15 +2780,20 @@ async function publishScan(ref){
 function placeForRef(ref, id){
   if(ref.place) return ref.place;
   const p={id, name:ref.name, lat:ref.lat, lng:ref.lng, crit:{}, tier:'est'};
+  p.f=featsOf(p);   /* renderable on its own: a run that writes nothing still leaves a valid pin */
   places.push(p);
   return p;
 }
 function upgradePin(p, crit, publish, photo, note){
+  p.publish=publish; p.note=note;
   /* Scanned on-site means the server read this photograph. A simulated run read nothing, so
-     the pin keeps the tier it had — which also keeps it out of the "N of M scanned" count. */
-  if(publish.state!=='simulated' && p.tier!=='owner') p.tier='scan';
+     it moves no tier, no date, no verdict and no photo on the pin — which is also what keeps
+     it out of the "N of M entrances scanned" count. The staged chips stay on the review
+     screen, where they carry the Simulated tag. */
+  if(publish.state==='simulated') return;
+  if(p.tier!=='owner') p.tier='scan';
   p.views=(p.views|0)+1; p.staged=true; p.date=new Date().toISOString().slice(0,10);
-  p.crit=crit; p.publish=publish; p.livePhoto=photo; p.note=note;
+  p.crit=crit; p.livePhoto=photo;
   p.f=featsOf(p);
 }
 document.getElementById('btn-publish').addEventListener('click',async ()=>{
@@ -2794,15 +2806,11 @@ document.getElementById('btn-publish').addEventListener('click',async ()=>{
   }
   let p;
   if(liveSimulated()){
-    /* no frame, or no server at all: staged examples, in memory, on a pin that does not move.
-       The evidence says what it is — nothing here was read off a photograph. */
+    /* no frame, or no server at all. Nothing read a photograph, so nothing is published and
+       nothing is written onto the pin — no verdicts to pass, and none invented. */
     p=placeForRef(ref, 'scan:sim-'+Date.now());
-    upgradePin(p,
-      {step_free_entry:{v:'present',c:86,e:'Staged example — no photograph was read'},
-       lever_or_pull_hardware:{v:'present',c:90,e:'Staged example — no photograph was read'},
-       clear_approach:{v:'present',c:84,e:'Staged example — no photograph was read'}},
-      {state:'simulated'}, liveFrame ? liveFrame.dataUrl : null,
-      'Simulated scan: there was no server to check a photo, so nothing was read and nothing was published. The chips are staged examples, not verdicts.');
+    upgradePin(p, null, {state:'simulated'}, null,
+      'Simulated scan: there was no server to check a photo, so nothing was read, nothing was published, and this entrance is unchanged.');
   } else {
     btn.disabled=true; btn.textContent='Publishing…';
     let out;
@@ -2869,7 +2877,7 @@ function runDone(p){
   const d=document.createElement('div');
   d.style.cssText=`position:absolute;left:${W/2}px;top:${Hh/2}px;margin:-17px 0 0 -17px;pointer-events:none`;
   d.className='pin-drop';
-  d.innerHTML=`<span class="pin" style="display:block">${pinSVG('scan',34)}</span>${REDUCED?'':'<span class="rippler"></span>'}`;
+  d.innerHTML=`<span class="pin" style="display:block">${pinSVG(p.tier,34)}</span>${REDUCED?'':'<span class="rippler"></span>'}`;
   mm.appendChild(d);
 }
 document.getElementById('btn-done-map').addEventListener('click',()=>{

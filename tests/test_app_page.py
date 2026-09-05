@@ -94,23 +94,28 @@ def test_a_failed_or_timed_out_scan_says_so_and_offers_a_retry():
     assert "publish to try again, or retake" in html
     assert "the scan timed out" in html
     assert "could not reach the server" in html
+    # ...and it does not reassure the user about an upload that never happened
+    failed = html.split("The scan could not be completed", 1)[0].rsplit("} else {", 1)[1]
+    assert "Not checked — this photo has not left your phone" in failed
+    assert "Faces blurred at upload" not in failed
 
 
-def test_nothing_simulated_takes_the_scanned_tier():
+def test_a_simulated_run_leaves_the_pin_alone():
+    """No tier, no date, no verdicts, no photo — so no scanned count either."""
     html = page().get_data(as_text=True)
     upgrade = html.split("function upgradePin(", 1)[1].split("\n}", 1)[0]
-    assert "p.tier='scan'" in upgrade
-    assert "simulated" in upgrade
-    # the assignment is guarded, not unconditional
-    tier_line = [line for line in upgrade.splitlines() if "p.tier='scan'" in line][0]
-    assert "publish.state!=='simulated'" in tier_line
+    body = upgrade.split("if(publish.state==='simulated') return;", 1)
+    assert len(body) == 2, "the simulated path must return before the pin is touched"
+    for written in ("p.tier='scan'", "p.date=", "p.crit=", "p.livePhoto=", "p.staged=true"):
+        assert written in body[1] and written not in body[0]
 
 
-def test_simulated_verdicts_make_no_first_person_claim_about_a_photograph():
+def test_a_simulated_run_invents_no_verdicts_about_a_photograph():
     html = page().get_data(as_text=True)
     simulated = html.split("\n  if(liveSimulated()){", 1)[1].split("\n  } else {", 1)[0]
-    assert simulated.count("Staged example — no photograph was read") == 3
-    assert "riser shadow" not in simulated  # the sentence it used to assert about your door
+    assert "upgradePin(p, null, {state:'simulated'}, null," in simulated
+    assert "present" not in simulated  # no fabricated verdict survives here at all
+    assert "riser shadow" not in simulated
     # ...and nothing anywhere in the page speaks about the user's own photograph in the
     # first person, which only fabricated evidence ever did.
     assert "in your photo" not in html
