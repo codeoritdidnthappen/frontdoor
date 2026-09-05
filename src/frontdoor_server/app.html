@@ -2375,8 +2375,11 @@ paintDoorway();
                             quarantine_reason:"face_check"} (nothing stored) · 503 {publish_reason,
                             publish_detail, assessment} when assessed but not stored.
      GET  /scan/photo/<key> the stored, privacy-processed photo for the card.
-   Only an outright network failure (no server, offline, timeout) falls back to the simulated
-   pipeline, and the review says so. A server error is shown, never hidden.
+   The simulated pipeline runs only where there is no server to talk to at all — this page
+   opened from a file:// URL — and the review says so. A real request that fails, times out or
+   answers badly is reported as a scan that could not be completed, with a retry; it never
+   becomes verdicts, never takes the Scanned tier, and never enters the scanned count.
+   A server error is shown, never hidden.
    Privacy: the captured frame lives in these variables only — never localStorage. */
 const SCREEN_API = '/screen';
 const PUBLISH_API = '/screen/publish';
@@ -2390,12 +2393,24 @@ let liveSettled = true;  /* false while the POST is in flight */
 let liveResult = null;   /* parsed /screen JSON, or null → simulated verdicts */
 let liveAbort = null;
 let liveError = null;    /* the server's error detail when /screen answered but could not assess */
-let liveNetFail = false; /* the POST never reached a server → simulated fallback */
+let liveNetFail = false; /* the POST failed outright: offline, aborted, or timed out */
+let liveTimedOut = false;/* the 30s client abort fired — the same 30s gunicorn allows the model */
+let liveRun = 0;         /* generation: a reset must not be overwritten by the POST it aborted */
 let scanFromCard = false;/* startScan(true) from a card: publish against that place_id */
 let ownerAttest = false; /* workspace guided capture: attested in-app only */
 let fromLibrary = false; /* camera-roll path cannot attest */
 let geoFix = null;       /* {lat,lng} from the phone while scanning; cleared on exit */
-const liveSimulated = ()=> !liveFrame || liveNetFail;
+/* There is a server whenever this page came from one. A request to it that fails is a failed
+   scan, not an absent server: only a file:// open — where no relative POST can ever go
+   anywhere — may fall back to the staged pipeline. */
+const HAS_SERVER = location.protocol.startsWith('http');
+const liveSimulated = ()=> !HAS_SERVER || !liveFrame;
+/* why a real scan produced no verdicts. Always a failure; never a substitute for one. */
+function liveFailure(){
+  if(liveError) return 'the server could not check this photo — '+String(liveError).replace(/\.$/,'');
+  if(liveTimedOut) return 'the scan timed out after 30 seconds';
+  return 'this phone could not reach the server';
+}
 
 function stopCamera(){
   if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}
@@ -2403,9 +2418,10 @@ function stopCamera(){
   document.getElementById('viewfinder').classList.remove('live');
 }
 function resetLive(){
+  liveRun++;                                  /* the aborted POST's handlers become no-ops */
   if(liveAbort){liveAbort.abort();liveAbort=null;}
   liveFrame=null; liveUpload=null; liveResult=null; liveSettled=true;
-  liveError=null; liveNetFail=false;
+  liveError=null; liveNetFail=false; liveTimedOut=false;
 }
 async function tryStartCamera(){
   if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) return false;
@@ -2433,19 +2449,25 @@ function captureFrame(){
 }
 function errorText(j, status){ return (j && (j.detail || j.error)) || ('HTTP '+status); }
 function startLiveUpload(frame){
-  liveResult=null; liveError=null; liveNetFail=false; liveSettled=false;
+  liveResult=null; liveError=null; liveNetFail=false; liveTimedOut=false; liveSettled=false;
   liveAbort = ('AbortController' in window) ? new AbortController() : null;
+  const run=liveRun, mine=()=>run===liveRun;
   const fd=new FormData();
   fd.append('images', frame.blob, 'scan.jpg');
   /* no entrance_id: map places are place ids, not frontdoor entrance ids — an invalid id would 400 */
-  const timer=setTimeout(()=>{if(liveAbort)liveAbort.abort();},30000);
+  const timer=setTimeout(()=>{if(mine())liveTimedOut=true; if(liveAbort)liveAbort.abort();},30000);
+  /* the two outcomes are kept apart on purpose: the rejection handler is the TRANSPORT
+     failing, and a throw inside the fulfilled handler falls to the .catch below as a
+     server-side failure. Neither one is evidence that no server exists, so neither
+     selects the staged pipeline — both land on the review screen as a failed scan. */
   liveUpload = fetch(SCREEN_API,{method:'POST',body:fd,signal:liveAbort?liveAbort.signal:undefined})
     .then(r=>r.json().catch(()=>({})).then(j=>{
+      if(!mine()) return;
       if(r.ok && j.assessment && j.assessment.criteria) liveResult=j;
       else liveError=errorText(j, r.status);          /* answered but could not assess: shown on review */
-    }))
-    .catch(()=>{ liveNetFail=true; })                  /* no server / offline / abort → simulated */
-    .then(()=>{ clearTimeout(timer); liveSettled=true; });
+    }), ()=>{ if(mine()) liveNetFail=true; })          /* offline, aborted, or timed out */
+    .catch(()=>{ if(mine() && !liveError) liveError='the answer could not be read'; })
+    .then(()=>{ clearTimeout(timer); if(mine()) liveSettled=true; });
 }
 
 /* ---- where a scan publishes: the card it was launched from, or the phone's fix + a typed name ---- */
@@ -2658,12 +2680,12 @@ function renderReviewChips(){
     el.innerHTML =
       (present.length?present.join(''):`<span class="vc-notseen">No features confirmed from this photo yet — it still helps.</span>`) +
       (notSeen.length?`<span class="vc-notseen">Not seen this time: ${notSeen.join(' · ')}</span>`:'');
-  } else if(liveFrame && !liveNetFail){
-    el.innerHTML = `<span class="vc-notseen">No verdicts yet — ${esc((liveError||'the server did not answer').replace(/\.$/,''))}. Publishing checks the photo again.</span>`;
-  } else {
+  } else if(liveSimulated()){
     el.innerHTML = STAGED.map(([k,c])=>
       `<span class="fchip scan" style="cursor:default">${FEATS[k].label}${dotTriple(c,'var(--marigold-ink)')}</span>`).join('')
       + `<span class="sim-tag">Simulated</span>`;
+  } else {
+    el.innerHTML = `<span class="vc-notseen">No verdicts — ${esc(liveFailure())}. Publishing checks the photo again.</span>`;
   }
 }
 function renderReview(){
@@ -2687,12 +2709,12 @@ function renderReview(){
         qNote.classList.add('on');
         qNote.textContent = 'Privacy hold: the automatic face check could not confirm every face is blurred, so this photo cannot be stored or published. Retake from further back, or publish to let the server check again.';
       }
-    } else if(liveNetFail){
+    } else if(liveSimulated()){
       tagText.textContent='Simulated — nothing leaves this phone';
-      hint.textContent='This phone could not reach the server, so these chips are staged examples and nothing will be published.';
+      hint.textContent='This page was opened with no server to check the photo, so the chips are staged examples rather than anything read from it, and nothing will be published.';
     } else {
       tagText.textContent='Faces blurred at upload';
-      hint.textContent='The server answered but could not check this photo yet. Retake, or publish and let it try again.';
+      hint.textContent='The scan could not be completed — '+liveFailure()+'. Nothing was read from your photo. It is still here: publish to try again, or retake.';
     }
   } else {
     img.hidden=true; img.removeAttribute('src');
@@ -2755,7 +2777,9 @@ function placeForRef(ref, id){
   return p;
 }
 function upgradePin(p, crit, publish, photo, note){
-  if(p.tier!=='owner') p.tier='scan';
+  /* Scanned on-site means the server read this photograph. A simulated run read nothing, so
+     the pin keeps the tier it had — which also keeps it out of the "N of M scanned" count. */
+  if(publish.state!=='simulated' && p.tier!=='owner') p.tier='scan';
   p.views=(p.views|0)+1; p.staged=true; p.date=new Date().toISOString().slice(0,10);
   p.crit=crit; p.publish=publish; p.livePhoto=photo; p.note=note;
   p.f=featsOf(p);
@@ -2770,14 +2794,15 @@ document.getElementById('btn-publish').addEventListener('click',async ()=>{
   }
   let p;
   if(liveSimulated()){
-    /* no frame, or no server: an in-memory upgrade only, and labelled as such everywhere it shows */
+    /* no frame, or no server at all: staged examples, in memory, on a pin that does not move.
+       The evidence says what it is — nothing here was read off a photograph. */
     p=placeForRef(ref, 'scan:sim-'+Date.now());
     upgradePin(p,
-      {step_free_entry:{v:'present',c:86,e:'Sidewalk runs level to the threshold with no riser shadow in your photo'},
-       lever_or_pull_hardware:{v:'present',c:90,e:'D-pull handle visible on the leaf, graspable without twisting'},
-       clear_approach:{v:'present',c:84,e:'Open sidewalk directly in front of the doorway'}},
+      {step_free_entry:{v:'present',c:86,e:'Staged example — no photograph was read'},
+       lever_or_pull_hardware:{v:'present',c:90,e:'Staged example — no photograph was read'},
+       clear_approach:{v:'present',c:84,e:'Staged example — no photograph was read'}},
       {state:'simulated'}, liveFrame ? liveFrame.dataUrl : null,
-      'Simulated scan: this phone could not reach the server, so nothing was published. The chips are staged examples, not verdicts.');
+      'Simulated scan: there was no server to check a photo, so nothing was read and nothing was published. The chips are staged examples, not verdicts.');
   } else {
     btn.disabled=true; btn.textContent='Publishing…';
     let out;
@@ -2819,7 +2844,9 @@ function runDone(p){
   document.getElementById('done-h').textContent=doneHeading(p);
   const scans = places.filter(q=>q.tier!=='est').length;
   document.getElementById('counter-line').textContent =
-    `${esc(p.name)} just moved up a tier · ${scans} of ${places.length} entrances scanned downtown`;
+    (p.publish && p.publish.state==='simulated')
+      ? `${esc(p.name)} is unchanged — a simulated run publishes nothing · ${scans} of ${places.length} entrances scanned downtown`
+      : `${esc(p.name)} just moved up a tier · ${scans} of ${places.length} entrances scanned downtown`;
   document.getElementById('done-legend').innerHTML =
     `<span class="lg">${pinSVG('est',20)} Estimated</span>
      <span class="lg">${pinSVG('scan',24)} Scanned on-site</span>

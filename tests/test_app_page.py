@@ -65,6 +65,63 @@ def test_the_page_targets_this_origin_only():
     assert "fly.dev" not in html
 
 
+# --- a failed scan is a failed scan (TICK-351, #351) -------------------------
+#
+# The scan flow is client-side JavaScript with no runner in this suite, so these read
+# the served source. They are deliberately pinned to the few expressions that decide
+# whether a person is shown a verdict or a failure, because that decision is the whole
+# defect: any rejection of the /screen POST — including the 30 s client abort that
+# collides exactly with gunicorn's --timeout 30 — used to select the simulated
+# pipeline, whose staged verdicts then took the Scanned tier, the scanned count, and a
+# first-person sentence about a photograph nothing had read.
+
+
+def simulated_predicate(html):
+    return html.split("const liveSimulated =", 1)[1].split("\n", 1)[0]
+
+
+def test_only_the_absence_of_a_server_selects_the_simulated_pipeline():
+    html = page().get_data(as_text=True)
+    predicate = simulated_predicate(html)
+    assert "liveNetFail" not in predicate  # a failed request is not "there is no server"
+    assert "HAS_SERVER" in predicate
+    assert "const HAS_SERVER = location.protocol.startsWith('http');" in html
+
+
+def test_a_failed_or_timed_out_scan_says_so_and_offers_a_retry():
+    html = page().get_data(as_text=True)
+    assert "The scan could not be completed" in html
+    assert "publish to try again, or retake" in html
+    assert "the scan timed out" in html
+    assert "could not reach the server" in html
+
+
+def test_nothing_simulated_takes_the_scanned_tier():
+    html = page().get_data(as_text=True)
+    upgrade = html.split("function upgradePin(", 1)[1].split("\n}", 1)[0]
+    assert "p.tier='scan'" in upgrade
+    assert "simulated" in upgrade
+    # the assignment is guarded, not unconditional
+    tier_line = [line for line in upgrade.splitlines() if "p.tier='scan'" in line][0]
+    assert "publish.state!=='simulated'" in tier_line
+
+
+def test_simulated_verdicts_make_no_first_person_claim_about_a_photograph():
+    html = page().get_data(as_text=True)
+    simulated = html.split("\n  if(liveSimulated()){", 1)[1].split("\n  } else {", 1)[0]
+    assert simulated.count("Staged example — no photograph was read") == 3
+    assert "riser shadow" not in simulated  # the sentence it used to assert about your door
+    # ...and nothing anywhere in the page speaks about the user's own photograph in the
+    # first person, which only fabricated evidence ever did.
+    assert "in your photo" not in html
+
+
+def test_the_scan_docstring_matches_what_the_code_does():
+    html = page().get_data(as_text=True)
+    assert "Only an outright network failure" not in html  # the claim that was untrue
+    assert "The simulated pipeline runs only where there is no server to talk to" in html
+
+
 def test_the_page_carries_a_short_max_age_and_nothing_else_about_caching():
     response = page()
     assert response.headers["Cache-Control"] == "public, max-age=300"
