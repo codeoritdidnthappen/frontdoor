@@ -83,6 +83,52 @@ final class ServerUploaderTests: XCTestCase {
         XCTAssertTrue(error.localizedDescription.contains("Nothing was stored"))
     }
 
+    // MARK: - a 503 is weather, a 500 is a bug (#265)
+
+    private func message(_ status: Int) -> String {
+        guard case .failure(let error) = ServerUploader.outcome(
+            status: status, body: Data(), expecting: sha) else { return "" }
+        return error.localizedDescription
+    }
+
+    func testA503SaysTheServerIsUnavailableRatherThanQuotingTheNumber() {
+        let text = message(503)
+        XCTAssertTrue(text.contains("temporarily unavailable"))
+        XCTAssertTrue(text.contains("try again"))
+        // The bare status number told the operator nothing about whether to wait or to stop.
+        XCTAssertFalse(text.contains("503"))
+    }
+
+    func testA500AndA503DoNotCollapseIntoTheSameAnswer() {
+        // The guard this ticket exists for. Before #265 both fell through to `default` and
+        // produced "the server answered <status>" -- the same message, the same behaviour, and
+        // no way for an operator to tell a bug from an outage. A revert in either direction
+        // fails here.
+        XCTAssertNotEqual(message(500), message(503))
+        XCTAssertTrue(message(500).contains("worth reporting"))
+    }
+
+    func testNeitherIsPermanent() {
+        // Both stop the drain, and both keep the capture: a 5xx is a fact about the server, not
+        // about these bytes, so nothing may be skipped or deleted on its word.
+        for status in [500, 502, 503] {
+            guard case .failure(let error) = ServerUploader.outcome(
+                status: status, body: Data(), expecting: sha) else {
+                return XCTFail("status \(status) must fail")
+            }
+            XCTAssertFalse(
+                error is PerCaptureUploadFailure,
+                "status \(status) must not be treated as this capture's own fault")
+        }
+    }
+
+    func testAPermanentClientRefusalStillIsPermanent() {
+        // AC-3's other half: splitting the 5xx branch must not have moved the 4xx boundary.
+        guard case .failure(let error) = ServerUploader.outcome(
+            status: 404, body: Data(), expecting: sha) else { return XCTFail("expected failure") }
+        XCTAssertTrue(error is PerCaptureUploadFailure)
+    }
+
     // MARK: - the request
 
     func testTheBodyCarriesEveryFieldTheServerRequiresAndNoSplit() throws {
