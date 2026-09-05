@@ -1317,3 +1317,15 @@ not a metric ruler. D-015 and D-020 are untouched — screening still never cons
 The planned monocular-versus-LiDAR comparison has no metric reference.
 
 **Reported as an amendment at Demo Day.**
+
+## 2026-09-04 — Collect future entrance labels on the capture phone (TICK-282, #309)
+
+Future captures now finish only after all six named views are present and James explicitly records
+the four entrance-level presence truths. The phone queues those labels durably before any model
+result is shown, reuses the existing upload credential, and retries without blocking the end of
+capture. The server assigns the label date and writes the four CSV rows atomically.
+
+This does not change the frozen dataset workflow: #302 remains James's retrospective Mac labeling
+task. The first phone-label version deliberately writes `data/labels.csv` inside the application
+container with no persistent volume, so a replacement or redeploy loses runtime labels. That
+limitation is accepted for the simplest first version and is explicit in the deploy runbook.

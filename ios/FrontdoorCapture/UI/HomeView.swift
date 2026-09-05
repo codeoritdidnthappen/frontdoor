@@ -15,6 +15,7 @@ struct HomeView: View {
     let onPrimer: () -> Void
     let onImport: () -> Void
     let onDiagnostics: () -> Void
+    let onEditLabel: (String) -> Void
 
     /// What is still only on this phone, and a way to send it.
     ///
@@ -24,11 +25,13 @@ struct HomeView: View {
     @ViewBuilder
     private var pendingRow: some View {
         let pending = controller.pendingUploads
+        let pendingLabels = controller.pendingLabels
         // The result is shown whether or not anything is still queued. It used to live inside
         // `pending > 0`, so a fully successful drain -- the one case worth confirming -- set the
         // count to zero and took its own confirmation with it: the operator tapped Upload now and
         // watched the row vanish with nothing said. AC6 is about not leaving a site unsure.
-        if pending > 0 || controller.lastDrainMessage != nil {
+        if pending > 0 || pendingLabels > 0 || controller.lastDrainMessage != nil
+            || controller.lastLabelDrainMessage != nil || controller.labelQueueError != nil {
             VStack(spacing: 6) {
                 if pending > 0 {
                     Text("^[\(pending) capture](inflect: true) on this phone only")
@@ -39,11 +42,36 @@ struct HomeView: View {
                     .buttonStyle(.bordered)
                     .disabled(controller.isDraining)
                 }
+                if pendingLabels > 0 {
+                    Text("^[\(pendingLabels) label record](inflect: true) waiting to upload")
+                        .font(.subheadline.weight(.medium))
+                    Button("Upload labels now") {
+                        Task { await controller.drainLabelQueue() }
+                    }
+                    .buttonStyle(.bordered)
+                    ForEach(controller.queuedLabelIds, id: \.self) { entranceId in
+                        Button("Edit labels for \(entranceId)") { onEditLabel(entranceId) }
+                            .buttonStyle(.borderless)
+                    }
+                }
+                if let queueError = controller.labelQueueError {
+                    Text(queueError)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .multilineTextAlignment(.center)
+                }
                 if let outcome = controller.lastDrainMessage {
                     Text(outcome)
                         .font(.footnote)
                         .multilineTextAlignment(.center)
                         .foregroundStyle(pending > 0 ? .secondary : .primary)
+                        .padding(.horizontal, 24)
+                }
+                if let outcome = controller.lastLabelDrainMessage {
+                    Text(outcome)
+                        .font(.footnote)
+                        .multilineTextAlignment(.center)
+                        .foregroundStyle(.secondary)
                         .padding(.horizontal, 24)
                 }
             }

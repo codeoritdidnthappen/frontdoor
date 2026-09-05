@@ -53,3 +53,16 @@ python -m frontdoor_server.labeling_app --check
 
 That command exits unsuccessfully while any eligible entrance remains untouched or the CSV fails
 its schema checks. It does not read any photograph or contact R2.
+
+## Future captures on James's iPhone
+
+The Mac workflow above remains the one-time path for the frozen dataset tracked by #302. Future
+entrances are labeled in the capture app after all six named views have been saved. **Finish
+capture** then shows four fixed rows, each with **Present**, **Absent**, and **Cannot determine**
+buttons. James selects every row explicitly; no model answer is shown until the human record is
+durably queued on the phone.
+
+The app remembers James's name, retries queued labels with the existing upload credential, and
+locks a record after the deployed server accepts it. The server supplies `labeled_at` and appends
+the same four-row entrance-level representation to `data/labels.csv`. These labels are human
+ground truth, not image-upload metadata, and image upload does not wait for them.

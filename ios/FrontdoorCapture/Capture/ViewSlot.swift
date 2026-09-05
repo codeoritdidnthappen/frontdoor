@@ -65,12 +65,12 @@ struct ViewSetCoverage: Equatable {
 
     var missing: [ViewSlot] { ViewSlot.allCases.filter { !captured.contains($0) } }
 
+    var isComplete: Bool { missing.isEmpty }
+
     /// What the protocol makes of this coverage.
     ///
-    /// Five is not silently treated as done. The document allows five "if one genuinely cannot be
-    /// captured — note which one and why in the entrance record", and only the operator standing
-    /// there knows whether that is the case. So the app reports the position and says what the
-    /// protocol asks; it does not decide on their behalf.
+    /// Five is not silently treated as done. TICK-282 makes all six the finish-and-label gate;
+    /// an entrance whose set cannot be completed is recorded as skipped instead.
     enum State: Equatable {
         case complete
         /// Five of six. The named slot is the one missing.

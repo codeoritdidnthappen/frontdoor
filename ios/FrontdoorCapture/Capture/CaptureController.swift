@@ -627,7 +627,10 @@ final class CaptureController: ObservableObject {
             if record.captureMode.carriesMetrologyTruth {
                 measure(written, caliperInches: record.entrance.riseInches)
             } else {
-                screen(written, entranceId: record.entrance.id)
+                // Human truth must be committed before model output can influence it. Keep only
+                // the latest completed view here; Finish capture releases it after labels are
+                // durably queued (TICK-282).
+                latestScreeningCapture = (written, record.entrance.id)
             }
         case .failure(let failure):
             // Complete-or-nothing (AC5): nothing is counted for a capture that is not on disk.
@@ -646,6 +649,8 @@ final class CaptureController: ObservableObject {
     /// The named checks for the last screening capture: on screen from the moment the photo is
     /// sent, so the criteria are named while the answer is being waited for.
     @Published var screeningRun: ScreeningRun?
+
+    private var latestScreeningCapture: (CaptureWriter.Written, String)?
 
     /// Built from the same Info.plist settings as the uploader and the measure client, so a build
     /// has one server or none. Nil when the build has no server, which is what keeps this additive.
@@ -743,6 +748,10 @@ final class CaptureController: ObservableObject {
     /// a number kept in a variable is a number that can disagree with the folder, and the whole
     /// point of it is to be trusted when deciding whether to leave a site.
     @Published private(set) var pendingUploads = 0
+    @Published private(set) var pendingLabels = 0
+    @Published private(set) var queuedLabelIds: [String] = []
+    @Published private(set) var labelQueueError: String?
+    @Published private(set) var lastLabelDrainMessage: String?
     @Published private(set) var isDraining = false
     @Published private(set) var lastDrainMessage: String?
 
@@ -753,6 +762,9 @@ final class CaptureController: ObservableObject {
     /// that fallback exists for, and it is silent about nothing -- the count keeps rising and the
     /// drain says why (TICK-029).
     var uploader: CaptureUploader = UploadSettings.fromBundle().uploader() ?? NoDestinationUploader()
+    var labelQueue = LabelQueue.inDocuments()
+    var labelUploader: EntranceLabelUploader = UploadSettings.fromBundle().labelUploader()
+        ?? NoLabelDestinationUploader()
 
     private let networkMonitor = NWPathMonitor()
     private var watchingNetwork = false
@@ -767,7 +779,10 @@ final class CaptureController: ObservableObject {
         watchingNetwork = true
         networkMonitor.pathUpdateHandler = { [weak self] path in
             guard path.status == .satisfied else { return }
-            Task { @MainActor in await self?.drainQueue() }
+            Task { @MainActor in
+                await self?.drainQueue()
+                await self?.drainLabelQueue()
+            }
         }
         networkMonitor.start(queue: DispatchQueue(label: "frontdoor.upload.path"))
     }
@@ -776,6 +791,7 @@ final class CaptureController: ObservableObject {
 
     func refreshPendingUploads() {
         pendingUploads = queue.count
+        refreshLabelQueueState()
     }
 
     func drainQueue() async {
@@ -785,6 +801,43 @@ final class CaptureController: ObservableObject {
         lastDrainMessage = report.message
         isDraining = false
         refreshPendingUploads()
+    }
+
+    func queueLabels(
+        entranceId: String,
+        labeledBy: String,
+        answers: [ScreeningCriterion: LabelTruth]
+    ) -> Result<Void, LabelQueue.Failure> {
+        LabelCompletionGate(queue: labelQueue).save(
+            entranceId: entranceId,
+            labeledBy: labeledBy,
+            answers: answers
+        ) { _ in
+            refreshLabelQueueState()
+            if let latest = latestScreeningCapture, latest.1 == entranceId {
+                screen(latest.0, entranceId: entranceId)
+                latestScreeningCapture = nil
+            }
+            Task { await drainLabelQueue() }
+        }
+    }
+
+    func drainLabelQueue() async {
+        let report = await LabelQueueDrain(queue: labelQueue, uploader: labelUploader).drain()
+        lastLabelDrainMessage = report.message
+        refreshLabelQueueState()
+    }
+
+    private func refreshLabelQueueState() {
+        switch labelQueue.pending() {
+        case .success(let records):
+            queuedLabelIds = records.map(\.entranceId)
+            pendingLabels = records.count
+            labelQueueError = nil
+        case .failure(let failure):
+            queuedLabelIds = []
+            labelQueueError = failure.localizedDescription
+        }
     }
 
     /// Captures live beside the app's own data, so iOS backs them up and Files can reach them.

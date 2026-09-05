@@ -3,6 +3,10 @@ import SwiftUI
 /// Home and viewfinder are separate screens, so the camera is only on while the operator is
 /// actually pointing it at something, and leaving the viewfinder does not mean leaving the app.
 struct RootView: View {
+    private struct LabelingTarget: Identifiable {
+        let id: String
+    }
+
     @StateObject private var controller = CaptureController()
     @StateObject private var entrances = EntranceStore()
     @Environment(\.scenePhase) private var scenePhase
@@ -10,6 +14,7 @@ struct RootView: View {
     @State private var settingUpEntrance = false
     @State private var showingDiagnostics = false
     @State private var importing = false
+    @State private var labelingTarget: LabelingTarget?
     /// Shown before the first scan on this install, and on request afterwards (#275).
     @State private var showingPrimer = false
     /// True when the primer is standing between the operator and the viewfinder, rather than
@@ -20,7 +25,12 @@ struct RootView: View {
     var body: some View {
         Group {
             if isCapturing {
-                CaptureView(controller: controller) { isCapturing = false }
+                CaptureView(controller: controller) {
+                    isCapturing = false
+                } onFinish: { entranceId in
+                    labelingTarget = LabelingTarget(id: entranceId)
+                    isCapturing = false
+                }
             } else {
                 HomeView(controller: controller) {
                     // Truth first, viewfinder second. There is no route to the camera that
@@ -41,6 +51,8 @@ struct RootView: View {
                     importing = true
                 } onDiagnostics: {
                     showingDiagnostics = true
+                } onEditLabel: { entranceId in
+                    labelingTarget = LabelingTarget(id: entranceId)
                 }
             }
         }
@@ -74,6 +86,11 @@ struct RootView: View {
         }
         .sheet(isPresented: $importing) {
             ImportPhotosView(store: entrances, controller: controller) { importing = false }
+        }
+        .sheet(item: $labelingTarget) { target in
+            EntranceLabelingView(controller: controller, entranceId: target.id) {
+                labelingTarget = nil
+            }
         }
         // Over the viewfinder, so the operator sees the result beside the doorway they just shot.
         // Dismissing returns them to the shutter rather than out of the session.
