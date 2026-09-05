@@ -272,6 +272,14 @@ def _is_precondition_failed(exc):
     return error.get("Code") in {"PreconditionFailed", "412"} or status == 412
 
 
+def _is_not_found(exc):
+    """A 404 from head_object, however the client spells it."""
+    response = getattr(exc, "response", None) or {}
+    code = str(response.get("Error", {}).get("Code", ""))
+    status = response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+    return code in ("404", "NoSuchKey", "NotFound") or status == 404
+
+
 def _raise_from_client(exc, action, bucket, key):
     from botocore.exceptions import ClientError
 
@@ -373,6 +381,28 @@ class ObjectStore:
         except Exception as exc:
             _raise_from_client(exc, "get", self.creds.bucket, key)
         return response["Body"].read()
+
+    def exists(self, key):
+        """Is there an object at this key? Metadata only -- no bytes are returned.
+
+        Sealed keys are NOT refused here, and the reason is worth stating rather than assuming.
+        This asks whether an object exists, and the capture ids it is asked about come from the
+        committed manifest, so a caller learns nothing the repository does not already tell them.
+        `put` already writes sealed keys without an audit line, because ingest has to; a HEAD is
+        strictly less than that.
+
+        What it exists for is the ordering: the freeze-day run appends to SEAL_AUDIT.log before it
+        fetches its first image, so a capture whose bytes were never uploaded costs the seal. This
+        lets that be a refusal instead.
+        """
+        _partition_of(key)
+        try:
+            self._client.head_object(Bucket=self.creds.bucket, Key=key)
+        except Exception as exc:
+            if _is_not_found(exc):
+                return False
+            _raise_from_client(exc, "head", self.creds.bucket, key)
+        return True
 
     def delete(self, key):
         _partition_of(key)

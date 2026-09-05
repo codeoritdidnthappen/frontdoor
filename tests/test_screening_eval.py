@@ -26,6 +26,7 @@ from frontdoor.screening import (
     SpendCapError,
 )
 from frontdoor.screening_eval import (
+    MissingCaptureObjects,
     CONDITION_KEYS,
     EVAL_MAX_USD_PER_RUN,
     LATENCY_BUDGET_S,
@@ -1375,3 +1376,91 @@ def test_a_screened_entrance_with_no_labels_still_appears(tmp_path):
         "all_committed_correct": None,
     }
     assert result["entrance_call"]["agreement"] is None
+
+
+# --- the bytes have to be there before the seal is opened (#62, R-5) ----------
+
+
+def test_a_capture_with_no_object_refuses_the_run_before_the_audit_line(
+    tmp_path, monkeypatch
+):
+    """The failure this guard exists for, in the state the repository was actually in.
+
+    On 2026-09-04 the committed dataset was 338 captures and the image bucket held 7 objects,
+    none of them a dataset capture. Without this the freeze-day run appends to SEAL_AUDIT.log,
+    fetches the first image, dies on NoSuchKey, and leaves a burned seal and no report -- and a
+    retry is a second unsealing.
+    """
+    manifest, labels = _sealed_fixture(tmp_path)
+    audit = _audit_context(tmp_path, manifest)
+    _clean_recordable_repo(monkeypatch)
+
+    def _boom(capture_id):
+        raise AssertionError("no image may be read when the preflight failed")
+
+    with pytest.raises(MissingCaptureObjects) as caught:
+        run_eval(
+            manifest_path=manifest,
+            labels_path=labels,
+            out_dir=tmp_path / "out",
+            engine=FakeEngine({}),
+            get_capture=_boom,
+            verify_images=lambda capture_ids, split: [
+                f"{split}/{capture_id}" for capture_id in capture_ids
+            ],
+            split="sealed",
+            audit=audit,
+            argv=SEALED_ARGV,
+        )
+    assert not audit["audit_path"].exists(), "the seal must survive a missing object"
+    assert not (tmp_path / "out").exists()
+    assert "never uploaded" in str(caught.value)
+
+
+def test_the_preflight_is_asked_only_about_this_runs_captures(tmp_path, monkeypatch):
+    manifest, labels = _sealed_fixture(tmp_path)
+    _clean_recordable_repo(monkeypatch)
+    asked = {}
+
+    def _verify(capture_ids, split):
+        asked["ids"] = capture_ids
+        asked["split"] = split
+        return []
+
+    run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=FakeEngine({DEV_A: _screening(DEV_A, {"ramp_or_bevel": "absent"})}),
+        get_capture=_fake_get_capture,
+        verify_images=_verify,
+        split="dev",
+    )
+    # The dev run must not be asked about sealed captures: the preflight would then reach for a
+    # sealed key on a run that has no business naming one.
+    assert asked["split"] == "dev"
+    assert SEALED_ID not in asked["ids"]
+    assert asked["ids"] == sorted(asked["ids"])
+
+
+def test_a_complete_bucket_does_not_disturb_the_run(tmp_path, monkeypatch):
+    manifest, labels = _sealed_fixture(tmp_path)
+    _clean_recordable_repo(monkeypatch)
+    result = run_eval(
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=FakeEngine({DEV_A: _screening(DEV_A, {"ramp_or_bevel": "absent"})}),
+        get_capture=_fake_get_capture,
+        verify_images=lambda capture_ids, split: [],
+        split="dev",
+    )
+    assert result["split"] == "dev"
+
+
+def test_the_cli_always_supplies_a_preflight(tmp_path, monkeypatch):
+    """`verify_images=None` skips the check, so the production path must never pass None."""
+    _stub_freeze_day(monkeypatch)
+    captured = _stub_run_eval(monkeypatch)
+    assert main(_cli_args(tmp_path, "--include-sealed"), from_cli=True) == 0
+    assert captured["verify_images"] is not None
