@@ -43,7 +43,7 @@ final class CapturePrivacyTests: XCTestCase {
         XCTAssertNotNil(properties(of: original)[kCGImagePropertyGPSDictionary],
                         "fixture has no GPS to strip")
 
-        guard case .success(let out) = CapturePrivacy.process(
+        guard case .success(let out) = CapturePrivacy.processWithoutDetection(
             original, exifOrientation: 6, normalizedFaceRectangles: []) else {
             return XCTFail("processing failed")
         }
@@ -55,7 +55,7 @@ final class CapturePrivacyTests: XCTestCase {
         // Stripping it too would make the stored image decode sideways for every consumer,
         // including the screening model.
         for tag in 1...8 {
-            let out = CapturePrivacy.process(
+            let out = CapturePrivacy.processWithoutDetection(
                 jpeg(width: 64, height: 48, orientation: tag, withGPS: true),
                 exifOrientation: tag, normalizedFaceRectangles: [])
             guard case .success(let processed) = out else {
@@ -71,7 +71,7 @@ final class CapturePrivacyTests: XCTestCase {
     func testThePixelGridIsUnchanged() {
         // The sidecar's intrinsics, distortion_center and roi points are all expressed in the
         // STORED grid. Rotating the pixels here would describe a grid that no longer exists.
-        guard case .success(let out) = CapturePrivacy.process(
+        guard case .success(let out) = CapturePrivacy.processWithoutDetection(
             jpeg(width: 64, height: 48, orientation: 6, withGPS: false),
             exifOrientation: 6, normalizedFaceRectangles: []) else {
             return XCTFail("processing failed")
@@ -84,11 +84,11 @@ final class CapturePrivacyTests: XCTestCase {
 
     func testAFaceRegionIsActuallyAlteredNotJustCounted() {
         let original = jpeg(width: 64, height: 64, orientation: 1, withGPS: false)
-        guard case .success(let out) = CapturePrivacy.process(
+        guard case .success(let out) = CapturePrivacy.processWithoutDetection(
             original, exifOrientation: 1,
             normalizedFaceRectangles: [CGRect(x: 0.25, y: 0.25, width: 0.5, height: 0.5)])
         else { return XCTFail("processing failed") }
-        XCTAssertEqual(out.faceCount, 1)
+        XCTAssertEqual(out.blurredFaceCount, 1)
         XCTAssertNotEqual(out.data, original, "the bytes are unchanged; nothing was blurred")
     }
 
@@ -156,5 +156,58 @@ final class CapturePrivacyTests: XCTestCase {
         }
         XCTAssertEqual(failure, .unreadable)
         XCTAssertTrue(failure.message.contains("not saved"))
+    }
+
+    func testAFaceTooSmallToBlurRefusesTheCaptureRatherThanWritingItInTheClear() {
+        // The one that shipped. A tiny or distant detection collapses below a pixel once the
+        // 30% margin is intersected with the frame, and the blur loop used to `continue` -- so
+        // the image was written and uploaded with that face untouched, and the reported count
+        // said it had been handled. It has to refuse.
+        let outcome = CapturePrivacy.processWithoutDetection(
+            jpeg(width: 64, height: 64, orientation: 1, withGPS: false),
+            exifOrientation: 1,
+            normalizedFaceRectangles: [CGRect(x: 0, y: 0, width: 0.001, height: 0.001)])
+        guard case .failure(let failure) = outcome else {
+            return XCTFail("a detected face was not blurred and the capture was produced anyway")
+        }
+        XCTAssertEqual(failure, .blurFailed)
+        XCTAssertTrue(failure.message.contains("not saved"),
+                      "the refusal must not read as 'saved anyway'")
+    }
+
+    func testADetectionOutsideTheFrameRefusesRatherThanBeingSkipped() {
+        // The other way the intersection empties: `isNull`. Same rule -- a face this step cannot
+        // account for is a capture that does not get written.
+        let outcome = CapturePrivacy.processWithoutDetection(
+            jpeg(width: 64, height: 64, orientation: 1, withGPS: false),
+            exifOrientation: 1,
+            normalizedFaceRectangles: [CGRect(x: 2.0, y: 2.0, width: 0.1, height: 0.1)])
+        guard case .failure(let failure) = outcome else {
+            return XCTFail("an unaccounted-for detection produced a capture")
+        }
+        XCTAssertEqual(failure, .blurFailed)
+    }
+
+    func testNoSuccessEverReportsFewerBlursThanFacesItWasGiven() {
+        // The count is the only thing that says a face was handled, so it must be impossible for
+        // a success to carry a number smaller than the detections it was handed. Awkward inputs,
+        // one per way the loop can give up: each must refuse, never succeed short.
+        let awkward: [[CGRect]] = [
+            [CGRect(x: 0.25, y: 0.25, width: 0.5, height: 0.5)],
+            [CGRect(x: 0, y: 0, width: 0.001, height: 0.001)],
+            [CGRect(x: 2.0, y: 2.0, width: 0.1, height: 0.1)],
+            [CGRect(x: 0.1, y: 0.1, width: 0.3, height: 0.3),
+             CGRect(x: 0, y: 0, width: 0.001, height: 0.001)],
+        ]
+        for rectangles in awkward {
+            let outcome = CapturePrivacy.processWithoutDetection(
+                jpeg(width: 64, height: 64, orientation: 1, withGPS: false),
+                exifOrientation: 1, normalizedFaceRectangles: rectangles)
+            if case .success(let out) = outcome {
+                XCTAssertEqual(out.blurredFaceCount, rectangles.count,
+                               "a capture was produced with \(rectangles.count - out.blurredFaceCount) "
+                               + "face(s) left in the clear")
+            }
+        }
     }
 }

@@ -287,6 +287,31 @@ unreadable one, changes nothing. If storage is down or misconfigured, publish de
 `assessed-but-not-published` response that still carries the verdicts — nothing is dropped
 silently, and no credential material ever appears in a response.
 
+### What the running server writes, and where it survives
+
+Three stores, and the difference between them is the difference between a durable record and a
+silent loss. `Dockerfile` redirects the first two onto the volume `fly.toml` mounts at `/data`;
+a test pins that list against both files.
+
+| Store | Variable | In the image | Survives a deploy |
+|---|---|---|---|
+| Community scans | `FRONTDOOR_SCANS` | `/data/scans.jsonl` | yes |
+| Owner claims | `FRONTDOOR_CLAIMS` | `/data/claims.jsonl` | yes |
+| Future-capture labels | `FRONTDOOR_LABELS_PATH` | not set — `data/labels.csv` in the container | **no**, by design (TICK-282) |
+
+**Claims lost is a credential lost, not a record lost.** The claim record holds the only bearer
+token for an approved workspace, so an unmounted claims path means every redeploy 404s every
+workspace that existed and no claimant can get back in. Worse, the `owner_confirmed` flag that
+an approved claim authorises lives in the *scan* store, which is on the volume — so the map goes
+on showing Owner-confirmed pins backed by claims that no longer exist. And `load_claims` answers
+a missing file with an empty list, exactly as it answers a store with no claims in it, so
+nothing anywhere reports the difference. That was live until this was set.
+
+`FRONTDOOR_CLAIM_CODES` (default `data/claim_codes.json`) is read-only team-issued config, not
+run-time state. It is **not** copied into the image, so the `in_store_code` claim channel is
+unavailable on the host; `listed_phone` and `business_email` are unaffected. Ship that file if
+in-store codes are wanted live.
+
 ### EntryMap app page (TICK-247)
 
 **`GET /app`** — `https://frontdoor-measure.fly.dev/app` — is the phone-web scanner: the map, the
