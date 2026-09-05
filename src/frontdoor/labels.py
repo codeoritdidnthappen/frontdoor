@@ -16,6 +16,7 @@ unsealing is recorded in SEAL_AUDIT.log via seal_audit.record_unsealing
 """
 
 import csv
+import fcntl
 import os
 from dataclasses import dataclass
 from datetime import date
@@ -227,6 +228,122 @@ def save_entrance_labels(
             }
         updated.append(row)
     _atomic_write_sheet(path, updated)
+
+
+#: What an append attempt did. The caller turns these into HTTP; keeping them here means the
+#: rule -- accepted once, then locked -- is stated where the rows are written rather than in a view.
+APPEND_ACCEPTED = "accepted"
+APPEND_IDENTICAL = "identical"
+APPEND_LOCKED = "locked"
+
+#: Longest operator name accepted. Long enough for a real name, short enough that a runaway
+#: client cannot grow the CSV a megabyte at a time.
+LABELED_BY_MAX = 64
+
+
+class LabelsLocked(LabelError):
+    """This entrance already has labels, and the new answers disagree with them.
+
+    A permanent refusal, not a retry: the phone must stop resending. Human ground truth is
+    recorded once so that it cannot be quietly revised after the model's verdicts are known --
+    which is the whole reason the labeling screen never shows model output (#309).
+    """
+
+
+def normalise_answers(answers: Mapping[str, str]) -> dict[str, str]:
+    """Validate one entrance's four answers and return them keyed by criterion.
+
+    Blank is a real answer -- "cannot determine" -- and is stored as an empty truth with the
+    operator's name still on the row, so a reviewed-but-undecidable criterion is distinguishable
+    from one nobody looked at.
+    """
+    if set(answers) != set(CRITERIA_KEYS):
+        raise LabelError(
+            f"answers must contain each of {', '.join(CRITERIA_KEYS)} exactly once"
+        )
+    allowed = {*ALLOWED_TRUTHS, ""}
+    cleaned = {}
+    for criterion, truth in answers.items():
+        if not isinstance(truth, str) or truth not in allowed:
+            raise LabelError(
+                f"answer for {criterion!r} must be one of "
+                f"{', '.join(ALLOWED_TRUTHS)}, or blank for cannot determine"
+            )
+        cleaned[criterion] = truth
+    return cleaned
+
+
+def normalise_labeled_by(labeled_by) -> str:
+    if not isinstance(labeled_by, str) or not labeled_by.strip():
+        raise LabelError("labeled_by must be a non-blank name")
+    trimmed = labeled_by.strip()
+    if len(trimmed) > LABELED_BY_MAX:
+        raise LabelError(f"labeled_by must be at most {LABELED_BY_MAX} characters")
+    return trimmed
+
+
+def append_entrance_labels(
+    path: Path,
+    entrance_id: str,
+    answers: Mapping[str, str],
+    *,
+    labeled_by: str,
+    labeled_at: date,
+) -> str:
+    """Append one entrance's four rows, once. Returns an APPEND_* outcome.
+
+    For entrances captured AFTER the 2026-09-04 closeout, which have no template row to fill in
+    (#309). The frozen 53 are #302's, through the Mac workflow, and are not touched here.
+
+    Three outcomes, and the distinction is the point:
+
+    * **accepted** -- there were no rows for this entrance; four are appended.
+    * **identical** -- the same answers and operator are already recorded. A resend after a lost
+      acknowledgement is a success, and `labeled_at` keeps the date the labels were actually
+      accepted rather than the date of the retry.
+    * **locked** -- rows exist and disagree. Raises `LabelsLocked` having changed nothing.
+
+    Serialised with an exclusive lock on a sibling file, because this is a read-modify-write and
+    two phones finishing an entrance at once would otherwise interleave or lose rows.
+    """
+    entrance_id = canonical_entrance_id(entrance_id)
+    cleaned = normalise_answers(answers)
+    operator = normalise_labeled_by(labeled_by)
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_name(path.name + ".lock")
+    with open(lock_path, "w", encoding="utf-8") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        try:
+            rows = _read_sheet(path) if path.exists() else []
+            existing = [row for row in rows if row["entrance_id"] == entrance_id]
+            if existing:
+                recorded = {row["criterion"]: row["truth"] for row in existing}
+                operators = {row["labeled_by"] for row in existing}
+                if recorded == cleaned and operators == {operator}:
+                    return APPEND_IDENTICAL
+                raise LabelsLocked(
+                    f"entrance {entrance_id} already has labels recorded by "
+                    f"{', '.join(sorted(operators))}; they are not editable through this "
+                    "endpoint. Nothing was changed."
+                )
+            appended = [
+                {
+                    "entrance_id": entrance_id,
+                    "criterion": criterion,
+                    "truth": cleaned[criterion],
+                    "labeled_by": operator,
+                    "labeled_at": labeled_at.isoformat(),
+                }
+                # CRITERIA_KEYS order, not the request's: the CSV reads the same way for every
+                # entrance however a client happened to serialise its JSON.
+                for criterion in CRITERIA_KEYS
+            ]
+            _atomic_write_sheet(path, [*rows, *appended])
+            return APPEND_ACCEPTED
+        finally:
+            fcntl.flock(lock, fcntl.LOCK_UN)
 
 
 def labeling_progress(path: Path, entrance_ids: Sequence[str]) -> LabelingProgress:

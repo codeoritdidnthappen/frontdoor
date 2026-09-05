@@ -53,3 +53,31 @@ python -m frontdoor_server.labeling_app --check
 
 That command exits unsuccessfully while any eligible entrance remains untouched or the CSV fails
 its schema checks. It does not read any photograph or contact R2.
+
+## Labeling from the phone, for entrances captured after the closeout (TICK-282, #309)
+
+Everything above is the Mac workflow, and it owns the **frozen 53**: the entrances the 2026-09-04
+closeout froze, which #302 completes. Nothing on the phone touches them.
+
+Entrances captured **after** that closeout have no template row to fill in, so they are labeled at
+the doorway instead. After all six named views of an entrance are captured, **Finish capture**
+opens a labeling screen: the same four criteria, the same three answers (**Present**, **Absent**,
+**Cannot determine**), no typing and no dictation. The label is saved on the phone first and sent
+to the server when there is a network.
+
+Three things about these labels that are easy to get wrong:
+
+- **They are human ground truth, not upload metadata.** They are the reference the model's verdicts
+  are scored against, which is why the labeling screen appears *before* any verdict for that
+  entrance is shown and why no model output reaches it.
+- **They are recorded once.** The server accepts an entrance's four rows and then locks them: an
+  identical resend succeeds so a phone can stop retrying, and anything that disagrees is refused.
+  Ground truth that can be revised after the verdicts are known is not ground truth.
+- **`labeled_at` is the server's date, not the phone's.** A phone's clock is settable.
+
+### v1 storage is ephemeral, deliberately
+
+The deployed server appends to `data/labels.csv` **inside its own container**. Replacing or
+redeploying that container loses every row written at runtime. Persistent volumes, a database and
+syncing runtime rows back into the repository are all out of scope for TICK-282 — so treat
+phone-entered labels as needing to be copied out before any redeploy, until that changes.
