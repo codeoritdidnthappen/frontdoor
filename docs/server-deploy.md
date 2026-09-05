@@ -439,3 +439,18 @@ fly apps destroy frontdoor-measure
 The image dataset lives in R2 and the frozen label artifact lives in the repo. Future-capture
 labels written by `POST /labels` are temporary container state and must be downloaded before the
 app is destroyed, replaced, or redeployed or they are lost.
+
+## Where phone labels are written (TICK-282, #313)
+
+`POST /labels` appends to `$FRONTDOOR_LABELS_PATH`, falling back to `data/labels.csv` relative to
+the process's working directory. In the container that is `/app/data/labels.csv`, created fresh:
+the image copies only `pyproject.toml` and `src`, so no committed sheet is present.
+
+**Running the server from a checkout is different, and the endpoint refuses it.** An append
+rewrites the whole sheet, so a single submission would modify the tracked `data/labels.csv` —
+harmless that day, and then the freeze-day run aborts on a dirty working tree with the cause being
+a data file nobody remembers touching. Set `FRONTDOOR_LABELS_PATH` to somewhere outside the
+repository when serving from a checkout, which is what #52's fallback rehearsal does.
+
+Runtime rows still live only in the container and are lost when it is replaced; see
+`docs/labeling.md`.

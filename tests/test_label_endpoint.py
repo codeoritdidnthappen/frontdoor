@@ -171,3 +171,54 @@ def test_ac_8_persistence_failure_returns_retryable_error_without_mutating_csv(
         response = _post(client)
     assert response.status_code == 503
     assert path.read_bytes() == original
+
+
+# --- the sheet must never be one git tracks, and the body must be bounded (#313) ----------
+
+
+def test_the_default_path_refuses_inside_a_checkout():
+    """One submission rewrites the whole sheet: 212 committed rows in, 216 out.
+
+    Harmless in the container, which ships no `data/`. On a laptop it modifies a tracked file,
+    and the bill arrives on freeze day when `record_unsealing` aborts on a dirty working tree.
+    """
+    from frontdoor_server.label_view import (
+        LABELS_PATH,
+        LabelsPathRefused,
+        resolve_labels_path,
+    )
+
+    with pytest.raises(LabelsPathRefused) as caught:
+        resolve_labels_path(LABELS_PATH)
+    assert "FRONTDOOR_LABELS_PATH" in str(caught.value)
+
+
+def test_a_configured_path_is_honoured_even_inside_a_checkout(tmp_path):
+    """The guard is about the unconfigured default, not about where someone chose to write."""
+    from frontdoor_server.label_view import resolve_labels_path
+
+    chosen = tmp_path / "labels.csv"
+    assert resolve_labels_path(chosen) == chosen
+
+
+def test_a_configured_path_still_writes(tmp_path):
+    from frontdoor_server.label_view import resolve_labels_path
+
+    inside_repo_but_named = Path("data") / "some-other-sheet.csv"
+    assert resolve_labels_path(inside_repo_but_named) == inside_repo_but_named
+
+
+def test_an_oversized_body_is_refused_on_its_declared_length(app):
+    """Before it is parsed. 64 MB is what the app allows; 512 MB is what the worker has (#233)."""
+    response = app.test_client().post(
+        "/labels",
+        data=b"x" * 9000,
+        content_type="application/json",
+        headers={"X-Frontdoor-Upload-Key": KEY, "Content-Length": "9000"},
+    )
+    assert response.status_code == 413
+
+
+def test_a_body_under_the_cap_is_still_accepted(app):
+    response = _post(app.test_client())
+    assert response.status_code in (200, 201)
