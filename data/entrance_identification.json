@@ -1,5 +1,5 @@
 {
-  "_comment": "TICK-341 (#341). Which business each captured entrance belongs to, so #333 can key a scan record to a place. E-001..E-012 come from the on-foot door survey. E-013..E-064 were identified by reading the storefront signage in the privacy-processed captures with a vision model, then matching the read name against data/precatalogue_census.json and constraining it with the capture order along the route. No accessibility judgement was made or consulted, and the 18 sealed entrances were excluded before any model call. confidence 'high' means the name was read unambiguously or surveyed on foot; 'low' means it was read from a single partly redacted source or assembled from corroborating text. Anything that could not be pinned to one business is 'unidentified' with a reason: an unmatched entrance is a smaller failure than a scan record attached to the wrong storefront. TICK-346 (#346) added `place_match`: which catalogued place the door resolves to and how, or why it does not. A match needs a business name AND the map's own 40 m distance gate, measured from where the door is evidenced to be - the geocoded street number it read (data/external/entrance_anchors.json), or the stretch of street between the two anchored doors either side of it in the same day's walk. A name on its own is never a match, a candidate past the gate is refused rather than the gate widened, and anything ambiguous stays unmatched. The identifications themselves are #341's and were not revisited.",
+  "_comment": "TICK-341 (#341). Which business each captured entrance belongs to, so #333 can key a scan record to a place. E-001..E-012 come from the on-foot door survey. E-013..E-064 were identified by reading the storefront signage in the privacy-processed captures with a vision model, then matching the read name against data/precatalogue_census.json and constraining it with the capture order along the route. No accessibility judgement was made or consulted, and the 18 sealed entrances were excluded before any model call. confidence 'high' means the name was read unambiguously or surveyed on foot; 'low' means it was read from a single partly redacted source or assembled from corroborating text. Anything that could not be pinned to one business is 'unidentified' with a reason: an unmatched entrance is a smaller failure than a scan record attached to the wrong storefront. TICK-346 (#346) added `place_match`: which catalogued place the door resolves to and how, or why it does not. A match needs a business name AND the map's own 40 m distance gate, measured from where the door is evidenced to be - the geocoded street number it read (data/external/entrance_anchors.json), or the stretch of street between the two anchored doors either side of it in the same day's walk. A name on its own is never a match, a candidate past the gate is refused rather than the gate widened, and anything ambiguous stays unmatched. A bracket is weaker evidence than a street number: the distance is measured to the whole stretch, so each match records the span it leaned on and a bracket wider than one downtown block (120 m) is refused as `bracket_too_wide` rather than allowed to stand in for a doorway. The identifications themselves are #341's and were not revisited.",
   "capture_dates": [
     "2026-08-31",
     "2026-09-04"
@@ -284,6 +284,7 @@
         "how": {
           "anchor": "address_geocode",
           "anchor_between": null,
+          "bracket_span_m": null,
           "distance_m": 11.9,
           "matched_name": "Swift's Attic"
         },
@@ -391,7 +392,7 @@
       "status": "identified",
       "name": "Mexic-Arte Museum",
       "address": null,
-      "place_id": "ChIJQ62VNgi1RIYRb4PYimCG5vU",
+      "place_id": null,
       "confidence": "high",
       "basis": [
         "read_sign"
@@ -406,17 +407,9 @@
         "IMG_3403"
       ],
       "place_match": {
-        "how": {
-          "anchor": "walk_order_bracket",
-          "anchor_between": [
-            "E-024",
-            "E-030"
-          ],
-          "distance_m": 0.4,
-          "matched_name": "Mexic-Arte Museum"
-        },
-        "unmatched_reason": null,
-        "detail": null
+        "how": null,
+        "unmatched_reason": "bracket_too_wide",
+        "detail": "bracketed by E-024 and E-030, 206 m apart, over the 120 m a bracket may claim"
       }
     },
     "E-027": {
@@ -490,6 +483,7 @@
             "E-030",
             "E-033"
           ],
+          "bracket_span_m": 74.3,
           "distance_m": 0.6,
           "matched_name": "Capital One Café"
         },
@@ -545,6 +539,7 @@
         "how": {
           "anchor": "address_geocode",
           "anchor_between": null,
+          "bracket_span_m": null,
           "distance_m": 1.5,
           "matched_name": "7-Eleven"
         },
@@ -617,8 +612,8 @@
       ],
       "place_match": {
         "how": null,
-        "unmatched_reason": "outside_match_distance",
-        "detail": "nearest candidate \"Kruger's Diamond Jewelers\" is 60 m away, over the 40 m gate"
+        "unmatched_reason": "bracket_too_wide",
+        "detail": "bracketed by E-037 and E-050, 261 m apart, over the 120 m a bracket may claim"
       }
     },
     "E-040": {
@@ -786,7 +781,7 @@
       "status": "identified",
       "name": "Ruth's Chris Steak House",
       "address": null,
-      "place_id": "ChIJWQDHxwm1RIYRJmu_M83GQlI",
+      "place_id": null,
       "confidence": "high",
       "basis": [
         "read_sign"
@@ -803,17 +798,9 @@
         "IMG_3534"
       ],
       "place_match": {
-        "how": {
-          "anchor": "walk_order_bracket",
-          "anchor_between": [
-            "E-037",
-            "E-050"
-          ],
-          "distance_m": 27.0,
-          "matched_name": "Ruth's Chris Steak House"
-        },
-        "unmatched_reason": null,
-        "detail": null
+        "how": null,
+        "unmatched_reason": "bracket_too_wide",
+        "detail": "bracketed by E-037 and E-050, 261 m apart, over the 120 m a bracket may claim"
       }
     },
     "E-050": {
@@ -866,6 +853,7 @@
         "how": {
           "anchor": "address_geocode",
           "anchor_between": null,
+          "bracket_span_m": null,
           "distance_m": 28.8,
           "matched_name": "Velvet Taco"
         },

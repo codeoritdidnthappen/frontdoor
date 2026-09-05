@@ -793,6 +793,14 @@ def run_census(area=None, out_dir="data", *, env=None, merge=False,
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
+    census_path = out_dir / CENSUS_FILENAME
+    if merge and not census_path.exists():
+        # Before the first paid call, not after. Falling back to a plain write
+        # would silently turn "extend the catalogue, identifier-only" into
+        # "create a new one with Places names in it" -- see _merged_census.
+        raise PrecatalogueError(
+            f"--merge needs an existing census at {census_path}; there is "
+            "none, so there is nothing to extend")
     dataset_path = out_dir / DATASET_FILENAME
     existing_ids = set()
     if dataset_path.exists():
@@ -817,9 +825,8 @@ def run_census(area=None, out_dir="data", *, env=None, merge=False,
         stopped = f"{type(exc).__name__}: {exc}"
         stopped_is_error = True
 
-    census_path = out_dir / CENSUS_FILENAME
     merged = None
-    if merge and census_path.exists():
+    if merge:
         merged = _merged_census(
             json.loads(census_path.read_text(encoding="utf-8")), places)
 
@@ -1045,7 +1052,11 @@ def main(argv=None):
             config = arg.split("=", 1)[1]
     args = [a for a in args
             if a not in ("--census", "--merge") and not a.startswith("--config=")]
+    # An empty --config= is a typo or an unset shell variable, not a request
+    # for the default area: silently sweeping the committed demo area instead
+    # costs real API calls and, with --merge, writes them into the catalogue.
     if (not args or args[0] not in ("run", "enrich") or len(args) > 2
+            or config == ""
             or (args[0] == "enrich" and (census or merge or config))
             or (merge and not census)):
         print("usage: python -m frontdoor.precatalogue run [--census] "

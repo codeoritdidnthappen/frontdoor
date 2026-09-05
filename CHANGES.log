@@ -1415,21 +1415,31 @@ display fields resolved at render time before it can draw a pin for one of these
 
 **Matching.** `frontdoor.entrance_matching` decides a place for each of the 46 non-sealed doors
 against the map's own gates: the name comparison `/map/data` merges scan records with, plus the
-40 m distance gate, measured from where the door is evidenced to be — the geocoded street number
+40 m distance gate, measured from where the door is evidenced to be - the geocoded street number
 it read, or the stretch of street between the two anchored doors either side of it in the same
 day's walk. Both gates, never one: an entrance has no independent coordinates, so the name
 comparison's "nothing to compare, fall back to distance" branch is shut here. Anything ambiguous
 stays unmatched, and a candidate past the gate is refused rather than the gate widened.
 
-**Result: 12 of the 46 resolve, up from 6.** The six new are Swift's Attic, Mexic-Arte Museum,
-Capital One Café, 7-Eleven, Ruth's Chris and Velvet Taco. Of the 17 identified doors still
-unmatched: 6 name a business the catalogue does not hold at all (Which Wich, One Medical,
-SoulCycle, L&D ATX, and the Scarbrough and Robinson-Rosner buildings, which are buildings rather
-than storefront businesses); 5 have no catalogued place of that name within 40 m, including
-E-038's Kruger's at 60 m, refused rather than widened; 5 sit outside the day's anchored stretch
-with no street number of their own, so nothing places them and a name alone is not a match; and
-E-056's CVS draws three Google listings for one store ("CVS", "CVS Pharmacy", "CVS Photo") within
-17 m of each other, which is an ambiguity the gate is right to refuse.
+A bracket is weaker evidence than a street number and the code says so twice. The distance is
+measured to the whole segment, so a bracket admits a capsule of its span plus 40 m either side -
+a real lateral constraint, and almost no constraint along the route. Every match therefore records
+the span it leaned on, and a bracket wider than one downtown block (120 m; a block measures about
+113 m off the anchors themselves) is refused outright as `bracket_too_wide`. Nine of the walk's
+doors share a single 261 m bracket, which is a corridor and not a doorway.
+
+**Result: 10 of the 46 resolve, up from 6.** The four new are Swift's Attic, Capital One Cafe,
+7-Eleven and Velvet Taco. Of the 19 identified doors still unmatched: 6 name a business the
+catalogue does not hold at all (Which Wich, One Medical, SoulCycle, L&D ATX, and the Scarbrough
+and Robinson-Rosner buildings, which are buildings rather than storefront businesses); 4 have no
+catalogued place of that name within 40 m, including E-012's Ashton at 70 m; 5 sit outside the
+day's anchored stretch with no street number of their own, so nothing places them and a name
+alone is not a match; and E-056's CVS draws three Google listings for one store ("CVS", "CVS
+Pharmacy", "CVS Photo") within 17 m of each other, which is an ambiguity the gate is right to
+refuse. Three more - E-026's Mexic-Arte Museum, E-038's Kruger's and E-049's Ruth's Chris - are
+refused as `bracket_too_wide`. Each of those three had a single exact-name candidate beside its
+corridor; reading one street number off each door's photographs would convert all three into
+testable matches at no cost.
 
 One independent check worth recording: E-012's nearest candidate comes out at 70 m, the same
 distance #341 measured against a surveyed door coordinate that was never persisted. The geocoded

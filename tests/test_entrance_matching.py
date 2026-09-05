@@ -13,14 +13,19 @@ import pytest
 
 from frontdoor.entrance_matching import (
     DEFAULT_MATCH_DISTANCE_M,
+    MAX_BRACKET_SPAN_M,
+    UNMATCHED_REASONS,
     anchors_document,
+    apply_matches,
     build_anchors,
+    catalogue_places,
     coverage,
     door_anchor,
     match_entrances,
     name_candidates,
     walk_days,
 )
+from frontdoor.precatalogue import Enumeration, MapsCallCapError
 
 DAY = "2026-09-04"
 
@@ -185,11 +190,11 @@ def test_a_door_past_the_days_last_anchor_gets_no_bracket():
 def test_a_bracketed_door_matches_a_place_beside_the_stretch():
     entrances = {"E-026": identified("Mexic-Arte Museum")}
     # the bracket runs up Congress; the museum sits on it, a few metres off
-    anchors = {"E-024": anchor(30.2659, -97.74315),
-               "E-030": anchor(30.26768, -97.74249)}
-    entrances["E-024"] = identified("Corner", "327 Congress Ave")
+    anchors = {"E-024": anchor(30.26640, -97.74300),
+               "E-030": anchor(30.26730, -97.74265)}
+    entrances["E-024"] = identified("Corner", "419 Congress Ave")
     entrances["E-030"] = unidentified()
-    places = [catalogued("p1", "Mexic-Arte Museum", 30.26690, -97.74285)]
+    places = [catalogued("p1", "Mexic-Arte Museum", 30.26685, -97.74283)]
     days = {"E-024": DAY, "E-026": DAY, "E-030": DAY}
     results = match_entrances(entrances, places, anchors, days)
     assert results["E-026"]["place_id"] == "p1"
@@ -199,15 +204,70 @@ def test_a_bracketed_door_matches_a_place_beside_the_stretch():
 
 def test_a_bracketed_door_still_refuses_a_place_off_the_stretch():
     entrances = {"E-026": identified("Mexic-Arte Museum"),
-                 "E-024": identified("Corner", "327 Congress Ave"),
+                 "E-024": identified("Corner", "419 Congress Ave"),
                  "E-030": unidentified()}
-    anchors = {"E-024": anchor(30.2659, -97.74315),
-               "E-030": anchor(30.26768, -97.74249)}
+    anchors = {"E-024": anchor(30.26640, -97.74300),
+               "E-030": anchor(30.26730, -97.74265)}
     # two blocks west of the walked stretch
-    places = [catalogued("p1", "Mexic-Arte Museum", 30.26690, -97.74600)]
+    places = [catalogued("p1", "Mexic-Arte Museum", 30.26685, -97.74600)]
     days = {"E-024": DAY, "E-026": DAY, "E-030": DAY}
     results = match_entrances(entrances, places, anchors, days)
     assert results["E-026"]["unmatched_reason"] == "outside_match_distance"
+
+
+def test_a_bracket_wider_than_a_block_is_refused():
+    """The gate measures to the whole segment, so a 260 m bracket admits a
+    340 m corridor under a name that says 40 m. Nine of the walk's doors share
+    one such bracket; along it the distance gate does no work at all."""
+    entrances = {"E-049": identified("Ruth's Chris Steak House"),
+                 "E-037": identified("Hyatt", "721 Congress Ave"),
+                 "E-050": identified("Scarbrough", "522 Congress Ave")}
+    anchors = {"E-037": anchor(30.269652, -97.741761),
+               "E-050": anchor(30.267772, -97.743381)}
+    places = [catalogued("p1", "Ruth's Chris Steak House",
+                         30.26860, -97.74280)]
+    days = {"E-037": DAY, "E-049": DAY, "E-050": DAY}
+    results = match_entrances(entrances, places, anchors, days)
+    assert results["E-049"]["place_id"] is None
+    assert results["E-049"]["unmatched_reason"] == "bracket_too_wide"
+    assert "261 m apart" in results["E-049"]["detail"]
+
+
+def test_a_bracket_records_the_stretch_it_claimed():
+    """So a reviewer can weigh a 27 m distance against the segment it was
+    measured to, rather than reading it as 27 m from a point."""
+    entrances = {"E-026": identified("Mexic-Arte Museum"),
+                 "E-024": identified("Corner", "419 Congress Ave"),
+                 "E-030": unidentified()}
+    anchors = {"E-024": anchor(30.26640, -97.74300),
+               "E-030": anchor(30.26730, -97.74265)}
+    places = [catalogued("p1", "Mexic-Arte Museum", 30.26685, -97.74283)]
+    days = {"E-024": DAY, "E-026": DAY, "E-030": DAY}
+    how = match_entrances(entrances, places, anchors, days)["E-026"]["how"]
+    assert 100 < how["bracket_span_m"] < 120
+
+
+def test_a_geocoded_door_records_no_bracket_span():
+    entrances = {"E-020": identified("Swift's Attic", "315 Congress Ave")}
+    places = [catalogued("p1", "Swift's Attic", 30.2656 + NEAR, -97.7433)]
+    results = match_entrances(
+        entrances, places, {"E-020": anchor(30.2656, -97.7433)},
+        {"E-020": DAY})
+    assert results["E-020"]["how"]["bracket_span_m"] is None
+
+
+def test_a_candidate_that_cannot_be_measured_blocks_the_match():
+    """An untestable candidate has not lost the uniqueness gate, it dodged it.
+    Matching one of the others would be a guess about which one."""
+    entrances = {"E-056": identified("CVS", "500 Congress Ave")}
+    places = [catalogued("p1", "CVS", 30.2670 + NEAR, -97.7435),
+              {"place_id": "p2", "name": "CVS",
+               "location": {"lat": None, "lng": None}}]
+    results = match_entrances(
+        entrances, places, {"E-056": anchor(30.2670, -97.7435)},
+        {"E-056": DAY})
+    assert results["E-056"]["place_id"] is None
+    assert results["E-056"]["unmatched_reason"] == "ambiguous_candidates"
 
 
 # --- name gate --------------------------------------------------------------
@@ -310,6 +370,160 @@ def test_the_anchors_document_carries_its_odbl_attribution():
     assert "segregated" in document["segregation"]
 
 
+# --- the match CLI ----------------------------------------------------------
+
+
+def test_apply_matches_touches_only_the_place_and_its_audit_trail():
+    """#341 decided which business a door belongs to. This ticket decides
+    which catalogue row that business is, and nothing else."""
+    entrances = {"E-020": {"status": "identified", "name": "Swift's Attic",
+                           "address": "315 Congress Ave", "place_id": None,
+                           "confidence": "high", "evidence": "sign"}}
+    before = dict(entrances["E-020"])
+    apply_matches(entrances, {"E-020": {"place_id": "p1", "how": {"a": 1}}})
+    record = entrances["E-020"]
+    assert record["place_id"] == "p1"
+    assert record["place_match"] == {
+        "how": {"a": 1}, "unmatched_reason": None, "detail": None}
+    for field in ("status", "name", "address", "confidence", "evidence"):
+        assert record[field] == before[field]
+
+
+def test_catalogue_places_takes_names_from_the_live_sweep_for_id_only_rows():
+    """The rows this ticket added hold the place_id alone, so their display
+    fields exist only for as long as the sweep that resolved them."""
+    census = {"places": [
+        {"place_id": "old", "name": "Taverna",
+         "location": {"lat": 1, "lng": 2}},
+        {"place_id": "new", "sweeps": ["restaurant"]},
+    ]}
+    enumerated = [{"place_id": "new", "name": "Velvet Taco",
+                   "location": {"lat": 3, "lng": 4}, "sweeps": ["restaurant"]}]
+    by_id = {p["place_id"]: p for p in catalogue_places(census, enumerated)}
+    assert set(by_id) == {"old", "new"}
+    assert by_id["new"]["name"] == "Velvet Taco"
+
+
+def test_catalogue_places_drops_a_row_with_nothing_to_match_on():
+    assert catalogue_places({"places": [{"place_id": "x", "sweeps": []}]},
+                            []) == []
+
+
+def _match_fixture(tmp_path, monkeypatch):
+    """A tiny data/ tree the match CLI can run against, with no network."""
+    monkeypatch.chdir(tmp_path)
+    data = tmp_path / "data"
+    (data / "external").mkdir(parents=True)
+    (data / "sidecars").mkdir()
+    (data / "entrance_identification.json").write_text(json.dumps({
+        "_comment": "fixture",
+        "entrances": {
+            "E-020": identified("Swift's Attic", "315 Congress Ave"),
+            "E-027": unidentified(),
+        },
+    }), encoding="utf-8")
+    (data / "precatalogue_census.json").write_text(json.dumps({
+        "summary": {"area": "first"},
+        "places": [{"place_id": "known", "sweeps": ["restaurant"]}]}),
+        encoding="utf-8")
+    (data / "external" / "entrance_anchors.json").write_text(json.dumps({
+        "anchors": {"E-020": {"entrance_id": "E-020",
+                              "address": "315 Congress Ave",
+                              "lat": 30.26558, "lng": -97.743271}}}),
+        encoding="utf-8")
+    for index, entrance in enumerate(("E-020", "E-027")):
+        (data / "sidecars" / f"{entrance}-1.json").write_text(json.dumps({
+            "entrance_id": entrance,
+            "captured_at": f"2026-09-04T19:5{index}:00Z"}), encoding="utf-8")
+    return data
+
+
+def _sweep(monkeypatch, places, truncated_types=()):
+    from frontdoor import entrance_matching
+
+    blocks = tuple(dict.fromkeys(block for block, _ in truncated_types))
+    monkeypatch.setattr(
+        entrance_matching, "enumerate_places",
+        lambda area, key, counter, **kwargs: Enumeration(
+            places=tuple(places), truncated_blocks=blocks,
+            truncated_types=tuple(truncated_types)))
+
+
+def test_the_match_cli_writes_the_decision_and_extends_the_catalogue(
+        tmp_path, monkeypatch):
+    from frontdoor import entrance_matching
+
+    data = _match_fixture(tmp_path, monkeypatch)
+    monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "test-maps-key")
+    _sweep(monkeypatch, [
+        {"place_id": "known", "name": "Swift's Attic",
+         "location": {"lat": 30.26559, "lng": -97.743272},
+         "sweeps": ["restaurant"]},
+        {"place_id": "fresh", "name": "Somewhere Else",
+         "location": {"lat": 30.2660, "lng": -97.7430}, "sweeps": ["bar"]},
+    ], truncated_types=(("cell-a", "establishment"),))
+
+    assert entrance_matching.main(["match"]) == 0
+
+    written = json.loads(
+        (data / "entrance_identification.json").read_text(encoding="utf-8"))
+    assert written["entrances"]["E-020"]["place_id"] == "known"
+    assert written["entrances"]["E-027"]["place_match"][
+        "unmatched_reason"] == "not_identified"
+    census = json.loads(
+        (data / "precatalogue_census.json").read_text(encoding="utf-8"))
+    # the added row is identifier-only; the row already there is untouched
+    assert census["places"] == [
+        {"place_id": "known", "sweeps": ["restaurant"]},
+        {"place_id": "fresh", "sweeps": ["bar"]}]
+    assert census["previous_summaries"] == [{"area": "first"}]
+    assert census["summary"]["truncated_blocks"] == ["cell-a"]
+
+
+def test_the_match_cli_reports_that_the_sweep_was_cut_short(
+        tmp_path, monkeypatch, capsys):
+    """A "no catalogue entry" verdict is only as complete as the sweep behind
+    it, and a truncated sweep is a cut-off list, not a finished one."""
+    from frontdoor import entrance_matching
+
+    _match_fixture(tmp_path, monkeypatch)
+    monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "test-maps-key")
+    _sweep(monkeypatch, [], truncated_types=(("cell-a", "restaurant"),))
+    assert entrance_matching.main(["match"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["sweep_truncated_in"] == {"cell-a": ["restaurant"]}
+    assert report["resolved_to_a_place"] == 0
+
+
+def test_the_match_cli_keeps_what_the_calls_bought_when_the_cap_stops_it(
+        tmp_path, monkeypatch, capsys):
+    from frontdoor import entrance_matching
+
+    data = _match_fixture(tmp_path, monkeypatch)
+    monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "test-maps-key")
+
+    def cap_stop(area, key, counter, **kwargs):
+        raise MapsCallCapError("over the cap")
+
+    monkeypatch.setattr(entrance_matching, "enumerate_places", cap_stop)
+    assert entrance_matching.main(["match"]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert "MapsCallCapError" in report["sweep_stopped"]
+    written = json.loads(
+        (data / "entrance_identification.json").read_text(encoding="utf-8"))
+    assert written["entrances"]["E-020"]["place_id"] is None
+
+
+def test_the_match_cli_reports_a_missing_key_instead_of_a_traceback(
+        tmp_path, monkeypatch, capsys):
+    from frontdoor import entrance_matching
+
+    _match_fixture(tmp_path, monkeypatch)
+    monkeypatch.setenv("GOOGLE_MAPS_API_KEY", "")
+    assert entrance_matching.main(["match"]) == 1
+    assert "GOOGLE_MAPS_API_KEY" in capsys.readouterr().err
+
+
 # --- the committed artefacts ------------------------------------------------
 
 
@@ -334,6 +548,26 @@ def test_every_identified_entrance_either_has_a_place_or_says_why(
         else:
             assert match["unmatched_reason"], entrance_id
             assert match["detail"], entrance_id
+
+
+def test_every_recorded_reason_is_one_the_module_defines(repo_entrances):
+    """The reason vocabulary is what a reader of the file goes to; a verdict
+    outside it would be undocumented."""
+    for entrance_id, record in sorted(repo_entrances.items()):
+        reason = record["place_match"]["unmatched_reason"]
+        if reason is not None:
+            assert reason in UNMATCHED_REASONS, entrance_id
+
+
+def test_no_recorded_match_leans_on_a_bracket_wider_than_a_block(
+        repo_entrances):
+    """The distance gate measures to the whole bracket, so a wide one admits a
+    corridor rather than a doorway."""
+    for entrance_id, record in sorted(repo_entrances.items()):
+        how = (record.get("place_match") or {}).get("how")
+        span = (how or {}).get("bracket_span_m")
+        if span is not None:
+            assert span <= MAX_BRACKET_SPAN_M, entrance_id
 
 
 def test_a_recorded_match_stayed_inside_the_distance_gate(repo_entrances):

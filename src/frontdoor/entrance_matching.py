@@ -52,6 +52,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 import sys
 import time
@@ -66,11 +67,36 @@ from frontdoor.external_data import (
     _names_match,
     _normalize_name,
 )
+from frontdoor.precatalogue import (
+    CENSUS_FILENAME,
+    MapsCallCapError,
+    MapsCallCounter,
+    PrecatalogueError,
+    _merged_census,
+    _truncated_types_by_block,
+    _write_json,
+    enumerate_places,
+    load_api_key,
+    load_demo_area,
+)
 
 IDENTIFICATION_PATH = Path("data/entrance_identification.json")
 ANCHORS_PATH = Path("data/external/entrance_anchors.json")
 SIDECAR_DIR = Path("data/sidecars")
 WALK_AREA_CONFIG = Path(__file__).with_name("walk_area.json")
+
+#: The widest stretch of street a walk-order bracket may claim, in metres.
+#:
+#: A bracket says the door is somewhere between two anchored doors, and the
+#: distance gate then measures to that whole segment — so the region it admits
+#: is a capsule of the span plus 40 m either side, not a 40 m circle. That is a
+#: real lateral constraint (it excludes anything a block off the route) but it
+#: says almost nothing about position ALONG the route, and the longer the span
+#: the less it says. One downtown Austin block, measured off the anchors
+#: themselves, is about 113 m (315 to 721 Congress Avenue is 475 m over four
+#: blocks). A bracket wider than a block has stopped being a claim about where
+#: one door is, so it is refused rather than the gate quietly widened.
+MAX_BRACKET_SPAN_M = 120.0
 
 #: "Ste 200", "Suite 100", "Unit 3", "#4" — a floor, not a front door.
 SUITE_RE = re.compile(r"^(ste|suite|unit|#)\b", re.IGNORECASE)
@@ -98,7 +124,8 @@ UNMATCHED_REASONS = {
     "no_location_evidence": "no street number was read and no anchored door brackets this one in the day's walk; a name on its own is not a match",
     "no_catalogue_entry": "no catalogued place carries this business name",
     "outside_match_distance": "no catalogued place carrying this business name is within the map's match distance of the door",
-    "ambiguous_candidates": "more than one catalogued place passes both gates",
+    "ambiguous_candidates": "more than one catalogued place passes both gates, or one of them cannot be tested",
+    "bracket_too_wide": "the stretch of street this door is bracketed to is wider than a block, which is no longer a claim about where one door is",
     "place_claimed_by_another_entrance": "another entrance matched the same place, and a place cannot be two front doors",
 }
 
@@ -154,15 +181,17 @@ def anchored_locations(anchors):
             for entrance_id, anchor in anchors.items()}
 
 
-def door_anchor(entrance_id, located, days):
+def door_anchor(entrance_id, located, days, max_span_m=MAX_BRACKET_SPAN_M):
     """How far a candidate may be from this door, and from what.
 
-    Returns None when no evidence places the door at all.
+    Returns None when no evidence places the door at all, and a bracket
+    marked ``too_wide`` when the stretch between its ends is longer than
+    ``max_span_m`` — see that constant for why a wide bracket is not evidence.
     """
     if entrance_id in located:
         lat, lng = located[entrance_id]
         return {"kind": "address_geocode", "ends": [(lat, lng)],
-                "between": None}
+                "between": None, "span_m": 0.0, "too_wide": False}
     day = days.get(entrance_id)
     if day is None:
         return None
@@ -176,9 +205,13 @@ def door_anchor(entrance_id, located, days):
         # the last anchor, and widening the gate is exactly what AC-4 forbids.
         return None
     end_a, end_b = before[-1], after[0]
+    ends = [located[end_a], located[end_b]]
+    span_m = _haversine_m(*ends[0], *ends[1])
     return {"kind": "walk_order_bracket",
-            "ends": [located[end_a], located[end_b]],
-            "between": [end_a, end_b]}
+            "ends": ends,
+            "between": [end_a, end_b],
+            "span_m": round(span_m, 1),
+            "too_wide": span_m > max_span_m}
 
 
 def anchor_distance_m(anchor, lat, lng):
@@ -246,15 +279,24 @@ def _match_one(entrance_id, record, places, located, days, max_distance_m):
         return _unmatched("no_location_evidence",
                           f"{len(candidates)} name candidate(s) in the "
                           "catalogue, none of them testable")
+    if anchor["too_wide"]:
+        return _unmatched(
+            "bracket_too_wide",
+            f"bracketed by {' and '.join(anchor['between'])}, "
+            f"{anchor['span_m']:.0f} m apart, over the "
+            f"{MAX_BRACKET_SPAN_M:.0f} m a bracket may claim")
     measured = []
+    untestable = [p for p in candidates if _place_location(p) is None]
+    if untestable:
+        # A candidate we cannot measure has not lost the uniqueness gate, it
+        # has dodged it. Matching one of the others would be a guess.
+        return _unmatched(
+            "ambiguous_candidates",
+            f"{len(untestable)} name candidate(s) carry no usable location, "
+            "so no candidate can be shown to be the only one")
     for place in candidates:
-        location = _place_location(place)
-        if location is None:
-            continue
-        measured.append((anchor_distance_m(anchor, *location), place))
-    if not measured:
-        return _unmatched("no_catalogue_entry",
-                          "name candidates carry no usable location")
+        measured.append((anchor_distance_m(anchor, *_place_location(place)),
+                         place))
     measured.sort(key=lambda pair: pair[0])
     near = [pair for pair in measured if pair[0] <= max_distance_m]
     if not near:
@@ -272,6 +314,7 @@ def _match_one(entrance_id, record, places, located, days, max_distance_m):
         "how": {
             "anchor": anchor["kind"],
             "anchor_between": anchor["between"],
+            "bracket_span_m": anchor["span_m"] or None,
             "distance_m": round(distance_m, 1),
             "matched_name": place["name"],
         },
@@ -304,8 +347,9 @@ def _drop_places_two_doors_claim(results):
             continue
         standing = [e for e in entrance_ids
                     if results[e]["how"]["anchor"] == "identification"]
-        losers = entrance_ids if len(standing) != 1 else [
-            e for e in entrance_ids if e not in standing]
+        # Only this pass's matches may lose. Two standing identifications on
+        # one place would be #341's to resolve, not ours to unpick.
+        losers = [e for e in entrance_ids if e not in standing]
         for entrance_id in losers:
             results[entrance_id] = _unmatched(
                 "place_claimed_by_another_entrance",
@@ -353,12 +397,18 @@ def _geocodable(address):
 
     A suite number names a floor inside the building, not a doorway on the
     street, and Nominatim answers nothing at all for an address carrying one.
+
+    The city is appended when no *component* is the city. Testing the whole
+    string would let a street name carrying it ("100 Austin Hwy") through
+    uncitied, and a confidently-wrong door in another town is worse than no
+    door at all -- it is what the whole distance gate then measures from.
     """
     parts = [part.strip() for part in address.split(",")]
-    parts = [part for part in parts
-             if not SUITE_RE.match(part)]
+    parts = [part for part in parts if not SUITE_RE.match(part)]
     query = ", ".join(parts)
-    return query if "Austin" in query else f"{query}, Austin, TX"
+    if any(part.casefold().startswith("austin") for part in parts[1:]):
+        return query
+    return f"{query}, Austin, TX"
 
 
 def build_anchors(entrances, fetch_json=_nominatim_get, sleep=time.sleep):
@@ -417,6 +467,21 @@ def load_anchors(path=ANCHORS_PATH):
     return json.loads(Path(path).read_text(encoding="utf-8"))["anchors"]
 
 
+def _write_identification(path, document):
+    """Atomic, and in the file's own shape.
+
+    Temp-then-replace for the same reason precatalogue._write_json does it:
+    this file holds #341's field work and #333's input, and a plain write
+    truncates before it writes. Its own formatting (indent 2, real accented
+    characters, insertion order) is preserved so the diff shows the decision
+    and not a reformat.
+    """
+    tmp = path.with_name(path.name + ".tmp")
+    tmp.write_text(json.dumps(document, indent=2, ensure_ascii=False) + "\n",
+                   encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def catalogue_places(census, enumerated):
     """The candidate set: catalogued rows that can actually be compared.
 
@@ -453,31 +518,55 @@ def apply_matches(entrances, results):
     return entrances
 
 
-def _run_match(out_path):
-    from frontdoor.precatalogue import (
-        CENSUS_FILENAME, MapsCallCounter, _merged_census, _write_json,
-        enumerate_places, load_api_key, load_demo_area,
-    )
+def _run_match(out_path, out_dir=Path("data"), *, env=None,
+               fetch_json=None, sleep=None):
+    """Sweep the walked blocks and decide a place for every entrance.
 
+    One pass, because the rows this ticket adds to the catalogue hold the
+    place_id alone: the names the match compares against exist only for as
+    long as this process runs. A cap stop is reported rather than raised, the
+    same way run_census reports one — the calls were still paid for.
+    """
     document = json.loads(IDENTIFICATION_PATH.read_text(encoding="utf-8"))
     entrances = document["entrances"]
-    census_path = Path("data") / CENSUS_FILENAME
+    census_path = Path(out_dir) / CENSUS_FILENAME
     census = json.loads(census_path.read_text(encoding="utf-8"))
 
     area = load_demo_area(WALK_AREA_CONFIG)
     counter = MapsCallCounter(area.max_maps_calls)
-    enumeration = enumerate_places(area, load_api_key(), counter)
+    kwargs = {}
+    if fetch_json is not None:
+        kwargs["fetch_json"] = fetch_json
+    if sleep is not None:
+        kwargs["sleep"] = sleep
+    stopped = None
+    places, truncated_blocks, truncated_types = (), (), ()
+    try:
+        enumeration = enumerate_places(
+            area, load_api_key(env), counter, **kwargs)
+        places = enumeration.places
+        truncated_blocks = enumeration.truncated_blocks
+        truncated_types = enumeration.truncated_types
+    except MapsCallCapError as exc:
+        # Match against what the calls did buy; the report says it was partial.
+        stopped = f"{type(exc).__name__}: {exc}"
+
     # Keep the committed catalogue a superset of what this pass matched
     # against, still identifier-only.
-    merged = _merged_census(census, enumeration.places)
+    merged = _merged_census(census, places)
     if merged["added"]:
         census = {
             "summary": {
                 "area": area.name,
                 "census": True,
                 "match_pass": True,
-                "businesses_enumerated": len(enumeration.places),
-                "maps_api_calls": counter.total,
+                "sweep_types": list(area.sweep_types),
+                "businesses_enumerated": len(places),
+                "maps_api_calls": {**counter.counts, "total": counter.total},
+                "maps_call_cap": area.max_maps_calls,
+                "truncated_blocks": list(truncated_blocks),
+                "truncated_types": _truncated_types_by_block(truncated_types),
+                "stopped": stopped,
                 "merged_into_existing": {
                     "places_added": len(merged["added"]),
                     "places_already_listed": merged["already_listed"],
@@ -490,15 +579,17 @@ def _run_match(out_path):
         _write_json(census_path, census)
 
     results = match_entrances(
-        entrances, catalogue_places(census, enumeration.places),
+        entrances, catalogue_places(census, places),
         load_anchors(), walk_days())
     document["entrances"] = apply_matches(entrances, results)
-    out_path.write_text(
-        json.dumps(document, indent=2, ensure_ascii=False) + "\n",
-        encoding="utf-8")
+    _write_identification(out_path, document)
     report = coverage(results)
     report["maps_api_calls"] = counter.total
     report["catalogue_rows_added"] = len(merged["added"])
+    # A "no catalogue entry" verdict is only as complete as the sweep behind
+    # it, and a truncated sweep is a cut-off list, not a finished one.
+    report["sweep_truncated_in"] = _truncated_types_by_block(truncated_types)
+    report["sweep_stopped"] = stopped
     print(json.dumps(report, indent=2))
     return 0
 
@@ -517,8 +608,17 @@ def main(argv=None):
         print(f"{document['record_count']} anchors -> {out_path}")
         return 0
     if args[:1] == ["match"] and len(args) <= 2:
-        return _run_match(
-            Path(args[1]) if len(args) == 2 else IDENTIFICATION_PATH)
+        # The key lives in .env for every other entry point that needs one;
+        # without this the runbook produces a missing-key error that looks
+        # like a credential mistake rather than a missing loader (#158).
+        from frontdoor.storage import _load_dotenv_once
+        _load_dotenv_once()
+        try:
+            return _run_match(
+                Path(args[1]) if len(args) == 2 else IDENTIFICATION_PATH)
+        except PrecatalogueError as exc:
+            print(exc, file=sys.stderr)
+            return 1
     print("usage: python -m frontdoor.entrance_matching anchors [out_path]\n"
           "       python -m frontdoor.entrance_matching match [out_path]",
           file=sys.stderr)

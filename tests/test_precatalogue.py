@@ -1093,17 +1093,30 @@ def test_a_merged_row_stores_the_identifier_and_nothing_else(tmp_path, env):
     assert census["places"] == [{"place_id": "p9", "sweeps": ["restaurant"]}]
 
 
-def test_merge_without_an_existing_census_writes_the_plain_census(tmp_path, env):
+def test_merge_without_an_existing_census_is_refused_before_any_call(tmp_path, env):
+    """Falling back to a plain write would silently turn "extend the
+    catalogue, identifier-only" into "create a new one with Places names in
+    it" - and it would do it after paying for the sweep."""
     fetcher = FakeFetcher(places_pages=[
         {"status": "OK", "results": [place("p1")]},
     ])
     area = load_demo_area(write_config(tmp_path, place_types=["restaurant"]))
-    summary = run_census(area=area, out_dir=tmp_path / "out", merge=True,
-                         fetch_json=fetcher.fetch_json, sleep=FakeClock())
-    assert "merged_into_existing" not in summary
-    census = json.loads(
-        (tmp_path / "out" / CENSUS_FILENAME).read_text(encoding="utf-8"))
-    assert "previous_summaries" not in census
+    with pytest.raises(PrecatalogueError, match="nothing to extend"):
+        run_census(area=area, out_dir=tmp_path / "out", merge=True,
+                   fetch_json=fetcher.fetch_json, sleep=FakeClock())
+    assert fetcher.calls == []
+    assert not (tmp_path / "out" / CENSUS_FILENAME).exists()
+
+
+def test_cli_an_empty_config_value_is_refused(tmp_path, capsys, monkeypatch):
+    """--config=$CFG with CFG unset would otherwise sweep the committed demo
+    area at real cost and, with --merge, write it into the catalogue."""
+    from frontdoor import precatalogue
+
+    monkeypatch.setattr(precatalogue, "run_census",
+                        lambda **kwargs: pytest.fail("must not sweep"))
+    assert precatalogue.main(["run", "--census", "--config=", "--merge"]) == 2
+    assert "--config" in capsys.readouterr().err
 
 
 def test_cli_merge_and_config_flags_reach_the_census(tmp_path, monkeypatch):
