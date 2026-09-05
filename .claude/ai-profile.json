@@ -1,0 +1,21 @@
+{
+  "language": "python@3.11",
+  "packageManager": "pip",
+  "pipelineDir": "src/frontdoor",
+  "promptsDir": "src/frontdoor",
+  "dataDir": "data",
+  "corpusDir": "reports",
+  "gates": {
+    "typecheck": ".venv/bin/python -m compileall -q src tests",
+    "lint": "git diff --check",
+    "test": ".venv/bin/pytest -q"
+  },
+  "model": {
+    "id": "claude-sonnet-5",
+    "surface": "Anthropic Messages API synchronous messages.create"
+  },
+  "maxSpendUsd": 20.0,
+  "subskills": [
+    "python"
+  ]
+}

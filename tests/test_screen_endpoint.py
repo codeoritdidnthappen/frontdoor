@@ -5,8 +5,11 @@ constructs an anthropic client or needs an API key.
 """
 
 import io
+import json
+from importlib import resources
 
 import pytest
+from jsonschema import Draft202012Validator
 
 from frontdoor.screening import CRITERIA_KEYS, ImageAssessment, ScreeningConfig
 from frontdoor_server.app import create_app
@@ -15,6 +18,13 @@ from frontdoor_server.screen_view import ENGINE_KEY, MAX_IMAGES, WORDING
 # Known assignments under the committed seed (pinned in test_split.py):
 DEV_ID = "E-001"
 SEALED_ID = "E-014"
+
+ERROR_SCHEMA = json.loads(
+    resources.files("frontdoor_server")
+    .joinpath("measure_error.schema.json")
+    .read_text(encoding="utf-8")
+)
+ERROR_VALIDATOR = Draft202012Validator(ERROR_SCHEMA)
 
 
 def ok_assessment(verdict="present", face_check="clear"):
@@ -121,7 +131,7 @@ def test_single_image_has_no_aggregate():
     assert "aggregate" not in body
 
 
-def test_multi_image_gets_one_integrated_assessment_and_aggregate():
+def test_tick_245_ac_1_multi_image_gets_one_integrated_assessment_and_aggregate():
     """N views are ONE engine call now, and the aggregate carries the
     integrated verdicts with flip_rate and counts null - no cross-view
     comparison was made, so there is no flip rate to report, and a fabricated
@@ -182,6 +192,7 @@ def assert_error_shape(response, status, token):
     assert response.status_code == status
     assert response.headers["Content-Type"].startswith("application/json")
     body = response.get_json()
+    ERROR_VALIDATOR.validate(body)
     assert body["error"] == token
     assert body["detail"].strip()
     return body
@@ -236,6 +247,7 @@ def test_a_failed_integrated_assessment_returns_502_naming_the_failure():
     response = post_screen(make_client(engine), [image_part("a.jpg"), image_part("b.jpg")])
     body = assert_error_shape(response, 502, "screening engine failure")
     assert "refused" in body["detail"]
+    assert isinstance(body["latency_ms"], int)
 
 
 def test_an_engine_exception_returns_502_named_not_a_bare_500():
@@ -244,6 +256,7 @@ def test_an_engine_exception_returns_502_named_not_a_bare_500():
     body = assert_error_shape(response, 502, "screening engine failure")
     assert "RuntimeError" in body["detail"]
     assert "spend cap breached" in body["detail"]
+    assert isinstance(body["latency_ms"], int)
 
 
 def test_missing_api_key_returns_503_with_a_clear_message(monkeypatch):

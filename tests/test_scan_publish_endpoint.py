@@ -24,7 +24,9 @@ from frontdoor_server.app import create_app
 from frontdoor_server.scan_view import STORE_KEY
 from frontdoor_server.screen_view import ENGINE_KEY
 from tests.test_screen_endpoint import (
+    ERROR_VALIDATOR,
     FakeEngine,
+    errored_assessment,
     image_part,
     ok_assessment,
     real_jpeg,
@@ -179,6 +181,24 @@ def test_publish_response_carries_the_same_assessment_contract_as_screen(
         assert body["assessment"]["criteria"][key]["verdict"] == "present"
     wording = body["wording"].lower()
     assert "not measurements" in wording and "not compliance" in wording
+
+
+@pytest.mark.parametrize(
+    "engine",
+    [
+        FakeEngine(assessment=errored_assessment("model refused the request")),
+        FakeEngine(raises=RuntimeError("spend cap breached")),
+    ],
+)
+def test_tick_245_ac_7_publish_model_failures_record_latency(engine, scans_path):
+    response = post_publish(
+        make_client(engine=engine, store=FakeStore()), [image_part()]
+    )
+    assert response.status_code == 502
+    body = response.get_json()
+    ERROR_VALIDATOR.validate(body)
+    assert body["error"] == "screening engine failure"
+    assert isinstance(body["latency_ms"], int)
 
 
 # --- quarantined frames are NEVER persisted ----------------------------------

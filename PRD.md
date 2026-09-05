@@ -170,7 +170,8 @@ before the sealed run — an unfrozen threshold is a dial fitted to the test set
 - **Ground truth:** ~~digital caliper to ±0.01" on threshold rise, recorded per entrance (D-003)~~.
   **Superseded 2026-09-02 by D-036: no caliper.** Ground truth is the capturing operator's
   **presence labels** — ramp/bevel, handrails, accessible hardware, signage — recorded by James
-  from his original photos and recollection (#168). Because the workflow landed after capture
+  from his original photos and recollection (#302), using the local workflow built by #168.
+  Because the workflow landed after capture
   closeout, these are retrospective labels, not capture-time or same-day observations. No
   instrument is used, and no threshold-rise measurement is taken.
 - **Depth record:** app captures on James's iPhone 17 Pro receive relative stereo disparity and

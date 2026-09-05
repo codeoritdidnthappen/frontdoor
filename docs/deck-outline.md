@@ -104,7 +104,7 @@ per-criterion verdicts) and answer "how do we know you didn't peek?" on the same
 **Content:**
 - Capture: 5-6 views per entrance (head-on, both obliques, near, far, hardware close-up),
   1x lens, no crop, condition tags recorded at capture. Source: docs/capture-protocol.md.
-- Screening — **one integrated model call per entrance**, not per photo: all 5-6 views go into
+- Screening — **one integrated model call per entrance**, not per photo: all eligible 5-7 views go into
   a single call that weighs them together, so the one oblique frame that shows a ramp's riser
   informs the verdict instead of being outvoted by frontal frames that hide it. Offline eval on
   the 12-entrance pilot set: per-image majority voting amplifies shared camera-position blind

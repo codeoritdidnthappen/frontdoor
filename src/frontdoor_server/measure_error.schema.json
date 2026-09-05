@@ -56,6 +56,11 @@
       "type": "string",
       "pattern": "\\S",
       "description": "JSONPath of the offending sidecar field when validation failed. Absent when the failure is not a field error."
+    },
+    "latency_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Elapsed model-attempt time in milliseconds. Present on screening-engine responses after a model call was attempted; absent on failures rejected before that boundary."
     }
   },
   "required": [

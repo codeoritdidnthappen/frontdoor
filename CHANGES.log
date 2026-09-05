@@ -1240,6 +1240,27 @@ sidecar, upload request, or database, and image upload never waits for it.
 
 James enters the labels through a loopback-only button interface on this Mac. It reads and
 hash-verifies locally supplied originals, including the photos James already holds for sealed
-entrances; it never reads R2 and never shows model output. The blank 53-by-4 template lands with
-the workflow, but #168 remains open until James has reviewed every entrance and the completion
-check passes.
+entrances; it never reads R2 and never shows model output. The blank 53-by-4 template landed with
+the workflow in #168. That implementation ticket is closed; #302 separately tracks James reviewing
+every entrance and passing the completion check.
+
+## 2026-09-04 — Freeze the current screening-engine contract (TICK-245, #167)
+
+## D-043  Product screening is integrated; per-image voting is evaluation-only
+
+The product sends all submitted entrance views in one synchronous Anthropic Messages API call and
+returns one integrated result for the four presence criteria. The evaluation-only path retains one
+call per image, majority aggregation, and measured flip rates across the eligible 5-7-view corpus;
+integrated results must not fabricate per-image counts or flip statistics.
+
+The production and evaluation model is fixed at `claude-sonnet-5`. Reviewable system, single-view,
+and integrated instructions live in the committed `src/frontdoor/screening_prompts.json` resource
+and are loaded at call time. A successful reply contains exactly the four criteria; every verdict,
+integer confidence, and short single-line evidence field is validated as a unit, so malformed
+output becomes a recorded error rather than a partial result. The face check remains a separate,
+fail-closed privacy audit and never joins the accessibility aggregate.
+
+Spend is reserved before a model call: the public demo retains its $1 run cap and evaluation its
+$20 cap. Automated verification uses injected clients and spends $0. Latency is recorded and the
+evaluation report computes p95, while the paid observed-latency result remains owned by #62.
+Human ground-truth completion remains owned by #302.

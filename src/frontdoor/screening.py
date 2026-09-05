@@ -2,7 +2,7 @@
 
 Two modes. Per-image: one model call per photo assesses which accessibility
 features are VISIBLE - ramp or beveled threshold, handrails, accessible door
-hardware, accessibility signage - and per entrance the 5-6 views are
+hardware, accessibility signage - and per entrance the eligible 5-7 views are
 aggregated into a majority verdict per criterion with the flip-rate reported
 alongside. Integrated (preferred): ALL of an entrance's views go into ONE
 model call that weighs them together, so the one oblique frame that shows a
@@ -37,6 +37,7 @@ import threading
 import time
 from collections import Counter
 from dataclasses import dataclass
+from importlib import resources
 
 import anthropic
 
@@ -44,31 +45,12 @@ from frontdoor.split import assign_split, canonical_entrance_id
 
 logger = logging.getLogger(__name__)
 
-# Criterion descriptions carry the decision rules that error adjudication on
-# the pilot set showed the model needs spelled out: where ramps actually sit,
-# what a same-tone platform hides from a frontal camera, and which hardware
-# look-alikes are NOT accessible hardware.
-CRITERIA = (
-    ("ramp_or_bevel",
-     "A ramp (permanent or portable) or a beveled threshold serving the "
-     "entrance is visible. Ramps often sit off-axis at the side of the "
-     "entrance, may be surfaced in brick or stone like the surroundings, and "
-     "their railings can resemble fencing. Check the platform edges in every "
-     "view: a raised platform in the same tone as the sidewalk hides its step "
-     "when photographed from on top of it, so only commit to a verdict when a "
-     "view actually shows the ground plane at the entrance"),
-    ("handrails",
-     "Handrails on any steps or ramp serving the entrance"),
-    ("accessible_door_hardware",
-     "Door hardware operable with a closed fist: a lever handle, a push bar, "
-     "or a loop/D pull that stands off the door surface. Flat push plates, "
-     "round knobs, and latch brackets are NOT accessible hardware"),
-    ("accessibility_signage",
-     "International Symbol of Accessibility or directional accessibility "
-     "signage visible"),
+CRITERIA_KEYS = (
+    "ramp_or_bevel",
+    "handrails",
+    "accessible_door_hardware",
+    "accessibility_signage",
 )
-
-CRITERIA_KEYS = tuple(key for key, _ in CRITERIA)
 
 ALLOWED_VERDICTS = ("present", "absent", "not_visible")
 
@@ -90,26 +72,11 @@ FACE_CHECK_ANSWERS = ("clear", "face_visible")
 #: only an explicit "clear" passes the privacy gate.
 FACE_CHECK_UNKNOWN = "unknown"
 FACE_CHECK_VALUES = FACE_CHECK_ANSWERS + (FACE_CHECK_UNKNOWN,)
-FACE_CHECK_QUESTION = (
-    "After the automatic blurring already applied to this image, is any "
-    "identifiable human face still visible anywhere - including reflections "
-    "in glass and people seen through windows? Answer face_visible if any "
-    "face could be recognized, clear otherwise."
-)
-
 # Tie-break order for the majority verdict: most conservative first. A tie
 # never invents certainty, and not_visible stays distinct from absent.
 _CONSERVATIVE_ORDER = ("not_visible", "absent", "present")
 
-SYSTEM_PROMPT = """\
-You are the vision screening engine for frontdoor. You assess ONLY what is
-visible in a photo of a building entrance. You never guess measurements:
-slopes, widths, and heights are not assessable from a photo, and you never
-state compliance or legal conclusions of any kind. Your job is presence or
-absence of visible features. Be conservative: if a feature is not clearly
-visible in frame, answer not_visible rather than absent - not_visible and
-absent are different claims and must never be merged.
-Respond with ONLY a JSON object - no prose, no markdown fences."""
+PROMPT_RESOURCE = "screening_prompts.json"
 
 
 class ScreeningError(ValueError):
@@ -176,66 +143,42 @@ class EntranceScreening:
     mode: str = "per_image"
 
 
-def build_prompt():
-    lines = [
-        "Assess this entrance photo against the criteria below.",
-        "For each criterion return: verdict ('present', 'absent', or "
-        "'not_visible'), confidence (0-100), evidence (one short phrase "
-        "describing what you see in THIS image).",
-        "Criteria:",
-    ]
-    for key, desc in CRITERIA:
-        lines.append(f"- {key}: {desc}")
-    lines.append(
-        "Additionally answer one privacy check, which is not an "
-        "accessibility criterion:"
-    )
-    lines.append(f"- {FACE_CHECK_KEY}: {FACE_CHECK_QUESTION}")
-    lines.append(
-        'Return exactly this JSON shape: {"criteria": {"<key>": '
-        '{"verdict": "...", "confidence": 0, "evidence": "..."}}, '
-        '"face_check": "clear" or "face_visible"}'
-    )
-    return "\n".join(lines)
+def _prompt(name: str, **values: object) -> str:
+    """Load one reviewable prompt from the packaged file at call time."""
+    try:
+        raw = json.loads(
+            resources.files("frontdoor")
+            .joinpath(PROMPT_RESOURCE)
+            .read_text(encoding="utf-8")
+        )
+        template = raw[name]
+    except (OSError, json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise ScreeningError(f"screening prompt {name!r} could not be loaded") from exc
+    if not isinstance(template, str) or not template.strip():
+        raise ScreeningError(f"screening prompt {name!r} is empty or not text")
+    rendered = template
+    for key, value in values.items():
+        marker = "{" + key + "}"
+        if marker not in rendered:
+            raise ScreeningError(f"screening prompt {name!r} has no {marker} placeholder")
+        rendered = rendered.replace(marker, str(value))
+    return rendered
 
 
-def build_integrated_prompt(view_count):
+def build_prompt() -> str:
+    return _prompt("single_view")
+
+
+def build_integrated_prompt(view_count: int) -> str:
     """The multi-view prompt: one integrated verdict per criterion.
 
     The instruction to trust the view that shows the relevant area is the
     point of the mode - it is how a single oblique frame showing a riser or a
     side ramp beats the frontal frames that cannot see it.
     """
-    lines = [
-        f"The {view_count} photos above are different views of the SAME "
-        "entrance. Integrate ALL views into ONE checklist result for the "
-        "entrance.",
-        "A feature clearly visible in ANY view is visible. When views appear "
-        "to disagree, trust the view that actually shows the relevant area - "
-        "for example, only a view that shows the ground plane can settle "
-        "whether a platform is raised, and an object that merely overlaps the "
-        "doorway from an oblique angle is not blocking the path.",
-        "For each criterion return: verdict ('present', 'absent', or "
-        "'not_visible'), confidence (0-100), evidence (one short phrase "
-        "describing what you see and, when it matters, which view shows it).",
-        "Criteria:",
-    ]
-    for key, desc in CRITERIA:
-        lines.append(f"- {key}: {desc}")
-    lines.append(
-        "Additionally answer one privacy check, which is not an "
-        "accessibility criterion and covers ALL the views together:"
-    )
-    lines.append(
-        f"- {FACE_CHECK_KEY}: {FACE_CHECK_QUESTION} Answer face_visible if "
-        "ANY view still shows one."
-    )
-    lines.append(
-        'Return exactly this JSON shape: {"criteria": {"<key>": '
-        '{"verdict": "...", "confidence": 0, "evidence": "..."}}, '
-        '"face_check": "clear" or "face_visible"}'
-    )
-    return "\n".join(lines)
+    if view_count < 1:
+        raise ScreeningError("integrated prompt needs at least one view")
+    return _prompt("integrated", view_count=view_count)
 
 
 def parse_json_response(text):
@@ -249,21 +192,38 @@ def parse_json_response(text):
         raise ScreeningError(f"response is not valid JSON: {exc}") from exc
 
 
-def validate_verdicts(parsed):
-    """Normalize the criteria block; flag out-of-vocabulary verdicts loudly."""
+def validate_verdicts(parsed: object) -> dict[str, dict[str, object]]:
+    """Return the four valid criteria or reject the whole model response."""
+    if not isinstance(parsed, dict):
+        raise ScreeningError("model response must be a JSON object")
+    crit = parsed.get("criteria")
+    if not isinstance(crit, dict) or set(crit) != set(CRITERIA_KEYS):
+        raise ScreeningError("model response must contain exactly the four criteria")
     out = {}
-    crit = parsed.get("criteria", {})
     for key in CRITERIA_KEYS:
-        entry = crit.get(key, {})
+        entry = crit[key]
         if not isinstance(entry, dict):
-            entry = {}
+            raise ScreeningError(f"criterion {key} must be an object")
         verdict = str(entry.get("verdict", "")).strip().lower()
         if verdict not in ALLOWED_VERDICTS:
-            verdict = f"INVALID:{verdict or 'missing'}"
+            raise ScreeningError(f"criterion {key} has invalid verdict {verdict!r}")
+        confidence = entry.get("confidence")
+        if isinstance(confidence, bool) or not isinstance(confidence, int):
+            raise ScreeningError(f"criterion {key} confidence must be an integer")
+        if not 0 <= confidence <= 100:
+            raise ScreeningError(f"criterion {key} confidence must be from 0 through 100")
+        evidence = entry.get("evidence")
+        if not isinstance(evidence, str) or not evidence.strip():
+            raise ScreeningError(f"criterion {key} evidence must be non-empty text")
+        evidence = evidence.strip()
+        if "\n" in evidence or "\r" in evidence or len(evidence) > 200:
+            raise ScreeningError(
+                f"criterion {key} evidence must be one line of at most 200 characters"
+            )
         out[key] = {
             "verdict": verdict,
-            "confidence": entry.get("confidence", ""),
-            "evidence": str(entry.get("evidence", ""))[:200],
+            "confidence": confidence,
+            "evidence": evidence,
         }
     return out
 
@@ -392,7 +352,7 @@ class ScreeningEngine:
             response = self._get_client().messages.create(
                 model=self.config.model,
                 max_tokens=self.config.max_tokens,
-                system=SYSTEM_PROMPT,
+                system=_prompt("system"),
                 messages=[{"role": "user", "content": content}],
             )
             latency = time.perf_counter() - t0
@@ -442,6 +402,10 @@ class ScreeningEngine:
             raise ScreeningError("assess_images_integrated needs at least one image")
         if media_types is None:
             media_types = ["image/jpeg"] * len(images)
+        if len(media_types) != len(images):
+            raise ScreeningError(
+                "media_types must contain exactly one value for every image"
+            )
         cost = self.config.usd_per_image * len(images)
         with self._lock:
             self._check_spend_cap(cost)
