@@ -130,3 +130,37 @@ question of contamination open, and the map can wait for the answer.
 - Presenting a post-hoc sealed finding as confirmatory.
 - Changing the pre-registered success criterion. Amendments are logged as amendments.
 - Practicing `--include-sealed` on any earlier day.
+
+## Where the images come from (TICK-342, #342)
+
+The run needs the capture photographs. There are two ways to give it them, and the choice is
+made with one flag.
+
+**From R2, the default.** Nothing to pass. This is the committed design — `data/STORAGE.md`:
+*"Bytes live here; records live in git"* — and it is what #23's release artifact needs.
+
+**From a local directory**, when the bytes are on the machine running the evaluation and not yet
+in the bucket:
+
+```sh
+python -m frontdoor.screening_eval --manifest data/manifest.csv \
+    --labels data/labels.csv --out <dir> --images /path/to/photographs
+```
+
+Each capture is located by **its own sidecar's `image.path`**, not by guessing at filenames, so
+whatever layout the photographs are already in is the layout that works.
+
+Three things hold either way:
+
+- **The manifest still decides what the bytes must be.** Every capture is hashed and compared to
+  `image_sha256`; a directory holding different pixels fails the run rather than quietly scoring
+  something else.
+- **The seal is enforced on both paths.** A sealed capture is refused unless the run is the
+  audited `--include-sealed` one. This is not inherited from the storage layer — `DatasetLoader`
+  hands an injected reader the bytes before `storage.get` is reached, so the local reader refuses
+  sealed captures itself.
+- **The pre-flight checks whatever source you chose**, before the audit line, and its refusal names
+  that source. A missing file says the directory; a missing object says the bucket.
+
+`--images` removes the upload from the evaluation's critical path. It does not replace it: the
+dataset should still reach R2.
