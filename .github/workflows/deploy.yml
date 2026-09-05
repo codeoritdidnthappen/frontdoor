@@ -59,6 +59,34 @@ jobs:
             fi
           done
 
+      # A deploy that cannot store a photograph looks identical from outside to
+      # one that can, right up until a published scan quietly loses its image.
+      # That has happened on this project once already, so the run says it.
+      - name: Report what the deployment can actually do
+        run: |
+          set -e
+          body=$(curl -sS --max-time 30 --retry 3 --retry-delay 5 --retry-all-errors             https://frontdoor-measure.fly.dev/ready)
+          echo "$body"
+          degraded=$(printf '%s' "$body" | python3 -c             'import json,sys; print(" ".join(json.load(sys.stdin)["degraded"]))')
+          {
+            echo "### Readiness"
+            echo
+            if [ -z "$degraded" ]; then
+              echo "All subsystems configured."
+            else
+              echo "Degraded: $degraded"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          case " $degraded " in
+            *" photo_storage "*)
+              echo "::warning::Photo storage is not configured. Scans will be assessed and published, but their photographs will NOT persist." ;;
+          esac
+          case " $degraded " in
+            *" screening "*)
+              echo "::error::The model key is not set. No scan can be assessed; the app is not usable."
+              exit 1 ;;
+          esac
+
       - name: Record what was deployed
         if: always()
         run: |
