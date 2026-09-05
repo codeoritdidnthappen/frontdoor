@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
 from tempfile import NamedTemporaryFile
+from threading import Lock
 from typing import Mapping, Sequence
 
 from frontdoor import seal_audit
@@ -53,6 +54,13 @@ class LabelError(ValueError):
 
 class SealedLabelError(LabelError):
     """Raised when sealed-split labels are requested outside the audited path."""
+
+
+class LabelConflict(LabelError):
+    """Raised when an accepted future-capture label is changed."""
+
+
+_future_label_write_lock = Lock()
 
 
 @dataclass(frozen=True)
@@ -227,6 +235,66 @@ def save_entrance_labels(
             }
         updated.append(row)
     _atomic_write_sheet(path, updated)
+
+
+def append_future_entrance_labels(
+    path: Path,
+    entrance_id: str,
+    answers: Mapping[str, str],
+    *,
+    labeled_by: str,
+    labeled_at: date,
+) -> bool:
+    """Append one immutable four-row future-capture label atomically.
+
+    Returns ``True`` for a new record and ``False`` for an identical retry.
+    The deployed server is one gunicorn process with two threads, so this
+    process-wide lock serializes the complete read/compare/replace transaction.
+    """
+    canonical = _require_canonical(entrance_id, "submission")
+    if set(answers) != set(CRITERIA_KEYS):
+        raise LabelError("answers must contain each screening criterion exactly once")
+    allowed = {*ALLOWED_TRUTHS, ""}
+    if any(truth not in allowed for truth in answers.values()):
+        raise LabelError("answers must be present, absent, or blank")
+    operator = labeled_by.strip()
+    if not operator:
+        raise LabelError("labeled_by must not be blank")
+
+    with _future_label_write_lock:
+        rows = _read_sheet(path) if path.exists() else []
+        if path.exists():
+            load_labels(path)
+        existing = [row for row in rows if row["entrance_id"] == canonical]
+        if existing:
+            by_criterion = {row["criterion"]: row for row in existing}
+            complete = (
+                len(existing) == len(CRITERIA_KEYS)
+                and set(by_criterion) == set(CRITERIA_KEYS)
+                and all(row["labeled_at"] for row in existing)
+            )
+            identical = complete and all(
+                by_criterion[criterion]["truth"] == answers[criterion]
+                and by_criterion[criterion]["labeled_by"] == operator
+                for criterion in CRITERIA_KEYS
+            )
+            if identical:
+                return False
+            raise LabelConflict(f"entrance {canonical} already has a different label")
+
+        stamped = labeled_at.isoformat()
+        rows.extend(
+            {
+                "entrance_id": canonical,
+                "criterion": criterion,
+                "truth": answers[criterion],
+                "labeled_by": operator,
+                "labeled_at": stamped,
+            }
+            for criterion in CRITERIA_KEYS
+        )
+        _atomic_write_sheet(path, rows)
+    return True
 
 
 def labeling_progress(path: Path, entrance_ids: Sequence[str]) -> LabelingProgress:

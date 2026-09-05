@@ -34,13 +34,17 @@ final class ViewSetCoverageTests: XCTestCase {
     }
 
     func testFiveIsNotSilentlyTreatedAsDone() {
-        // The protocol allows five "if one genuinely cannot be captured" -- a judgement only the
-        // operator at the doorway can make. The app reports the position; it does not decide.
+        // TICK-282 opens Finish capture and labeling only for the complete six-view set.
         XCTAssertNotEqual(coverage(ViewSlot.allCases.filter { $0 != .far }).state, .complete)
     }
 
     func testTheFullSetIsComplete() {
         XCTAssertEqual(coverage(ViewSlot.allCases).state, .complete)
+    }
+
+    func testAC1FinishGateRequiresEveryNamedView() {
+        XCTAssertFalse(coverage(ViewSlot.allCases.filter { $0 != .hardware }).isComplete)
+        XCTAssertTrue(coverage(ViewSlot.allCases).isComplete)
     }
 
     func testTheSummarySaysWhatIsMissingRatherThanACount() {
