@@ -55,7 +55,10 @@ def test_ac_4_model_screening_is_released_only_after_durable_label_save():
     queue = source[source.index("func queueLabels(") : source.index("func drainLabelQueue()")]
     assert "screen(" not in commit
     assert "LabelCompletionGate(queue: labelQueue).save(" in queue
-    assert queue.index(") { _ in") < queue.index("screen(latest.0")
+    # The rule is unchanged -- screening is released only after the durable save. The symbol
+    # moved when #316 made the release send the entrance's whole view set instead of its last
+    # frame, so this follows it rather than pinning a name that no longer exists.
+    assert queue.index(") { _ in") < queue.index("screen(views:")
 
 
 def test_ac_7_pending_labels_have_a_visible_edit_route_and_queue_errors_are_visible():

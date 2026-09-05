@@ -627,10 +627,16 @@ final class CaptureController: ObservableObject {
             if record.captureMode.carriesMetrologyTruth {
                 measure(written, caliperInches: record.entrance.riseInches)
             } else {
-                // Human truth must be committed before model output can influence it. Keep only
-                // the latest completed view here; Finish capture releases it after labels are
+                // Human truth must be committed before model output can influence it, so the
+                // views are held here and Finish capture releases them once the labels are
                 // durably queued (TICK-282).
-                latestScreeningCapture = (written, record.entrance.id)
+                //
+                // The WHOLE set, not the latest frame. /screen makes one integrated call across
+                // every view it is given, and that is what the view set is for: a hardware
+                // close-up cannot see the ground plane, so screening it alone answers
+                // `not_visible` for ramp/bevel and handrails and reports framing rather than the
+                // entrance (#316).
+                rememberViewForScreening(written, entranceId: record.entrance.id)
             }
         case .failure(let failure):
             // Complete-or-nothing (AC5): nothing is counted for a capture that is not on disk.
@@ -650,34 +656,52 @@ final class CaptureController: ObservableObject {
     /// sent, so the criteria are named while the answer is being waited for.
     @Published var screeningRun: ScreeningRun?
 
-    private var latestScreeningCapture: (CaptureWriter.Written, String)?
+    /// The entrance being captured, and the views of it waiting to be screened together.
+    ///
+    /// Held as file URLs rather than bytes: six full-resolution frames in memory is tens of
+    /// megabytes carried for the length of a labeling session, for data already on disk.
+    private var pendingScreening: (entranceId: String, views: [URL])?
+
+    /// Remember one more view of this entrance, replacing the set when the entrance changes.
+    ///
+    /// Capped at the endpoint's limit, keeping the FIRST six. The protocol walks head-on, both
+    /// obliques, near, far, hardware close-up -- so the first six are one of each, and a seventh
+    /// frame is an extra angle of a view already covered rather than a new one.
+    private func rememberViewForScreening(_ written: CaptureWriter.Written, entranceId: String) {
+        if pendingScreening?.entranceId != entranceId {
+            pendingScreening = (entranceId, [])
+        }
+        guard var views = pendingScreening?.views else { return }
+        if views.count < ScreenClient.maxViews {
+            views.append(written.imageURL)
+            pendingScreening = (entranceId, views)
+        }
+    }
 
     /// Built from the same Info.plist settings as the uploader and the measure client, so a build
     /// has one server or none. Nil when the build has no server, which is what keeps this additive.
     var screenClient: ScreenClient? = UploadSettings.fromBundle().serverURL
         .map { ScreenClient(baseURL: $0) }
 
-    /// Ask the server what accessibility features are visible in a photo already safe on disk.
+    /// Ask the server what accessibility features are visible in this entrance's view set.
     ///
     /// Not awaited, for the same reason `measure` is not: this waits on a vision model for tens of
     /// seconds, and the operator has to be able to take the next frame. The verdicts are a read of
-    /// a capture that is already written and queued, whatever comes back.
-    private func screen(_ written: CaptureWriter.Written, entranceId: String) {
+    /// captures already written and queued, whatever comes back.
+    private func screen(views urls: [URL], entranceId: String) {
         guard let screenClient else { return }
-        let image: Data
-        do {
-            image = try Data(contentsOf: written.imageURL)
-        } catch {
-            screeningRun = ScreeningRun(
-                entranceId: entranceId, startedAt: Date(),
-                outcome: .failed(ScreenClient.Failure.unreadable(error.localizedDescription).message))
-            return
+        // Read what is still here. The upload drain deletes a capture once the bucket has
+        // confirmed it, and labeling takes long enough on a working network for that to happen
+        // mid-session -- so a missing file means the capture is SAFE, not lost, and the rest of
+        // the set can still be screened (#316).
+        let views = urls.compactMap { url -> ScreenClient.View? in
+            guard let data = try? Data(contentsOf: url) else { return nil }
+            return ScreenClient.View(data: data, filename: url.lastPathComponent)
         }
         let run = ScreeningRun(entranceId: entranceId, startedAt: Date(), outcome: .inFlight)
         screeningRun = run
-        Task { [screenClient, filename = written.imageURL.lastPathComponent] in
-            let outcome = await screenClient.screen(
-                image: image, entranceId: entranceId, filename: filename)
+        Task { [screenClient] in
+            let outcome = await screenClient.screen(views: views, entranceId: entranceId)
             // Only if this run is still the one on screen. A second photo taken while the first was
             // in flight has already replaced it, and letting the older answer land would show the
             // previous doorway's verdicts under the current one's heading.
@@ -814,9 +838,9 @@ final class CaptureController: ObservableObject {
             answers: answers
         ) { _ in
             refreshLabelQueueState()
-            if let latest = latestScreeningCapture, latest.1 == entranceId {
-                screen(latest.0, entranceId: entranceId)
-                latestScreeningCapture = nil
+            if let pending = pendingScreening, pending.entranceId == entranceId {
+                screen(views: pending.views, entranceId: entranceId)
+                pendingScreening = nil
             }
             Task { await drainLabelQueue() }
         }

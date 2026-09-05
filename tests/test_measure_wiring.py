@@ -195,8 +195,8 @@ def test_the_photo_is_written_and_queued_before_screening_is_deferred_for_labels
     capture that were screened before it was written would be promised safe while it was not.
     """
     body = confirm_review_body()
-    assert body.index("CaptureWriter.write(") < body.index("latestScreeningCapture =")
-    assert body.index("refreshPendingUploads()") < body.index("latestScreeningCapture =")
+    assert body.index("CaptureWriter.write(") < body.index("rememberViewForScreening(")
+    assert body.index("refreshPendingUploads()") < body.index("rememberViewForScreening(")
     assert "screen(written" not in body, "model output must wait for human labels (#309)"
 
 
@@ -210,7 +210,7 @@ def test_the_mode_decides_measure_now_or_defer_screening_until_labels():
     body = confirm_review_body()
     branch = body.split("if record.captureMode.carriesMetrologyTruth", 1)[1]
     measured = branch.index("measure(written")
-    deferred = branch.index("latestScreeningCapture =")
+    deferred = branch.index("rememberViewForScreening(")
     assert measured < deferred, (
         "metrology asks /measure; screening waits for the human-label gate before /screen"
     )
