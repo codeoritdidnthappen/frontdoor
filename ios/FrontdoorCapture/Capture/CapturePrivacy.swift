@@ -24,6 +24,7 @@ enum CapturePrivacy {
     enum Failure: Error, Equatable {
         case unreadable
         case detectionFailed
+        case blurFailed
         case encodingFailed
 
         /// Written for someone at a doorway. Each one ends with the capture NOT being written:
@@ -34,6 +35,9 @@ enum CapturePrivacy {
                 return "That photo could not be decoded for privacy processing, so it was not saved."
             case .detectionFailed:
                 return "Faces could not be checked, so the photo was not saved. Take it again."
+            case .blurFailed:
+                return "A face in that photo could not be blurred, so it was not saved. "
+                    + "Take it again with the doorway clear."
             case .encodingFailed:
                 return "The privacy-processed photo could not be encoded, so it was not saved."
             }
@@ -44,7 +48,13 @@ enum CapturePrivacy {
         var data: Data
         var pixelWidth: Int
         var pixelHeight: Int
-        var faceCount: Int
+        /// Faces this step actually BLURRED, counted as each patch is composited.
+        ///
+        /// It used to be `faceRectangles.count` — the number DETECTED. The two differed exactly
+        /// when it mattered, because the blur loop skipped any face it could not process and the
+        /// count then asserted that a face left in the clear had been handled. Derived from the
+        /// work rather than from the input, so the two cannot drift apart again.
+        var blurredFaceCount: Int
     }
 
     /// Production entry point. `exifOrientation` is the stored image's tag, 1-8.
@@ -65,14 +75,23 @@ enum CapturePrivacy {
         return render(image, faceRectangles: inGrid, exifOrientation: exifOrientation)
     }
 
-    /// Deterministic seam for tests: rectangles are already in the STORED grid's normalized space.
-    static func process(
+    /// Deterministic seam for tests: rectangles are already in the STORED grid's normalized space,
+    /// and **face detection does not run**.
+    ///
+    /// Two things keep it out of production, because one is not enough. It no longer shares a name
+    /// with `process(_:exifOrientation:)`: an overload set where one member silently skips
+    /// detection is one argument away from writing an unblurred capture, and the compiler helps
+    /// with neither the mistake nor the review. And it is compiled out of a release build
+    /// entirely, so a call site that reaches for it there does not build.
+    #if DEBUG
+    static func processWithoutDetection(
         _ data: Data, exifOrientation: Int, normalizedFaceRectangles: [CGRect]
     ) -> Result<Processed, Failure> {
         guard let image = rawImage(from: data) else { return .failure(.unreadable) }
         return render(image, faceRectangles: normalizedFaceRectangles,
                       exifOrientation: exifOrientation)
     }
+    #endif
 
     /// Map a normalized rect from the upright interpretation back into the stored grid.
     ///
@@ -118,6 +137,7 @@ enum CapturePrivacy {
         let height = CGFloat(image.height)
         let bounds = CGRect(x: 0, y: 0, width: width, height: height)
         var output = CIImage(cgImage: image)
+        var blurred = 0
 
         for normalized in faceRectangles {
             var rectangle = CGRect(
@@ -126,15 +146,24 @@ enum CapturePrivacy {
             let marginX = rectangle.width * 0.30
             let marginY = rectangle.height * 0.30
             rectangle = rectangle.insetBy(dx: -marginX, dy: -marginY).intersection(bounds)
+            // A DETECTED face that cannot be blurred refuses the capture, like every other
+            // failure in this file. Both of these used to `continue`: the loop moved on, the
+            // frame was written and uploaded with that face in the clear, and `faceCount` said it
+            // had been handled. A small or distant face at the edge of the frame is exactly what
+            // trips the `>= 1` after the margin intersection, so the case that failed open was
+            // the ordinary one, in the path that fills the dataset.
             guard !rectangle.isNull, rectangle.width >= 1, rectangle.height >= 1,
                   let pixelate = CIFilter(name: "CIPixellate")
-            else { continue }
+            else { return .failure(.blurFailed) }
             pixelate.setValue(output, forKey: kCIInputImageKey)
             pixelate.setValue(max(1, rectangle.width / 12), forKey: kCIInputScaleKey)
             pixelate.setValue(
                 CIVector(x: rectangle.midX, y: rectangle.midY), forKey: kCIInputCenterKey)
-            guard let patch = pixelate.outputImage?.cropped(to: rectangle) else { continue }
+            guard let patch = pixelate.outputImage?.cropped(to: rectangle) else {
+                return .failure(.blurFailed)
+            }
             output = patch.composited(over: output)
+            blurred += 1
         }
 
         let context = CIContext(options: [.cacheIntermediates: false])
@@ -156,6 +185,6 @@ enum CapturePrivacy {
             data: encoded as Data,
             pixelWidth: rendered.width,
             pixelHeight: rendered.height,
-            faceCount: faceRectangles.count))
+            blurredFaceCount: blurred))
     }
 }
