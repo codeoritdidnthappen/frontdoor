@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from frontdoor.claims import DEFAULT_CLAIMS_PATH
 from frontdoor.scan_records import DEFAULT_SCANS_PATH
 from frontdoor_server.map_view import (
     DEFAULT_DATASET_PATH,
@@ -61,24 +62,55 @@ def test_the_dockerfile_copies_it(relative):
     assert copied, f"{relative} is never COPYied into the image"
 
 
-def test_the_scan_store_is_pointed_at_a_mounted_volume():
-    """Scans are the only state written at run time.
+#: Every store the running server WRITES, and the variable that relocates it.
+#:
+#: The container filesystem is replaced on every deploy, so a default relative path means the
+#: records live until the next deploy and then disappear -- and both loaders answer a missing
+#: file with an empty result, so nothing reports the loss. The image must redirect each of
+#: them, and the host must mount something at that place.
+#:
+#: Claims are worse than scans, not merely equal to them. A claim carries the only bearer token
+#: for an approved workspace, so losing the file 404s every workspace that existed -- while the
+#: `owner_confirmed` flag a claim authorised persists in the scan store on the volume, and the
+#: map goes on showing Owner-confirmed pins backed by claims that no longer exist.
+#:
+#: `data/labels.csv` is deliberately absent from this list. `POST /labels` writes it inside the
+#: container and those rows are lost on redeploy, which TICK-282 records as a known limitation
+#: of that first version rather than a defect; docs/server-deploy.md says to download them
+#: first. If it is ever given a volume, add it here.
+RUNTIME_STORES = (
+    ("FRONTDOOR_SCANS", DEFAULT_SCANS_PATH),
+    ("FRONTDOOR_CLAIMS", DEFAULT_CLAIMS_PATH),
+)
 
-    The container filesystem is replaced on every deploy, so the default relative
-    path means a published scan lives until the next deploy and then disappears.
-    The image must redirect it, and the host must mount something at that place.
-    """
+
+@pytest.mark.parametrize("variable, default", RUNTIME_STORES, ids=lambda value: str(value))
+def test_every_store_written_at_run_time_is_pointed_at_a_mounted_volume(variable, default):
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
-    assert "ENV FRONTDOOR_SCANS=" in dockerfile, (
-        "the image leaves the scan store on the ephemeral container filesystem"
+    assert f"ENV {variable}=" in dockerfile, (
+        f"the image leaves {variable} on the ephemeral container filesystem"
     )
-    scans_path = dockerfile.split("ENV FRONTDOOR_SCANS=")[1].split()[0]
-    assert scans_path != DEFAULT_SCANS_PATH
-    assert scans_path.startswith("/"), "the scan store must be an absolute path on a mount"
+    path = dockerfile.split(f"ENV {variable}=")[1].split()[0]
+    assert path != default
+    assert path.startswith("/"), f"{variable} must be an absolute path on a mount"
 
     fly = (ROOT / "fly.toml").read_text(encoding="utf-8")
     assert "[mounts]" in fly, "nothing is mounted, so the redirected path is still ephemeral"
     destination = fly.split("destination = ")[1].split("\n")[0].strip().strip('"')
-    assert scans_path.startswith(destination.rstrip("/") + "/"), (
-        f"the scan store {scans_path} is not inside the mount at {destination}"
+    assert path.startswith(destination.rstrip("/") + "/"), (
+        f"{variable} points at {path}, which is not inside the mount at {destination}"
     )
+
+
+def test_the_build_files_do_not_claim_scans_are_the_only_state_written():
+    """The sentence that made an ephemeral claims path look like nothing was missing.
+
+    Both files said community scans were the only state this app writes. They were not -- owner
+    claims and `POST /labels` rows are written too -- and that sentence is what a reader
+    checking for a missing volume redirect would have believed.
+    """
+    for name in ("Dockerfile", "fly.toml"):
+        text = (ROOT / name).read_text(encoding="utf-8")
+        assert "are the only state this app writes" not in text, (
+            f"{name} still says scans are the only run-time state; they are not"
+        )

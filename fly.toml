@@ -13,10 +13,11 @@ primary_region = "sjc"          # near WNAM, where the R2 buckets live (D-026)
 [env]
   PORT = "8080"
 
-# Community scans are the only state this app writes, and a deploy replaces the container
-# filesystem. Without this mount a scan published from a phone survives until the next
-# deploy and then vanishes, with nothing anywhere reporting that it happened. One machine
-# holds this volume, which matches the single-machine demo posture.
+# A deploy replaces the container filesystem. Without this mount, what a phone published
+# survives until the next deploy and then vanishes, with nothing anywhere reporting that it
+# happened. The Dockerfile lists exactly what is pointed here -- community scans and owner
+# claims -- and what is knowingly left ephemeral. One machine holds this volume, which matches
+# the single-machine demo posture.
 [mounts]
   source = "frontdoor_data"
   destination = "/data"
