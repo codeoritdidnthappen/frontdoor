@@ -4,12 +4,31 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# The commit this image was built from, so the running server can say what it is (#337). Passed
+# by the deploy -- `--build-arg FRONTDOOR_COMMIT=$(git rev-parse HEAD)`. Left as "unknown" when
+# nobody passed it, because a wrong answer here is worse than no answer: the whole point is to be
+# able to trust what /version says.
+ARG FRONTDOOR_COMMIT=unknown
+ENV FRONTDOOR_COMMIT=$FRONTDOOR_COMMIT
+
 COPY pyproject.toml /app/pyproject.toml
 COPY src /app/src
+
+# The map dataset and the open-licensed provenance files. These are read at request time
+# from paths relative to the working directory, so they have to be in the image. Without
+# them the build succeeds, the server starts, and /map/data answers 200 with an empty pin
+# list and a dataset_error -- indistinguishable from a working map unless somebody reads
+# the body. That is what production served until TICK-337.
+COPY data/precatalogue.json /app/data/precatalogue.json
+COPY data/external /app/data/external
 
 RUN pip install --no-cache-dir ".[server]"
 
 ENV PORT=8080
+# Community scans are the only state this app writes, and the container filesystem is
+# replaced on every deploy. This points at the volume declared in fly.toml, so a scan
+# published from a phone outlives the next deploy.
+ENV FRONTDOOR_SCANS=/data/scans.jsonl
 EXPOSE 8080
 
 # exec, so gunicorn is PID 1 and a stop signal reaches it instead of the shell. The shell

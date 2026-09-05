@@ -1141,7 +1141,7 @@ body{
       </div>
     </section>
 
-    <!-- ================= OWNER CLAIM FLOW (stub) ================= -->
+    <!-- ================= OWNER CLAIM FLOW ================= -->
     <section class="screen claimscreen" id="claim-find">
       <div class="screen-body">
         <div class="flowhead">
@@ -1150,9 +1150,9 @@ body{
         </div>
         <div class="searchfield">
           <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="var(--sub)" stroke-width="2.2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>
-          <input id="claim-search" value="Royal Blue" aria-label="Search your business">
+          <input id="claim-search" placeholder="Search the map catalogue" aria-label="Search your business" autocomplete="off">
         </div>
-        <p class="sheet-p" style="margin-top:12px">Choose the entrance you manage.</p>
+        <p class="sheet-p" style="margin-top:12px">Choose the place-backed listing you manage.</p>
         <div id="claim-results"></div>
         <div class="card-actions" style="margin-top:18px">
           <button class="btn primary" id="btn-claim-continue">Continue</button>
@@ -1171,25 +1171,31 @@ body{
           <label for="claim-role">Your role</label>
           <select id="claim-role"><option>Owner</option><option>Manager</option></select>
         </div>
-        <div class="field">
-          <label for="claim-email">Work email</label>
+        <div class="chips-title" style="margin-top:16px">How should we verify you?</div>
+        <label class="verify-opt" id="vo-call">
+          <input type="radio" name="claim-verify" value="listed_phone">
+          <span><span class="vo-name">Call the listed phone</span>
+          <span class="vo-sub">We'll call the number already on this listing. You don't type it.</span></span>
+        </label>
+        <label class="verify-opt" id="vo-email">
+          <input type="radio" name="claim-verify" value="business_email">
+          <span><span class="vo-name">Business-domain email</span>
+          <span class="vo-sub">Your address must match the listing website's domain.</span></span>
+        </label>
+        <label class="verify-opt" id="vo-code">
+          <input type="radio" name="claim-verify" value="in_store_code">
+          <span><span class="vo-name">In-store code</span>
+          <span class="vo-sub">The code we issued to this listing, not one you invent.</span></span>
+        </label>
+        <p class="sheet-p" id="claim-no-channel" hidden>No verifiable channel is on file for this listing yet. Ask the team for an in-store code.</p>
+        <div class="field" id="claim-email-field" hidden>
+          <label for="claim-email">Work email on the listing domain</label>
           <input type="email" id="claim-email" placeholder="you@yourbusiness.com" autocomplete="off">
         </div>
-        <div class="field">
-          <label for="claim-phone">Business phone</label>
-          <input type="tel" id="claim-phone" placeholder="(512) 555-0137" autocomplete="off">
+        <div class="field" id="claim-code-field" hidden>
+          <label for="claim-code">In-store code</label>
+          <input type="text" id="claim-code" placeholder="Code from the listing" autocomplete="off">
         </div>
-        <div class="chips-title" style="margin-top:16px">How should we verify you?</div>
-        <label class="verify-opt sel" id="vo-email">
-          <input type="radio" name="claim-verify" value="email" checked>
-          <span><span class="vo-name">Business email</span>
-          <span class="vo-sub">We'll send a link to the business's listed domain.</span></span>
-        </label>
-        <label class="verify-opt" id="vo-call">
-          <input type="radio" name="claim-verify" value="call">
-          <span><span class="vo-name">Call the business</span>
-          <span class="vo-sub">We'll call the business's listed phone.</span></span>
-        </label>
         <label class="authz">
           <input type="checkbox" id="claim-authz">
           <span>I'm authorized to manage this business listing.</span>
@@ -1242,7 +1248,32 @@ body{
       </div>
     </section>
 
-    <!-- ================= SHEETS ================= -->
+    <section class="screen claimscreen" id="claim-workspace">
+      <div class="screen-body">
+        <div class="flowhead">
+          <button class="backbtn" data-goto="screen-profile" aria-label="Back to Profile">‹</button>
+          <h2>My business</h2>
+        </div>
+        <div class="bizhead" id="ws-bizhead"></div>
+        <div class="prof-card" style="margin-top:12px">
+          <div class="chips-title" style="margin:0 0 6px">As customers see it</div>
+          <div id="ws-pin" style="font-weight:800;font-size:.95em"></div>
+          <div class="prof-sub" id="ws-status" style="margin-top:6px"></div>
+        </div>
+        <div class="tax-box" id="ws-incentives" style="margin-top:12px"></div>
+        <div class="card-actions" style="margin-top:14px">
+          <button class="btn primary" id="btn-ws-capture" style="min-height:48px">Guided capture at the door</button>
+        </div>
+        <p class="sheet-p">Camera-roll photos cannot attest. Owner-confirmed only from this in-app capture.</p>
+        <div class="field">
+          <label for="ws-dispute">Correct or dispute what customers see</label>
+          <textarea id="ws-dispute" rows="3" maxlength="500" placeholder="What should change?"></textarea>
+        </div>
+        <div class="card-actions" style="margin-top:10px">
+          <button class="btn ghost" id="btn-ws-dispute">Send dispute</button>
+        </div>
+      </div>
+    </section>
     <div class="scrim" id="scrim"></div>
 
     <div class="sheet" id="sheet-card" role="dialog" aria-label="Place details">
@@ -2241,7 +2272,7 @@ document.getElementById('nav-scan').addEventListener('click',()=>{closeSheets();
 
 /* ===================== profile controls ===================== */
 document.getElementById('btn-signin').addEventListener('click',()=>toast('Prototype: sign-in comes later — guests are first-class'));
-document.getElementById('btn-claim').addEventListener('click',()=>{closeSheets();initClaimFind();showScreen('claim-find');});
+document.getElementById('btn-claim').addEventListener('click',()=>{location.hash='claim';openClaimFind();});
 document.getElementById('privacy-row').addEventListener('click',()=>openSheet('sheet-privacy'));
 document.getElementById('claim-illus').innerHTML=pinSVG('owner',40);
 
@@ -2350,6 +2381,7 @@ paintDoorway();
 const SCREEN_API = '/screen';
 const PUBLISH_API = '/screen/publish';
 const PHOTO_API = '/scan/photo/';
+const CLAIM_API = '/claim';
 const camVideo = document.getElementById('cam-video');
 let camStream = null;    /* active MediaStream while the viewfinder is live */
 let liveFrame = null;    /* {blob, dataUrl} of the captured frame — in-memory only */
@@ -2360,6 +2392,8 @@ let liveAbort = null;
 let liveError = null;    /* the server's error detail when /screen answered but could not assess */
 let liveNetFail = false; /* the POST never reached a server → simulated fallback */
 let scanFromCard = false;/* startScan(true) from a card: publish against that place_id */
+let ownerAttest = false; /* workspace guided capture: attested in-app only */
+let fromLibrary = false; /* camera-roll path cannot attest */
 let geoFix = null;       /* {lat,lng} from the phone while scanning; cleared on exit */
 const liveSimulated = ()=> !liveFrame || liveNetFail;
 
@@ -2464,9 +2498,12 @@ let scanTimers=[];
 function cancelScanTimers(){scanTimers.forEach(clearTimeout);scanTimers=[];}
 function after(ms,fn){scanTimers.push(setTimeout(fn,ms));}
 
-function startScan(fromCard){
+function startScan(fromCard, opts){
   cancelScanTimers();
   resetLive();
+  fromLibrary=false;
+  ownerAttest=!!(opts && opts.ownerAttest);
+  document.getElementById('btn-library').hidden=ownerAttest;
   scanFromCard=!!fromCard;
   if(!scanFromCard){ /* no card: the nearest estimated pin stands in for the doorway art; the real place is named at review */
     const next = places.filter(p=>p.tier==='est').sort((a,b)=>(Math.hypot(a.lat-cx,a.lng-cy)-Math.hypot(b.lat-cx,b.lng-cy)))[0];
@@ -2480,7 +2517,9 @@ function startScan(fromCard){
   showScreen('scan-primer');
 }
 document.querySelectorAll('[data-scan-exit]').forEach(b=>b.addEventListener('click',()=>{
-  cancelScanTimers(); resetLive(); geoFix=null; showScreen('screen-map'); renderMap();
+  cancelScanTimers(); resetLive(); geoFix=null; ownerAttest=false; fromLibrary=false;
+  document.getElementById('btn-library').hidden=false;
+  showScreen('screen-map'); renderMap();
 }));
 document.getElementById('btn-allow-cam').addEventListener('click',()=>{
   showScreen('scan-capture');
@@ -2685,6 +2724,8 @@ async function publishScan(ref){
   fd.append('images', liveFrame.blob, 'scan.jpg');
   if(ref.place_id) fd.append('place_id', ref.place_id);
   fd.append('name', ref.name); fd.append('lat', String(ref.lat)); fd.append('lng', String(ref.lng));
+  fd.append('capture_kind', fromLibrary ? 'camera_roll' : 'in_app');
+  if(ownerAttest) fd.append('attested', '1');
   const ctl=('AbortController' in window) ? new AbortController() : null;
   const timer=setTimeout(()=>{if(ctl)ctl.abort();},45000);
   let r, j;
@@ -2842,49 +2883,189 @@ document.getElementById('ob-needs-skip').addEventListener('click',()=>{
   finishOnboarding();
 });
 
-/* ===================== owner claim flow (stub; entrance-level, proof-of-control honest) ===================== */
-const CLAIM_RESULTS=[
-  {name:'Royal Blue Grocery', addr:'241 W 3rd St', dist:'0.1 mi', id:'door-04'},
-  {name:'Royal Blue Grocery', addr:'609 Congress Ave', dist:'0.3 mi', id:null},
-  {name:'Royal Blue Grocery', addr:'360 Nueces St', dist:'0.4 mi', id:null}
-];
-let claimSel=0;
-function initClaimFind(){
+/* ===================== owner claim flow ===================== */
+let claimHits=[];
+let claimSel=null;
+let claimRecord=null;
+function claimSessionLoad(){
+  try{
+    const raw=sessionStorage.getItem('entrymap.claim');
+    if(!raw) return null;
+    const rec=JSON.parse(raw);
+    if(rec && rec.claim_id && rec.token) return rec;
+  }catch(e){}
+  return null;
+}
+function claimSessionSave(rec){
+  claimRecord=rec;
+  try{ sessionStorage.setItem('entrymap.claim', JSON.stringify({claim_id:rec.claim_id, token:rec.token})); }catch(e){}
+}
+function openClaimFind(){
+  closeSheets();
+  initClaimFind();
+  showScreen('claim-find');
+}
+function renderClaimHits(){
   const wrap=document.getElementById('claim-results');
   wrap.innerHTML='';
-  CLAIM_RESULTS.forEach((r,i)=>{
+  claimHits.forEach((r)=>{
     const b=document.createElement('button');
-    b.className='claim-result'+(i===claimSel?' sel':'');
+    b.type='button';
+    b.className='claim-result'+(claimSel && claimSel.place_id===r.place_id?' sel':'');
     b.innerHTML=`<span class="cr-icon">${iconSVG(GL.store,'var(--purple-ink)')}</span>
       <span><span class="cr-name">${esc(r.name)}</span>
-      <span class="cr-sub">${esc(r.addr)}</span></span>
-      <span class="cr-dist">${r.dist}</span>`;
-    b.addEventListener('click',()=>{claimSel=i;initClaimFind();});
+      <span class="cr-sub">${esc(r.place_id)}</span></span>`;
+    b.addEventListener('click',()=>{claimSel=r;renderClaimHits();});
     wrap.appendChild(b);
   });
 }
+async function searchClaims(){
+  const q=document.getElementById('claim-search').value.trim();
+  if(q.length<2){ claimHits=[]; claimSel=null; renderClaimHits(); return; }
+  try{
+    const r=await fetch(CLAIM_API+'/places?q='+encodeURIComponent(q));
+    const j=await r.json().catch(()=>({places:[]}));
+    claimHits=j.places||[];
+    if(claimSel && !claimHits.some(h=>h.place_id===claimSel.place_id)) claimSel=null;
+    if(!claimSel && claimHits.length) claimSel=claimHits[0];
+    renderClaimHits();
+  }catch(e){ toast("Couldn't search listings"); }
+}
+function initClaimFind(){
+  document.getElementById('claim-search').value='';
+  claimHits=[]; claimSel=null; renderClaimHits();
+}
+let claimSearchTimer=null;
+document.getElementById('claim-search').addEventListener('input',()=>{
+  clearTimeout(claimSearchTimer);
+  claimSearchTimer=setTimeout(searchClaims, 180);
+});
+function selectedClaimChannel(){
+  const el=document.querySelector('input[name="claim-verify"]:checked');
+  return el ? el.value : null;
+}
+function paintClaimChannels(){
+  const ch=(claimSel && claimSel.channels) || {};
+  const call=document.getElementById('vo-call');
+  const email=document.getElementById('vo-email');
+  const code=document.getElementById('vo-code');
+  call.hidden=!ch.listed_phone;
+  email.hidden=!ch.business_email;
+  code.hidden=!ch.in_store_code;
+  const any=ch.listed_phone||ch.business_email||ch.in_store_code;
+  document.getElementById('claim-no-channel').hidden=!!any;
+  document.getElementById('btn-claim-submit').disabled=!any;
+  const first=ch.listed_phone?'listed_phone':ch.business_email?'business_email':ch.in_store_code?'in_store_code':null;
+  document.querySelectorAll('input[name="claim-verify"]').forEach(rb=>{
+    rb.checked = rb.value===first;
+  });
+  syncClaimVerifyUi();
+}
+function syncClaimVerifyUi(){
+  const channel=selectedClaimChannel();
+  document.getElementById('vo-call').classList.toggle('sel', channel==='listed_phone');
+  document.getElementById('vo-email').classList.toggle('sel', channel==='business_email');
+  document.getElementById('vo-code').classList.toggle('sel', channel==='in_store_code');
+  document.getElementById('claim-email-field').hidden=channel!=='business_email';
+  document.getElementById('claim-code-field').hidden=channel!=='in_store_code';
+}
 document.getElementById('btn-claim-continue').addEventListener('click',()=>{
-  const r=CLAIM_RESULTS[claimSel];
+  if(!claimSel){ toast('Pick a listing from the search results'); return; }
   document.getElementById('claim-bizhead').innerHTML=
     `<span class="cr-icon">${iconSVG(GL.store,'var(--purple-ink)')}</span>
-     <span><span class="cr-name">${esc(r.name)}</span>
-     <span class="cr-sub">${esc(r.addr)}, Austin, TX</span></span>`;
+     <span><span class="cr-name">${esc(claimSel.name)}</span>
+     <span class="cr-sub">${esc(claimSel.place_id)}</span></span>`;
+  document.getElementById('claim-authz').checked=false;
+  paintClaimChannels();
   showScreen('claim-confirm');
 });
-document.querySelectorAll('input[name="claim-verify"]').forEach(rb=>rb.addEventListener('change',()=>{
-  document.getElementById('vo-email').classList.toggle('sel',rb.value==='email'&&rb.checked);
-  document.getElementById('vo-call').classList.toggle('sel',rb.value==='call'&&rb.checked);
-  if(rb.value==='email') document.getElementById('vo-call').classList.remove('sel');
-  else document.getElementById('vo-email').classList.remove('sel');
-}));
-document.getElementById('btn-claim-submit').addEventListener('click',()=>{
+document.querySelectorAll('input[name="claim-verify"]').forEach(rb=>rb.addEventListener('change', syncClaimVerifyUi));
+document.getElementById('btn-claim-submit').addEventListener('click', async ()=>{
   if(!document.getElementById('claim-authz').checked){
     toast("Please confirm you're authorized to manage this listing");
     return;
   }
+  if(!claimSel){ toast('Pick a listing first'); return; }
+  const channel=selectedClaimChannel();
+  if(!channel){ toast('Pick a verifiable channel'); return; }
+  const payload={place_id:claimSel.place_id, channel, role:document.getElementById('claim-role').value};
+  if(channel==='business_email') payload.email=document.getElementById('claim-email').value.trim();
+  if(channel==='in_store_code') payload.code=document.getElementById('claim-code').value.trim();
+  let r, j;
+  try{
+    r=await fetch(CLAIM_API,{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+    j=await r.json().catch(()=>({}));
+  }catch(e){ toast("Couldn't submit the claim"); return; }
+  if(!r.ok){ toast(j.detail || j.error || "Couldn't submit the claim"); return; }
+  claimSessionSave(j);
   document.getElementById('track-pin').innerHTML=pinSVG('owner',38);
   showScreen('claim-track');
+  refreshClaimTrack();
 });
+async function refreshClaimTrack(){
+  const rec=claimRecord || claimSessionLoad();
+  if(!rec) return;
+  try{
+    const r=await fetch(CLAIM_API+'/'+rec.claim_id+'?token='+encodeURIComponent(rec.token));
+    const j=await r.json().catch(()=>({}));
+    if(r.ok && j.status==='approved'){ openWorkspace(rec); }
+  }catch(e){}
+}
+async function openWorkspace(rec){
+  rec=rec || claimRecord || claimSessionLoad();
+  if(!rec){ toast('No claim in this session'); return; }
+  let r, j;
+  try{
+    r=await fetch(CLAIM_API+'/'+rec.claim_id+'/workspace?token='+encodeURIComponent(rec.token));
+    j=await r.json().catch(()=>({}));
+  }catch(e){ toast("Couldn't open the workspace"); return; }
+  if(!r.ok){ toast(j.detail || 'Workspace is not ready yet'); return; }
+  const pin=j.pin||{};
+  document.getElementById('ws-bizhead').innerHTML=
+    `<span class="cr-icon">${iconSVG(GL.store,'var(--purple-ink)')}</span>
+     <span><span class="cr-name">${esc(pin.name||'')}</span>
+     <span class="cr-sub">${esc(pin.place_id||'')}</span></span>`;
+  const tier=pin.owner_confirmed?'Owner-confirmed':(pin.state==='verified_accessible'?'Scanned on-site':'Estimated');
+  document.getElementById('ws-pin').textContent=tier+' — '+ (pin.label||'');
+  document.getElementById('ws-status').textContent='Claim '+j.claim.status+'. A claim never changes the public pin; attested in-app capture does.';
+  document.getElementById('ws-incentives').textContent=j.incentives||'';
+  claimSessionSave(rec);
+  showScreen('claim-workspace');
+}
+document.getElementById('btn-ws-capture').addEventListener('click',()=>{
+  const rec=claimRecord || claimSessionLoad();
+  if(!rec){ toast('No approved claim in this session'); return; }
+  fetch(CLAIM_API+'/'+rec.claim_id+'/workspace?token='+encodeURIComponent(rec.token))
+    .then(r=>r.json().then(j=>({ok:r.ok,j})))
+    .then(({ok,j})=>{
+      if(!ok || !j.pin){ toast('Workspace is not ready yet'); return; }
+      scanTarget={id:j.pin.place_id, name:j.pin.name, lat:j.pin.location.lat, lng:j.pin.location.lng};
+      startScan(true, {ownerAttest:true});
+    })
+    .catch(()=>toast("Couldn't start guided capture"));
+});
+document.getElementById('btn-ws-dispute').addEventListener('click', async ()=>{
+  const rec=claimRecord || claimSessionLoad();
+  const note=document.getElementById('ws-dispute').value.trim();
+  if(!rec){ toast('No approved claim in this session'); return; }
+  if(!note){ toast('Write what should change'); return; }
+  try{
+    const r=await fetch(CLAIM_API+'/'+rec.claim_id+'/dispute',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({token:rec.token, note})
+    });
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok){ toast(j.detail || "Couldn't send the dispute"); return; }
+    document.getElementById('ws-dispute').value='';
+    toast("Thanks — we'll review your note. The public pin is unchanged.");
+  }catch(e){ toast("Couldn't send the dispute"); }
+});
+function maybeOpenClaimFromHash(){
+  if(location.hash==='#claim') openClaimFind();
+}
+claimRecord=claimSessionLoad();
+maybeOpenClaimFromHash();
+window.addEventListener('hashchange', maybeOpenClaimFromHash);
 document.querySelectorAll('[data-goto]').forEach(b=>b.addEventListener('click',()=>{
   showScreen(b.dataset.goto);
 }));
@@ -2895,6 +3076,7 @@ document.getElementById('btn-library').addEventListener('click',()=>libInput.cli
 libInput.addEventListener('change',()=>{
   const file=libInput.files && libInput.files[0];
   if(!file) return;
+  fromLibrary=true;
   const reader=new FileReader();
   reader.onload=()=>{
     stopCamera();

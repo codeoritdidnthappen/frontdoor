@@ -73,6 +73,14 @@ DEFAULT_SCANS_PATH = "data/scans.jsonl"
 #: renders.
 SCAN_SOURCE = "community_scan"
 
+#: An attested in-app capture from an approved owner workspace. Still a
+#: human, non-imagery confirmation (so the legal stamp can be verified); the
+#: map's Owner-confirmed tier is the extra `owner_confirmed` flag, not a
+#: third Green-or-Gray state.
+OWNER_SCAN_SOURCE = "owner_attested"
+CAPTURE_IN_APP = "in_app"
+CAPTURE_CAMERA_ROLL = "camera_roll"
+
 #: Public image-key shape: scans/<place-slug>/<uuid32>.jpg. An allowlist, not a
 #: denylist — the slug charset has no dot and no slash, so ".." and nested
 #: paths cannot match, and only keys under scans/ resolve at all.
@@ -134,9 +142,10 @@ def physical_key(image_key):
 
 def new_scan_record(*, place_ref, created_at, verdicts, confidences,
                     faces_blurred, quarantined_count, image_keys,
-                    contributor=None, entrance_id=None):
+                    contributor=None, entrance_id=None,
+                    capture_kind=None, attested=False):
     """One scan record, with a fresh scan_id."""
-    return {
+    record = {
         "scan_id": uuid.uuid4().hex,
         "place_ref": place_ref,
         "entrance_id": entrance_id,
@@ -148,6 +157,20 @@ def new_scan_record(*, place_ref, created_at, verdicts, confidences,
         "image_keys": list(image_keys),
         "contributor": contributor,
     }
+    if capture_kind:
+        record["capture_kind"] = capture_kind
+    if attested:
+        record["attested"] = True
+    return record
+
+
+def is_owner_attested(scan):
+    """True only for guided in-app capture the owner attested at the door."""
+    return (
+        isinstance(scan, dict)
+        and scan.get("attested") is True
+        and scan.get("capture_kind") == CAPTURE_IN_APP
+    )
 
 
 def append_scan(path, record):
@@ -307,10 +330,14 @@ def _upgrade_row(base, scan):
     row["criteria"] = criteria
 
     # State: the only write is the upgrade to verified. A row already in the
-    # verified state is left exactly as it is.
+    # verified state is left exactly as it is. Owner-confirmed is an extra
+    # flag, never a third legal stamp, and only an attested in-app capture
+    # can set it — a later community scan cannot clear it.
+    if is_owner_attested(scan):
+        row["owner_confirmed"] = True
     if state_for_row(row) != STATE_VERIFIED:
         row["status"] = "verified"
-        row["source"] = SCAN_SOURCE
+        row["source"] = OWNER_SCAN_SOURCE if is_owner_attested(scan) else SCAN_SOURCE
 
     # Freshness: monotone. ISO dates compare lexicographically.
     date = _scan_date(scan)

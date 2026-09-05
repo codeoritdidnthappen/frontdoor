@@ -36,7 +36,7 @@ ERROR_HELPERS = {"error", "_error"}
 #: The modules that emit error tokens today. Named so that renaming one fails this guard loudly
 #: rather than silently shrinking what it covers; a NEW view is picked up by the glob for free.
 KNOWN_EMITTERS = {
-    "app.py", "label_view.py", "scan_view.py", "screen_view.py", "upload_view.py"
+    "app.py", "claim_view.py", "label_view.py", "scan_view.py", "screen_view.py", "upload_view.py"
 }
 
 

@@ -314,7 +314,7 @@ so a corrupted or substituted file fails loudly rather than quietly changing a n
 **Retention.** The bucket is the system of record during the sprint. At results freeze the dataset
 is published as a release artifact, satisfying deliverable #1.
 
-**On-site publication (TICK-333).** The map's Scanned on-site tier is fed by `data/scans.jsonl`, a
+**On-site publication (TICK-333).** The map's Scanned on-site tier is fed by `data/published_scans.jsonl`, a
 committed record of one scan per non-sealed entrance: verdicts, confidences, the capture date from
 the sidecar, and a place reference — never image bytes, so no capture is republished by this path.
 `data/scan_matches.json` records, for every published entrance, which catalogue place it was

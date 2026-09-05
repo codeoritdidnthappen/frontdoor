@@ -186,15 +186,85 @@ def check_live(record, run=None):
     return f"ok  host, laptop cache and record all agree  {host_digest} ({host_release})"
 
 
+#: Where the deployed server answers "what commit am I".
+DEFAULT_URL = "https://frontdoor-measure.fly.dev/version"
+
+
+def deployed_commit(url=DEFAULT_URL, opener=None):
+    """The commit the running server reports, or raise DeploymentError saying why not."""
+    import json as _json
+    import urllib.error
+    import urllib.request
+
+    opener = opener or (lambda u: urllib.request.urlopen(u, timeout=15))
+    try:
+        with opener(url) as response:
+            body = _json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        # Reached it -- it answered. A 404 is its own diagnosis and the most likely one for a
+        # while: the running image predates this endpoint, which is itself drift, and saying
+        # "could not reach" would send someone to check the network instead of the deploy.
+        if exc.code == 404:
+            raise DeploymentError(
+                f"{url} answered 404: the server is up but has no /version, so the image "
+                "predates it. That is drift -- deploy the current commit."
+            ) from exc
+        raise DeploymentError(f"{url} answered HTTP {exc.code}") from exc
+    except urllib.error.URLError as exc:
+        raise DeploymentError(f"could not reach {url}: {exc.reason}") from exc
+    except ValueError as exc:
+        raise DeploymentError(f"{url} did not answer with JSON: {exc}") from exc
+    commit = str(body.get("commit", "")).strip()
+    if not commit:
+        raise DeploymentError(f"{url} answered without a commit: {body!r}")
+    if commit == "unknown":
+        raise DeploymentError(
+            f"{url} reports commit 'unknown' -- the image was built without "
+            "--build-arg FRONTDOOR_COMMIT, so what is deployed cannot be identified. "
+            "Redeploy with the documented command."
+        )
+    return commit
+
+
+def check_drift(ref="HEAD", url=DEFAULT_URL, opener=None, run=None):
+    """Compare the deployed commit against a local ref. Raises on drift.
+
+    The failure this exists for: on 2026-09-05 the host served the previous day's image for a full
+    day while main moved on, and a bug that had been fixed and merged was still live -- and was
+    reported a second time, because nothing could say what was running.
+    """
+    run = run or _run
+    deployed = deployed_commit(url, opener=opener)
+    local = run(["git", "rev-parse", ref]).strip()
+    if deployed == local:
+        return f"ok  deployed {deployed[:12]} matches {ref} {local[:12]}"
+    raise DeploymentError(
+        f"DRIFT: the server is running {deployed[:12]} but {ref} is {local[:12]}. "
+        "What is deployed is not what this checkout says. Deploy, or check out what is deployed "
+        "before concluding anything from a live probe."
+    )
+
+
 def main(argv=None):
     args = sys.argv[1:] if argv is None else argv
+    if args and args[0] == "drift":
+        ref = args[1] if len(args) > 1 else "HEAD"
+        if len(args) > 2:
+            print("usage: python -m frontdoor_server.deployment drift [ref]", file=sys.stderr)
+            return 2
+        try:
+            print(check_drift(ref))
+        except DeploymentError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        return 0
     if args == ["verify"]:
         live = True
     elif args == ["verify", "--recorded-only"]:
         live = False
     else:
-        print("usage: python -m frontdoor_server.deployment verify [--recorded-only]",
-              file=sys.stderr)
+        print("usage: python -m frontdoor_server.deployment "
+              "{verify [--recorded-only] | drift [ref]}", file=sys.stderr)
         return 2
     try:
         record = load()

@@ -97,6 +97,7 @@ PUBLISH_MAX_USD_PER_RUN = 20.0
 #: The reviewable entrance-to-place matching report (AC4): one entry per
 #: published entrance, naming the place it was matched to and how, or saying
 #: why it was left unmatched.
+DEFAULT_PUBLISHED_PATH = "data/published_scans.jsonl"
 DEFAULT_MATCHES_PATH = "data/scan_matches.json"
 
 #: Longest edge of a view as it is SENT to the model. The 2026-09-04 captures
@@ -545,7 +546,7 @@ def main(argv=None):
              "entrance is published unmatched",
     )
     parser.add_argument("--dataset", default="data/precatalogue.json")
-    parser.add_argument("--out", default=DEFAULT_SCANS_PATH)
+    parser.add_argument("--out", default=DEFAULT_PUBLISHED_PATH)
     parser.add_argument("--matches", default=DEFAULT_MATCHES_PATH)
     parser.add_argument("--cache", default=None)
     parser.add_argument("--replace", action="store_true")

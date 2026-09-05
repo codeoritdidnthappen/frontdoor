@@ -41,7 +41,11 @@ jobs:
       - name: Deploy
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-        run: flyctl deploy --remote-only --app frontdoor-measure
+        # --build-arg bakes the commit into the image so /version can report it. Without
+        # it the server honestly says "unknown", which is the state #337 was filed for.
+        run: >
+          flyctl deploy --remote-only --app frontdoor-measure
+          --build-arg FRONTDOOR_COMMIT=${{ github.sha }}
 
       # The deploy command returning zero only means Fly accepted the image.
       # These three say the thing a phone actually needs is answering, and the
@@ -50,7 +54,7 @@ jobs:
         run: |
           set -e
           base=https://frontdoor-measure.fly.dev
-          for path in /health /app /app-icon.png; do
+          for path in /health /app /app-icon.png /version; do
             code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 --retry 5 --retry-delay 6 --retry-all-errors "$base$path")
             echo "$path -> $code"
             if [ "$code" != "200" ]; then
@@ -58,6 +62,49 @@ jobs:
               exit 1
             fi
           done
+
+      # The deploy is only honest if the thing now running says it is this commit. Without
+      # this a build-arg typo leaves /version saying "unknown" and a green run over a server
+      # nobody can identify -- which is exactly the state #337 was filed for.
+      - name: The server must report the commit we just deployed
+        run: |
+          set -e
+          reported=$(curl -sS --max-time 30 --retry 5 --retry-delay 6 --retry-all-errors \
+            https://frontdoor-measure.fly.dev/version \
+            | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"])')
+          echo "deployed reports: $reported"
+          if [ "$reported" != "${{ github.sha }}" ]; then
+            echo "::error::/version reports '$reported' but this run deployed ${{ github.sha }}"
+            exit 1
+          fi
+
+      # A deploy that cannot store a photograph looks identical from outside to
+      # one that can, right up until a published scan quietly loses its image.
+      # That has happened on this project once already, so the run says it.
+      - name: Report what the deployment can actually do
+        run: |
+          set -e
+          body=$(curl -sS --max-time 30 --retry 3 --retry-delay 5 --retry-all-errors             https://frontdoor-measure.fly.dev/ready)
+          echo "$body"
+          degraded=$(printf '%s' "$body" | python3 -c             'import json,sys; print(" ".join(json.load(sys.stdin)["degraded"]))')
+          {
+            echo "### Readiness"
+            echo
+            if [ -z "$degraded" ]; then
+              echo "All subsystems configured."
+            else
+              echo "Degraded: $degraded"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          case " $degraded " in
+            *" photo_storage "*)
+              echo "::warning::Photo storage is not configured. Scans will be assessed and published, but their photographs will NOT persist." ;;
+          esac
+          case " $degraded " in
+            *" screening "*)
+              echo "::error::The model key is not set. No scan can be assessed; the app is not usable."
+              exit 1 ;;
+          esac
 
       - name: Record what was deployed
         if: always()

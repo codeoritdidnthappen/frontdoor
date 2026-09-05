@@ -168,9 +168,18 @@ vite.config.ts.timestamp-*
 # directory; never committed.
 .worktrees/
 
-# Community scan records (TICK-262) were ignored here as runtime server data.
-# Since TICK-333 the same store also holds the curated on-site publication --
-# the 46 non-sealed entrances the demo map serves as Scanned on-site -- so it is
-# a committed dataset file like data/precatalogue.json, and is tracked. A local
-# POST /screen/publish appends to it and then shows up in `git status`, which is
-# the point: an accidental local publish is visible rather than silent.
+# Community scan records (TICK-262): runtime server data, appended by POST
+# /screen/publish. In production this lives on the mounted volume (TICK-337),
+# not here. Local publishes must not end up committed alongside the curated
+# dataset files.
+data/scans.jsonl
+
+# Owner claim records (TICK-259): runtime server data, appended by POST /claim.
+data/claims.jsonl
+data/claim_codes.json
+
+# The curated on-site publication (TICK-333) is deliberately NOT this file. It is
+# a reproducible dataset artifact with its own name, data/published_scans.jsonl,
+# and it is tracked. Runtime scans and a curated dataset have different
+# lifecycles and conflating them in one path made an accidental local publish
+# indistinguishable from the study's own records.

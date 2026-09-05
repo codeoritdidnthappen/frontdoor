@@ -146,6 +146,16 @@ def test_every_route_to_a_capture_reaches_the_commit():
     )
 
 
+def _write_switch(body):
+    """The part of `commit` from the write onwards.
+
+    #328 put a privacy step in front of the write, which has a `case .failure` of its own. These
+    guards are about what happens when the WRITE fails, so they start where the write does --
+    otherwise they partition on the wrong branch and report a rule that is still being kept.
+    """
+    return body[body.index("CaptureWriter.write("):]
+
+
 @pytest.mark.parametrize("needle", ["photosTaken += 1", "lastRecord = record"])
 def test_success_state_is_set_only_on_a_successful_write(needle):
     """A counter that advances on a failed write is a session that lies about its own size.
@@ -158,7 +168,7 @@ def test_success_state_is_set_only_on_a_successful_write(needle):
     source = _strip_comments(
         (APP / "Capture" / "CaptureController.swift").read_text(encoding="utf-8")
     )
-    body = _body_of(source, COMMIT)
+    body = _write_switch(_body_of(source, COMMIT))
     # Matched as a rule rather than as one spelling. The branch may bind the write result --
     # `case .success(let written)` -- which TICK-063 needs in order to measure the file it just
     # wrote, and which is every bit as standalone as `case .success:`. What must never appear is a
@@ -181,7 +191,7 @@ def test_the_failure_branch_reports_and_keeps_the_frame():
     source = _strip_comments(
         (APP / "Capture" / "CaptureController.swift").read_text(encoding="utf-8")
     )
-    _, _, failure = _body_of(source, COMMIT).partition("case .failure")
+    _, _, failure = _write_switch(_body_of(source, COMMIT)).partition("case .failure")
     assert "lastCaptureError" in failure, "a failed write must say why"
     assert "pendingReview = nil" not in failure, (
         "the frame must stay under review, or the operator loses it with no capture on disk"

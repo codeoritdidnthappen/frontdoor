@@ -35,6 +35,27 @@ fly launch --no-deploy --copy-config --name frontdoor-measure
 The first phone-label version writes ephemeral CSV state inside the application container; the
 limitations below explain what must be copied before a replacement or redeploy.
 
+### Checking what a deployment can actually do
+
+`GET /ready` answers the question `/health` does not: whether a scan taken on a phone will be
+assessed, and whether its photograph will be stored.
+
+```json
+{"ready": false, "subsystems": {"screening": true, "photo_storage": false, "map_dataset": true},
+ "degraded": ["photo_storage"]}
+```
+
+`photo_storage` is the one that matters most, because its failure is invisible. Without those
+credentials the endpoint still answers, the assessment still succeeds, and the image simply does
+not persist. That is how `FRONTDOOR_UPLOAD_KEY` went missing for days: nothing was broken enough
+to notice. The deploy workflow now reads this endpoint and raises a warning when photo storage is
+degraded, and fails the run outright when the model key is absent, since nothing works at all
+without it.
+
+It reports presence, never values, and never names the missing variable: a status is enough for
+an operator and useless to anyone else. To find out which credential is missing, look at the
+secrets on the host.
+
 ### Installing the app on a phone
 
 There is no paid Apple developer account on this project, so TestFlight and the App Store are
@@ -242,7 +263,7 @@ assessment, and then — only when the face audit answered exactly `clear` — i
 - **`FRONTDOOR_SCANS`** — path of the append-only JSONL scan-record store, default
   `data/scans.jsonl` (relative, like the map dataset — same caveat: point it at a **mounted
   volume** in `fly.toml`'s `[env]`, or the records vanish with the machine's rootfs on the next
-  deploy). Since TICK-333 the committed `data/scans.jsonl` also carries the on-site publication of
+  deploy). Since TICK-333 the committed `data/published_scans.jsonl` carries the on-site publication of
   the 46 non-sealed entrances, so it ships with the repository the way the map dataset does: if
   you point this variable at a volume, the demo map loses those records unless the file is seeded
   there too.
@@ -479,3 +500,38 @@ fly apps destroy frontdoor-measure
 The image dataset lives in R2 and the frozen label artifact lives in the repo. Future-capture
 labels written by `POST /labels` are temporary container state and must be downloaded before the
 app is destroyed, replaced, or redeployed or they are lost.
+
+## Which commit is running (TICK-337, #337)
+
+`GET /version` answers, with no credentials:
+
+```sh
+curl -s https://frontdoor-measure.fly.dev/version
+# {"commit":"<40-hex>"}
+```
+
+`/health` deliberately still returns only `{"status": "ok"}` — it is the D-016 fallback chain's
+liveness probe, and a cheap check should not grow a second job.
+
+**The commit is baked in at build time.** The CI deploy passes it; a local deploy must too, or the
+server will honestly report `unknown`:
+
+```sh
+fly deploy -a frontdoor-measure --build-arg FRONTDOOR_COMMIT=$(git rev-parse HEAD)
+```
+
+`unknown` is not a soft failure. It means the running image cannot be identified, and the drift
+check treats it as an error rather than letting it compare equal to anything.
+
+**Before trusting any live probe, check for drift:**
+
+```sh
+python -m frontdoor_server.deployment drift          # against HEAD
+python -m frontdoor_server.deployment drift origin/main
+```
+
+It exits non-zero and names both sides when the server is not running what your checkout says.
+
+Why this exists: on 2026-09-05 the host served the previous day's image for a full day while `main`
+moved on. A bug that had already been fixed and merged was still live, was probed, and was reported
+a second time as a new defect. Nothing in the system could say what was running.

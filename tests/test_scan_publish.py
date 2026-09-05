@@ -40,7 +40,7 @@ from frontdoor.split import assign_split, canonical_entrance_id
 
 REPO = Path(__file__).resolve().parents[1]
 MANIFEST = REPO / "data" / "manifest.csv"
-STORE = REPO / "data" / "scans.jsonl"
+STORE = REPO / "data" / "published_scans.jsonl"
 MATCHES = REPO / "data" / "scan_matches.json"
 DATASET = REPO / "data" / "precatalogue.json"
 
@@ -339,7 +339,7 @@ def _require_published():
     if not records or not MATCHES.is_file():
         pytest.skip(
             "the on-site publication has not been run on this checkout; "
-            "run python -m frontdoor.scan_publish to produce data/scans.jsonl "
+            "run python -m frontdoor.scan_publish to produce data/published_scans.jsonl "
             "and data/scan_matches.json"
         )
     return records
