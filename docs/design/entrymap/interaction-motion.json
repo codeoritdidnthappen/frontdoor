@@ -1,0 +1,73 @@
+{
+  "version": "1.0.0",
+  "durationMs": {
+    "instant": 0,
+    "shutter": 90,
+    "press": 100,
+    "focus": 120,
+    "tabSwitch": 180,
+    "checkDraw": 180,
+    "toastEnter": 220,
+    "receiptExpand": 240,
+    "screenTransition": 260,
+    "sheetSnap": 320,
+    "mapCamera": 450,
+    "pinDrop": 620,
+    "scanTarget": 7600,
+    "scanMaximum": 8000
+  },
+  "easing": {
+    "standard": "cubic-bezier(.2,.75,.25,1)",
+    "decelerate": "cubic-bezier(.16,1,.3,1)",
+    "sheetSpring": "cubic-bezier(.22,.9,.28,1.08)",
+    "pinSpring": "cubic-bezier(.2,.9,.25,1.2)"
+  },
+  "button": {
+    "pressedScale": 0.97,
+    "focusRingPx": 3,
+    "focusOffsetPx": 3,
+    "minimumTouchTargetPx": 48
+  },
+  "sheetStopsPercent": [18, 54, 92],
+  "pinHierarchy": {
+    "overviewPx": {
+      "estimated": 32,
+      "scannedOnSite": 36,
+      "ownerConfirmed": 40
+    },
+    "streetPx": {
+      "estimated": 40,
+      "scannedOnSite": 44,
+      "ownerConfirmed": 48
+    },
+    "selectedPx": {
+      "estimated": 52,
+      "scannedOnSite": 56,
+      "ownerConfirmed": 60
+    },
+    "receiptPx": {
+      "estimated": 24,
+      "scannedOnSite": 28,
+      "ownerConfirmed": 32
+    },
+    "liveScanDropPx": 64,
+    "clusterPx": 48,
+    "zIndex": {
+      "cluster": 10,
+      "estimated": 20,
+      "scannedOnSite": 30,
+      "ownerConfirmed": 40,
+      "needsMatch": 50,
+      "selected": 60,
+      "liveScanDrop": 70
+    }
+  },
+  "reducedMotion": {
+    "transitionMaximumMs": 80,
+    "useFinalStates": true,
+    "removeTransforms": true,
+    "removeRotation": true,
+    "removeRipple": true
+  }
+}
+

@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 32 32" role="img" aria-labelledby="title desc">
+  <title id="title">map icon</title><desc id="desc">EntryMap map icon asset.</desc>
+  
+  <g fill="none" stroke="#4020B5" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"><path d="m4 7 7-3 7 3 7-3v22l-7 3-7-3-7 3Z"/><path d="M11 4v22M18 7v22"/></g>
+</svg>
