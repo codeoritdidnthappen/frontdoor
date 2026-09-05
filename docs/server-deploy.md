@@ -41,20 +41,37 @@ limitations below explain what must be copied before a replacement or redeploy.
 assessed, and whether its photograph will be stored.
 
 ```json
-{"ready": false, "subsystems": {"screening": true, "photo_storage": false, "map_dataset": true},
- "degraded": ["photo_storage"]}
+{"ready": false, "subsystems": {"screening": true, "photo_storage": false, "map_dataset": true,
+ "scan_store": true}, "degraded": ["photo_storage"]}
 ```
 
 `photo_storage` is the one that matters most, because its failure is invisible. Without those
 credentials the endpoint still answers, the assessment still succeeds, and the image simply does
 not persist. That is how `FRONTDOOR_UPLOAD_KEY` went missing for days: nothing was broken enough
-to notice. The deploy workflow now reads this endpoint and raises a warning when photo storage is
-degraded, and fails the run outright when the model key is absent, since nothing works at all
-without it.
+to notice. The deploy workflow reads this endpoint and warns on each degraded subsystem, and
+fails the run outright when the model key is absent, since nothing works at all without it.
 
-It reports presence, never values, and never names the missing variable: a status is enough for
-an operator and useless to anyone else. To find out which credential is missing, look at the
-secrets on the host.
+Each subsystem is **verified, not assumed** (#353). The first version of this endpoint checked the
+presence of exactly what had failed before, and every one-notch variant walked straight through it:
+
+| subsystem | what it proves | why presence was not enough |
+| --- | --- | --- |
+| `screening` | either `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` is set | the engine accepts either, so checking only one reported a working deployment as broken. Still presence-only: the cheapest way to verify a model key is a billed model call, on every probe |
+| `photo_storage` | one bounded `HEAD` on the bucket succeeds | a revoked key or a deleted bucket leaves every variable set, and is symptomatically identical to the missing credential this endpoint was written for |
+| `map_dataset` | the file parses **and** holds at least one row | a present-but-unparseable file passed the old `stat()` while `/map/data` served zero pins |
+| `scan_store` | the store is readable and no record in it was skipped | a store nobody has written to yet is fine; a missing *directory* is the unmounted volume, and an unparseable line is a contributor's scan that is off the map for good |
+
+The storage probe is the one check that leaves the process, so it is bounded (2 s timeouts, no
+retries) and its answer — success or failure — is cached for 30 seconds. A storage outage costs
+one request per half minute rather than one per caller, and the endpoint stays cheap enough to
+poll. Nothing here mutates: proving the volume is *writable* would mean writing to the only state
+this app keeps, which is a worse trade than missing a read-only mount, and `append_scan`'s refusal
+to create its own parent directory is what catches the mount itself.
+
+It reports presence and status, never values, and never names the missing variable: a status is
+enough for an operator and useless to anyone else. To find out which credential is missing, look
+at the secrets on the host, or at the server log — the probe records the provider's own message
+there, where it is not public.
 
 ### Installing the app on a phone
 

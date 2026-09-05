@@ -31,6 +31,7 @@ from frontdoor.scan_records import (
     new_scan_record,
     physical_key,
     place_slug,
+    read_scan_records,
 )
 
 PLACE = "ChIJexample"
@@ -94,20 +95,83 @@ def test_append_writes_one_newline_terminated_json_line(tmp_path):
     assert json.loads(lines[0]) == record
 
 
-def test_append_creates_the_parent_directory(tmp_path):
-    path = tmp_path / "data" / "scans.jsonl"
-    append_scan(path, scan())
-    assert load_scan_records(path) == [scan()]
+def test_append_refuses_to_create_its_own_parent_directory(tmp_path, caplog):
+    """#353: the mkdir made an unmounted volume invisible.
+
+    fly.toml mounts the volume at /data and the image points FRONTDOOR_SCANS
+    at /data/scans.jsonl. With mkdir(parents=True) and no volume the append
+    creates that directory INSIDE the container, succeeds, the contributor
+    gets a 200, and every scan dies with the container -- exactly the incident
+    the volume was added to fix.
+    """
+    path = tmp_path / "not-mounted" / "scans.jsonl"
+    with caplog.at_level("ERROR", logger="frontdoor.scan_records"):
+        with pytest.raises(ScanRecordError):
+            append_scan(path, scan())
+    assert not path.parent.exists(), "append invented its own storage location"
+    assert caplog.records, "an unmounted store left no trace"
 
 
-def test_append_refuses_a_store_with_a_torn_last_line(tmp_path):
-    # The manifest's newline discipline: appending onto an unterminated line
-    # would merge two records into one silently-unparseable line.
+def test_a_torn_last_line_is_repaired_rather_than_wedging_the_store(
+        tmp_path, caplog):
+    """#353: a worker killed mid-append used to wedge the store for good.
+
+    gunicorn runs --timeout 30 on a 512 MB machine with an OOM kill on record,
+    so an unterminated last line is a real event. Refusing every later append
+    leaves reads working -- the torn line is skipped -- so the map looks fine
+    while each contributor in turn is told "saved for later", and nothing was
+    logged.
+    """
     path = tmp_path / "scans.jsonl"
-    path.write_bytes(b'{"scan_id": "partial"')
-    with pytest.raises(ScanRecordError):
+    path.write_bytes(b'{"scan_id": "torn"')
+    with caplog.at_level("ERROR", logger="frontdoor.scan_records"):
         append_scan(path, scan())
-    assert path.read_bytes() == b'{"scan_id": "partial"'
+    assert caplog.records, "a torn store was repaired silently"
+
+    # The new record landed, and the invariant the newline discipline exists
+    # for still holds: the torn remains never merged into it.
+    result = read_scan_records(path)
+    assert [record["scan_id"] for record in result.records] == ["abc123"]
+    assert result.skipped == 1
+    # ...and the store takes appends again.
+    append_scan(path, scan(scan_id="s2"))
+    assert [r["scan_id"] for r in read_scan_records(path).records] == ["abc123", "s2"]
+
+
+# --- the store says what it could not read (#353) ----------------------------
+
+
+def test_an_unreachable_store_is_reported_not_silently_empty(tmp_path, caplog):
+    """"Nobody has published yet", "the volume is not mounted" and "the file
+    is corrupt" all rendered as an empty map and nothing else."""
+    published_nothing = read_scan_records(tmp_path / "scans.jsonl")
+    assert published_nothing.records == []
+    assert published_nothing.error is None
+
+    with caplog.at_level("ERROR", logger="frontdoor.scan_records"):
+        unmounted = read_scan_records(tmp_path / "not-mounted" / "scans.jsonl")
+    assert unmounted.records == []
+    assert unmounted.error is not None
+    assert caplog.records
+
+
+def test_a_skipped_line_is_counted_and_logged(tmp_path, caplog):
+    """A torn line silently deleted that scan from the map forever, while its
+    contributor held a 200 saying it published."""
+    path = tmp_path / "scans.jsonl"
+    path.write_text(
+        json.dumps(scan()) + "\n"
+        + '{"scan_id": "torn"\n'
+        + '"a bare string"\n'
+        + json.dumps(scan(scan_id="s2")) + "\n",
+        encoding="utf-8",
+    )
+    with caplog.at_level("WARNING", logger="frontdoor.scan_records"):
+        result = read_scan_records(path)
+    assert [record["scan_id"] for record in result.records] == ["abc123", "s2"]
+    assert result.skipped == 2
+    assert result.error is None
+    assert len(caplog.records) >= 2, "a skipped scan was dropped silently"
 
 
 def test_concurrent_appends_stay_line_separated(tmp_path):

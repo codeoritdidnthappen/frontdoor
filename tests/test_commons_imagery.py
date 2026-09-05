@@ -25,6 +25,7 @@ from frontdoor.commons_imagery import (
     license_allowed,
     load_commons_records,
     parse_commons_payloads,
+    read_commons_records,
     strip_html,
     write_commons_dataset,
 )
@@ -246,6 +247,18 @@ def test_load_commons_records_total_over_missing_or_broken(tmp_path):
     weird = tmp_path / "weird.json"
     weird.write_text(json.dumps({"records": ["junk", 7]}), encoding="utf-8")
     assert load_commons_records(weird) == []
+
+
+def test_a_lost_commons_side_file_says_so_and_logs(tmp_path, caplog):
+    """#353: every CC BY / CC BY-SA record here carries an attribution the
+    licence requires us to display. A side file that fails to load takes every
+    one of those lines off the map while the map looks entirely normal, so it
+    cannot be silent. Fails against the old loader, which returned []."""
+    with caplog.at_level("ERROR", logger="frontdoor.external_data"):
+        records, error = read_commons_records(tmp_path / "nope.json")
+    assert records == []
+    assert error is not None
+    assert caplog.records, "a missing attribution source left no trace"
 
 
 # --- provenance matching ----------------------------------------------------

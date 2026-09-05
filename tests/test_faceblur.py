@@ -212,13 +212,92 @@ def test_yunet_non_finite_rows_are_skipped_and_finite_rows_survive(monkeypatch):
             rows[1, 14] = 0.9
             rows[2, :4] = (5.0, 6.0, 4.0, 4.0)      # finite: kept
             rows[2, 14] = 0.9
-            return None, rows
+            # 1 is what a real FaceDetectorYN returns whenever it RAN,
+            # found-nothing included. A falsy status now means "did not
+            # answer" and is refused -- see the non-answer tests below.
+            return 1, rows
 
     monkeypatch.setattr(faceblur, "_get_yunet", lambda: _FakeYuNet())
     boxes = faceblur._detect_yunet(np.full((32, 32, 3), 128, dtype=np.uint8))
     # The detector runs on the image and its contrast-boosted copy, so the
     # surviving box is reported once per variant.
     assert boxes == [(5, 6, 4, 4), (5, 6, 4, 4)]
+
+
+# --- a non-answer is not a negative answer (#353) ----------------------------
+#
+# The detector's return status was discarded and `faces is None` was read as
+# "no faces". A YuNet that did not run therefore produced an image processed
+# by the Haar cascade alone -- which this module's docstring records as
+# measurably missing the through-glass and reflected faces the module exists
+# for -- plus a face_count of 0, which reads as a clean photograph. Each test
+# below fails against that code, because each one goes quietly green there.
+
+
+class _SilentYuNet:
+    """A detector that answers with a failure status, as OpenCV does."""
+
+    def __init__(self, status=0):
+        self.status = status
+
+    def setInputSize(self, size):
+        pass
+
+    def detect(self, img):
+        return self.status, None
+
+
+def test_a_yunet_failure_status_is_not_reported_as_no_faces(monkeypatch):
+    monkeypatch.setattr(faceblur, "_get_yunet", lambda: _SilentYuNet())
+    with pytest.raises(faceblur.FaceDetectionUnavailable):
+        faceblur._detect_yunet(np.full((64, 64, 3), 128, dtype=np.uint8))
+
+
+def test_a_yunet_that_raises_is_not_reported_as_no_faces(monkeypatch):
+    class _RaisingYuNet(_SilentYuNet):
+        def detect(self, img):
+            raise cv2.error("detect failed")
+
+    monkeypatch.setattr(faceblur, "_get_yunet", lambda: _RaisingYuNet())
+    with pytest.raises(faceblur.FaceDetectionUnavailable):
+        faceblur._detect_yunet(np.full((64, 64, 3), 128, dtype=np.uint8))
+
+
+def test_a_yunet_that_cannot_load_is_not_reported_as_no_faces(monkeypatch):
+    def _no_model():
+        raise cv2.error("model missing")
+
+    monkeypatch.setattr(faceblur, "_get_yunet", _no_model)
+    with pytest.raises(faceblur.FaceDetectionUnavailable):
+        faceblur._detect_yunet(np.full((64, 64, 3), 128, dtype=np.uint8))
+
+
+def test_process_upload_refuses_rather_than_shipping_a_haar_only_result(
+        monkeypatch, caplog):
+    """Fail closed, and loudly.
+
+    The bytes must not come back at all: a ProcessedImage is what crosses the
+    model and storage boundary, and one built from the supplementary cascade
+    alone carries a face_count that says "clean" about an image nothing
+    competent looked at.
+    """
+    monkeypatch.setattr(faceblur, "_get_yunet", lambda: _SilentYuNet())
+    with caplog.at_level("ERROR", logger="frontdoor.faceblur"):
+        with pytest.raises(faceblur.FaceDetectionUnavailable):
+            process_upload(encode(noisy_image()))
+    assert caplog.records, "a detector that did not answer left no trace"
+
+
+def test_a_non_answer_is_distinguishable_from_a_clean_photograph(monkeypatch):
+    """The two outcomes must not be the same exception, or the caller cannot
+    tell "we looked and it was clean" from "we never looked"."""
+    assert not issubclass(faceblur.FaceDetectionUnavailable, InvalidImageError)
+    clean = process_upload(encode(np.full((240, 320, 3), 128, dtype=np.uint8)))
+    assert clean.face_count == 0
+
+    monkeypatch.setattr(faceblur, "_get_yunet", lambda: _SilentYuNet())
+    with pytest.raises(faceblur.FaceDetectionUnavailable):
+        process_upload(encode(np.full((240, 320, 3), 128, dtype=np.uint8)))
 
 
 # --- detect_faces ------------------------------------------------------------

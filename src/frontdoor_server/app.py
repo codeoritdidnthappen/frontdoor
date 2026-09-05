@@ -16,8 +16,13 @@ from jsonschema import Draft202012Validator, ValidationError
 from werkzeug.exceptions import HTTPException
 
 from frontdoor.metrology import ARM_NAMES
+from frontdoor.scan_records import (
+    DEFAULT_SCANS_PATH,
+    SCANS_ENV,
+    read_scan_records,
+)
 from frontdoor.sidecar import validate_sidecar
-from frontdoor.storage import StorageError, load_image_creds
+from frontdoor.storage import StorageError, probe_image_storage
 from frontdoor_server.claim_view import claim_page
 from frontdoor_server.map_view import map_page
 from frontdoor_server.label_view import register_labels
@@ -79,6 +84,46 @@ def _error(message, detail, field=None, status=400):
     if field is not None:
         body["field"] = field
     return body, status
+
+
+def _map_dataset_ready():
+    """True only when the map dataset parses AND holds at least one row.
+
+    /ready used to stat() this file. The incident was "the file was not
+    there"; the variant that walks through a stat() is a file that IS there
+    and does not parse, or parses to nothing -- /map/data then serves zero
+    pins with a dataset_error nobody reads, and /ready says the deployment is
+    fine. Parsing ~200 KB of JSON is the cheapest check that tells those
+    apart, and /ready is a human-and-deploy-check endpoint (fly.toml polls
+    /health, not this) so it is not on a 30-second timer.
+    """
+    path = Path(os.environ.get("FRONTDOOR_MAP_DATASET", "data/precatalogue.json"))
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    # The shape map_states.prepare_map_payload renders: a place_id-keyed
+    # mapping of row objects. Anything else yields no pins.
+    return isinstance(document, dict) and any(
+        isinstance(row, dict) for row in document.values()
+    )
+
+
+def _scan_store_ready():
+    """True when the scan store is readable and nothing in it was skipped.
+
+    A store that does not exist yet under a directory that DOES is ready:
+    nobody has published, which is not a fault. A missing directory is the
+    unmounted volume, and a line that will not parse is a contributor's scan
+    that is off the map for good -- neither is ready.
+
+    Deliberately not a write probe. Proving the volume is writable means
+    writing to it, and a health endpoint that mutates the only state this app
+    keeps is a worse trade than missing a read-only mount; append_scan's
+    refusal to create its own parent is what catches the mount itself.
+    """
+    result = read_scan_records(os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH))
+    return result.error is None and result.skipped == 0
 
 # Fixed placeholder values. The repdigit rises are deliberately synthetic so nobody reads stub
 # output as a measurement. TICK-062 serves A and A' live on the free-tier image; B and C need
@@ -240,29 +285,55 @@ def create_app():
         assessment succeeds, and the image quietly does not persist. That has
         already happened once on this project.
 
-        Reports configuration presence only. It never reveals a value, and it
+        Each subsystem is VERIFIED rather than assumed (#353). The first cut
+        of this endpoint checked the presence of exactly what had failed
+        before, and every one-notch variant walked straight through it: a
+        dataset that exists but does not parse, storage whose credentials are
+        present but revoked, a scan store nobody checked at all. Cost is held
+        down by choosing the cheapest question that actually separates working
+        from broken, and by bounding and caching the one check that leaves the
+        process (frontdoor.storage.probe_image_storage).
+
+        Reports presence and status only. It never reveals a value, and it
         never reveals which specific variable is missing, because that is a map
         of the deployment for anyone who asks. Names of subsystems, booleans,
         nothing else.
         """
         subsystems = {}
 
-        # The model: an assessment cannot happen without it.
-        subsystems["screening"] = bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
+        # The model: an assessment cannot happen without it. Either variable
+        # counts, because screen_view._get_engine accepts either -- checking
+        # only ANTHROPIC_API_KEY made a deployment authenticated by
+        # ANTHROPIC_AUTH_TOKEN report itself broken while it worked. Not
+        # verified beyond presence on purpose: the cheapest question that
+        # verifies a model key is a billed model call, on every probe.
+        subsystems["screening"] = bool(
+            os.environ.get("ANTHROPIC_API_KEY", "").strip()
+            or os.environ.get("ANTHROPIC_AUTH_TOKEN", "").strip()
+        )
 
         # Object storage: the difference between a published scan that keeps
-        # its photograph and one that silently does not.
+        # its photograph and one that silently does not. One bounded, cached
+        # HEAD on the bucket, because a revoked key and a deleted bucket are
+        # symptomatically identical to the missing credential this endpoint
+        # was written for -- and the variables being set says nothing about
+        # either.
         try:
-            load_image_creds()
+            probe_image_storage()
             subsystems["photo_storage"] = True
         except StorageError:
             subsystems["photo_storage"] = False
 
-        # The map dataset, which is what /map/data serves.
-        dataset_path = Path(
-            os.environ.get("FRONTDOOR_MAP_DATASET", "data/precatalogue.json")
-        )
-        subsystems["map_dataset"] = dataset_path.is_file()
+        # The map dataset, which is what /map/data serves. Parsed, not just
+        # stat()ed: a present-but-unparseable file, or one that parses to no
+        # rows, served zero pins while reporting ready.
+        subsystems["map_dataset"] = _map_dataset_ready()
+
+        # The scan store, which had its own incident and no check at all. A
+        # store nobody has written to yet is ready; an unreachable directory
+        # (the unmounted volume) or a line that will not parse (a scan that is
+        # gone from the map for good) is not.
+        subsystems["scan_store"] = _scan_store_ready()
 
         ready_state = all(subsystems.values())
         return {

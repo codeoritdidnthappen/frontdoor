@@ -23,6 +23,7 @@ from frontdoor.external_data import (
     match_records,
     parse_overpass_payload,
     provenance_for_place,
+    read_osm_records,
     write_disagreements,
     write_osm_dataset,
 )
@@ -136,6 +137,40 @@ def test_load_osm_records_total_over_missing_or_broken(tmp_path):
     weird = tmp_path / "weird.json"
     weird.write_text(json.dumps({"records": ["junk", 7]}), encoding="utf-8")
     assert load_osm_records(weird) == []
+
+
+def test_a_side_file_that_cannot_be_read_says_so_and_logs(tmp_path, caplog):
+    """#353: total is not the same as silent.
+
+    The side files are COPYed into the image. If one is dropped or truncated
+    -- the dataset incident's exact class -- every provenance and attribution
+    line disappears from every pin and the map looks entirely normal. The ODbL
+    attribution these records carry is a licence obligation, so its silent
+    disappearance is not only an observability problem. Fails against the old
+    loader, which returned [] and said nothing.
+    """
+    with caplog.at_level("ERROR", logger="frontdoor.external_data"):
+        records, error = read_osm_records(tmp_path / "nope.json")
+    assert records == []
+    assert error is not None
+    assert caplog.records, "a missing side file left no trace"
+
+    broken = tmp_path / "broken.json"
+    broken.write_text("{not json", encoding="utf-8")
+    caplog.clear()
+    with caplog.at_level("ERROR", logger="frontdoor.external_data"):
+        records, error = read_osm_records(broken)
+    assert records == []
+    assert error is not None
+    assert caplog.records
+
+
+def test_a_side_file_that_reads_cleanly_reports_no_error(tmp_path):
+    """An empty records array is a real answer, not a failure: the sources
+    matched nothing, and that stays distinguishable from a lost file."""
+    path = tmp_path / "empty.json"
+    path.write_text(json.dumps({"records": []}), encoding="utf-8")
+    assert read_osm_records(path) == ([], None)
 
 
 # --- provenance matching ----------------------------------------------------

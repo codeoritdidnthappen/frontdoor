@@ -5,10 +5,14 @@ POST /screen assesses and deliberately retains nothing. The publish step
 privacy-processed image bytes go to object storage, and one record per scan is
 appended here — an append-friendly JSONL file (one JSON object per line), path
 from FRONTDOOR_SCANS, default data/scans.jsonl, the same env-plus-default shape
-as the map dataset. JSONL because the write is one line: append_scan borrows the
-manifest's newline discipline (frontdoor.manifest._require_newline_terminated)
-so a torn earlier write is refused loudly instead of silently concatenating two
-records into one unparseable line.
+as the map dataset. JSONL because the write is one line: append_scan keeps the
+manifest's newline invariant (frontdoor.manifest._require_newline_terminated)
+so a torn earlier write can never silently concatenate two records into one
+unparseable line — it terminates the torn line, loudly, and carries on, and
+the torn remains are then counted and logged as a skipped record on every
+read rather than disappearing. append_scan also refuses to create its own
+parent directory, so an unmounted volume is a 503 and not a 200 over a store
+that dies with the container.
 
 The record is metadata only — verdicts, confidences, place reference, image
 KEYS. The image bytes live in object storage under `scans/<place-slug>/<uuid>.jpg`
@@ -38,9 +42,11 @@ an observation; test_scan_records pins each property.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import threading
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 from frontdoor.external_data import (
@@ -63,6 +69,8 @@ from frontdoor.map_states import (
     _valid_location,
     state_for_row,
 )
+
+logger = logging.getLogger(__name__)
 
 SCANS_ENV = "FRONTDOOR_SCANS"
 DEFAULT_SCANS_PATH = "data/scans.jsonl"
@@ -176,47 +184,143 @@ def is_owner_attested(scan):
 def append_scan(path, record):
     """Append one record as one JSONL line, newline-terminated.
 
-    Same discipline as the manifest: a store whose last line was never finished
-    means an earlier write was interrupted, and appending onto it would merge
-    two records into one silently-unparseable line — refuse loudly instead.
+    Two things this deliberately does NOT do, each because doing it hides a
+    failure behind a 200:
+
+    * It does not create the parent directory. The publish path does not own
+      the storage location; the volume mount does (fly.toml mounts
+      `frontdoor_data` at `/data`, and the image sets FRONTDOOR_SCANS to
+      `/data/scans.jsonl`). `mkdir(parents=True)` on an unmounted volume
+      creates the directory *inside the container*, the append succeeds, the
+      contributor is told the scan published, and every scan dies with the
+      container with nothing anywhere reporting it. Refusing is the only
+      outcome anybody finds out about: scan_view turns a ScanRecordError into
+      a 503 that names the store as unavailable.
+    * It does not refuse forever over a torn last line. A worker killed
+      mid-append (gunicorn runs --timeout 30, and the 512 MB machine has an
+      OOM kill on record) leaves the file unterminated. Refusing every later
+      append wedges the store for the life of the file while reads keep
+      succeeding, so the map looks fine and each contributor is individually
+      told "saved for later". Terminating the torn line is recoverable and
+      keeps the property the newline discipline exists for -- two records can
+      still never merge into one line, because the torn remains stay on their
+      own line, where load counts and logs them as skipped.
+
     The check and the write happen under one lock so two threads in the same
     worker cannot interleave them.
     """
     path = Path(path)
     line = json.dumps(record, sort_keys=True, separators=(",", ":"))
     with _append_lock:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if path.exists() and path.stat().st_size and path.read_bytes()[-1:] != b"\n":
-            raise ScanRecordError(
-                f"{path} does not end with a newline; a previous append was "
-                "interrupted. Refusing to append onto a partial record."
+        if not path.parent.is_dir():
+            logger.error(
+                "scan store directory %s does not exist; refusing to create it "
+                "and publish into a location that is not the mounted volume",
+                path.parent,
             )
+            raise ScanRecordError(
+                f"{path.parent} is not an existing directory, so the scan "
+                "store's volume is not mounted. Refusing to create it: a "
+                "store written inside the container is lost with the container."
+            )
+        if path.exists() and path.stat().st_size and path.read_bytes()[-1:] != b"\n":
+            logger.error(
+                "scan store %s was left unterminated by an interrupted append; "
+                "terminating the torn line so appends can resume. The torn "
+                "remains stay on their own line and are reported as a skipped "
+                "record on every read.",
+                path,
+            )
+            with open(path, "ab") as handle:
+                handle.write(b"\n")
         with open(path, "a", encoding="utf-8", newline="") as handle:
             handle.write(line + "\n")
+
+
+@dataclass(frozen=True)
+class ScanStoreRead:
+    """One read of the scan store, including what it could not read.
+
+    `error` is None only when the store itself was readable; `skipped` counts
+    lines that were present and could not be turned into a record. Both are
+    reported by /map/data, because "nobody has published yet", "the volume is
+    not mounted" and "a line is corrupt" produce the same empty map and the
+    caller could not previously tell them apart.
+    """
+
+    records: list
+    skipped: int
+    error: str | None
+
+
+def read_scan_records(path):
+    """Read the store and say what happened.
+
+    Still total -- the map must render with or without scans, and one corrupt
+    line must not take every other scan off the map with it -- but no longer
+    silent. A missing FILE under an existing directory is the legitimate
+    "nobody has published yet" and is not an error; a missing DIRECTORY is the
+    unmounted volume and is.
+    """
+    try:
+        store = Path(path)
+        text = store.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        if not store.parent.is_dir():
+            error = f"scan store directory not found: {store.parent}"
+            logger.error(
+                "scan store directory %s does not exist; the map is showing no "
+                "scans because the store is unreachable, not because none were "
+                "published", store.parent,
+            )
+            return ScanStoreRead([], 0, error)
+        return ScanStoreRead([], 0, None)
+    except (OSError, TypeError, ValueError) as exc:
+        error = f"scan store unreadable: {type(exc).__name__}: {exc}"
+        logger.error("scan store %r unreadable: %s", path, exc)
+        return ScanStoreRead([], 0, error)
+
+    records = []
+    skipped = 0
+    for number, line in enumerate(text.splitlines(), start=1):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as exc:
+            skipped += 1
+            # The line itself is never logged: a scan record carries a place
+            # reference and a contributor. Where it is and why is enough to
+            # find it, and the store is on the volume.
+            logger.warning(
+                "scan store %s line %d is not JSON (%s); that scan is not on "
+                "the map", store, number, exc.msg,
+            )
+            continue
+        if not isinstance(record, dict):
+            skipped += 1
+            logger.warning(
+                "scan store %s line %d is JSON but not an object; that scan is "
+                "not on the map", store, number,
+            )
+            continue
+        records.append(record)
+    if skipped:
+        logger.error(
+            "scan store %s: %d of %d line(s) could not be read as a record and "
+            "are missing from the map", store, skipped, skipped + len(records),
+        )
+    return ScanStoreRead(records, skipped, None)
 
 
 def load_scan_records(path):
     """Every parseable record; [] when the store is missing or unreadable.
 
-    Total on purpose, like the map dataset and the external side files: the
-    map must render with or without scans, and one corrupt line must not take
-    every other scan off the map with it.
+    The list-only view of read_scan_records, for callers that genuinely only
+    need the records. /map/data is not one of them -- it reports the count and
+    the error too.
     """
-    try:
-        text = Path(path).read_text(encoding="utf-8")
-    except (OSError, TypeError, ValueError):
-        return []
-    records = []
-    for line in text.splitlines():
-        if not line.strip():
-            continue
-        try:
-            record = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(record, dict):
-            records.append(record)
-    return records
+    return read_scan_records(path).records
 
 
 # --- merging into the map dataset -------------------------------------------

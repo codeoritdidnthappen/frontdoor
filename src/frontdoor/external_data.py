@@ -42,6 +42,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import logging
 import math
 import re
 import sys
@@ -50,6 +51,8 @@ import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 
@@ -201,17 +204,57 @@ def write_osm_dataset(records, path, fetched_at):
     return document
 
 
-def load_osm_records(path):
-    """Records from a segregated OSM side file; [] when missing/unreadable.
+def read_side_file(path, label):
+    """(records, error) from one segregated external side file.
 
-    Total on purpose: the map must render with or without external data.
+    Still total -- the map must render with or without external data -- but no
+    longer silent. Losing a side file is the dataset incident's exact class:
+    the files are COPYed into the image (Dockerfile: `COPY data/external`), so
+    if one is dropped or truncated every provenance line disappears from every
+    pin and the map looks entirely normal. Attribution is a licence obligation
+    for these sources (ODbL for OSM, CC BY / CC BY-SA for Commons), so an
+    attribution line that silently stops rendering is not only an
+    observability problem.
+
+    Shared by both side files rather than copied, so neither can be made
+    observable while the other stays quiet.
     """
     try:
         document = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, TypeError):
-        return []
+    except FileNotFoundError:
+        logger.error(
+            "%s side file %s is missing; every %s provenance and attribution "
+            "line is absent from the map", label, path, label,
+        )
+        return [], f"{label} side file not found: {path}"
+    except (OSError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        logger.error(
+            "%s side file %r unreadable (%s); every %s provenance and "
+            "attribution line is absent from the map", label, path, exc, label,
+        )
+        return [], f"{label} side file unreadable: {type(exc).__name__}: {exc}"
     records = document.get("records") if isinstance(document, dict) else None
-    return [r for r in records or [] if isinstance(r, dict)]
+    if records is None:
+        logger.error(
+            "%s side file %s carries no records array; every %s provenance and "
+            "attribution line is absent from the map", label, path, label,
+        )
+        return [], f"{label} side file has no records array: {path}"
+    return [r for r in records if isinstance(r, dict)], None
+
+
+def read_osm_records(path):
+    """(records, error) from a segregated OSM side file."""
+    return read_side_file(path, OSM_SOURCE)
+
+
+def load_osm_records(path):
+    """Records from a segregated OSM side file; [] when missing/unreadable.
+
+    The list-only view of read_osm_records. /map/data uses the pair instead,
+    so a missing side file is reported rather than rendering as "no matches".
+    """
+    return read_osm_records(path)[0]
 
 
 # --- provenance lines -------------------------------------------------------

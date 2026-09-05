@@ -10,6 +10,12 @@ only). Its path comes from FRONTDOOR_MAP_DATASET, defaulting to
 data/precatalogue.json. A missing or unreadable dataset degrades to an empty
 pin list with the problem named in the payload, never an error page.
 
+Every input this endpoint degrades over names its own failure in the payload
+(#353), because an empty or thinner map is otherwise indistinguishable from a
+working one: `dataset_error` for the pre-catalogue, `scans_error` with
+`scan_count` and `scans_skipped` for the scan store, and `provenance_error`
+for the external side files. Each is None when that input was read cleanly.
+
 External provenance (TICK-258, #242): when the segregated OSM side file is
 present (FRONTDOOR_EXTERNAL_OSM, default data/external/osm_accessibility.json),
 pins with a matching positive external record gain an optional "provenance"
@@ -43,15 +49,15 @@ from flask import Blueprint, Response
 
 from frontdoor.commons_imagery import (
     commons_provenance_for_place,
-    load_commons_records,
+    read_commons_records,
 )
-from frontdoor.external_data import load_osm_records, provenance_for_place
+from frontdoor.external_data import provenance_for_place, read_osm_records
 from frontdoor.map_states import prepare_map_payload
 from frontdoor.scan_records import (
     DEFAULT_SCANS_PATH,
     SCANS_ENV,
-    load_scan_records,
     merge_scans,
+    read_scan_records,
 )
 
 DATASET_ENV = "FRONTDOOR_MAP_DATASET"
@@ -91,11 +97,25 @@ def map_data():
     # pin or raise one — never lower a state, an observation, or a date
     # (frontdoor.scan_records' never-negative contract) — and no scan store,
     # or an unreadable one, changes nothing at all.
-    scans = load_scan_records(os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH))
-    dataset, scan_meta = merge_scans(dataset, scans)
+    scans = read_scan_records(os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH))
+    # An empty pin list has three causes that used to look identical from here:
+    # nobody has published, the volume is not mounted, and the file is corrupt.
+    # A skipped line is the worst of the three, because the map keeps rendering
+    # while one contributor's scan is gone for good and their 200 said it
+    # published -- so it is an error here, not a footnote.
+    scans_error = scans.error
+    if scans_error is None and scans.skipped:
+        scans_error = (
+            f"{scans.skipped} scan record(s) could not be read and are missing "
+            "from the map"
+        )
+    dataset, scan_meta = merge_scans(dataset, scans.records)
     payload = prepare_map_payload(dataset)
     payload["dataset_error"] = dataset_error
-    _attach_provenance(payload["pins"])
+    payload["scans_error"] = scans_error
+    payload["scan_count"] = len(scans.records)
+    payload["scans_skipped"] = scans.skipped
+    payload["provenance_error"] = _attach_provenance(payload["pins"])
     _attach_scan_provenance(payload["pins"], scan_meta)
     return payload
 
@@ -106,14 +126,18 @@ def _attach_provenance(pins):
     States and labels are already computed; this only ever appends
     source+date lines (positive-only by frontdoor.external_data's
     never-negative rule) and touches nothing else. No external file, no
-    change at all.
+    change at all -- but the caller is told which side file failed and why,
+    because "the sources matched nothing" and "the side file is not in the
+    image" produce the same pins, and the second one drops attribution the
+    ODbL and CC BY licences require us to show.
     """
-    osm_records = load_osm_records(
+    osm_records, osm_error = read_osm_records(
         os.environ.get(EXTERNAL_OSM_ENV, DEFAULT_EXTERNAL_OSM_PATH))
-    commons_records = load_commons_records(
+    commons_records, commons_error = read_commons_records(
         os.environ.get(EXTERNAL_COMMONS_ENV, DEFAULT_EXTERNAL_COMMONS_PATH))
+    error = "; ".join(part for part in (osm_error, commons_error) if part) or None
     if not osm_records and not commons_records:
-        return
+        return error
     for pin in pins:
         location = pin["location"]
         lines = provenance_for_place(
@@ -124,6 +148,7 @@ def _attach_provenance(pins):
         )
         if lines:
             pin["provenance"] = lines
+    return error
 
 
 def _attach_scan_provenance(pins, scan_meta):

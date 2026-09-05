@@ -48,6 +48,7 @@ from frontdoor.external_data import (
     ProvenanceLine,
     _haversine_m,
     _is_number,
+    read_side_file,
 )
 
 COMMONS_API_URL = "https://commons.wikimedia.org/w/api.php"
@@ -307,15 +308,21 @@ def write_commons_dataset(records, path, fetched_at, dropped=None):
     return document
 
 
+def read_commons_records(path):
+    """(records, error) from the segregated Commons side file.
+
+    Shares external_data.read_side_file with the OSM loader: the CC BY /
+    CC BY-SA attribution these records carry is a licence obligation, so a
+    side file that silently fails to load takes every attribution line off
+    the map while the map still looks entirely normal.
+    """
+    return read_side_file(path, COMMONS_SOURCE)
+
+
 def load_commons_records(path):
     """Records from the segregated Commons side file; [] when missing or
-    unreadable. Total on purpose: the map renders with or without it."""
-    try:
-        document = json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, TypeError):
-        return []
-    records = document.get("records") if isinstance(document, dict) else None
-    return [r for r in records or [] if isinstance(r, dict)]
+    unreadable. The list-only view of read_commons_records."""
+    return read_commons_records(path)[0]
 
 
 # --- provenance lines -------------------------------------------------------

@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
+import time
 from ipaddress import ip_address
 from urllib.parse import urlsplit
 
@@ -216,7 +218,7 @@ def load_image_creds():
     )
 
 
-def _client(creds):
+def _client(creds, *, config_kwargs=None):
     try:
         import boto3
         from botocore.config import Config
@@ -231,6 +233,7 @@ def _client(creds):
         "config": Config(
             request_checksum_calculation="when_required",
             response_checksum_validation="when_required",
+            **(config_kwargs or {}),
         ),
     }
     if creds.endpoint:
@@ -260,6 +263,63 @@ def _client(creds):
             "could not configure object storage client; check "
             "FRONTDOOR_S3_ENDPOINT and FRONTDOOR_S3_REGION"
         ) from exc
+
+
+#: Bounds on the /ready reachability probe. A readiness endpoint that can hang
+#: for a storage provider's timeout is not usable as a probe, so the probe
+#: client gets short timeouts and no retries, and the ANSWER is cached for
+#: PROBE_TTL_S -- including a failure, so an outage costs one bounded HEAD per
+#: half minute rather than one per caller.
+PROBE_TIMEOUT_S = 2
+PROBE_TTL_S = 30.0
+
+_probe_cache = {}
+_probe_lock = threading.Lock()
+
+
+def probe_image_storage(now=None):
+    """Can the configured credentials actually reach the images bucket?
+
+    Presence of the variables was all /ready checked, and from there a revoked
+    key, a rotated secret and a deleted bucket are indistinguishable from
+    working storage -- symptomatically identical to the MISSING credential
+    that already cost this project a day of scans whose photographs did not
+    persist. One HEAD on the bucket is the cheapest question that separates
+    them.
+
+    Raises StorageError when the credentials are absent, refused, or the
+    bucket does not answer. Never returns a value derived from the response.
+    """
+    creds = load_image_creds()
+    key = (creds.bucket, creds.access_key, creds.secret_key,
+           creds.region, creds.endpoint)
+    now = time.monotonic() if now is None else now
+    with _probe_lock:
+        cached = _probe_cache.get(key)
+    if cached is not None and cached[0] > now:
+        if cached[1] is not None:
+            raise StorageError(cached[1])
+        return True
+
+    error = None
+    try:
+        _client(creds, config_kwargs={
+            "connect_timeout": PROBE_TIMEOUT_S,
+            "read_timeout": PROBE_TIMEOUT_S,
+            "retries": {"max_attempts": 1},
+        }).head_bucket(Bucket=creds.bucket)
+    except StorageError as exc:
+        error = str(exc)
+    except Exception as exc:
+        # The message says what failed, never which variable or value: /ready
+        # renders a boolean from this and the operator reads the log.
+        logger.error("object storage probe failed: %s: %s", type(exc).__name__, exc)
+        error = f"object storage did not answer: {type(exc).__name__}"
+    with _probe_lock:
+        _probe_cache[key] = (now + PROBE_TTL_S, error)
+    if error is not None:
+        raise StorageError(error)
+    return True
 
 
 def _is_precondition_failed(exc):
