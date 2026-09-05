@@ -78,9 +78,28 @@ Both files are served from the app's own origin, and the worker is served with `
 
 `.github/workflows/deploy.yml` deploys this app on manual dispatch only, never on merge: Actions
 tab, **deploy**, **Run workflow**, and a one-line reason that the run records alongside the commit
-and the actor. It runs `flyctl deploy --remote-only`, then fails the run unless `/health`, `/app`
-and `/app-icon.png` all answer 200, so a green run means the path a phone uses is actually serving.
-A concurrency group keeps two deploys off the same machine.
+and the actor. It runs `flyctl deploy --remote-only`, then fails the run unless `/health`, `/app`,
+`/app-icon.png`, `/app-manifest.json`, `/app-sw.js` and `/version` all answer 200, so a green run
+means the path a phone uses — including the two files the home-screen install depends on — is
+actually serving. A concurrency group keeps two deploys off the same machine.
+
+**Pick `main` in the branch box.** The Run workflow dialog offers every branch, and the workflow
+now refuses anything but `refs/heads/main` on its first step, before the checkout. It used to
+deploy whichever branch was picked and still go green, because the post-deploy check compares
+`/version` against that same branch's commit.
+
+Four rules the workflow file keeps, pinned by `tests/test_workflow_hardening.py` so they survive
+the next edit:
+
+- Both workflows declare `permissions: contents: read`. Without a block, a job runs with the
+  organisation's default token scope — a setting this repository cannot see and did not choose.
+- Third-party actions are pinned to a full commit SHA, never a tag or a branch. `setup-flyctl` was
+  on `@master`, and the step after it runs the binary that action installs with the production
+  deploy token in the environment.
+- No `${{ }}` inside any `run:` block. An expression is pasted in as text before the shell parses
+  it, so a free-text `reason` could run commands. Values go through `env:` and are read as quoted
+  shell variables.
+- The ref guard runs before the checkout, not after it.
 
 It needs one repository secret, created once by whoever holds the Fly account:
 

