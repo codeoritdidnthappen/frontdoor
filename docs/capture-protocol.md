@@ -31,6 +31,13 @@ measure a step, that is the earlier version of this project and it is not what w
 delivered relative stereo data, which the app persists as `DepthFloat32` when supported. Capture
 validation still requires intrinsics, and depth is never used to produce a verdict.
 
+**A capture whose privacy step blurred a face is written with no depth map at all.** A depth map
+of a face is the same face in geometry, and it would be stored and uploaded beside the colour
+frame the blur just cleaned. Nothing is asked of you and no capture is lost — depth is
+quarantined from the method (D-020) and its absence is recorded rather than punished
+(TICK-023) — but the later depth comparison excludes those shots, exactly as it excludes
+imported ones.
+
 > If that phone will not launch the app, capture does not happen that day — nothing is shooting
 > alongside it. That is why the launch check below is the first line of the checklist and not the
 > last.
@@ -98,10 +105,12 @@ Across the view set (not necessarily every single shot), the set as a whole must
 - **No interiors.** Stop at the threshold. Don't shoot through an open door into the space beyond
   it.
 - **Identifiable people: blur-first (TICK-257).** Ingest now detects faces and irreversibly
-  blurs them automatically, so a face in a shot is a blur problem the pipeline handles, not a
-  reshoot. Reshoot only when a person **physically occludes the entrance** — that is an occlusion
-  problem, not a privacy one, and no amount of blurring puts the doorway back in frame. If the
-  occlusion won't clear in a reasonable wait, treat the entrance as a skip (see below).
+  blurs them automatically, so a face in a shot is usually a blur problem the pipeline handles,
+  not a reshoot. Reshoot only when a person **physically occludes the entrance** — that is an
+  occlusion problem, not a privacy one, and no amount of blurring puts the doorway back in
+  frame. If the occlusion won't clear in a reasonable wait, treat the entrance as a skip (see
+  below). The other reshoot is the app telling you a face **could not** be blurred: it refuses
+  that photo rather than saving it with the face in the clear, so take it again.
 - **Verify the processed glass — never rely on the raw preview.** Storefront
   doors are mirrors: the pilot (TICK-092) lost 17 of 65 shots to identifiable faces, mostly *in
   the door glass* — reflections of passers-by, people inside seen through the pane, and the

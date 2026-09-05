@@ -224,17 +224,17 @@ extension ImportedPhotoTests {
         let raw = source as Data
         let clear: ImportedPhotoPrivacy.Processed
         let blurred: ImportedPhotoPrivacy.Processed
-        guard case .success(let noFaces) = ImportedPhotoPrivacy.process(
+        guard case .success(let noFaces) = ImportedPhotoPrivacy.processWithoutDetection(
             raw, normalizedFaceRectangles: []) else {
             return XCTFail("metadata-only processing failed")
         }
         clear = noFaces
-        guard case .success(let oneFace) = ImportedPhotoPrivacy.process(
+        guard case .success(let oneFace) = ImportedPhotoPrivacy.processWithoutDetection(
             raw, normalizedFaceRectangles: [CGRect(x: 0.25, y: 0.25, width: 0.5, height: 0.5)])
         else { return XCTFail("face processing failed") }
         blurred = oneFace
 
-        XCTAssertEqual(blurred.faceCount, 1)
+        XCTAssertEqual(blurred.blurredFaceCount, 1)
         XCTAssertNotEqual(blurred.data, raw)
         XCTAssertNotEqual(blurred.data, clear.data, "the face rectangle must change pixels")
         XCTAssertEqual(blurred.pixelWidth, width)
@@ -254,6 +254,34 @@ extension ImportedPhotoTests {
     func testAC1AC2UnreadableImportIsRefusedWithoutAnOriginalFallback() {
         guard case .failure(.unreadable) = ImportedPhotoPrivacy.process(Data("not image".utf8))
         else { return XCTFail("an unreadable image must fail closed") }
+    }
+
+    func testAFaceTooSmallToBlurRefusesTheImportRatherThanStoringItInTheClear() throws {
+        // The camera path's bug, in the importer too: the blur loop used to `continue` on a
+        // detection that collapsed below a pixel, and the photo was stored with that face
+        // untouched while `faceCount` claimed it had been handled.
+        let width = 64, height = 64
+        let bytes = [UInt8](repeating: 128, count: width * height * 4)
+        let provider = try XCTUnwrap(CGDataProvider(data: Data(bytes) as CFData))
+        let image = try XCTUnwrap(CGImage(
+            width: width, height: height, bitsPerComponent: 8, bitsPerPixel: 32,
+            bytesPerRow: width * 4, space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.noneSkipLast.rawValue),
+            provider: provider, decode: nil, shouldInterpolate: false, intent: .defaultIntent))
+        let source = NSMutableData()
+        let destination = try XCTUnwrap(CGImageDestinationCreateWithData(
+            source, UTType.jpeg.identifier as CFString, 1, nil))
+        CGImageDestinationAddImage(destination, image, nil)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+
+        let outcome = ImportedPhotoPrivacy.processWithoutDetection(
+            source as Data,
+            normalizedFaceRectangles: [CGRect(x: 0, y: 0, width: 0.001, height: 0.001)])
+        guard case .failure(let failure) = outcome else {
+            return XCTFail("a detected face was not blurred and the import succeeded anyway")
+        }
+        XCTAssertEqual(failure, .blurFailed)
+        XCTAssertTrue(failure.message.contains("not imported"))
     }
 }
 
