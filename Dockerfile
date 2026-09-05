@@ -25,10 +25,23 @@ COPY data/external /app/data/external
 RUN pip install --no-cache-dir ".[server]"
 
 ENV PORT=8080
-# Community scans are the only state this app writes, and the container filesystem is
-# replaced on every deploy. This points at the volume declared in fly.toml, so a scan
-# published from a phone outlives the next deploy.
+# Three things this app writes at run time, and the container filesystem is replaced on every
+# deploy. The two below are pointed at the volume declared in fly.toml, so what a phone
+# published outlives the next deploy. The third is knowingly ephemeral -- see below.
+#
+# This comment used to say scans were the only state written here. They were not, and the claim
+# was load-bearing: it is what made an ephemeral claims path look like nothing was missing.
 ENV FRONTDOOR_SCANS=/data/scans.jsonl
+# Owner claims. Losing these is not a lost record, it is a lost credential: the claim carries the
+# only bearer token for an approved workspace, so a deploy 404s every workspace that existed --
+# while `owner_confirmed`, which a claim authorised, persists in the scan store on the volume.
+# The map goes on showing Owner-confirmed pins backed by claims that no longer exist, and
+# `load_claims` answers a missing file with an empty list, so nothing anywhere reports it.
+ENV FRONTDOOR_CLAIMS=/data/claims.jsonl
+# NOT redirected: `POST /labels` appends to data/labels.csv inside the container and those rows
+# are lost on the next deploy. That is a known and documented limitation of the first phone-label
+# version (TICK-282, docs/server-deploy.md), not an oversight of this line -- download them before
+# a redeploy. Named here so the list above stays honest about what is and is not durable.
 EXPOSE 8080
 
 # exec, so gunicorn is PID 1 and a stop signal reaches it instead of the shell. The shell
