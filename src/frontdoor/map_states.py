@@ -156,6 +156,10 @@ def pin_for_row(place_id, row):
         "ai_estimated": row.get("status") == "ai_estimated",
         "imagery_date": imagery_date if isinstance(imagery_date, str) else None,
         "checklist": checklist_for_row(row),
+        # Visual trust tier only. Not a third legal stamp: Green-or-Gray is
+        # still exactly `state`. Owner-confirmed is set by an attested in-app
+        # capture, never by a claim.
+        "owner_confirmed": row.get("owner_confirmed") is True,
     }
 
 

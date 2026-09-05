@@ -46,8 +46,15 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, Response, current_app, request
 
+from frontdoor.claims import (
+    CLAIMS_ENV,
+    DEFAULT_CLAIMS_PATH,
+    has_approved_claim,
+)
 from frontdoor.faceblur import InvalidImageError, process_upload
 from frontdoor.scan_records import (
+    CAPTURE_CAMERA_ROLL,
+    CAPTURE_IN_APP,
     DEFAULT_SCANS_PATH,
     SCANS_ENV,
     ScanRecordError,
@@ -204,6 +211,39 @@ def publish():
     place_ref, ref_error = _parse_place_ref(request.form)
     if ref_error is not None:
         return ref_error
+
+    capture_kind = (request.form.get("capture_kind") or "").strip() or None
+    if capture_kind not in (None, CAPTURE_IN_APP, CAPTURE_CAMERA_ROLL):
+        return _error(
+            "invalid capture_kind",
+            "capture_kind must be in_app or camera_roll.",
+            status=422,
+        )
+    attested_raw = (request.form.get("attested") or "").strip().lower()
+    attested = attested_raw in ("1", "true", "yes")
+    if attested and capture_kind == CAPTURE_CAMERA_ROLL:
+        return _error(
+            "camera-roll cannot attest",
+            "Owner-confirmed requires guided in-app capture at the door; "
+            "a camera-roll photo cannot attest.",
+            status=422,
+        )
+    if attested and capture_kind != CAPTURE_IN_APP:
+        return _error(
+            "attestation requires in-app capture",
+            "attested=1 is only valid with capture_kind=in_app.",
+            status=422,
+        )
+    if attested:
+        place_id = place_ref.get("place_id")
+        if not has_approved_claim(
+            os.environ.get(CLAIMS_ENV, DEFAULT_CLAIMS_PATH), place_id
+        ):
+            return _error(
+                "no approved claim",
+                "Owner-confirmed capture needs an approved claim for this place.",
+                status=422,
+            )
 
     entrance_id = request.form.get("entrance_id")
     if entrance_id is not None:
@@ -374,6 +414,8 @@ def publish():
         image_keys=image_keys,
         contributor=_contributor(),
         entrance_id=entrance_id,
+        capture_kind=capture_kind,
+        attested=attested,
     )
     try:
         append_scan(os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH), record)

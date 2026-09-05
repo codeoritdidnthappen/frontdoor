@@ -233,6 +233,15 @@
   #demo-holder button[disabled] { opacity: .55; cursor: wait; }
   #demo-holder button:focus-visible { outline: 3px solid var(--purple-deep); outline-offset: 2px; }
 
+  #owner-entry {
+    position: absolute; bottom: 18px; left: 50%; transform: translateX(-50%);
+    z-index: 6; background: var(--card); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 999px;
+    padding: 10px 16px; font-size: 13px; font-weight: 700;
+    font-family: inherit; text-decoration: none; box-shadow: var(--shadow);
+  }
+  #owner-entry:focus-visible { outline: 3px solid var(--purple-deep); outline-offset: 2px; }
+
   #scanbox {
     position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
     z-index: 8; background: var(--card); border-radius: var(--radius);
@@ -265,6 +274,7 @@
 <body>
 <div id="map" role="application" aria-label="Accessibility map"></div>
 <div id="banner" role="status"></div>
+<a id="owner-entry" href="/app#claim">For business owners</a>
 
 <div id="layers" role="group" aria-label="Map layers">
   <label id="sr-label">
@@ -291,15 +301,15 @@ var TIER_LABELS = {
   "tier-owner": "Owner-confirmed"
 };
 
-// Honest tier mapping, mirroring the server's two-state contract
-// (frontdoor.map_states.state_for_row): total and default-Estimated.
-// Only the exact server-computed verified state — which requires human,
-// non-imagery confirmation server-side — renders the Scanned tier. Nothing
-// in today's data can reach the Owner tier; that class exists in the visual
-// system only, and no input can select it here. ai_estimated rows and every
-// unexpected value render Estimated. Pins only upgrade; no negative state
-// exists.
-function tierClass(state) { return state === VERIFIED_STATE ? "tier-scanned" : "tier-estimated"; }
+// Honest tier mapping. The legal stamp is still exactly two states
+// (frontdoor.map_states.state_for_row): verified_accessible or not_yet_checked.
+// Owner-confirmed is an extra pin field from attested in-app capture, never a
+// third stamp state and never a claim approval.
+function tierClass(pin) {
+  if (pin && pin.owner_confirmed) return "tier-owner";
+  var state = pin && typeof pin === "object" ? pin.state : pin;
+  return state === VERIFIED_STATE ? "tier-scanned" : "tier-estimated";
+}
 
 // State-record provenance detection, keyed on the provenance source string.
 // TABS/TDLR data is a later round; the mechanism is ready for it and
@@ -375,7 +385,7 @@ function pinBodySvg(tier) {
 }
 
 function pinElement(pin, index) {
-  var tier = tierClass(pin.state);
+  var tier = tierClass(pin);
   var node = el("div", "pin " + tier + " pin-drop");
   node.setAttribute("role", "button");
   node.setAttribute("tabindex", "0");
@@ -509,7 +519,7 @@ function closeSheet() {
 
 function openSheet(pin, sourceElement) {
   var sheet = document.getElementById("sheet");
-  var tier = tierClass(pin.state);
+  var tier = tierClass(pin);
   var name = pin.name || "Unnamed business";
   lastFocusedPin = sourceElement || null;
   sheet.className = tier;

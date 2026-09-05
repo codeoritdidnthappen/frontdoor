@@ -60,6 +60,7 @@ def test_the_page_targets_this_origin_only():
     assert "const PUBLISH_API = '/screen/publish';" in html
     assert "const PHOTO_API = '/scan/photo/';" in html
     assert "fetch('/map/data'" in html
+    assert "const CLAIM_API = '/claim';" in html
     assert "X-Frontdoor-Contributor" in html
     assert "fly.dev" not in html
 
