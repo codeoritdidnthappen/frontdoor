@@ -85,6 +85,22 @@ struct AdaCheck: Decodable, Equatable {
 
 /// The photo-based ADA screening block. Score, counts and summary are computed on the server.
 struct AdaScreening: Decodable, Equatable {
+    struct RenderRow: Equatable, Identifiable {
+        let id: String
+        let label: String
+        let result: String
+        let evidence: String?
+    }
+
+    struct RenderModel: Equatable {
+        let score: String
+        let coverage: String
+        let rows: [RenderRow]
+        let summary: String
+        let disclaimer: String
+        let standardsURL: URL?
+    }
+
     let scorePercent: Double?
     let determinedCount: Int
     let totalCount: Int
@@ -107,6 +123,37 @@ struct AdaScreening: Decodable, Equatable {
         case notApplicableCount = "not_applicable_count"
         case checks, summary, disclaimer
         case standardsUrl = "standards_url"
+    }
+
+    var renderModel: RenderModel {
+        RenderModel(
+            score: scorePercent.map { String(format: "%.1f%%", $0) }
+                ?? "Not enough visible evidence",
+            coverage: "\(determinedCount) of \(totalCount) checks determined",
+            rows: AdaScreeningCheck.allCases.map { check in
+                let value = checks[check.rawValue]
+                return RenderRow(
+                    id: check.rawValue,
+                    label: check.label,
+                    result: Self.resultText(value?.result),
+                    evidence: value?.evidence
+                )
+            },
+            summary: summary,
+            disclaimer: disclaimer,
+            standardsURL: URL(string: standardsUrl)
+        )
+    }
+
+    private static func resultText(_ result: String?) -> String {
+        switch result {
+        case "true": return "Supported by photos"
+        case "false": return "Potential barrier"
+        case "cannot_determine": return "Cannot determine"
+        case "not_applicable": return "Not applicable"
+        case .some(let value): return value
+        case nil: return "No result"
+        }
     }
 }
 

@@ -125,6 +125,17 @@ final class ScreeningResponseTests: XCTestCase {
             "entrance_route", "threshold", "ramp", "door_hardware",
             "door_opening", "handrails", "signage", "temporary_barriers",
         ])
+        let rendered = ada.renderModel
+        XCTAssertEqual(rendered.score, "75.0%")
+        XCTAssertEqual(rendered.coverage, "4 of 8 checks determined")
+        XCTAssertEqual(rendered.rows.map(\.id), AdaScreeningCheck.allCases.map(\.rawValue))
+        let threshold = try XCTUnwrap(rendered.rows.first { $0.id == "threshold" })
+        XCTAssertEqual(threshold.label, "Threshold")
+        XCTAssertEqual(threshold.result, "Potential barrier")
+        XCTAssertEqual(threshold.evidence, "Raised transition.")
+        XCTAssertEqual(rendered.summary, ada.summary)
+        XCTAssertEqual(rendered.disclaimer, ada.disclaimer)
+        XCTAssertEqual(rendered.standardsURL?.host, "www.ada.gov")
     }
 
     func testAZeroDeterminedAdaScreeningHasNoPercentage() throws {
@@ -134,6 +145,15 @@ final class ScreeningResponseTests: XCTestCase {
         XCTAssertEqual(ada.determinedCount, 0)
         XCTAssertTrue(ada.summary.contains("No photo checks were determined"))
         XCTAssertFalse(ada.disclaimer.lowercased().contains("compliant"))
+        let rendered = ada.renderModel
+        XCTAssertEqual(rendered.score, "Not enough visible evidence")
+        XCTAssertEqual(rendered.coverage, "0 of 8 checks determined")
+        XCTAssertEqual(rendered.rows.count, 8)
+        XCTAssertTrue(rendered.rows.allSatisfy { $0.result == "Cannot determine" })
+        XCTAssertTrue(rendered.rows.allSatisfy { !($0.evidence ?? "").isEmpty })
+        XCTAssertEqual(rendered.summary, ada.summary)
+        XCTAssertEqual(rendered.disclaimer, ada.disclaimer)
+        XCTAssertEqual(rendered.standardsURL?.host, "www.ada.gov")
     }
 
     func testAnOlderReplyWithoutAdaScreeningStillDecodes() throws {

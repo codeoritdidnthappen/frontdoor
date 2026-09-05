@@ -141,25 +141,21 @@ struct ScreeningChecksView: View {
     @ViewBuilder
     private var adaScreening: some View {
         if case .assessed(let response) = run.outcome, let ada = response.adaScreening {
+            let presentation = ada.renderModel
             VStack(alignment: .leading, spacing: 10) {
                 Text("Photo ADA screening").font(.headline)
-                if let score = ada.scorePercent {
-                    Text("\(score, specifier: "%.1f")%")
-                        .font(.title2.weight(.semibold))
-                } else {
-                    Text("Not enough visible evidence")
-                        .font(.title2.weight(.semibold))
-                }
-                Text("\(ada.determinedCount) of \(ada.totalCount) checks determined")
+                Text(presentation.score)
+                    .font(.title2.weight(.semibold))
+                Text(presentation.coverage)
                     .font(.subheadline)
                     .foregroundStyle(.secondary)
-                ForEach(AdaScreeningCheck.allCases, id: \.self) { check in
-                    adaRow(check, ada.checks[check.rawValue])
+                ForEach(presentation.rows) { row in
+                    adaRow(row)
                     Divider()
                 }
-                Text(ada.summary).font(.subheadline)
-                Text(ada.disclaimer).font(.footnote).foregroundStyle(.secondary)
-                if let url = URL(string: ada.standardsUrl) {
+                Text(presentation.summary).font(.subheadline)
+                Text(presentation.disclaimer).font(.footnote).foregroundStyle(.secondary)
+                if let url = presentation.standardsURL {
                     Link("2010 ADA Standards", destination: url)
                         .font(.footnote)
                 }
@@ -168,19 +164,16 @@ struct ScreeningChecksView: View {
         }
     }
 
-    private func adaRow(_ check: AdaScreeningCheck, _ entry: AdaCheck?) -> some View {
+    private func adaRow(_ row: AdaScreening.RenderRow) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(check.label).font(.headline)
-            if let result = entry?.result {
-                Text(result).font(.title3.weight(.semibold))
-            } else {
-                Text("no result").font(.title3.weight(.semibold)).foregroundStyle(.secondary)
-            }
-            if let evidence = entry?.evidence, !evidence.isEmpty {
+            Text(row.label).font(.headline)
+            Text(row.result).font(.title3.weight(.semibold))
+            if let evidence = row.evidence, !evidence.isEmpty {
                 Text(evidence).font(.subheadline).foregroundStyle(.secondary)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder

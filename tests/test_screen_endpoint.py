@@ -627,3 +627,23 @@ def test_screen_rejects_model_supplied_ada_aggregates():
     response = post_screen(make_client(engine), [image_part()])
     assert response.status_code == 502
     assert "must not supply" in response.get_json()["detail"]
+
+
+@pytest.mark.parametrize(
+    "unsafe_evidence",
+    ["This entrance is ADA compliant.", "Door is 36 inches wide."],
+)
+def test_screen_never_returns_unsafe_model_authored_evidence(unsafe_evidence):
+    from tests.test_screening import FakeClient, _Response, _payload
+
+    poisoned = json.loads(_payload())
+    poisoned["ada_checks"]["door_opening"]["evidence"] = unsafe_evidence
+    engine = ScreeningEngine(
+        client=FakeClient([_Response(json.dumps(poisoned))])
+    )
+
+    response = post_screen(make_client(engine), [image_part()])
+
+    assert response.status_code == 502
+    assert "ada_screening" not in response.get_json()
+    assert unsafe_evidence not in response.get_data(as_text=True)
