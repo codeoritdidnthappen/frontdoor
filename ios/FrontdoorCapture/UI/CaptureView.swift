@@ -9,6 +9,7 @@ struct CaptureView: View {
     @ObservedObject var controller: CaptureController
     @Environment(\.scenePhase) private var scenePhase
     let onClose: () -> Void
+    let onFinish: (String) -> Void
 
     @State private var editingConditions = false
 
@@ -251,44 +252,65 @@ struct CaptureView: View {
     }
 
     private var controls: some View {
-        HStack(alignment: .center) {
-            // Last still, held in memory. Proof that a capture actually produced an image rather
-            // than only incrementing a counter.
-            Group {
-                if let thumb = controller.lastThumbnail {
-                    Image(uiImage: thumb)
-                        .resizable()
-                        .scaledToFill()
-                        .frame(width: 52, height: 52)
-                        .clipShape(RoundedRectangle(cornerRadius: 8))
-                        .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.6)))
-                } else {
-                    RoundedRectangle(cornerRadius: 8)
-                        .stroke(.white.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [4]))
-                        .frame(width: 52, height: 52)
+        VStack(spacing: 12) {
+            HStack(alignment: .center) {
+                // Last still, held in memory. Proof that a capture actually produced an image
+                // rather than only incrementing a counter.
+                Group {
+                    if let thumb = controller.lastThumbnail {
+                        Image(uiImage: thumb)
+                            .resizable()
+                            .scaledToFill()
+                            .frame(width: 52, height: 52)
+                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.6)))
+                    } else {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(.white.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [4]))
+                            .frame(width: 52, height: 52)
+                    }
                 }
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
 
-            Button(action: controller.capturePhoto) {
-                Circle()
-                    .strokeBorder(.white, lineWidth: 4)
-                    .frame(width: 74, height: 74)
-                    .background(Circle().fill(.white.opacity(0.25)))
-            }
-            .accessibilityLabel("Take photo")
-
-            VStack(alignment: .trailing, spacing: 2) {
-                Text("\(controller.photosTaken)")
-                    .font(.title3.monospacedDigit().weight(.semibold))
-                    .foregroundStyle(.white)
-                if controller.lastCaptureError != nil {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.orange)
+                Button(action: controller.capturePhoto) {
+                    Circle()
+                        .strokeBorder(.white, lineWidth: 4)
+                        .frame(width: 74, height: 74)
+                        .background(Circle().fill(.white.opacity(0.25)))
                 }
+                .accessibilityLabel("Take photo")
+
+                VStack(alignment: .trailing, spacing: 2) {
+                    Text("\(controller.photosTaken)")
+                        .font(.title3.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(.white)
+                    if controller.lastCaptureError != nil {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .trailing)
             }
-            .frame(maxWidth: .infinity, alignment: .trailing)
+            if controller.captureMode == .screening,
+               let entranceId = controller.subject?.entrance.id {
+                Button("Finish capture") {
+                    controller.stop()
+                    if let destination = CaptureFinishDecision.destination(
+                        mode: controller.captureMode,
+                        coverage: controller.coverageForSubject,
+                        entranceId: entranceId) {
+                        onFinish(destination)
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!CaptureFinishDecision.isEnabled(
+                    mode: controller.captureMode, coverage: controller.coverageForSubject))
+                .accessibilityHint(
+                    controller.coverageForSubject.isComplete
+                        ? "Opens the four human-label questions."
+                        : "Available after all six named views are captured.")
+            }
         }
         .padding(.horizontal, 24)
         .padding(.top, 16)

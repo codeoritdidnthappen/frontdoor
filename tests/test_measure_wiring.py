@@ -187,7 +187,7 @@ def test_the_count_is_on_the_viewfinder_where_it_can_still_be_acted_on():
     assert "capturesForSubject" in spoken, "and spoken, so the bar reads the same either way"
 
 
-def test_the_photo_is_written_and_queued_before_it_is_screened():
+def test_the_photo_is_written_and_queued_before_screening_is_deferred_for_labels():
     """Every ScreenClient failure message ends "The photo is saved and queued" (#275).
 
     That sentence is only true if the write and the queue refresh happen first. It is the same
@@ -195,11 +195,12 @@ def test_the_photo_is_written_and_queued_before_it_is_screened():
     capture that were screened before it was written would be promised safe while it was not.
     """
     body = confirm_review_body()
-    assert body.index("CaptureWriter.write(") < body.index("screen(written")
-    assert body.index("refreshPendingUploads()") < body.index("screen(written")
+    assert body.index("CaptureWriter.write(") < body.index("latestScreeningCapture =")
+    assert body.index("refreshPendingUploads()") < body.index("latestScreeningCapture =")
+    assert "screen(written" not in body, "model output must wait for human labels (#309)"
 
 
-def test_the_mode_decides_which_question_the_server_is_asked():
+def test_the_mode_decides_measure_now_or_defer_screening_until_labels():
     """A screening frame must not go to /measure.
 
     /measure serves the stub arms, so sending a plain photo there returns placeholder numbers
@@ -208,8 +209,11 @@ def test_the_mode_decides_which_question_the_server_is_asked():
     """
     body = confirm_review_body()
     branch = body.split("if record.captureMode.carriesMetrologyTruth", 1)[1]
-    measured, screened = branch.index("measure(written"), branch.index("screen(written")
-    assert measured < screened, "metrology takes the /measure branch, screening the /screen one"
+    measured = branch.index("measure(written")
+    deferred = branch.index("latestScreeningCapture =")
+    assert measured < deferred, (
+        "metrology asks /measure; screening waits for the human-label gate before /screen"
+    )
 
 
 def test_screening_does_not_block_the_shutter_and_is_off_without_a_server():

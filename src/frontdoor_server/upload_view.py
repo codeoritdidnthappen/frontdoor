@@ -137,10 +137,6 @@ def register_upload(app, error):
     """
 
     client_key = _client_key()
-    # Handed to the labels endpoint so both write paths share one notion of who may write, and
-    # one constant-time comparison (#309).
-    app.config["UPLOAD_CLIENT_KEY"] = client_key
-    app.config["UPLOAD_AUTHORISED"] = _authorised
     depth_config = None
     depth_config_failure = None
     if client_key is not None:

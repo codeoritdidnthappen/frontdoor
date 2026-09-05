@@ -77,11 +77,13 @@ struct ScreeningResponse: Decodable, Equatable {
 /// The keys are the server's (`frontdoor.screening.CRITERIA`), and a pytest source guard fails if
 /// the two lists ever disagree — a criterion the server assesses and this list omits would simply
 /// not appear on the phone, which is the quiet failure worth preventing.
-enum ScreeningCriterion: String, CaseIterable {
+enum ScreeningCriterion: String, CaseIterable, Codable, Identifiable {
     case rampOrBevel = "ramp_or_bevel"
     case handrails = "handrails"
     case accessibleDoorHardware = "accessible_door_hardware"
     case accessibilitySignage = "accessibility_signage"
+
+    var id: String { rawValue }
 
     /// The same labels the laptop surface prints, so the two demo surfaces name the same things.
     var label: String {

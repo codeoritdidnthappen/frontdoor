@@ -1,339 +1,237 @@
-"""POST /labels: one entrance's human presence labels, from the phone (#309).
-
-The rules worth testing are not the plumbing. Labels are recorded once and then locked, because
-ground truth that can be revised after the verdicts are known is not ground truth. The server owns
-the date, because a phone's clock is settable. And blank means "cannot determine" -- a reviewed
-answer, not a missing one.
-"""
+"""Phone-to-server human-label contract for TICK-282 / #309."""
 
 import csv
-import threading
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
+from pathlib import Path
 
 import pytest
+from jsonschema import Draft202012Validator
 
-from frontdoor.labels import (
-    APPEND_ACCEPTED,
-    APPEND_IDENTICAL,
-    CRITERIA_KEYS,
-    COLUMNS,
-    LabelError,
-    LabelsLocked,
-    append_entrance_labels,
-)
-from frontdoor_server.app import create_app
-from frontdoor_server.label_view import PATH_ENV
+from frontdoor.labels import COLUMNS, CRITERIA_KEYS
+from frontdoor_server.app import ERROR_SCHEMA, create_app
 
 KEY = "test-upload-key"
 ANSWERS = {
     "ramp_or_bevel": "present",
     "handrails": "absent",
-    "accessible_door_hardware": "present",
-    "accessibility_signage": "",
+    "accessible_door_hardware": "",
+    "accessibility_signage": "present",
 }
 
 
 @pytest.fixture
-def labels_csv(tmp_path, monkeypatch):
-    path = tmp_path / "labels.csv"
-    monkeypatch.setenv(PATH_ENV, str(path))
+def app(monkeypatch, tmp_path):
     monkeypatch.setenv("FRONTDOOR_UPLOAD_KEY", KEY)
-    return path
+    built = create_app()
+    built.config.update(TESTING=True, LABELS_PATH=tmp_path / "labels.csv")
+    return built
 
 
-@pytest.fixture
-def client(labels_csv):
-    return create_app().test_client()
+def _post(client, *, entrance_id="E-901", labeled_by="James", answers=None, key=KEY):
+    headers = {"X-Frontdoor-Upload-Key": key} if key is not None else {}
+    return client.post(
+        "/labels",
+        json={
+            "entrance_id": entrance_id,
+            "labeled_by": labeled_by,
+            "answers": ANSWERS if answers is None else answers,
+        },
+        headers=headers,
+    )
 
 
-def rows_of(path):
+def _rows(path: Path) -> list[dict[str, str]]:
     with path.open(encoding="utf-8", newline="") as handle:
         return list(csv.DictReader(handle))
 
 
-def post(client, **overrides):
-    body = {"entrance_id": "E-101", "labeled_by": "James", "answers": dict(ANSWERS)}
-    body.update(overrides)
-    return client.post("/labels", json=body, headers={"X-Frontdoor-Upload-Key": KEY})
+def test_ac_8_label_submission_uses_the_existing_upload_key(app):
+    with app.test_client() as client:
+        assert _post(client, key=None).status_code == 401
+        assert _post(client, key="wrong").status_code == 401
+        assert _post(client).status_code == 201
 
 
-# --- the core append ---------------------------------------------------------
-
-
-def test_four_rows_are_appended_in_criterion_order(labels_csv):
-    outcome = append_entrance_labels(
-        labels_csv, "E-101", ANSWERS, labeled_by="James", labeled_at=date(2026, 9, 5))
-    assert outcome == APPEND_ACCEPTED
-    rows = rows_of(labels_csv)
-    assert [row["criterion"] for row in rows] == list(CRITERIA_KEYS)
-    assert list(rows[0]) == list(COLUMNS)
-    assert {row["labeled_at"] for row in rows} == {"2026-09-05"}
-
-
-def test_cannot_determine_is_blank_truth_with_the_operator_still_recorded(labels_csv):
-    append_entrance_labels(
-        labels_csv, "E-101", ANSWERS, labeled_by="James", labeled_at=date(2026, 9, 5))
-    signage = [r for r in rows_of(labels_csv) if r["criterion"] == "accessibility_signage"][0]
-    # Blank truth, but reviewed: an undecidable criterion must stay distinguishable from one
-    # nobody looked at, which is exactly what an empty labeled_by would make it.
-    assert signage["truth"] == ""
-    assert signage["labeled_by"] == "James"
-
-
-def test_an_identical_resend_is_a_success_and_does_not_move_the_date(labels_csv):
-    append_entrance_labels(
-        labels_csv, "E-101", ANSWERS, labeled_by="James", labeled_at=date(2026, 9, 5))
-    outcome = append_entrance_labels(
-        labels_csv, "E-101", ANSWERS, labeled_by="James", labeled_at=date(2026, 9, 6))
-    assert outcome == APPEND_IDENTICAL
-    rows = rows_of(labels_csv)
-    assert len(rows) == 4, "a replay must not duplicate rows"
-    assert {row["labeled_at"] for row in rows} == {"2026-09-05"}
-
-
-def test_a_disagreeing_resend_is_locked_and_changes_nothing(labels_csv):
-    append_entrance_labels(
-        labels_csv, "E-101", ANSWERS, labeled_by="James", labeled_at=date(2026, 9, 5))
-    before = labels_csv.read_bytes()
-    with pytest.raises(LabelsLocked):
-        append_entrance_labels(
-            labels_csv, "E-101", {**ANSWERS, "handrails": "present"},
-            labeled_by="James", labeled_at=date(2026, 9, 6))
-    assert labels_csv.read_bytes() == before, "byte-for-byte unchanged"
-
-
-def test_a_different_operator_is_locked_too(labels_csv):
-    append_entrance_labels(
-        labels_csv, "E-101", ANSWERS, labeled_by="James", labeled_at=date(2026, 9, 5))
-    with pytest.raises(LabelsLocked):
-        append_entrance_labels(
-            labels_csv, "E-101", ANSWERS, labeled_by="Emily", labeled_at=date(2026, 9, 5))
-
-
-def test_another_entrance_appends_beside_the_first(labels_csv):
-    append_entrance_labels(
-        labels_csv, "E-101", ANSWERS, labeled_by="James", labeled_at=date(2026, 9, 5))
-    append_entrance_labels(
-        labels_csv, "E-102", ANSWERS, labeled_by="James", labeled_at=date(2026, 9, 5))
-    assert len(rows_of(labels_csv)) == 8
+def test_ac_8_unconfigured_server_refuses_every_key(monkeypatch, tmp_path):
+    monkeypatch.delenv("FRONTDOOR_UPLOAD_KEY", raising=False)
+    app = create_app()
+    app.config.update(TESTING=True, LABELS_PATH=tmp_path / "labels.csv")
+    with app.test_client() as client:
+        assert _post(client).status_code == 401
 
 
 @pytest.mark.parametrize(
-    "answers, reason",
+    ("change", "value"),
     [
-        ({k: "present" for k in list(CRITERIA_KEYS)[:3]}, "a missing criterion"),
-        ({**ANSWERS, "door_width": "present"}, "an unknown criterion"),
-        ({**ANSWERS, "handrails": "maybe"}, "an unknown truth"),
-        ({**ANSWERS, "handrails": "not_visible"}, "the screening vocabulary, not the label one"),
+        ("entrance_id", "E-14"),
+        ("entrance_id", "e-901"),
+        ("labeled_by", "   "),
+        ("labeled_by", "x" * 101),
+        ("answers", {**ANSWERS, "extra": "present"}),
+        ("answers", {"handrails": "present"}),
+        ("answers", {**ANSWERS, "handrails": "not_visible"}),
     ],
 )
-def test_malformed_answers_write_nothing(labels_csv, answers, reason):
-    with pytest.raises(LabelError):
-        append_entrance_labels(
-            labels_csv, "E-101", answers, labeled_by="James", labeled_at=date(2026, 9, 5))
-    assert not labels_csv.exists(), reason
+def test_ac_8_invalid_or_oversized_submissions_change_nothing(app, change, value):
+    kwargs = {change: value}
+    with app.test_client() as client:
+        response = _post(client, **kwargs)
+    assert response.status_code == 422
+    Draft202012Validator(ERROR_SCHEMA).validate(response.get_json())
+    assert not Path(app.config["LABELS_PATH"]).exists()
 
 
-@pytest.mark.parametrize("name", ["", "   ", "x" * 65])
-def test_a_bad_operator_name_writes_nothing(labels_csv, name):
-    with pytest.raises(LabelError):
-        append_entrance_labels(
-            labels_csv, "E-101", ANSWERS, labeled_by=name, labeled_at=date(2026, 9, 5))
-    assert not labels_csv.exists()
+def test_ac_8_requires_exact_json_shape_and_content_type(app):
+    with app.test_client() as client:
+        extra = client.post(
+            "/labels",
+            json={
+                "entrance_id": "E-901",
+                "labeled_by": "James",
+                "answers": ANSWERS,
+                "labeled_at": "1999-01-01",
+            },
+            headers={"X-Frontdoor-Upload-Key": KEY},
+        )
+        not_json = client.post(
+            "/labels",
+            data="hello",
+            headers={"X-Frontdoor-Upload-Key": KEY},
+        )
+    assert extra.status_code == 422
+    assert not_json.status_code == 415
 
 
-def test_concurrent_submissions_do_not_lose_or_interleave_rows(labels_csv):
-    """Read-modify-write under a lock: two phones finishing at the same moment.
+def test_ac_9_server_stamps_four_rows_atomically_and_preserves_blank_truth(app, monkeypatch):
+    class FixedDate:
+        @classmethod
+        def today(cls):
+            return date(2026, 9, 5)
 
-    Without the lock both read the same file, both write their own four rows, and one entrance's
-    labels vanish -- silently, because each request succeeded.
-    """
-    entrances = [f"E-{n:03d}" for n in range(101, 121)]
-    errors = []
+    monkeypatch.setattr("frontdoor_server.label_view.date", FixedDate)
+    with app.test_client() as client:
+        response = _post(client)
+    assert response.status_code == 201
+    rows = _rows(Path(app.config["LABELS_PATH"]))
+    assert tuple(rows[0]) == COLUMNS
+    assert [row["criterion"] for row in rows] == list(CRITERIA_KEYS)
+    assert [row["truth"] for row in rows] == list(ANSWERS.values())
+    assert {row["labeled_by"] for row in rows} == {"James"}
+    assert {row["labeled_at"] for row in rows} == {"2026-09-05"}
+
+
+def test_ac_10_identical_retry_is_success_and_different_retry_is_locked(app):
+    path = Path(app.config["LABELS_PATH"])
+    with app.test_client() as client:
+        assert _post(client).status_code == 201
+        original = path.read_bytes()
+        repeat = _post(client)
+        changed = _post(client, answers={**ANSWERS, "handrails": "present"})
+    assert repeat.status_code == 200
+    assert repeat.get_json()["created"] is False
+    assert changed.status_code == 409
+    assert path.read_bytes() == original
+
+
+def test_ac_9_concurrent_submissions_cannot_lose_or_interleave_rows(app):
+    entrances = [f"E-{number:03d}" for number in range(901, 921)]
 
     def submit(entrance_id):
-        try:
-            append_entrance_labels(
-                labels_csv, entrance_id, ANSWERS,
-                labeled_by="James", labeled_at=date(2026, 9, 5))
-        except Exception as exc:  # noqa: BLE001 - reported, not swallowed
-            errors.append(exc)
+        with app.test_client() as client:
+            return _post(client, entrance_id=entrance_id).status_code
 
-    threads = [threading.Thread(target=submit, args=(e,)) for e in entrances]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        statuses = list(executor.map(submit, entrances))
 
-    assert errors == []
-    rows = rows_of(labels_csv)
-    assert len(rows) == 4 * len(entrances)
-    assert {row["entrance_id"] for row in rows} == set(entrances)
-
-
-# --- the endpoint ------------------------------------------------------------
+    assert statuses == [201] * len(entrances)
+    rows = _rows(Path(app.config["LABELS_PATH"]))
+    assert len(rows) == len(entrances) * len(CRITERIA_KEYS)
+    assert {
+        rows[index]["entrance_id"] for index in range(0, len(rows), 4)
+    } == set(entrances)
+    for index in range(0, len(rows), 4):
+        assert {row["entrance_id"] for row in rows[index : index + 4]} == {
+            rows[index]["entrance_id"]
+        }
 
 
-def test_the_endpoint_requires_the_upload_key(client, labels_csv):
-    assert client.post("/labels", json={}).status_code == 401
-    assert not labels_csv.exists()
-
-
-def test_a_wrong_key_is_refused(client, labels_csv):
-    response = client.post(
-        "/labels", json={}, headers={"X-Frontdoor-Upload-Key": "wrong"})
-    assert response.status_code == 401
-    assert not labels_csv.exists()
-
-
-def test_an_accepted_submission_writes_four_rows(client, labels_csv):
-    response = post(client)
-    assert response.status_code == 200
-    assert response.get_json()["accepted"] is True
-    assert response.get_json()["idempotent"] is False
-    assert len(rows_of(labels_csv)) == 4
-
-
-def test_the_server_assigns_the_date_not_the_phone(client, labels_csv):
-    """A phone's clock is settable; a date it chose would be a claim nobody could check."""
-    from datetime import datetime, timezone
-
-    post(client, labeled_at="1999-01-01")
-    today = datetime.now(timezone.utc).date().isoformat()
-    assert {row["labeled_at"] for row in rows_of(labels_csv)} == {today}
-
-
-def test_a_replay_is_an_idempotent_success(client, labels_csv):
-    post(client)
-    response = post(client)
-    assert response.status_code == 200
-    assert response.get_json()["idempotent"] is True
-    assert len(rows_of(labels_csv)) == 4
-
-
-def test_a_conflicting_submission_is_409_and_changes_nothing(client, labels_csv):
-    post(client)
-    before = labels_csv.read_bytes()
-    response = post(client, answers={**ANSWERS, "handrails": "present"})
-    assert response.status_code == 409
-    assert response.get_json()["error"] == "labels already recorded"
-    assert labels_csv.read_bytes() == before
-
-
-def test_a_malformed_entrance_id_is_refused(client, labels_csv):
-    response = post(client, entrance_id="entrance 101")
-    assert response.status_code == 400
-    assert response.get_json()["error"] == "invalid entrance_id"
-    assert not labels_csv.exists()
-
-
-@pytest.mark.parametrize(
-    "body",
-    [
-        {"labeled_by": "James", "answers": ANSWERS},
-        {"entrance_id": "E-101", "answers": ANSWERS},
-        {"entrance_id": "E-101", "labeled_by": "James"},
-        {"entrance_id": "E-101", "labeled_by": "James", "answers": "present"},
-    ],
-)
-def test_a_partial_submission_writes_nothing(client, labels_csv, body):
-    response = client.post(
-        "/labels", json=body, headers={"X-Frontdoor-Upload-Key": KEY})
-    assert response.status_code == 400
-    assert not labels_csv.exists()
-
-
-def test_an_oversized_body_is_refused_before_it_is_parsed(client, labels_csv):
-    response = client.post(
-        "/labels",
-        data=b"{" + b"x" * 9000 + b"}",
-        content_type="application/json",
-        headers={"X-Frontdoor-Upload-Key": KEY},
-    )
-    assert response.status_code == 413
-    assert not labels_csv.exists()
-
-
-def test_the_response_carries_the_contract_the_phone_bundles(client, labels_csv):
-    """So a drifted build can be noticed from the response rather than from wrong labels."""
-    body = post(client).get_json()
-    assert body["criteria"] == list(CRITERIA_KEYS)
-    assert body["allowed_truths"] == ["present", "absent", ""]
-
-
-# --- review findings ---------------------------------------------------------
-
-
-def test_the_same_entrance_submitted_twice_at_once_records_it_once(labels_csv):
-    """The sharper race than twenty different entrances: both callers see an empty sheet.
-
-    Narrowing the lock to cover only the write would keep every other test green while letting
-    both append four rows -- eight rows for one entrance, both requests reporting success, and an
-    entrance whose ground truth is doubled.
-    """
-    outcomes = []
-
+def test_ac_10_concurrent_identical_submissions_record_one_entrance_once(app):
     def submit():
-        try:
-            outcomes.append(append_entrance_labels(
-                labels_csv, "E-101", ANSWERS, labeled_by="James",
-                labeled_at=date(2026, 9, 5)))
-        except LabelsLocked:
-            outcomes.append("locked")
+        with app.test_client() as client:
+            return _post(client).status_code
 
-    threads = [threading.Thread(target=submit) for _ in range(8)]
-    for thread in threads:
-        thread.start()
-    for thread in threads:
-        thread.join()
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        statuses = list(executor.map(lambda _: submit(), range(8)))
 
-    assert len(rows_of(labels_csv)) == 4
-    assert outcomes.count(APPEND_ACCEPTED) == 1
-    assert outcomes.count(APPEND_IDENTICAL) == 7
+    assert statuses.count(201) == 1
+    assert statuses.count(200) == 7
+    assert len(_rows(Path(app.config["LABELS_PATH"]))) == len(CRITERIA_KEYS)
 
 
-def test_an_unreadable_sheet_is_the_servers_fault_not_the_phones(client, labels_csv):
-    """A 400 would tell the phone its own answers were rejected, and it would drop them."""
-    labels_csv.write_text("wrong,header\n1,2\n", encoding="utf-8")
-    response = post(client)
-    assert response.status_code == 500
-    assert response.get_json()["error"] == "internal error"
+def test_ac_8_persistence_failure_returns_retryable_error_without_mutating_csv(
+    app, monkeypatch
+):
+    path = Path(app.config["LABELS_PATH"])
+    path.write_text(",".join(COLUMNS) + "\n", encoding="utf-8")
+    original = path.read_bytes()
+
+    def fail(*args, **kwargs):
+        raise OSError("disk full")
+
+    monkeypatch.setattr("frontdoor_server.label_view.append_future_entrance_labels", fail)
+    with app.test_client() as client:
+        response = _post(client)
+    assert response.status_code == 503
+    assert path.read_bytes() == original
 
 
-def test_an_oversized_body_is_refused_on_its_declared_length(client, labels_csv):
-    """Before it is buffered: the app allows 64 MB and the worker has 512 MB (#233)."""
-    response = client.post(
-        "/labels",
-        data=b"x" * 9000,
-        content_type="application/json",
-        headers={"X-Frontdoor-Upload-Key": KEY, "Content-Length": "9000"},
-    )
+def test_ac_8_unreadable_server_sheet_is_retryable_and_unchanged(app):
+    path = Path(app.config["LABELS_PATH"])
+    path.write_text("wrong,header\n1,2\n", encoding="utf-8")
+    original = path.read_bytes()
+    with app.test_client() as client:
+        response = _post(client)
+    assert response.status_code == 503
+    assert path.read_bytes() == original
+
+
+def test_ac_8_oversized_body_is_refused_before_parsing(app):
+    with app.test_client() as client:
+        response = client.post(
+            "/labels",
+            data=b"{" + b"x" * 9000 + b"}",
+            content_type="application/json",
+            headers={"X-Frontdoor-Upload-Key": KEY},
+        )
     assert response.status_code == 413
-    assert not labels_csv.exists()
+    Draft202012Validator(ERROR_SCHEMA).validate(response.get_json())
+    assert not Path(app.config["LABELS_PATH"]).exists()
 
 
-def test_the_response_echoes_the_id_that_was_written(client, labels_csv):
-    """Canonicalised once, by the writer -- not spelled a second way for the reply."""
-    response = post(client, entrance_id="  e-101  ")
-    assert response.get_json()["entrance_id"] == "E-101"
-    assert {row["entrance_id"] for row in rows_of(labels_csv)} == {"E-101"}
+def test_ac_9_default_path_refuses_to_modify_a_git_checkout(monkeypatch, tmp_path):
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / ".git").mkdir()
+    monkeypatch.setenv("FRONTDOOR_UPLOAD_KEY", KEY)
+    app = create_app()
+    app.config["TESTING"] = True
+    with app.test_client() as client:
+        response = _post(client)
+    assert response.status_code == 503
+    assert not (tmp_path / "data" / "labels.csv").exists()
 
 
-def test_the_default_path_refuses_to_write_inside_a_checkout(monkeypatch):
-    """One POST against a server started from a checkout rewrites the committed template.
-
-    Nothing breaks that day. It breaks on Sep 7, when record_unsealing aborts on a dirty working
-    tree and the cause is a tracked file nobody remembers touching.
-    """
-    from frontdoor_server.label_view import LabelsPathRefused, labels_path
-
-    monkeypatch.delenv(PATH_ENV, raising=False)
-    with pytest.raises(LabelsPathRefused):
-        labels_path()
-
-
-def test_an_explicit_path_is_always_honoured(tmp_path, monkeypatch):
-    from frontdoor_server.label_view import labels_path
-
-    monkeypatch.setenv(PATH_ENV, str(tmp_path / "elsewhere.csv"))
-    assert labels_path() == tmp_path / "elsewhere.csv"
+def test_ac_9_explicit_runtime_path_is_honoured_in_a_git_checkout(monkeypatch, tmp_path):
+    checkout = tmp_path / "checkout"
+    checkout.mkdir()
+    (checkout / ".git").mkdir()
+    runtime_path = tmp_path / "runtime" / "labels.csv"
+    monkeypatch.chdir(checkout)
+    monkeypatch.setenv("FRONTDOOR_UPLOAD_KEY", KEY)
+    monkeypatch.setenv("FRONTDOOR_LABELS_PATH", str(runtime_path))
+    app = create_app()
+    app.config["TESTING"] = True
+    with app.test_client() as client:
+        response = _post(client)
+    assert response.status_code == 201
+    assert runtime_path.exists()

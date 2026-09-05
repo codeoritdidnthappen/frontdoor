@@ -53,7 +53,7 @@ Check before you spend time on it:
 If the answer to any of these is no, this is a **skip**, not a problem to force your way through.
 See "Skip and failure classes" below.
 
-## The view set: 5-6 photos, every entrance, no exceptions
+## The view set: all 6 photos, every completed entrance
 
 1. **Head-on** — square to the entrance, doorway centered.
    [photo: to be added after the pilot — TICK-092]
@@ -68,8 +68,8 @@ See "Skip and failure classes" below.
 6. **Hardware close-up** — the door handle, lock, lever, or push plate, filling the frame.
    [photo: to be added after the pilot — TICK-092]
 
-Six views is the target; five is acceptable if one genuinely cannot be captured (say, an
-obstruction that only affects one angle) — note which one and why in the entrance record.
+All six named views are the complete set. If one genuinely cannot be captured, record the entrance
+as skipped with the reason; the phone does not enable **Finish capture** or labeling on five.
 
 ## Fixed geometry — the one thing that must never vary
 
@@ -186,10 +186,12 @@ entrances, and there are not many left. Schedule and steps: [signing-calendar.md
 - [ ] **App launches on James's iPhone 17 Pro** — done before leaving, not at the entrance
 - [ ] Entrance ID assigned (`E-NNN`), written down before shooting
 - [ ] Vantage point, sightlines, and people situation checked — capturable, or logged as a skip
-- [ ] 5-6 views captured: head-on, both obliques, near (~1.5 m), far (~3-4 m), hardware close-up
+- [ ] All 6 views captured: head-on, both obliques, near (~1.5 m), far (~3-4 m), hardware close-up
 - [ ] 1× lens, no zoom, no crop, on every shot
 - [ ] Full entrance + approach path + hardware covered across the set
 - [ ] No interiors; people occluding the entrance reshot; processed blur output verified,
       especially in glass (TICK-257)
 - [ ] Condition tags (lighting, occlusion) recorded now, at the entrance
+- [ ] Tap **Finish capture** after all six named views, then explicitly label all four presence
+      criteria before viewing any screening result
 - [ ] If skipped: entrance and reason recorded before moving on

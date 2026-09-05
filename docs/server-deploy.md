@@ -31,8 +31,9 @@ fly auth login                      # interactive, opens a browser
 fly launch --no-deploy --copy-config --name frontdoor-measure
 ```
 
-`--copy-config` uses the committed `fly.toml`. Say **no** to Postgres, Redis and any other add-on:
-the server holds no state.
+`--copy-config` uses the committed `fly.toml`. Say **no** to Postgres, Redis and any other add-on.
+The first phone-label version writes ephemeral CSV state inside the application container; the
+limitations below explain what must be copied before a replacement or redeploy.
 
 ### Cap the spend before deploying — with the mechanism Fly actually has
 
@@ -133,12 +134,22 @@ encrypted secret survives a deploy and does not need setting again. To go back, 
 id from `npx wrangler versions list --name frontdoor-depth-ingest` and run
 `npx wrangler rollback <version-id>`.
 
-`FRONTDOOR_UPLOAD_KEY` is the shared secret for `POST /upload`, the capture-ingest endpoint
-(TICK-029, #33). The capture app sends it as `X-Frontdoor-Upload-Key`; the same value goes into the
+`FRONTDOOR_UPLOAD_KEY` is the shared secret for `POST /upload` and `POST /labels`, the phone's
+write-only capture and human-label endpoints (TICK-029, #33; TICK-282, #309). The capture app
+sends it as `X-Frontdoor-Upload-Key`; the same value goes into the
 app's build setting of the same name, which is why it is not committed. **Unset means the endpoint
 refuses every request** — an ingest path that accepts anonymous writes into the dataset bucket
 because a deploy forgot a variable is worse than one that is switched off. This key grants ingest
 only: it is not an R2 credential and cannot read any bucket.
+
+### Future-capture labels (TICK-282)
+
+`POST /labels` accepts one completed entrance-level human label record and appends four rows to
+`/app/data/labels.csv` in the running application container. This first version deliberately has
+no database, volume, backup, or automatic repository sync. **Those accepted runtime labels are
+lost when the container is replaced or the app is redeployed.** Download them before either event
+if they need to survive. The frozen 53-entrance artifact remains the repository's
+`data/labels.csv` and is completed separately under #302.
 
 `ANTHROPIC_API_KEY` is required for the pivot's own endpoint: without it, `POST /screen` returns
 **503 "screening unavailable"** — `screen_view.py`'s engine gate (`_get_engine`) returns `None`
@@ -425,4 +436,6 @@ Destroy the app so the spend stops:
 fly apps destroy frontdoor-measure
 ```
 
-The dataset lives in R2 and the repo, not on this host — it holds no state and nothing is lost.
+The image dataset lives in R2 and the frozen label artifact lives in the repo. Future-capture
+labels written by `POST /labels` are temporary container state and must be downloaded before the
+app is destroyed, replaced, or redeployed or they are lost.

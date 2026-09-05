@@ -54,39 +54,20 @@ python -m frontdoor_server.labeling_app --check
 That command exits unsuccessfully while any eligible entrance remains untouched or the CSV fails
 its schema checks. It does not read any photograph or contact R2.
 
-## Labeling from the phone, for entrances captured after the closeout (TICK-282, #309)
+## Future captures on James's iPhone
 
-Everything above is the Mac workflow, and it owns the **frozen 53**: the entrances the 2026-09-04
-closeout froze, which #302 completes. Nothing on the phone touches them.
+The Mac workflow above remains the one-time path for the frozen dataset tracked by #302. Future
+entrances are labeled in the capture app after all six named views have been saved. **Finish
+capture** then shows four fixed rows, each with **Present**, **Absent**, and **Cannot determine**
+buttons. James selects every row explicitly; no model answer is shown until the human record is
+durably queued on the phone.
 
-Entrances captured **after** that closeout have no template row to fill in, so they are labeled at
-the doorway instead. After all six named views of an entrance are captured, **Finish capture**
-opens a labeling screen: the same four criteria, the same three answers (**Present**, **Absent**,
-**Cannot determine**), no typing and no dictation. The label is saved on the phone first and sent
-to the server when there is a network.
+The app remembers James's name, retries queued labels with the existing upload credential, and
+locks a record after the deployed server accepts it. The server supplies `labeled_at` and appends
+the same four-row entrance-level representation to `data/labels.csv`. These labels are human
+ground truth, not image-upload metadata, and image upload does not wait for them.
 
-Three things about these labels that are easy to get wrong:
-
-- **They are human ground truth, not upload metadata.** They are the reference the model's verdicts
-  are scored against, which is why the labeling screen appears *before* any verdict for that
-  entrance is shown and why no model output reaches it.
-- **They are recorded once.** The server accepts an entrance's four rows and then locks them: an
-  identical resend succeeds so a phone can stop retrying, and anything that disagrees is refused.
-  Ground truth that can be revised after the verdicts are known is not ground truth.
-- **`labeled_at` is the server's date, not the phone's.** A phone's clock is settable.
-
-### Point it somewhere, or it refuses
-
-The server appends to `$FRONTDOOR_LABELS_PATH`. With that unset it falls back to
-`data/labels.csv` — and **refuses to start writing if that resolves inside a git checkout**,
-because an append rewrites the whole sheet and would modify a tracked file. Nothing breaks the day
-it happens; it breaks on freeze day, when the unsealing run aborts on a dirty working tree and the
-cause is a file nobody remembers touching. In the container there is no checkout and no `data/`,
-so the fallback is a fresh file and the guard never fires.
-
-### v1 storage is ephemeral, deliberately
-
-The deployed server appends to `data/labels.csv` **inside its own container**. Replacing or
-redeploying that container loses every row written at runtime. Persistent volumes, a database and
-syncing runtime rows back into the repository are all out of scope for TICK-282 — so treat
-phone-entered labels as needing to be copied out before any redeploy, until that changes.
+The deployed container has no git checkout, so its default `data/labels.csv` path is a fresh
+runtime file. When running the server from a repository checkout, set `FRONTDOOR_LABELS_PATH` to a
+path outside the checkout. The endpoint refuses the default there rather than rewriting the
+committed frozen label sheet and leaving the repository dirty.
