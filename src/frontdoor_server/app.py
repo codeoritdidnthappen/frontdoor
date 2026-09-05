@@ -222,6 +222,25 @@ def create_app():
         response.headers["Cache-Control"] = "public, max-age=300"
         return response
 
+    @app.get("/app-icon.png")
+    def app_icon():
+        """The home-screen icon for the app page (TICK-325).
+
+        iOS reads apple-touch-icon only from a real URL: a data: URI in the
+        link tag is ignored and Safari falls back to the page favicon, which
+        is how an installed shortcut ends up with the wrong image. Serving
+        the mark from this origin is the whole fix. The bytes are fixed for
+        the life of a deploy, so they cache for a day.
+        """
+        icon = (
+            resources.files("frontdoor_server")
+            .joinpath("app-icon.png")
+            .read_bytes()
+        )
+        response = Response(icon, mimetype="image/png")
+        response.headers["Cache-Control"] = "public, max-age=86400"
+        return response
+
     @app.post("/measure")
     def measure():
         if "image" not in request.files:

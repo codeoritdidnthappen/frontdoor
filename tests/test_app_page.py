@@ -74,3 +74,27 @@ def test_the_page_carries_a_short_max_age_and_nothing_else_about_caching():
 def test_the_page_is_outside_the_cors_scope():
     """The wildcard CORS header is scoped to the screening routes; the page is same-origin."""
     assert "Access-Control-Allow-Origin" not in page().headers
+
+
+def test_the_home_screen_icon_is_served_from_this_origin():
+    """iOS ignores a data: URI in apple-touch-icon and falls back to the favicon.
+
+    An installed shortcut then carries the wrong image, which is exactly what
+    happened before TICK-325. The icon has to come from a real URL on this
+    origin, so both the route and the page's reference to it are pinned here.
+    """
+    response = create_app().test_client().get("/app-icon.png")
+    assert response.status_code == 200
+    assert response.mimetype == "image/png"
+    body = response.get_data()
+    assert body.startswith(b"\x89PNG\r\n\x1a\n")
+    assert body == (
+        resources.files("frontdoor_server").joinpath("app-icon.png").read_bytes()
+    )
+
+
+def test_the_page_points_at_the_served_icon_and_not_a_data_uri():
+    html = page().get_data(as_text=True)
+    assert 'rel="apple-touch-icon" sizes="180x180" href="/app-icon.png"' in html
+    assert 'apple-touch-icon" href="data:' not in html
+    assert '<meta name="apple-mobile-web-app-title" content="EntryMap">' in html
