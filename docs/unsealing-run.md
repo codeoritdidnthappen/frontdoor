@@ -96,6 +96,34 @@ Commit the same day, on the tree that ran:
 Push the same day. Anything noticed in the sealed data afterwards is exploratory, never
 confirmatory.
 
+## Then publish the sealed entrances to the map
+
+The 18 sealed entrances are withheld from the public map for one reason only: assessing them
+before the freeze would mean having seen their results, which is the contamination this whole
+procedure exists to prevent. Once the run above has exited cleanly and its report is committed,
+that reason is spent. The evidence was collected at the door like every other entrance, and
+keeping it off the map after the freeze would understate what we know for no remaining benefit.
+
+So this is not a separate initiative anyone has to remember. It is the last step of freeze day.
+
+Sealed entrances, withheld until this point:
+
+    E-002  E-005  E-006  E-011  E-014  E-015  E-016  E-021  E-028
+    E-029  E-032  E-036  E-039  E-044  E-046  E-052  E-059  E-064
+
+Run the same publication path #333 established for the other 46, with the sealed identifiers now
+permitted, and open it as its own pull request so the moment is auditable. Order matters and is
+not negotiable: **the evaluation report is committed first, then the entrances are published.**
+Publishing before the report would leave the seal broken with nothing recording what it found.
+
+The published records are ordinary Scanned on-site records. They carry their capture dates, they
+pass through the same never-downgrade and Green-or-Gray gates, and nothing about them is marked
+as having been sealed. The seal was a procedure for protecting an evaluation, never a property
+of the doorway.
+
+If the run above did **not** exit cleanly, publish nothing. An aborted unsealing leaves the
+question of contamination open, and the map can wait for the answer.
+
 ## Out of scope here
 
 - Tuning, re-fitting, or picking a variant after seeing the numbers.
