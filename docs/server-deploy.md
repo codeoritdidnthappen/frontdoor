@@ -35,6 +35,25 @@ fly launch --no-deploy --copy-config --name frontdoor-measure
 The first phone-label version writes ephemeral CSV state inside the application container; the
 limitations below explain what must be copied before a replacement or redeploy.
 
+### Redeploying from CI
+
+`.github/workflows/deploy.yml` deploys this app on manual dispatch only, never on merge: Actions
+tab, **deploy**, **Run workflow**, and a one-line reason that the run records alongside the commit
+and the actor. It runs `flyctl deploy --remote-only`, then fails the run unless `/health`, `/app`
+and `/app-icon.png` all answer 200, so a green run means the path a phone uses is actually serving.
+A concurrency group keeps two deploys off the same machine.
+
+It needs one repository secret, created once by whoever holds the Fly account:
+
+```sh
+fly tokens create deploy -a frontdoor-measure
+```
+
+Paste the value into **Settings → Secrets and variables → Actions → New repository secret** as
+`FLY_API_TOKEN`. It is a deploy-scoped token, not an account token: it can push a release to this
+one app and nothing else. Without it the workflow stops on its first step and says so rather than
+failing somewhere confusing. Local `fly deploy` from a logged-in machine keeps working unchanged.
+
 ### Cap the spend before deploying — with the mechanism Fly actually has
 
 D-026 requires that billing cannot start silently. On a paid plan that is no longer satisfied by
