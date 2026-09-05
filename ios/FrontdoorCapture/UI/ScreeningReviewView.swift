@@ -37,7 +37,7 @@ struct ScreeningReviewView: View {
                 // artefact rather than as the thing we did on purpose.
                 Text("This is the photo that will be published: faces blurred, location removed. "
                      + "It will be uploaded and screened. Discarding keeps nothing — the photo is "
-                     + "not saved and nothing is counted.")
+                     + "not saved and nothing is counted. After publish it cannot be deleted from this phone.")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
