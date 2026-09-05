@@ -253,8 +253,12 @@ def publish():
             payloads, media_types=["image/jpeg"] * len(payloads)
         )
     except Exception as exc:
+        latency_ms = round((time.perf_counter() - t0) * 1000)
         return _error(
-            "screening engine failure", f"{type(exc).__name__}: {exc}", status=502
+            "screening engine failure",
+            f"{type(exc).__name__}: {exc}",
+            status=502,
+            latency_ms=latency_ms,
         )
     latency_ms = round((time.perf_counter() - t0) * 1000)
 
@@ -263,6 +267,7 @@ def publish():
             "screening engine failure",
             f"the integrated assessment failed: {assessment.error or 'unknown error'}",
             status=502,
+            latency_ms=latency_ms,
         )
 
     # Only an explicit "clear" may persist. The audit answers once for the

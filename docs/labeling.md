@@ -1,7 +1,8 @@
 # Ground-truth labeling on James's Mac
 
-Issue #168 records the study's human ground truth. Labels are not needed to capture or upload
-images. They are used later to evaluate the screening engine and publish the labeled dataset.
+Issue #168 built this ground-truth workflow; issue #302 tracks James completing the study's human
+ground truth. Labels are not needed to capture or upload images. They are used later to evaluate
+the screening engine and publish the labeled dataset.
 
 These are retrospective labels. The original captures were completed before this workflow existed,
 so do not describe the labels as recorded at capture time or on the same day. James should use only

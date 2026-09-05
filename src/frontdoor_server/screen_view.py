@@ -66,12 +66,15 @@ _DETAIL_ELLIPSIS = "..."
 screen_page = Blueprint("screen_page", __name__)
 
 
-def _error(message, detail, status=400):
+def _error(message, detail, status=400, *, latency_ms=None):
     """Same error shape as the rest of the service: stable token + bounded detail."""
     text = detail if isinstance(detail, str) else str(detail)
     if len(text) > DETAIL_MAX_LENGTH:
         text = text[: DETAIL_MAX_LENGTH - len(_DETAIL_ELLIPSIS)] + _DETAIL_ELLIPSIS
-    return {"error": message, "detail": text}, status
+    body = {"error": message, "detail": text}
+    if latency_ms is not None:
+        body["latency_ms"] = latency_ms
+    return body, status
 
 
 def _get_engine():
@@ -194,8 +197,12 @@ def screen():
             media_types=[media_type for _, media_type in payloads],
         )
     except Exception as exc:
+        latency_ms = round((time.perf_counter() - t0) * 1000)
         return _error(
-            "screening engine failure", f"{type(exc).__name__}: {exc}", status=502
+            "screening engine failure",
+            f"{type(exc).__name__}: {exc}",
+            status=502,
+            latency_ms=latency_ms,
         )
     latency_ms = round((time.perf_counter() - t0) * 1000)
 
@@ -204,6 +211,7 @@ def screen():
             "screening engine failure",
             f"the integrated assessment failed: {assessment.error or 'unknown error'}",
             status=502,
+            latency_ms=latency_ms,
         )
 
     # face_check quarantine (TICK-257 follow-up, #232): the model has audited its

@@ -38,7 +38,8 @@ Stop if any item fails. None of these opens the seal.
    any sealed byte is read; the recorded commit SHA would not describe the code that ran.
 2. **This checkout is `main`, pulled.** The audit line names `HEAD`. Uncommitted runbook
    edits, leftover branches, and a stale `origin/main` are all the wrong SHA.
-3. **`data/labels.csv` exists.** Operator presence labels from #168. Without it the runner
+3. **`data/labels.csv` exists.** Operator presence labels completed under #302 with the workflow
+   built by #168. Without it the runner
    cannot score. Do not invent labels, and do not look at sealed per-entrance results
    before this run.
 4. **`data/dataset-closeout.json` is current.** The runner refuses a stale closeout (manifest

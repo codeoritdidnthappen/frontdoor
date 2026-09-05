@@ -133,7 +133,8 @@ Three things this shape buys:
 
 > **Amended 2026-09-02 by D-036.** No caliper is used, so there is no instrument reading to bind.
 > What binds at the shutter is the entrance ID and the condition tags; ground truth for the
-> screening study is James's retrospective **presence labels** (#168), recorded from his original
+> screening study is James's retrospective **presence labels** (#302), entered with the workflow
+> built by #168 and recorded from his original
 > photos and recollection after dataset closeout. They need no instrument and are not part of an
 > image upload. Capture
 > runs on **one device** — James's iPhone 17 Pro (`iPhone18,1`) with LiDAR — so `device_model` is a

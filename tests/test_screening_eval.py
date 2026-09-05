@@ -267,7 +267,7 @@ def test_entrance_flip_rates_mean_over_criteria_with_verdicts():
     assert rates[DEV_B] is None
 
 
-def test_latency_stats_and_over_budget_count():
+def test_tick_245_ac_7_latency_stats_and_over_budget_count():
     screenings = {
         DEV_A: _screening(DEV_A, {}, latencies=(1.0, 2.0, 3.0)),
         DEV_B: _screening(DEV_B, {}, latencies=(4.0, 16.5)),

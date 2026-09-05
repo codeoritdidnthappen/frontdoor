@@ -15,10 +15,10 @@ from frontdoor.screening import (
     ALLOWED_VERDICTS,
     CRITERIA_KEYS,
     FACE_CHECK_KEY,
-    FACE_CHECK_QUESTION,
-    SYSTEM_PROMPT,
+    PROMPT_RESOURCE,
     EntranceScreening,
     ImageAssessment,
+    ScreeningError,
     ScreeningConfig,
     ScreeningEngine,
     SealedSplitError,
@@ -103,11 +103,35 @@ def test_assess_image_returns_verdicts_confidence_evidence_and_latency():
 def test_out_of_vocabulary_verdict_is_flagged_not_silently_accepted():
     parsed = json.loads(_payload())
     parsed["criteria"]["handrails"]["verdict"] = "maybe"
-    del parsed["criteria"]["accessibility_signage"]
-    out = validate_verdicts(parsed)
-    assert out["handrails"]["verdict"] == "INVALID:maybe"
-    assert out["accessibility_signage"]["verdict"] == "INVALID:missing"
-    assert out["ramp_or_bevel"]["verdict"] == "present"
+    with pytest.raises(ScreeningError, match="handrails.*invalid verdict"):
+        validate_verdicts(parsed)
+
+
+def test_missing_or_extra_criterion_rejects_the_whole_response():
+    for change in ("missing", "extra"):
+        parsed = json.loads(_payload())
+        if change == "missing":
+            del parsed["criteria"]["accessibility_signage"]
+        else:
+            parsed["criteria"]["door_width"] = parsed["criteria"]["handrails"]
+        with pytest.raises(ScreeningError, match="exactly the four criteria"):
+            validate_verdicts(parsed)
+
+
+@pytest.mark.parametrize("confidence", [True, "80", 80.5, -1, 101])
+def test_invalid_confidence_rejects_the_whole_response(confidence):
+    parsed = json.loads(_payload())
+    parsed["criteria"]["handrails"]["confidence"] = confidence
+    with pytest.raises(ScreeningError, match="handrails confidence"):
+        validate_verdicts(parsed)
+
+
+@pytest.mark.parametrize("evidence", ["", "  ", "first line\nsecond line", "x" * 201])
+def test_invalid_evidence_rejects_the_whole_response(evidence):
+    parsed = json.loads(_payload())
+    parsed["criteria"]["handrails"]["evidence"] = evidence
+    with pytest.raises(ScreeningError, match="handrails evidence"):
+        validate_verdicts(parsed)
 
 
 def test_not_visible_stays_distinct_from_absent():
@@ -135,6 +159,15 @@ def test_parse_failure_is_a_recorded_error_never_silent():
     assert "no JSON object" in result.error
 
 
+def test_tick_245_ac_3_invalid_result_is_a_recorded_error_never_partial_output():
+    parsed = json.loads(_payload())
+    parsed["criteria"]["handrails"]["confidence"] = "80"
+    engine = ScreeningEngine(client=FakeClient([_Response(json.dumps(parsed))]))
+    result = engine.assess_image(b"jpeg-bytes")
+    assert result.criteria is None
+    assert "handrails confidence" in result.error
+
+
 def test_api_exception_is_a_recorded_error():
     engine = ScreeningEngine(client=FakeClient([RuntimeError("connection reset")]))
     result = engine.assess_image(b"jpeg-bytes")
@@ -148,7 +181,6 @@ def test_api_exception_is_a_recorded_error():
 def test_prompt_carries_the_face_check_question_as_a_fifth_item():
     prompt = build_prompt()
     assert FACE_CHECK_KEY in prompt
-    assert FACE_CHECK_QUESTION in prompt
     assert "reflections in glass" in prompt
 
 
@@ -223,7 +255,7 @@ def test_aggregation_majority_verdict_and_flip_rate():
     assert summary["handrails"].flip_rate == 0.0
 
 
-def test_aggregation_tie_resolves_to_the_conservative_verdict():
+def test_tick_245_ac_2_tie_resolves_to_the_conservative_verdict():
     views = [
         _assessment({"ramp_or_bevel": "present", "handrails": "present"}),
         _assessment({"ramp_or_bevel": "not_visible", "handrails": "absent"}),
@@ -278,6 +310,16 @@ def test_dev_entrance_screens_all_views_and_logs_the_split_check(caplog):
     assert "spend cap" in caplog.text
 
 
+def test_tick_245_ac_2_per_image_evaluation_accepts_all_seven_eligible_views():
+    client = FakeClient([_Response(_payload()) for _ in range(7)])
+    result = ScreeningEngine(client=client).screen_entrance(
+        DEV_ID, [bytes([value]) for value in range(7)]
+    )
+    assert len(client.calls) == 7
+    assert len(result.assessments) == 7
+    assert result.summary["ramp_or_bevel"].counts == {"present": 7}
+
+
 def test_spend_cap_aborts_the_run_instead_of_exceeding_it():
     client = FakeClient([_Response(_payload())] * 3)
     config = ScreeningConfig(max_usd_per_run=0.08, usd_per_image=0.05)
@@ -287,7 +329,7 @@ def test_spend_cap_aborts_the_run_instead_of_exceeding_it():
     assert len(client.calls) == 1  # second call was stopped before spending
 
 
-def test_engine_works_without_an_api_key_in_the_environment(monkeypatch):
+def test_tick_245_ac_9_injected_client_needs_no_api_key(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ANTHROPIC_AUTH_TOKEN", raising=False)
     engine = ScreeningEngine(client=FakeClient([_Response(_payload())]))
@@ -295,21 +337,45 @@ def test_engine_works_without_an_api_key_in_the_environment(monkeypatch):
     assert result.summary["ramp_or_bevel"].verdict == "present"
 
 
-def test_model_call_carries_the_honest_criteria_contract():
+def test_tick_245_ac_6_model_call_uses_exact_surface_without_sampling():
     client = FakeClient([_Response(_payload())])
     ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
     call = client.calls[0]
     assert call["model"] == "claude-sonnet-5"
+    assert set(call) == {"model", "max_tokens", "system", "messages"}
     # Offline eval: 2000 tokens truncates sonnet's JSON on hard entrances once
     # adaptive thinking has eaten the budget; the default must stay >= 4000.
     assert call["max_tokens"] >= 4000
-    assert call["system"] == SYSTEM_PROMPT
     assert "not_visible" in call["system"]
-    assert "never guess measurements" in call["system"]
+    assert "Never guess measurements" in call["system"]
     prompt = call["messages"][0]["content"][1]["text"]
     for key in CRITERIA_KEYS:
         assert key in prompt
     assert prompt == build_prompt()
+
+
+def test_tick_245_ac_4_prompts_load_from_committed_resource_at_call_time(
+    monkeypatch,
+):
+    from frontdoor import screening
+
+    calls = []
+    real_prompt = screening._prompt
+
+    def observed(name, **values):
+        calls.append((name, values))
+        return real_prompt(name, **values)
+
+    monkeypatch.setattr(screening, "_prompt", observed)
+    client = FakeClient([_Response(_payload())])
+    ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
+    assert calls == [("single_view", {}), ("system", {})]
+    resource = (
+        screening.resources.files("frontdoor")
+        .joinpath(PROMPT_RESOURCE)
+        .read_text(encoding="utf-8")
+    )
+    assert "Never guess measurements" in resource
 
 
 def test_model_is_overridable_via_config():
@@ -342,10 +408,10 @@ def test_integrated_sends_all_views_in_one_call_with_image_blocks():
 
 def test_integrated_prompt_instructs_cross_view_integration():
     prompt = build_integrated_prompt(4)
-    assert "4 photos" in prompt
-    assert "SAME entrance" in prompt
-    assert "ANY view" in prompt
-    assert "trust the view that actually shows the relevant area" in prompt
+    assert "4 photographs" in prompt
+    assert "same entrance" in prompt
+    assert "any view" in prompt
+    assert "trust the view that shows the relevant area" in prompt
     for key in CRITERIA_KEYS:
         assert key in prompt
 
@@ -391,7 +457,7 @@ def test_per_image_mode_keeps_real_flip_stats_and_says_so():
     assert summary.counts == {"present": 1, "absent": 1}
 
 
-def test_integrated_sealed_entrance_is_refused_before_any_model_call():
+def test_tick_245_ac_5_integrated_sealed_id_is_refused_before_model_call():
     client = FakeClient([_Response(_payload())])
     engine = ScreeningEngine(client=client)
     with pytest.raises(SealedSplitError, match=SEALED_ID):
@@ -449,6 +515,19 @@ def test_integrated_media_types_default_to_jpeg_and_are_overridable():
     assert [b["source"]["media_type"] for b in second[:2]] == [
         "image/png", "image/webp",
     ]
+
+
+def test_tick_245_ac_8_rejects_zero_images_or_media_type_drift_before_call():
+    client = FakeClient([_Response(_payload())])
+    engine = ScreeningEngine(client=client)
+    with pytest.raises(ScreeningError, match="at least one image"):
+        engine.assess_images_integrated([])
+    with pytest.raises(ScreeningError, match="one value for every image"):
+        engine.assess_images_integrated(
+            [b"a", b"b"], media_types=["image/jpeg"]
+        )
+    assert client.calls == []
+    assert engine.spent_usd == 0.0
 
 
 def test_the_spend_cap_is_checked_and_reserved_atomically():
