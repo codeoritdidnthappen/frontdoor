@@ -9,6 +9,8 @@ endpoint exists and why these tests are about what it refuses to reveal as
 much as what it reports.
 """
 
+import json
+
 import pytest
 
 from frontdoor_server.app import create_app
@@ -158,3 +160,75 @@ def test_scan_store_tracks_whether_the_volume_is_mounted(clean_env, tmp_path):
     mounted.mkdir()
     clean_env.setenv("FRONTDOOR_SCANS", str(mounted / "scans.jsonl"))
     assert ready().get_json()["subsystems"]["scan_store"] is True
+
+
+# --- verified, not assumed: the notch past #353 (#370) -----------------------
+
+
+@pytest.fixture
+def reachable(monkeypatch):
+    monkeypatch.setattr(
+        "frontdoor_server.app.image_bucket_is_reachable", lambda: True)
+    return monkeypatch
+
+
+def usable_dataset():
+    return {"ChIJexample": {"name": "Cafe",
+                            "location": {"lat": 30.26, "lng": -97.74}}}
+
+
+def test_a_dataset_full_of_rows_that_yield_no_pins_is_not_ready(
+        clean_env, reachable, tmp_path, caplog):
+    """#353 accepted any non-empty dict. prepare_map_payload drops every row
+    without a numeric, in-range location, so a refresh that renames or nulls
+    the coordinate keys serves an empty map while /ready says it is fine --
+    which is verbatim the case the parse was added to catch."""
+    dataset = tmp_path / "precatalogue.json"
+    clean_env.setenv("FRONTDOOR_MAP_DATASET", str(dataset))
+
+    dataset.write_text(json.dumps({"ChIJexample": {"name": "Cafe"}}),
+                       encoding="utf-8")
+    with caplog.at_level("ERROR", logger="frontdoor_server.app"):
+        assert ready().get_json()["subsystems"]["map_dataset"] is False
+    assert caplog.records, "a degraded subsystem reported false and logged nothing"
+
+    dataset.write_text(json.dumps(usable_dataset()), encoding="utf-8")
+    assert ready().get_json()["subsystems"]["map_dataset"] is True
+
+
+def test_an_unparseable_dataset_says_why_in_the_log(
+        clean_env, reachable, tmp_path, caplog):
+    """The body says WHICH, the log says why. docs/server-deploy.md sends the
+    operator to the log for the reason, and five causes needing five different
+    fixes arrive here as one bit."""
+    dataset = tmp_path / "precatalogue.json"
+    dataset.write_text("{ not json", encoding="utf-8")
+    clean_env.setenv("FRONTDOOR_MAP_DATASET", str(dataset))
+    with caplog.at_level("ERROR", logger="frontdoor_server.app"):
+        assert ready().get_json()["subsystems"]["map_dataset"] is False
+    assert caplog.records
+
+
+def test_a_corrupt_scan_line_makes_the_scan_store_not_ready(
+        clean_env, reachable, tmp_path):
+    """#353 checked the parent directory and stopped. A line that will not
+    parse is a contributor's scan that is off the map for good, and reads keep
+    succeeding, so nothing else notices."""
+    store = tmp_path / "scans.jsonl"
+    clean_env.setenv("FRONTDOOR_SCANS", str(store))
+
+    # Nobody has published yet, under a directory that exists: ready.
+    assert ready().get_json()["subsystems"]["scan_store"] is True
+
+    store.write_text('{"scan_id": "torn"\n', encoding="utf-8")
+    body = ready().get_json()
+    assert body["subsystems"]["scan_store"] is False
+    assert "scan_store" in body["degraded"]
+
+
+def test_an_unmounted_volume_still_makes_the_scan_store_not_ready(
+        clean_env, reachable, tmp_path):
+    """The case #353 did catch, kept pinned."""
+    clean_env.setenv("FRONTDOOR_SCANS",
+                     str(tmp_path / "not-mounted" / "scans.jsonl"))
+    assert ready().get_json()["subsystems"]["scan_store"] is False

@@ -213,7 +213,10 @@ def test_yunet_non_finite_rows_are_skipped_and_finite_rows_survive(monkeypatch):
             rows[1, 14] = 0.9
             rows[2, :4] = (5.0, 6.0, 4.0, 4.0)      # finite: kept
             rows[2, 14] = 0.9
-            return None, rows
+            # 1 is what a real FaceDetectorYN returns whenever it RAN,
+            # found-nothing included. Any falsy status is now a non-answer
+            # and is refused, so the fake states the status it means (#370).
+            return 1, rows
 
     monkeypatch.setattr(faceblur, "_get_yunet", lambda: _FakeYuNet())
     boxes = faceblur._detect_yunet(np.full((32, 32, 3), 128, dtype=np.uint8))
@@ -367,3 +370,119 @@ def test_process_upload_reencodes_png_as_jpeg():
 def test_process_upload_rejects_undecodable_bytes(raw):
     with pytest.raises(InvalidImageError):
         process_upload(raw)
+
+
+# --- every way the detector can fail to answer (#370) ------------------------
+#
+# #353 guarded one of five. The rest escaped as a raw cv2.error, which is not
+# FaceDetectorError, so neither the views' new handlers nor any caller written
+# against the new contract caught them.
+
+
+class _BoomCascade:
+    def detectMultiScale(self, *args, **kwargs):
+        raise AssertionError("Haar must not stand in for a failed YuNet")
+
+
+def _no_haar(monkeypatch):
+    monkeypatch.setattr(
+        faceblur, "_get_cascades", lambda: (_BoomCascade(), _BoomCascade())
+    )
+
+
+def test_a_yunet_that_cannot_load_is_not_reported_as_no_faces(monkeypatch):
+    def _no_model():
+        raise cv2.error("model missing")
+
+    _no_haar(monkeypatch)
+    monkeypatch.setattr(faceblur, "_get_yunet", _no_model)
+    with pytest.raises(FaceDetectorError):
+        faceblur._detect_yunet(np.full((64, 64, 3), 128, dtype=np.uint8))
+
+
+def test_a_yunet_that_raises_is_not_reported_as_no_faces(monkeypatch):
+    class _RaisingYuNet:
+        def setInputSize(self, size):
+            pass
+
+        def detect(self, img):
+            raise cv2.error("detect failed")
+
+    _no_haar(monkeypatch)
+    monkeypatch.setattr(faceblur, "_get_yunet", lambda: _RaisingYuNet())
+    with pytest.raises(FaceDetectorError):
+        faceblur._detect_yunet(np.full((64, 64, 3), 128, dtype=np.uint8))
+
+
+def test_a_silent_boosted_pass_counts_even_when_the_plain_pass_answered(monkeypatch):
+    """The contrast-boosted variant is the one this module credits with the
+    ghosted-reflection recall, so a per-call "did anything answer" flag let its
+    silence through whenever the plain pass succeeded."""
+    class _HalfDeadYuNet:
+        def __init__(self):
+            self.calls = 0
+
+        def setInputSize(self, size):
+            pass
+
+        def detect(self, img):
+            self.calls += 1
+            return (1, None) if self.calls == 1 else (0, None)
+
+    _no_haar(monkeypatch)
+    monkeypatch.setattr(faceblur, "_get_yunet", lambda: _HalfDeadYuNet())
+    with pytest.raises(FaceDetectorError):
+        faceblur._detect_yunet(np.full((64, 64, 3), 128, dtype=np.uint8))
+
+
+def test_a_cascade_that_did_not_load_is_not_reported_as_no_faces(
+        monkeypatch, tmp_path, caplog):
+    """cv2.CascadeClassifier does not raise on a missing XML: it returns an
+    EMPTY classifier, which finds nothing and is indistinguishable from a clean
+    image. The same defect as YuNet's discarded status, one detector over."""
+    monkeypatch.setattr(faceblur, "_cascades", None)
+    monkeypatch.setattr(cv2.data, "haarcascades", str(tmp_path) + "/")
+    with caplog.at_level("WARNING", logger="frontdoor.faceblur"):
+        with pytest.raises(FaceDetectorError):
+            faceblur._get_cascades()
+    assert caplog.records
+    # ...and the empty classifier was not cached, so a transient read failure
+    # does not disable the supplementary net for the life of the process.
+    assert faceblur._cascades is None
+
+
+def test_a_discarded_non_finite_detection_is_logged(monkeypatch, caplog):
+    """YuNet ANSWERED -- it asserted a face there -- and the row is dropped for
+    unusable geometry. Dropping an assertion without a trace is the silence
+    this module's fix exists to end."""
+    class _NonFiniteYuNet:
+        def setInputSize(self, size):
+            pass
+
+        def detect(self, img):
+            rows = np.zeros((1, 15), dtype=np.float32)
+            rows[0, :4] = (np.inf, 4.0, 3.0, 3.0)
+            rows[0, 14] = 0.9
+            return 1, rows
+
+    monkeypatch.setattr(faceblur, "_get_yunet", lambda: _NonFiniteYuNet())
+    with caplog.at_level("WARNING", logger="frontdoor.faceblur"):
+        boxes = faceblur._detect_yunet(np.full((64, 64, 3), 128, dtype=np.uint8))
+    assert boxes == []
+    assert caplog.records, "a discarded detection left no trace"
+
+
+def test_the_face_count_is_what_was_blurred_not_what_was_detected(monkeypatch):
+    """A box that clamps to nothing is skipped by _blur but was still counted.
+
+    That is the mirror of the non-answer defect: a number attesting that the
+    privacy pass ran over a region where it did not.
+    """
+    off_frame = (10_000, 10_000, 40, 40)
+    real = (20, 20, 40, 40)
+    monkeypatch.setattr(faceblur, "_detect", lambda img: [real, off_frame])
+    assert process_upload(encode(noisy_image())).face_count == 1
+
+    monkeypatch.setattr(faceblur, "_detect", lambda img: [off_frame])
+    assert process_upload(encode(noisy_image())).face_count == 0
+    assert blur_faces(encode(noisy_image()))[1] == 0

@@ -7,6 +7,7 @@ unchanged against it.
 """
 
 import json
+import logging
 import os
 from importlib import resources
 from pathlib import Path
@@ -15,8 +16,13 @@ from flask import Flask, Response, jsonify, request
 from jsonschema import Draft202012Validator, ValidationError
 from werkzeug.exceptions import HTTPException
 
+from frontdoor.map_states import prepare_map_payload
 from frontdoor.metrology import ARM_NAMES
-from frontdoor.scan_records import DEFAULT_SCANS_PATH, SCANS_ENV
+from frontdoor.scan_records import (
+    DEFAULT_SCANS_PATH,
+    SCANS_ENV,
+    load_scan_store,
+)
 from frontdoor.sidecar import validate_sidecar
 from frontdoor.storage import StorageError, load_image_creds, image_bucket_is_reachable
 from frontdoor_server.claim_view import claim_page
@@ -25,6 +31,8 @@ from frontdoor_server.label_view import register_labels
 from frontdoor_server.scan_view import scan_page
 from frontdoor_server.screen_view import screen_page
 from frontdoor_server.upload_view import register_upload
+
+logger = logging.getLogger(__name__)
 
 RESPONSE_SCHEMA = json.loads(
     resources.files("frontdoor_server")
@@ -83,14 +91,53 @@ def _error(message, detail, field=None, status=400):
 
 
 def _map_dataset_ready(path):
-    """True only when the map dataset is a non-empty JSON object on disk."""
+    """True only when the map dataset holds at least one row /map/data can render.
+
+    The boolean says WHICH subsystem; the log says why (#370). Absent,
+    unreadable, permission-denied, not-JSON, and parses-to-no-usable-rows all
+    arrive here as one bit and need five different fixes, while
+    docs/server-deploy.md sends the operator to the log for the reason.
+
+    "Non-empty" is not the floor, and neither is "holds a dict". The only
+    definition of a usable row that matches what /map/data serves is the one
+    /map/data uses: prepare_map_payload drops any row without a numeric,
+    in-range location, so a refresh that renames or nulls the coordinate keys
+    yields a dict full of dicts, zero pins, a null dataset_error -- and, on any
+    weaker floor, a green map_dataset.
+    """
     if not path.is_file():
+        logger.error("map dataset %s is not a file; /map/data has no pins to "
+                     "serve", path)
         return False
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeError):
+    except (OSError, json.JSONDecodeError, UnicodeError) as exc:
+        logger.error("map dataset %s is not usable: %s: %s",
+                     path, type(exc).__name__, exc)
         return False
-    return isinstance(data, dict) and bool(data)
+    if prepare_map_payload(data)["pins"]:
+        return True
+    logger.error("map dataset %s parsed but yields no pins; /map/data is "
+                 "serving an empty map", path)
+    return False
+
+
+def _scan_store_ready(path):
+    """True when the store is reachable AND every record in it could be read.
+
+    The parent directory is the volume, and checking only that catches the
+    unmounted-volume incident and stops there (#370). A line that will not
+    parse is a contributor's scan that is off the map for good while reads
+    keep succeeding, so nothing else notices -- which is the case #353 item 1
+    is about. load_scan_store already counts and logs those; this asks it.
+
+    Deliberately not a write probe: proving the volume is writable means
+    writing to it, and a health endpoint that mutates the only state this app
+    keeps is a worse trade than missing a read-only mount. append_scan's
+    refusal to create its own parent is what catches the mount itself.
+    """
+    store = load_scan_store(path)
+    return store.error is None and store.skipped == 0
 
 # Fixed placeholder values. The repdigit rises are deliberately synthetic so nobody reads stub
 # output as a measurement. TICK-062 serves A and A' live on the free-tier image; B and C need
@@ -286,8 +333,9 @@ def create_app():
         # The scan store's parent directory is the volume. A missing file
         # inside a mounted volume is the empty store; a missing parent is
         # the unmounted-volume incident.
-        scans_path = Path(os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH))
-        subsystems["scan_store"] = scans_path.parent.is_dir()
+        subsystems["scan_store"] = _scan_store_ready(
+            os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH)
+        )
 
         ready_state = all(subsystems.values())
         return {

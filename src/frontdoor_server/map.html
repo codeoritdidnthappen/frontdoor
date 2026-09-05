@@ -803,12 +803,31 @@ async function init() {
 
   var pins = payload.pins || [];
   setupLayers(pins);
+  // A map that is MISSING something still renders, and rendered as if nothing
+  // were wrong (#370): /map/data reports scans_error, osm_error and
+  // commons_error, and the only reader on this page was dataset_error. A
+  // dropped scan store takes published scans off the map; a lost side file
+  // takes every provenance and attribution line off it, and that attribution
+  // is a licence obligation rather than a nicety.
+  //
+  // Computed BEFORE the empty-pin branch and appended to whatever that
+  // branch says, because the empty case is where the difference matters most:
+  // "No doors in the dataset yet" is a false statement about an unmounted
+  // volume, and /map/data went to the trouble of separating "nobody has
+  // published" from "the store is unreachable" precisely so the page would
+  // stop saying it.
+  var incomplete = [
+    payload.scans_error, payload.osm_error, payload.commons_error
+  ].filter(Boolean).join("; ");
+  var alsoIncomplete = incomplete ? " This map is incomplete — " + incomplete + "." : "";
+
   if (!pins.length) {
-    banner(payload.dataset_error
+    banner((payload.dataset_error
       ? "No map data loaded (" + payload.dataset_error + ")"
-      : "No doors in the dataset yet.");
+      : "No doors in the dataset yet.") + alsoIncomplete);
     return;
   }
+  if (incomplete) banner(alsoIncomplete.trim());
 
   var bounds = new google.maps.LatLngBounds();
   var contents = [];

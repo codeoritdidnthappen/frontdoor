@@ -481,3 +481,26 @@ def test_map_data_reports_a_missing_scan_volume(client, tmp_path, monkeypatch):
     assert "unreadable" in payload["scans_error"]
     assert payload["scans_loaded"] == 0
     assert payload["scans_skipped"] == 0
+
+
+def test_the_map_page_reads_every_error_the_payload_reports(client):
+    """A JSON key nobody reads is not an observation channel (#370).
+
+    /map/data reports scans_error, osm_error and commons_error; the page
+    bannered dataset_error and nothing else, and only when the pin list was
+    empty -- so a dropped scan store or a lost attribution side file, both of
+    which leave a full map, were reported to nobody.
+    """
+    page = client.get("/map").get_data(as_text=True)
+    for field in ("scans_error", "osm_error", "commons_error"):
+        assert field in page, f"/map never reads {field}"
+
+
+def test_the_map_page_does_not_call_an_unreachable_store_an_empty_dataset(client):
+    """The empty-pin branch returned early, so "No doors in the dataset yet"
+    was printed over an unmounted volume -- reuniting the three causes
+    /map/data had just gone to the trouble of separating."""
+    page = client.get("/map").get_data(as_text=True)
+    assert 'No doors in the dataset yet.") + alsoIncomplete' in page, (
+        "the empty-pin branch still returns without saying what was missing"
+    )

@@ -447,27 +447,68 @@ def image_store():
     return ObjectStore(load_image_creds())
 
 
+def _probe_status(call, **kwargs):
+    """The HTTP status of one bounded metadata call, or None if it never got one.
+
+    STATUS, not the parsed error code, and that is the whole point (#370): a
+    HEAD response carries no body (RFC 9110), so botocore has nothing to parse
+    and synthesizes `{"Code": "404"}` for a missing bucket and a missing key
+    alike. Only the status, and which call produced it, separates them.
+    """
+    try:
+        call(**kwargs)
+        return 200
+    except Exception as exc:
+        response = getattr(exc, "response", None) or {}
+        return response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+
+
 def image_bucket_is_reachable():
     """True when the images bucket answers a metadata probe.
 
-    Environment variables being set is not the same as the bucket existing
-    and the credential working. HeadObject on a missing key: 404 means the
-    credential can talk to the bucket (the images token is object-scoped and
-    may not be allowed to HeadBucket). Auth failure or a missing bucket is
-    False. Nothing is written. Failures log a generic line so /ready can
-    stay a boolean and never echo a value.
+    Environment variables being set is not the same as the bucket existing and
+    the credential working, and a revoked key or a deleted bucket looks
+    identical to the missing-credential incident from outside. Nothing is
+    written. Failures log for the operator so /ready can stay a boolean that
+    never echoes a value.
+
+    Two questions, asked in the order that makes the common case one call:
+
+    * HeadBucket. 200 is a pass, and its 404 is the ONLY answer that can mean
+      "this bucket is gone" -- head_object's 404 cannot, because a missing
+      bucket and a missing key are the same bodyless 404 (#370).
+    * Anything else from HeadBucket -- 403 above all -- is inconclusive about
+      existence, because this project's tokens are scoped per bucket at the
+      object level (D-020, D-026, D-033) and an object-scoped identity is
+      refused bucket-level calls while every operation the app performs works.
+      So ask the question the app actually asks: HeadObject on a key that need
+      not exist. 200 or 404 means the request was signed, routed and answered;
+      a 403 there is a credential that genuinely cannot work.
     """
     try:
         creds = load_image_creds()
-        _client(creds, timeout=2).head_object(
-            Bucket=creds.bucket, Key=PROBE_KEY
-        )
-        return True
+        client = _client(creds, timeout=2)
     except Exception as exc:
-        if _is_not_found(exc):
-            return True
-        logger.warning("image bucket probe failed")
+        logger.warning("image bucket probe could not start: %s: %s",
+                       type(exc).__name__, exc)
         return False
+
+    bucket_status = _probe_status(client.head_bucket, Bucket=creds.bucket)
+    if bucket_status == 200:
+        return True
+    if bucket_status == 404:
+        logger.warning("image bucket probe: the bucket does not exist")
+        return False
+
+    key_status = _probe_status(
+        client.head_object, Bucket=creds.bucket, Key=PROBE_KEY)
+    if key_status in (200, 404):
+        return True
+    logger.warning(
+        "image bucket probe failed: bucket call answered %s, object call "
+        "answered %s", bucket_status, key_status,
+    )
+    return False
 
 
 def main(argv=None):

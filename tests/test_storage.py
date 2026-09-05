@@ -615,3 +615,97 @@ def test_exists_answers_for_a_sealed_key_without_returning_bytes(monkeypatch):
     # ...and reading it still is not allowed.
     with pytest.raises(SealedObjectDenied):
         store.get(sealed)
+
+
+# --- the /ready reachability probe (#370) ------------------------------------
+#
+# #353 added the probe and stubbed it in every test, so the probe itself was
+# never driven against a bucket. Both tests below fail against that code.
+
+
+@mock_aws
+def test_the_probe_passes_when_the_bucket_exists_but_the_key_does_not(monkeypatch):
+    """A 404 on the KEY is a fully successful round trip -- signed, accepted,
+    answered -- and requiring the object to exist would mean writing one from a
+    health endpoint. head_object, not head_bucket: this project's tokens are
+    object-scoped (D-020, D-026, D-033) and may be refused HeadBucket."""
+    _image_env(monkeypatch)
+    _create_buckets()
+    assert not image_store().exists(PROBE_KEY)
+    assert storage.image_bucket_is_reachable() is True
+
+
+@mock_aws
+def test_the_probe_refuses_a_bucket_that_is_not_there(monkeypatch):
+    """The deleted-bucket case: fully configured, entirely broken."""
+    _image_env(monkeypatch)
+    # deliberately no create_bucket
+    assert storage.image_bucket_is_reachable() is False
+
+
+class _FakeHeadError(Exception):
+    """A ClientError as botocore ACTUALLY builds one from a HEAD response.
+
+    A HEAD carries no body (RFC 9110), so there is nothing to parse an error
+    code out of and botocore synthesizes `{"Code": "404"}` -- for a missing
+    BUCKET and a missing KEY alike. moto is the outlier: it returns an XML
+    error body on HEAD that S3, R2 and MinIO do not, which is why a
+    moto-only test cannot see this and the code-based guard that shipped
+    looked correct while being inert in production.
+    """
+
+    def __init__(self, status):
+        super().__init__(str(status))
+        self.response = {
+            "Error": {"Code": str(status), "Message": "Not Found"},
+            "ResponseMetadata": {"HTTPStatusCode": status},
+        }
+
+
+class _FakeS3:
+    def __init__(self, bucket_status, key_status):
+        self._bucket_status = bucket_status
+        self._key_status = key_status
+        self.calls = []
+
+    def head_bucket(self, **kwargs):
+        self.calls.append("head_bucket")
+        if self._bucket_status != 200:
+            raise _FakeHeadError(self._bucket_status)
+
+    def head_object(self, **kwargs):
+        self.calls.append("head_object")
+        if self._key_status != 200:
+            raise _FakeHeadError(self._key_status)
+
+
+@pytest.mark.parametrize(
+    "bucket_status, key_status, expected, why",
+    [
+        (200, 404, True, "bucket answers; nothing else needs asking"),
+        (404, 404, False, "the bucket is gone -- the case the probe exists for"),
+        (403, 404, True, "object-scoped token: refused HeadBucket, works on objects"),
+        (403, 403, False, "a credential that genuinely cannot work"),
+        (None, None, False, "the endpoint never answered at all"),
+    ],
+)
+def test_the_probe_reads_the_status_not_the_synthesized_error_code(
+        monkeypatch, bucket_status, key_status, expected, why):
+    """Against a real provider every one of these is `Code: "404"` or nothing.
+
+    The bucket-is-gone row fails against a probe that reads the error code,
+    which is how a deleted bucket reported healthy.
+    """
+    _image_env(monkeypatch)
+    fake = _FakeS3(bucket_status, key_status)
+    monkeypatch.setattr(storage, "_client", lambda creds, timeout=None: fake)
+    assert storage.image_bucket_is_reachable() is expected, why
+
+
+def test_the_probe_asks_the_bucket_first_so_the_common_case_is_one_call(monkeypatch):
+    """A working deployment must not pay two network round trips per /ready."""
+    _image_env(monkeypatch)
+    fake = _FakeS3(200, 404)
+    monkeypatch.setattr(storage, "_client", lambda creds, timeout=None: fake)
+    assert storage.image_bucket_is_reachable() is True
+    assert fake.calls == ["head_bucket"]
