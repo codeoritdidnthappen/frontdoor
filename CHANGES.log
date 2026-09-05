@@ -1345,3 +1345,38 @@ The surviving rise-error-versus-angle finding remains explicitly predicted befor
 observed screening result. Its published analytical and independent 3D-check values from #35,
 #138, and #159 now have a machine-readable companion artifact so the chart can be regenerated
 without scraping prose or silently changing the derivation.
+
+## 2026-09-05 — Identify the storefront behind each captured entrance (TICK-341, #341)
+
+`data/entrance_identification.json` now says, for each of the 46 non-sealed captured entrances,
+which business its front door belongs to, or why it could not be told. #333's matching step
+consumes it directly.
+
+E-001 to E-012 carry the on-foot door survey. E-013 to E-064 were read out of the photographs:
+each entrance's privacy-processed views went to a vision model asked for nothing but the text
+legibly visible on the storefront — name, street number, other identifying text — with no
+question about the entrance itself. The read name was then matched against
+`data/precatalogue_census.json` and constrained by the capture order along the route, which is
+what rejected the catalogue's Starbucks for E-019: it sits about 230 m west of Congress Avenue,
+while the door photographed four seconds earlier reads "Burger Bar on Congress".
+
+Of the 38 photographed entrances, 21 were identified — 17 with the name read unambiguously, 4
+from a single partly redacted source or assembled from corroborating text — and 17 were left
+unidentified with a reason. Across all 46 non-sealed doors, including the 8 already surveyed on
+foot, that is 29 identified and 17 not. Recall is well ahead of the 34.6% the earlier
+text-recognition pass measured on this dataset; precision is not measured here, because nothing
+in this change independently verifies an identification at scale. Three were re-checked by eye
+against their photographs before landing, and one of the three (E-025, SoulCycle) was downgraded
+from high to low as a result: what looked like three independent readings of the name turned out
+to be a co-branded advertisement on the door plus a reflection of a banner across the street.
+
+A bare street number is not a business, so a door whose only legible sign is its own address is
+recorded as unidentified with that address kept — E-024, E-030 and E-058 are the cases. Of the
+17 unidentified, 9 name redaction as the cause: the privacy processing that removes faces and
+personal text also removes storefront lettering, and in those doorways it took the fascia with
+it. The rest are not legibility failures at all. E-054 is a vacant storefront with no tenant to
+identify, E-045 is a pair of service doors, and three more are building lobbies.
+
+The census catalogue is now the binding constraint on #333, not identification: it was swept
+over the Second Street district and holds only 6 of these 46 doors, so 23 of the 29
+identifications carry a business name and no `place_id`. That gap is #346.
