@@ -21,11 +21,17 @@ cap stops the run cleanly — the dataset is keyed by place_id and rows already
 present are skipped on re-run, so a stopped run resumes rather than
 duplicating.
 
+Listing contact (phone, website) is not in Nearby Search. A Place Details
+call per place copies those fields onto the row so owner-claim channels can
+use the listing as authority. They are catalogue-private: the public map pin
+is a separately constructed object and does not copy them.
+
 The API key comes from the GOOGLE_MAPS_API_KEY environment variable and is
 never hardcoded. All network calls go through small injectable fetch
 functions so tests mock them; no test hits the network.
 
 Run as a tool:  python -m frontdoor.precatalogue run [out_dir]
+                 python -m frontdoor.precatalogue enrich [out_dir]
 """
 
 from __future__ import annotations
@@ -48,8 +54,12 @@ from frontdoor.screening import (
 )
 
 PLACES_SEARCH_URL = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+PLACES_DETAILS_URL = "https://maps.googleapis.com/maps/api/place/details/json"
 STREETVIEW_METADATA_URL = "https://maps.googleapis.com/maps/api/streetview/metadata"
 STREETVIEW_IMAGE_URL = "https://maps.googleapis.com/maps/api/streetview"
+# Contact only. Nearby Search cannot return these; asking for anything else
+# here would bill a higher Place Details SKU without helping the claim flow.
+DETAILS_FIELDS = "formatted_phone_number,international_phone_number,website"
 
 IMAGE_SIZE = "640x640"
 IMAGE_FOV = 90
@@ -367,7 +377,7 @@ class MapsCallCounter:
 
     def __init__(self, cap):
         self.cap = cap
-        self.counts = {"places": 0, "metadata": 0, "image": 0}
+        self.counts = {"places": 0, "details": 0, "metadata": 0, "image": 0}
 
     @property
     def total(self):
@@ -531,6 +541,68 @@ def fetch_streetview_image(pano_id, heading, api_key, counter,
     })
 
 
+def _nonempty_str(value):
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
+
+
+def contact_from_details(result):
+    """Phone and website from a Place Details `result` object.
+
+    Missing or blank fields become None. The claimant never supplies these.
+    """
+    if not isinstance(result, dict):
+        return None, None
+    phone = (_nonempty_str(result.get("formatted_phone_number"))
+             or _nonempty_str(result.get("international_phone_number")))
+    website = _nonempty_str(result.get("website"))
+    return phone, website
+
+
+def row_needs_contact(row):
+    """True when a Details call could still fill phone or website."""
+    if not isinstance(row, dict):
+        return False
+    has_phone = (
+        _nonempty_str(row.get("phone")) is not None
+        or contact_from_details(row)[0] is not None
+    )
+    has_website = _nonempty_str(row.get("website")) is not None
+    return not (has_phone and has_website)
+
+
+def apply_contact(row, phone, website):
+    """Write listing contact onto a row; do not overwrite a value already there."""
+    if phone and _nonempty_str(row.get("phone")) is None:
+        row["phone"] = phone
+    if website and _nonempty_str(row.get("website")) is None:
+        row["website"] = website
+    return row
+
+
+def fetch_place_contact(place_id, api_key, counter, fetch_json=_http_get_json):
+    """One Place Details call for listing phone and website.
+
+    NOT_FOUND / ZERO_RESULTS mean Google has no listing contact; that is a
+    missing channel, not a failed run. Any other status stops the batch.
+    """
+    counter.tick("details")
+    page = fetch_json(PLACES_DETAILS_URL, {
+        "place_id": place_id,
+        "fields": DETAILS_FIELDS,
+        "key": api_key,
+    })
+    status = page.get("status")
+    if status == "OK":
+        return contact_from_details(page.get("result"))
+    if status in ("NOT_FOUND", "ZERO_RESULTS"):
+        return None, None
+    raise PrecatalogueError(
+        f"Place Details failed for {place_id!r}: status {status!r}"
+    )
+
+
 def _criterion_confidence(assessments, key, verdict):
     """Mean model confidence among the views that voted for the majority
     verdict; None when no view produced a usable number."""
@@ -547,18 +619,19 @@ def _criterion_confidence(assessments, key, verdict):
     return round(sum(values) / len(values), 1)
 
 
-def _row_base(place):
-    return {
+def _row_base(place, phone=None, website=None):
+    row = {
         "place_id": place["place_id"],
         "name": place["name"],
         "location": place["location"],
         "source": "streetview",
         "status": "ai_estimated",
     }
+    return apply_contact(row, phone, website)
 
 
-def _uncovered_row(place, coverage_status):
-    row = _row_base(place)
+def _uncovered_row(place, coverage_status, phone=None, website=None):
+    row = _row_base(place, phone, website)
     row.update({
         "covered": False,
         "coverage_status": coverage_status,
@@ -569,7 +642,8 @@ def _uncovered_row(place, coverage_status):
     return row
 
 
-def _screened_row(place, metadata, headings, assessments):
+def _screened_row(place, metadata, headings, assessments,
+                  phone=None, website=None):
     summary = aggregate_assessments(assessments)
     criteria = {}
     for key in CRITERIA_KEYS:
@@ -580,7 +654,7 @@ def _screened_row(place, metadata, headings, assessments):
                 assessments, key, criterion.verdict),
             "flip_rate": criterion.flip_rate,
         }
-    row = _row_base(place)
+    row = _row_base(place, phone, website)
     row.update({
         "covered": True,
         "coverage_status": "OK",
@@ -723,16 +797,19 @@ def run_precatalogue(area=None, out_dir="data", *, engine=None, env=None,
             if place_id in dataset:
                 skipped_existing += 1
                 continue
+            phone, website = fetch_place_contact(
+                place_id, api_key, counter, fetch_json)
             metadata = streetview_metadata(
                 place["location"], api_key, counter, fetch_json)
             if metadata.get("status") != "OK":
                 row = _uncovered_row(
-                    place, metadata.get("status", "UNKNOWN"))
+                    place, metadata.get("status", "UNKNOWN"),
+                    phone, website)
             elif not metadata.get("pano_id"):
                 # Status said OK but there is no panorama to request. Sending
                 # an empty pano is a 400 that would end the whole batch; the
                 # honest reading is that this business has nothing to look at.
-                row = _uncovered_row(place, "NO_PANO_ID")
+                row = _uncovered_row(place, "NO_PANO_ID", phone, website)
             else:
                 pano_location = metadata.get("location", place["location"])
                 headings = storefront_headings(
@@ -744,7 +821,8 @@ def run_precatalogue(area=None, out_dir="data", *, engine=None, env=None,
                         metadata["pano_id"], heading, api_key,
                         counter, fetch_bytes)
                     assessments.append(engine.assess_image(image))
-                row = _screened_row(place, metadata, headings, assessments)
+                row = _screened_row(
+                    place, metadata, headings, assessments, phone, website)
             dataset[place_id] = row
             _write_json(dataset_path, dataset)
     except (MapsCallCapError, SpendCapError) as exc:
@@ -787,17 +865,93 @@ def run_precatalogue(area=None, out_dir="data", *, engine=None, env=None,
     return summary
 
 
+def enrich_contacts(out_dir="data", *, area=None, env=None,
+                    fetch_json=_http_get_json):
+    """Fill phone/website on existing rows from Place Details.
+
+    Does not re-screen. Rows that already have both fields are skipped, so a
+    cap stop resumes. Google having no listing contact is recorded as a skip
+    after the call, not as an error.
+    """
+    t0 = time.perf_counter()
+    if area is None:
+        area = load_demo_area()
+    api_key = load_api_key(env)
+    out_dir = Path(out_dir)
+    dataset_path = out_dir / DATASET_FILENAME
+    try:
+        dataset = json.loads(dataset_path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise PrecatalogueError(f"dataset not found: {dataset_path}") from None
+    except (OSError, json.JSONDecodeError) as exc:
+        raise PrecatalogueError(f"dataset unreadable: {exc}") from exc
+    if not isinstance(dataset, dict):
+        raise PrecatalogueError(
+            f"dataset is not a place_id map: {dataset_path}")
+
+    counter = MapsCallCounter(area.max_maps_calls)
+    stopped = None
+    stopped_is_error = False
+    skipped_complete = 0
+    updated = 0
+    unchanged = 0
+    try:
+        for place_id, row in list(dataset.items()):
+            if not isinstance(place_id, str) or not isinstance(row, dict):
+                continue
+            if not row_needs_contact(row):
+                skipped_complete += 1
+                continue
+            phone, website = fetch_place_contact(
+                place_id, api_key, counter, fetch_json)
+            before = (row.get("phone"), row.get("website"))
+            apply_contact(row, phone, website)
+            if (row.get("phone"), row.get("website")) != before:
+                updated += 1
+            else:
+                unchanged += 1
+            dataset[place_id] = row
+            _write_json(dataset_path, dataset)
+    except MapsCallCapError as exc:
+        stopped = f"{type(exc).__name__}: {exc}"
+    except Exception as exc:  # noqa: BLE001 - same as run: keep the summary
+        stopped = f"{type(exc).__name__}: {exc}"
+        stopped_is_error = True
+
+    summary = {
+        "area": area.name,
+        "enrich": True,
+        "rows": sum(1 for row in dataset.values() if isinstance(row, dict)),
+        "skipped_complete": skipped_complete,
+        "updated": updated,
+        "unchanged_after_details": unchanged,
+        "maps_api_calls": {**counter.counts, "total": counter.total},
+        "maps_call_cap": area.max_maps_calls,
+        "wall_clock_s": round(time.perf_counter() - t0, 3),
+        "stopped": stopped,
+        "stopped_is_error": stopped_is_error,
+    }
+    return summary
+
+
 def main(argv=None):
+    from frontdoor.storage import _load_dotenv_once
+    _load_dotenv_once()
     args = sys.argv[1:] if argv is None else argv
     census = "--census" in args
     args = [a for a in args if a != "--census"]
-    if not args or args[0] != "run" or len(args) > 2:
+    if (not args or args[0] not in ("run", "enrich") or len(args) > 2
+            or (args[0] == "enrich" and census)):
         print("usage: python -m frontdoor.precatalogue run [--census] "
-              "[out_dir]", file=sys.stderr)
+              "[out_dir]\n"
+              "       python -m frontdoor.precatalogue enrich [out_dir]",
+              file=sys.stderr)
         return 2
     out_dir = args[1] if len(args) == 2 else "data"
     try:
-        if census:
+        if args[0] == "enrich":
+            summary = enrich_contacts(out_dir=out_dir)
+        elif census:
             # Enumeration only: no Street View, no model, no dataset writes.
             summary = run_census(out_dir=out_dir)
         else:

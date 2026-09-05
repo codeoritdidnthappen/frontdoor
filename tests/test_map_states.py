@@ -157,6 +157,20 @@ def test_pin_carries_state_label_and_freshness():
     assert pin["owner_confirmed"] is False
 
 
+def test_pin_does_not_carry_listing_contact():
+    """Catalogue phone/website are claim-channel authority, not map payload."""
+    pin = pin_for_row("ChIJx", row(
+        phone="(512) 555-0100",
+        website="https://secret.example",
+        formatted_phone_number="(512) 555-0100",
+    ))
+    dumped = json.dumps(pin)
+    assert "(512) 555-0100" not in dumped
+    assert "secret.example" not in dumped
+    assert "phone" not in pin
+    assert "website" not in pin
+
+
 def test_pin_without_usable_location_is_dropped():
     assert pin_for_row("a", row(location=None)) is None
     assert pin_for_row("b", row(location={"lat": None, "lng": None})) is None
