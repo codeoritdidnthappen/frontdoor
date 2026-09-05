@@ -1329,3 +1329,15 @@ This does not change the frozen dataset workflow: #302 remains James's retrospec
 task. The first phone-label version deliberately writes `data/labels.csv` inside the application
 container with no persistent volume, so a replacement or redeploy loses runtime labels. That
 limitation is accepted for the simplest first version and is explicit in the deploy runbook.
+
+## 2026-09-04 — Make the error-analysis figures reproducible (TICK-100, #70)
+
+The executable percent-format notebook presents the screening harness's per-criterion accuracy,
+not-visible rate, and exploratory condition breakdown without reading raw or sealed images. Every
+development figure identifies itself as exploratory and every condition row carries its
+independent-entrance sample size.
+
+The surviving rise-error-versus-angle finding remains explicitly predicted before data, not an
+observed screening result. Its published analytical and independent 3D-check values from #35,
+#138, and #159 now have a machine-readable companion artifact so the chart can be regenerated
+without scraping prose or silently changing the derivation.
