@@ -1,0 +1,24 @@
+{
+  "name": "congress-avenue-walk-blocks",
+  "_comment": "TICK-346 (#346). The blocks the 2026-09-04 walk actually covered, derived from the walk's own evidence rather than assumed: the 19 street addresses recorded on foot or read off a transom in data/entrance_identification.json (geocoded through OSM/Nominatim, committed as data/external/entrance_anchors.json) together with the catalogue locations of the six entrances that already resolved. That evidence hull runs 30.263882..30.269652 N and -97.746043..-97.741761 E; the box below is the hull padded by 40 m on every side, which is the map's own match distance, so any business a walked door could legitimately match to is inside the swept area. The committed demo-area box (src/frontdoor/demo_area.json) is unchanged - it still names the Second Street district, and this sweep merges into the same catalogue.",
+  "bounding_box": {
+    "south": 30.263523,
+    "west": -97.746459,
+    "north": 30.270012,
+    "east": -97.741345
+  },
+  "grid": {
+    "rows": 3,
+    "cols": 2
+  },
+  "headings_per_business": 3,
+  "max_maps_calls": 250,
+  "place_types": [
+    "restaurant", "cafe", "bar", "bakery", "meal_takeaway",
+    "store", "clothing_store", "shoe_store", "jewelry_store", "book_store",
+    "convenience_store", "liquor_store", "florist",
+    "pharmacy", "gym", "hair_care", "beauty_salon", "spa", "laundry", "bank",
+    "lodging", "art_gallery", "museum"
+  ],
+  "include_establishment_sweep": true
+}

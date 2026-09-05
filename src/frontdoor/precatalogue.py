@@ -227,17 +227,66 @@ def _haversine_m(lat1, lng1, lat2, lng2):
     return 6_371_000 * 2 * math.asin(math.sqrt(a))
 
 
-def _block_from_bounding_box(box, name):
+def _require_bounding_box(box):
     for key in ("south", "west", "north", "east"):
         _require_number(box, key, "bounding_box")
     if box["south"] >= box["north"]:
         raise ConfigError("bounding_box: south must be less than north")
     if box["west"] >= box["east"]:
         raise ConfigError("bounding_box: west must be less than east")
+
+
+def _block_from_bounding_box(box, name):
+    _require_bounding_box(box)
     lat = (box["south"] + box["north"]) / 2
     lng = (box["west"] + box["east"]) / 2
     radius_m = math.ceil(_haversine_m(lat, lng, box["north"], box["east"]))
     return {"name": name, "lat": lat, "lng": lng, "radius_m": radius_m}
+
+
+def _validated_grid(raw):
+    """Optional 'grid': how many sub-boxes to cut a bounding_box into.
+
+    Absent means one covering circle, exactly as before. #259 left this open:
+    the 60-result cap is per query, so once a per-type sweep still truncates,
+    the only remaining lever is a smaller search circle. Subdividing keeps the
+    declared box as the filter -- only the search geometry changes.
+    """
+    if "grid" not in raw:
+        return (1, 1)
+    grid = raw["grid"]
+    if not isinstance(grid, dict):
+        raise ConfigError("grid must be an object with 'rows' and 'cols'")
+    values = []
+    for key in ("rows", "cols"):
+        value = grid.get(key)
+        if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+            raise ConfigError(
+                f"grid: {key!r} must be a positive integer, got {value!r}")
+        values.append(value)
+    if "bounding_box" not in raw:
+        # 'blocks' already says where to search; a grid over it means nothing.
+        raise ConfigError("grid applies to 'bounding_box', not to 'blocks'")
+    return tuple(values)
+
+
+def _blocks_from_bounding_box(box, name, rows, cols):
+    """One covering circle per grid cell of the declared box."""
+    _require_bounding_box(box)
+    blocks = []
+    lat_step = (box["north"] - box["south"]) / rows
+    lng_step = (box["east"] - box["west"]) / cols
+    for row in range(rows):
+        for col in range(cols):
+            cell = {
+                "south": box["south"] + row * lat_step,
+                "north": box["south"] + (row + 1) * lat_step,
+                "west": box["west"] + col * lng_step,
+                "east": box["west"] + (col + 1) * lng_step,
+            }
+            cell_name = name if rows == cols == 1 else f"{name}-r{row}c{col}"
+            blocks.append(_block_from_bounding_box(cell, cell_name))
+    return tuple(blocks)
 
 
 def _validated_block(block, index):
@@ -287,10 +336,11 @@ def load_demo_area(path=None):
             "'blocks'"
         )
     bounds = None
+    grid = _validated_grid(raw)
     if has_box:
         if not isinstance(raw["bounding_box"], dict):
             raise ConfigError("bounding_box must be an object")
-        blocks = (_block_from_bounding_box(raw["bounding_box"], name),)
+        blocks = _blocks_from_bounding_box(raw["bounding_box"], name, *grid)
         bounds = {key: float(raw["bounding_box"][key])
                   for key in ("south", "west", "north", "east")}
     else:
@@ -689,7 +739,36 @@ def _truncated_types_by_block(truncated_types):
     return by_block
 
 
-def run_census(area=None, out_dir="data", *, env=None,
+def _merged_census(existing, places):
+    """Add the places this sweep found to a census already on disk (#346).
+
+    One catalogue, swept in more than one pass: a second area's sweep extends
+    the list rather than replacing it. Rows already present are left exactly as
+    they are -- a later sweep re-finding a place is not new information about
+    it, and rewriting rows would put this pass's fingerprints on the earlier
+    pass's evidence.
+
+    Added rows carry the place_id and which sweeps returned it, and nothing
+    else. #242's acceptance criterion is that nothing from Places is persisted
+    except the place_id; the existing rows' `name` and `location` are the
+    violation that ticket is open on, and this pass deliberately does not add
+    to their number. Display fields resolve at render time from the identifier.
+    """
+    known = {row["place_id"] for row in existing.get("places", [])}
+    added = [{"place_id": p["place_id"], "sweeps": list(p["sweeps"])}
+             for p in places if p["place_id"] not in known]
+    previous = list(existing.get("previous_summaries", []))
+    if existing.get("summary") is not None:
+        previous.append(existing["summary"])
+    return {
+        "places": list(existing.get("places", [])) + added,
+        "previous_summaries": previous,
+        "added": added,
+        "already_listed": len(places) - len(added),
+    }
+
+
+def run_census(area=None, out_dir="data", *, env=None, merge=False,
                fetch_json=_http_get_json, sleep=time.sleep):
     """Enumerate only: list the area's places and stop before any imagery.
 
@@ -702,6 +781,10 @@ def run_census(area=None, out_dir="data", *, env=None,
 
     Writes the census (summary plus the full place list) next to where the
     dataset would go, and returns the summary.
+
+    With merge=True the census on disk is extended instead of replaced: this
+    area's places are added to it, identifier-only, and the census it replaced
+    keeps its summary under `previous_summaries`. See _merged_census.
     """
     t0 = time.perf_counter()
     if area is None:
@@ -734,6 +817,12 @@ def run_census(area=None, out_dir="data", *, env=None,
         stopped = f"{type(exc).__name__}: {exc}"
         stopped_is_error = True
 
+    census_path = out_dir / CENSUS_FILENAME
+    merged = None
+    if merge and census_path.exists():
+        merged = _merged_census(
+            json.loads(census_path.read_text(encoding="utf-8")), places)
+
     already = sum(1 for p in places if p["place_id"] in existing_ids)
     summary = {
         "area": area.name,
@@ -750,8 +839,18 @@ def run_census(area=None, out_dir="data", *, env=None,
         "stopped": stopped,
         "stopped_is_error": stopped_is_error,
     }
-    _write_json(out_dir / CENSUS_FILENAME,
-                {"summary": summary, "places": list(places)})
+    if merged is None:
+        payload = {"summary": summary, "places": list(places)}
+    else:
+        summary["merged_into_existing"] = {
+            "places_added": len(merged["added"]),
+            "places_already_listed": merged["already_listed"],
+            "places_total": len(merged["places"]),
+        }
+        payload = {"summary": summary,
+                   "previous_summaries": merged["previous_summaries"],
+                   "places": merged["places"]}
+    _write_json(census_path, payload)
     return summary
 
 
@@ -939,23 +1038,33 @@ def main(argv=None):
     _load_dotenv_once()
     args = sys.argv[1:] if argv is None else argv
     census = "--census" in args
-    args = [a for a in args if a != "--census"]
+    merge = "--merge" in args
+    config = None
+    for arg in args:
+        if arg.startswith("--config="):
+            config = arg.split("=", 1)[1]
+    args = [a for a in args
+            if a not in ("--census", "--merge") and not a.startswith("--config=")]
     if (not args or args[0] not in ("run", "enrich") or len(args) > 2
-            or (args[0] == "enrich" and census)):
+            or (args[0] == "enrich" and (census or merge or config))
+            or (merge and not census)):
         print("usage: python -m frontdoor.precatalogue run [--census] "
-              "[out_dir]\n"
-              "       python -m frontdoor.precatalogue enrich [out_dir]",
+              "[--config=PATH] [--merge] [out_dir]\n"
+              "       python -m frontdoor.precatalogue enrich [out_dir]\n"
+              "  --merge extends the census on disk instead of replacing it, "
+              "and needs --census",
               file=sys.stderr)
         return 2
     out_dir = args[1] if len(args) == 2 else "data"
     try:
+        area = load_demo_area(config) if config else None
         if args[0] == "enrich":
             summary = enrich_contacts(out_dir=out_dir)
         elif census:
             # Enumeration only: no Street View, no model, no dataset writes.
-            summary = run_census(out_dir=out_dir)
+            summary = run_census(area=area, out_dir=out_dir, merge=merge)
         else:
-            summary = run_precatalogue(out_dir=out_dir)
+            summary = run_precatalogue(area=area, out_dir=out_dir)
     except PrecatalogueError as exc:
         print(exc, file=sys.stderr)
         return 1

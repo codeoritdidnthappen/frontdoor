@@ -1380,3 +1380,60 @@ identify, E-045 is a pair of service doors, and three more are building lobbies.
 The census catalogue is now the binding constraint on #333, not identification: it was swept
 over the Second Street district and holds only 6 of these 46 doors, so 23 of the 29
 identifications carry a business name and no `place_id`. That gap is #346.
+
+## 2026-09-05 — Extend the pre-catalogue to the blocks the walk covered (TICK-346, #346)
+
+The catalogue was swept over the Second Street district; the 2026-09-04 walk went up Congress
+Avenue, so 23 of #341's 29 identified doors carried a business name and nothing the map could
+pin them to. This extends the catalogue over the blocks that were actually walked and re-runs
+the matching.
+
+**The blocks, derived rather than assumed.** The walk left three kinds of positional evidence:
+19 street addresses recorded on foot or read off a transom, the capture order along the route,
+and the catalogue locations of the six doors that already resolved. Geocoding those addresses
+through OSM/Nominatim (`data/external/entrance_anchors.json`, segregated and ODbL-attributed)
+puts the evidence hull at 30.263882..30.269652 N, -97.746043..-97.741761 E — 101 Colorado Street
+at the south end, 721 Congress Avenue at the north. `src/frontdoor/walk_area.json` is that hull
+padded by 40 m, the map's own match distance, so any business a walked door could legitimately
+match to is inside the swept area. The committed demo area is unchanged.
+
+**Sweeping it.** #259's per-storefront-type enumeration, reused unchanged except for one new
+config key: `grid` cuts a bounding box into cells and sweeps one circle per cell. #259 left this
+open — the 60-result cap is per query, so once a typed sweep still truncates the only lever left
+is a smaller circle. A 3x2 grid over this box holds truncation to the `establishment` umbrella in
+every cell (plus `store` and `lodging` in one), against four truncated types under the single
+covering circle the un-gridded box produces. 175 Places calls, about $5.60; 664 in-bounds
+businesses, 509 of them new. The catalogue is now 695 places.
+
+**Licensing (#242).** That ticket found Places `name` and `location` persisted to disk against a
+criterion saying nothing but `place_id` may be stored. The rows added here hold the `place_id`
+and which sweeps found it, and nothing else: `--merge` on the census is identifier-only by
+construction, and the names the matching compared against were resolved by the sweep running in
+the same pass and never written down. The existing rows are untouched — this change does not
+deepen the violation and does not fix it either. #242 still owns it, and #333 will need those
+display fields resolved at render time before it can draw a pin for one of these places.
+
+**Matching.** `frontdoor.entrance_matching` decides a place for each of the 46 non-sealed doors
+against the map's own gates: the name comparison `/map/data` merges scan records with, plus the
+40 m distance gate, measured from where the door is evidenced to be — the geocoded street number
+it read, or the stretch of street between the two anchored doors either side of it in the same
+day's walk. Both gates, never one: an entrance has no independent coordinates, so the name
+comparison's "nothing to compare, fall back to distance" branch is shut here. Anything ambiguous
+stays unmatched, and a candidate past the gate is refused rather than the gate widened.
+
+**Result: 12 of the 46 resolve, up from 6.** The six new are Swift's Attic, Mexic-Arte Museum,
+Capital One Café, 7-Eleven, Ruth's Chris and Velvet Taco. Of the 17 identified doors still
+unmatched: 6 name a business the catalogue does not hold at all (Which Wich, One Medical,
+SoulCycle, L&D ATX, and the Scarbrough and Robinson-Rosner buildings, which are buildings rather
+than storefront businesses); 5 have no catalogued place of that name within 40 m, including
+E-038's Kruger's at 60 m, refused rather than widened; 5 sit outside the day's anchored stretch
+with no street number of their own, so nothing places them and a name alone is not a match; and
+E-056's CVS draws three Google listings for one store ("CVS", "CVS Pharmacy", "CVS Photo") within
+17 m of each other, which is an ambiguity the gate is right to refuse.
+
+One independent check worth recording: E-012's nearest candidate comes out at 70 m, the same
+distance #341 measured against a surveyed door coordinate that was never persisted. The geocoded
+anchor reproduces it.
+
+The identifications themselves are unchanged. Only `place_id` moved, and the new `place_match`
+field records how each decision was made.

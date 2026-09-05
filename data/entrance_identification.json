@@ -1,5 +1,5 @@
 {
-  "_comment": "TICK-341 (#341). Which business each captured entrance belongs to, so #333 can key a scan record to a place. E-001..E-012 come from the on-foot door survey. E-013..E-064 were identified by reading the storefront signage in the privacy-processed captures with a vision model, then matching the read name against data/precatalogue_census.json and constraining it with the capture order along the route. No accessibility judgement was made or consulted, and the 18 sealed entrances were excluded before any model call. confidence 'high' means the name was read unambiguously or surveyed on foot; 'low' means it was read from a single partly redacted source or assembled from corroborating text. Anything that could not be pinned to one business is 'unidentified' with a reason: an unmatched entrance is a smaller failure than a scan record attached to the wrong storefront.",
+  "_comment": "TICK-341 (#341). Which business each captured entrance belongs to, so #333 can key a scan record to a place. E-001..E-012 come from the on-foot door survey. E-013..E-064 were identified by reading the storefront signage in the privacy-processed captures with a vision model, then matching the read name against data/precatalogue_census.json and constraining it with the capture order along the route. No accessibility judgement was made or consulted, and the 18 sealed entrances were excluded before any model call. confidence 'high' means the name was read unambiguously or surveyed on foot; 'low' means it was read from a single partly redacted source or assembled from corroborating text. Anything that could not be pinned to one business is 'unidentified' with a reason: an unmatched entrance is a smaller failure than a scan record attached to the wrong storefront. TICK-346 (#346) added `place_match`: which catalogued place the door resolves to and how, or why it does not. A match needs a business name AND the map's own 40 m distance gate, measured from where the door is evidenced to be - the geocoded street number it read (data/external/entrance_anchors.json), or the stretch of street between the two anchored doors either side of it in the same day's walk. A name on its own is never a match, a candidate past the gate is refused rather than the gate widened, and anything ambiguous stays unmatched. The identifications themselves are #341's and were not revisited.",
   "capture_dates": [
     "2026-08-31",
     "2026-09-04"
@@ -21,7 +21,15 @@
       ],
       "evidence": "Door surveyed on foot for #333; business and address recorded at the time. Yelp (301 Lavaca St) + OSM/Nominatim geocode; the '200' on the transom is the suite number, entrance faces the W 3rd/Lavaca corner.",
       "reason": null,
-      "views_read": []
+      "views_read": [],
+      "place_match": {
+        "how": {
+          "anchor": "identification",
+          "detail": "resolved by #341 against the committed catalogue"
+        },
+        "unmatched_reason": null,
+        "detail": null
+      }
     },
     "E-003": {
       "status": "identified",
@@ -34,7 +42,12 @@
       ],
       "evidence": "Door surveyed on foot for #333; business and address recorded at the time. Yelp + whichwich.com + OSM/Nominatim geocode (POI 'Which Wich?' at 247 W 3rd). No census catalogue entry for this business.",
       "reason": null,
-      "views_read": []
+      "views_read": [],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "no_catalogue_entry",
+        "detail": "no catalogued place carries this business name"
+      }
     },
     "E-004": {
       "status": "identified",
@@ -47,7 +60,15 @@
       ],
       "evidence": "Door surveyed on foot for #333; business and address recorded at the time. Yelp + 2ndstreetdistrict.com + OSM/Nominatim geocode (POI 'Royal Blue Grocery' at 241 W 3rd).",
       "reason": null,
-      "views_read": []
+      "views_read": [],
+      "place_match": {
+        "how": {
+          "anchor": "identification",
+          "detail": "resolved by #341 against the committed catalogue"
+        },
+        "unmatched_reason": null,
+        "detail": null
+      }
     },
     "E-007": {
       "status": "identified",
@@ -60,7 +81,12 @@
       ],
       "evidence": "Door surveyed on foot for #333; business and address recorded at the time. Yelp + redfarmnyc.com + OSM/Nominatim geocode (POI 'Red Farm' at 201 W 3rd, corner of W 3rd & Colorado); Yelp lists it as CLOSED as of Sept 2026 but signage/location confirmed. No census catalogue entry for this business.",
       "reason": null,
-      "views_read": []
+      "views_read": [],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "outside_match_distance",
+        "detail": "nearest candidate 'Diafar' is 287 m away, over the 40 m gate"
+      }
     },
     "E-008": {
       "status": "identified",
@@ -73,7 +99,15 @@
       ],
       "evidence": "Door surveyed on foot for #333; business and address recorded at the time. Yelp + sevlaser.com/austin + OSM/Nominatim geocode (POI 'SEV Laser'); '208' door number is on Colorado St between W 2nd and W 3rd, not W 3rd.",
       "reason": null,
-      "views_read": []
+      "views_read": [],
+      "place_match": {
+        "how": {
+          "anchor": "identification",
+          "detail": "resolved by #341 against the committed catalogue"
+        },
+        "unmatched_reason": null,
+        "detail": null
+      }
     },
     "E-009": {
       "status": "identified",
@@ -86,7 +120,12 @@
       ],
       "evidence": "Door surveyed on foot for #333; business and address recorded at the time. SAM registration via opengovus.com + atptx.org + OSM/Nominatim geocode; '203' door number is on Colorado St between W 2nd and W 3rd. No census catalogue entry for this business.",
       "reason": null,
-      "views_read": []
+      "views_read": [],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "outside_match_distance",
+        "detail": "nearest candidate 'USA Compression Partners LP' is 109 m away, over the 40 m gate"
+      }
     },
     "E-010": {
       "status": "identified",
@@ -99,7 +138,15 @@
       ],
       "evidence": "Door surveyed on foot for #333; business and address recorded at the time. Yelp + sweetgreen.com (2nd + Colorado) + OSM/Nominatim geocode (POI 'Sweetgreen' at 200 W 2nd).",
       "reason": null,
-      "views_read": []
+      "views_read": [],
+      "place_match": {
+        "how": {
+          "anchor": "identification",
+          "detail": "resolved by #341 against the committed catalogue"
+        },
+        "unmatched_reason": null,
+        "detail": null
+      }
     },
     "E-012": {
       "status": "identified",
@@ -112,7 +159,12 @@
       ],
       "evidence": "Door surveyed on foot for #333; business and address recorded at the time. Apartments.com/Zillow/Yelp + OSM/Nominatim geocode (address point 101 Colorado St); lobby is a block south of the W 3rd cluster, between W 2nd St and Cesar Chavez. Catalogue candidate 'Ashton Austin' sits 70 m from the surveyed door, outside the map's 40 m match gate, so no place_id is claimed.",
       "reason": null,
-      "views_read": []
+      "views_read": [],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "outside_match_distance",
+        "detail": "nearest candidate 'Ashton Austin' is 70 m away, over the 40 m gate"
+      }
     },
     "E-013": {
       "status": "identified",
@@ -129,7 +181,15 @@
         "IMG_3329",
         "IMG_3330",
         "IMG_3331"
-      ]
+      ],
+      "place_match": {
+        "how": {
+          "anchor": "identification",
+          "detail": "resolved by #341 against the committed catalogue"
+        },
+        "unmatched_reason": null,
+        "detail": null
+      }
     },
     "E-017": {
       "status": "unidentified",
@@ -146,7 +206,12 @@
         "IMG_3358",
         "IMG_3359",
         "IMG_3360"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "not_identified",
+        "detail": "the entrance was never identified, so there is no name to match"
+      }
     },
     "E-018": {
       "status": "identified",
@@ -165,7 +230,12 @@
         "IMG_3363",
         "IMG_3364",
         "IMG_3365"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "no_location_evidence",
+        "detail": "2 name candidate(s) in the catalogue, none of them testable"
+      }
     },
     "E-019": {
       "status": "identified",
@@ -184,13 +254,18 @@
         "IMG_3367",
         "IMG_3368",
         "IMG_3369"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "no_location_evidence",
+        "detail": "2 name candidate(s) in the catalogue, none of them testable"
+      }
     },
     "E-020": {
       "status": "identified",
       "name": "Swift's Attic",
       "address": "315 Congress Ave",
-      "place_id": null,
+      "place_id": "ChIJOZxxaAi1RIYRe3j7KpIprWo",
       "confidence": "high",
       "basis": [
         "read_sign",
@@ -204,7 +279,17 @@
         "IMG_3372",
         "IMG_3373",
         "IMG_3374"
-      ]
+      ],
+      "place_match": {
+        "how": {
+          "anchor": "address_geocode",
+          "anchor_between": null,
+          "distance_m": 11.9,
+          "matched_name": "Swift's Attic"
+        },
+        "unmatched_reason": null,
+        "detail": null
+      }
     },
     "E-022": {
       "status": "identified",
@@ -224,7 +309,12 @@
         "IMG_3382",
         "IMG_3383",
         "IMG_3384"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "no_catalogue_entry",
+        "detail": "no catalogued place carries this business name"
+      }
     },
     "E-023": {
       "status": "identified",
@@ -242,7 +332,12 @@
         "IMG_3385",
         "IMG_3386",
         "IMG_3387"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "outside_match_distance",
+        "detail": "nearest candidate 'VentureLab' is 368 m away, over the 40 m gate"
+      }
     },
     "E-024": {
       "status": "unidentified",
@@ -260,7 +355,12 @@
         "IMG_3391",
         "IMG_3392",
         "IMG_3393"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "not_identified",
+        "detail": "the entrance was never identified, so there is no name to match"
+      }
     },
     "E-025": {
       "status": "identified",
@@ -280,13 +380,18 @@
         "IMG_3396",
         "IMG_3397",
         "IMG_3398"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "no_catalogue_entry",
+        "detail": "no catalogued place carries this business name"
+      }
     },
     "E-026": {
       "status": "identified",
       "name": "Mexic-Arte Museum",
       "address": null,
-      "place_id": null,
+      "place_id": "ChIJQ62VNgi1RIYRb4PYimCG5vU",
       "confidence": "high",
       "basis": [
         "read_sign"
@@ -299,7 +404,20 @@
         "IMG_3401",
         "IMG_3402",
         "IMG_3403"
-      ]
+      ],
+      "place_match": {
+        "how": {
+          "anchor": "walk_order_bracket",
+          "anchor_between": [
+            "E-024",
+            "E-030"
+          ],
+          "distance_m": 0.4,
+          "matched_name": "Mexic-Arte Museum"
+        },
+        "unmatched_reason": null,
+        "detail": null
+      }
     },
     "E-027": {
       "status": "unidentified",
@@ -316,7 +434,12 @@
         "IMG_3406",
         "IMG_3407",
         "IMG_3408"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "not_identified",
+        "detail": "the entrance was never identified, so there is no name to match"
+      }
     },
     "E-030": {
       "status": "unidentified",
@@ -335,13 +458,18 @@
         "IMG_3422",
         "IMG_3423",
         "IMG_3424"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "not_identified",
+        "detail": "the entrance was never identified, so there is no name to match"
+      }
     },
     "E-031": {
       "status": "identified",
       "name": "Capital One Café",
       "address": null,
-      "place_id": null,
+      "place_id": "ChIJmzg1xQm1RIYRxzAFpBcfK78",
       "confidence": "high",
       "basis": [
         "read_sign"
@@ -354,7 +482,20 @@
         "IMG_3427",
         "IMG_3428",
         "IMG_3429"
-      ]
+      ],
+      "place_match": {
+        "how": {
+          "anchor": "walk_order_bracket",
+          "anchor_between": [
+            "E-030",
+            "E-033"
+          ],
+          "distance_m": 0.6,
+          "matched_name": "Capital One Café"
+        },
+        "unmatched_reason": null,
+        "detail": null
+      }
     },
     "E-033": {
       "status": "unidentified",
@@ -372,13 +513,18 @@
         "IMG_3439",
         "IMG_3440",
         "IMG_3441"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "not_identified",
+        "detail": "the entrance was never identified, so there is no name to match"
+      }
     },
     "E-034": {
       "status": "identified",
       "name": "7-Eleven",
       "address": "613 Congress Ave",
-      "place_id": null,
+      "place_id": "ChIJE7BdYAi1RIYRU1hwvbVXfwU",
       "confidence": "low",
       "basis": [
         "read_branding",
@@ -394,7 +540,17 @@
         "IMG_3445",
         "IMG_3446",
         "IMG_3447"
-      ]
+      ],
+      "place_match": {
+        "how": {
+          "anchor": "address_geocode",
+          "anchor_between": null,
+          "distance_m": 1.5,
+          "matched_name": "7-Eleven"
+        },
+        "unmatched_reason": null,
+        "detail": null
+      }
     },
     "E-035": {
       "status": "unidentified",
@@ -411,7 +567,12 @@
         "IMG_3450",
         "IMG_3451",
         "IMG_3452"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "not_identified",
+        "detail": "the entrance was never identified, so there is no name to match"
+      }
     },
     "E-037": {
       "status": "unidentified",
@@ -428,7 +589,12 @@
         "IMG_3461",
         "IMG_3462",
         "IMG_3463"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "not_identified",
+        "detail": "the entrance was never identified, so there is no name to match"
+      }
     },
     "E-038": {
       "status": "identified",
@@ -448,7 +614,12 @@
         "IMG_3467",
         "IMG_3468",
         "IMG_3469"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "outside_match_distance",
+        "detail": "nearest candidate \"Kruger's Diamond Jewelers\" is 60 m away, over the 40 m gate"
+      }
     },
     "E-040": {
       "status": "unidentified",
@@ -465,7 +636,12 @@
         "IMG_3479",
         "IMG_3480",
         "IMG_3481"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "not_identified",
+        "detail": "the entrance was never identified, so there is no name to match"
+      }
     },
     "E-041": {
       "status": "unidentified",
@@ -483,7 +659,12 @@
         "IMG_3486",
         "IMG_3487",
         "IMG_3488"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "not_identified",
+        "detail": "the entrance was never identified, so there is no name to match"
+      }
     },
     "E-042": {
       "status": "unidentified",
@@ -501,7 +682,12 @@
         "IMG_3492",
         "IMG_3493",
         "IMG_3494"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "not_identified",
+        "detail": "the entrance was never identified, so there is no name to match"
+      }
     },
     "E-043": {
       "status": "unidentified",
@@ -519,7 +705,12 @@
         "IMG_3498",
         "IMG_3499",
         "IMG_3500"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "not_identified",
+        "detail": "the entrance was never identified, so there is no name to match"
+      }
     },
     "E-045": {
       "status": "unidentified",
@@ -536,7 +727,12 @@
         "IMG_3507",
         "IMG_3508",
         "IMG_3509"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "not_identified",
+        "detail": "the entrance was never identified, so there is no name to match"
+      }
     },
     "E-047": {
       "status": "identified",
@@ -556,7 +752,12 @@
         "IMG_3519",
         "IMG_3520",
         "IMG_3521"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "no_catalogue_entry",
+        "detail": "no catalogued place carries this business name"
+      }
     },
     "E-048": {
       "status": "unidentified",
@@ -574,13 +775,18 @@
         "IMG_3525",
         "IMG_3526",
         "IMG_3527"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "not_identified",
+        "detail": "the entrance was never identified, so there is no name to match"
+      }
     },
     "E-049": {
       "status": "identified",
       "name": "Ruth's Chris Steak House",
       "address": null,
-      "place_id": null,
+      "place_id": "ChIJWQDHxwm1RIYRJmu_M83GQlI",
       "confidence": "high",
       "basis": [
         "read_sign"
@@ -595,7 +801,20 @@
         "IMG_3532",
         "IMG_3533",
         "IMG_3534"
-      ]
+      ],
+      "place_match": {
+        "how": {
+          "anchor": "walk_order_bracket",
+          "anchor_between": [
+            "E-037",
+            "E-050"
+          ],
+          "distance_m": 27.0,
+          "matched_name": "Ruth's Chris Steak House"
+        },
+        "unmatched_reason": null,
+        "detail": null
+      }
     },
     "E-050": {
       "status": "identified",
@@ -617,13 +836,18 @@
         "IMG_3538",
         "IMG_3539",
         "IMG_3540"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "no_catalogue_entry",
+        "detail": "no catalogued place carries this business name"
+      }
     },
     "E-051": {
       "status": "identified",
       "name": "Velvet Taco",
       "address": "522 Congress Ave",
-      "place_id": null,
+      "place_id": "ChIJIQ4kr4e1RIYRbQ_afrDF1p0",
       "confidence": "high",
       "basis": [
         "read_sign",
@@ -637,7 +861,17 @@
         "IMG_3543",
         "IMG_3544",
         "IMG_3545"
-      ]
+      ],
+      "place_match": {
+        "how": {
+          "anchor": "address_geocode",
+          "anchor_between": null,
+          "distance_m": 28.8,
+          "matched_name": "Velvet Taco"
+        },
+        "unmatched_reason": null,
+        "detail": null
+      }
     },
     "E-053": {
       "status": "unidentified",
@@ -654,7 +888,12 @@
         "IMG_3554",
         "IMG_3555",
         "IMG_3556"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "not_identified",
+        "detail": "the entrance was never identified, so there is no name to match"
+      }
     },
     "E-054": {
       "status": "unidentified",
@@ -671,7 +910,12 @@
         "IMG_3559",
         "IMG_3560",
         "IMG_3561"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "not_identified",
+        "detail": "the entrance was never identified, so there is no name to match"
+      }
     },
     "E-055": {
       "status": "identified",
@@ -692,7 +936,12 @@
         "IMG_3565",
         "IMG_3566",
         "IMG_3567"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "no_catalogue_entry",
+        "detail": "no catalogued place carries this business name"
+      }
     },
     "E-056": {
       "status": "identified",
@@ -711,7 +960,12 @@
         "IMG_3570",
         "IMG_3571",
         "IMG_3572"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "ambiguous_candidates",
+        "detail": "'CVS Photo' at 7 m; 'CVS' at 17 m; 'CVS Pharmacy' at 17 m"
+      }
     },
     "E-057": {
       "status": "unidentified",
@@ -730,7 +984,12 @@
         "IMG_3577",
         "IMG_3578",
         "IMG_3579"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "not_identified",
+        "detail": "the entrance was never identified, so there is no name to match"
+      }
     },
     "E-058": {
       "status": "unidentified",
@@ -747,7 +1006,12 @@
         "IMG_3582",
         "IMG_3583",
         "IMG_3584"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "not_identified",
+        "detail": "the entrance was never identified, so there is no name to match"
+      }
     },
     "E-060": {
       "status": "identified",
@@ -767,7 +1031,15 @@
         "IMG_3594",
         "IMG_3595",
         "IMG_3596"
-      ]
+      ],
+      "place_match": {
+        "how": {
+          "anchor": "identification",
+          "detail": "resolved by #341 against the committed catalogue"
+        },
+        "unmatched_reason": null,
+        "detail": null
+      }
     },
     "E-061": {
       "status": "identified",
@@ -787,7 +1059,12 @@
         "IMG_3600",
         "IMG_3601",
         "IMG_3602"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "no_location_evidence",
+        "detail": "1 name candidate(s) in the catalogue, none of them testable"
+      }
     },
     "E-062": {
       "status": "identified",
@@ -805,7 +1082,12 @@
         "IMG_3604",
         "IMG_3605",
         "IMG_3606"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "no_location_evidence",
+        "detail": "1 name candidate(s) in the catalogue, none of them testable"
+      }
     },
     "E-063": {
       "status": "identified",
@@ -824,7 +1106,12 @@
         "IMG_3609",
         "IMG_3610",
         "IMG_3611"
-      ]
+      ],
+      "place_match": {
+        "how": null,
+        "unmatched_reason": "no_location_evidence",
+        "detail": "1 name candidate(s) in the catalogue, none of them testable"
+      }
     }
   }
 }
