@@ -1,0 +1,830 @@
+{
+  "_comment": "TICK-341 (#341). Which business each captured entrance belongs to, so #333 can key a scan record to a place. E-001..E-012 come from the on-foot door survey. E-013..E-064 were identified by reading the storefront signage in the privacy-processed captures with a vision model, then matching the read name against data/precatalogue_census.json and constraining it with the capture order along the route. No accessibility judgement was made or consulted, and the 18 sealed entrances were excluded before any model call. confidence 'high' means the name was read unambiguously or surveyed on foot; 'low' means it was read from a single partly redacted source or assembled from corroborating text. Anything that could not be pinned to one business is 'unidentified' with a reason: an unmatched entrance is a smaller failure than a scan record attached to the wrong storefront.",
+  "capture_dates": [
+    "2026-08-31",
+    "2026-09-04"
+  ],
+  "method": {
+    "model": "claude-opus-5",
+    "source_images": "privacy-processed captures only",
+    "catalogue": "data/precatalogue_census.json"
+  },
+  "entrances": {
+    "E-001": {
+      "status": "identified",
+      "name": "DeSano Pizzeria Napoletana",
+      "address": "301 Lavaca St, Ste 200, Austin, TX 78701",
+      "place_id": "ChIJH1vZsj21RIYR9QNowHxmpDU",
+      "confidence": "high",
+      "basis": [
+        "surveyed_location"
+      ],
+      "evidence": "Door surveyed on foot for #333; business and address recorded at the time. Yelp (301 Lavaca St) + OSM/Nominatim geocode; the '200' on the transom is the suite number, entrance faces the W 3rd/Lavaca corner.",
+      "reason": null,
+      "views_read": []
+    },
+    "E-003": {
+      "status": "identified",
+      "name": "Which Wich",
+      "address": "247 W 3rd St, Austin, TX 78701",
+      "place_id": null,
+      "confidence": "high",
+      "basis": [
+        "surveyed_location"
+      ],
+      "evidence": "Door surveyed on foot for #333; business and address recorded at the time. Yelp + whichwich.com + OSM/Nominatim geocode (POI 'Which Wich?' at 247 W 3rd). No census catalogue entry for this business.",
+      "reason": null,
+      "views_read": []
+    },
+    "E-004": {
+      "status": "identified",
+      "name": "Royal Blue Grocery",
+      "address": "241 W 3rd St, Austin, TX 78701",
+      "place_id": "ChIJq6qqqgm1RIYRGCbJhx17hBA",
+      "confidence": "high",
+      "basis": [
+        "surveyed_location"
+      ],
+      "evidence": "Door surveyed on foot for #333; business and address recorded at the time. Yelp + 2ndstreetdistrict.com + OSM/Nominatim geocode (POI 'Royal Blue Grocery' at 241 W 3rd).",
+      "reason": null,
+      "views_read": []
+    },
+    "E-007": {
+      "status": "identified",
+      "name": "RedFarm",
+      "address": "201 W 3rd St, Austin, TX 78701",
+      "place_id": null,
+      "confidence": "high",
+      "basis": [
+        "surveyed_location"
+      ],
+      "evidence": "Door surveyed on foot for #333; business and address recorded at the time. Yelp + redfarmnyc.com + OSM/Nominatim geocode (POI 'Red Farm' at 201 W 3rd, corner of W 3rd & Colorado); Yelp lists it as CLOSED as of Sept 2026 but signage/location confirmed. No census catalogue entry for this business.",
+      "reason": null,
+      "views_read": []
+    },
+    "E-008": {
+      "status": "identified",
+      "name": "SEV Laser",
+      "address": "208 Colorado St, Austin, TX 78701",
+      "place_id": "ChIJj29QlJe1RIYRrFSOVy2A4Xs",
+      "confidence": "high",
+      "basis": [
+        "surveyed_location"
+      ],
+      "evidence": "Door surveyed on foot for #333; business and address recorded at the time. Yelp + sevlaser.com/austin + OSM/Nominatim geocode (POI 'SEV Laser'); '208' door number is on Colorado St between W 2nd and W 3rd, not W 3rd.",
+      "reason": null,
+      "views_read": []
+    },
+    "E-009": {
+      "status": "identified",
+      "name": "Austin Transit Partnership",
+      "address": "203 Colorado St, Austin, TX 78701",
+      "place_id": null,
+      "confidence": "high",
+      "basis": [
+        "surveyed_location"
+      ],
+      "evidence": "Door surveyed on foot for #333; business and address recorded at the time. SAM registration via opengovus.com + atptx.org + OSM/Nominatim geocode; '203' door number is on Colorado St between W 2nd and W 3rd. No census catalogue entry for this business.",
+      "reason": null,
+      "views_read": []
+    },
+    "E-010": {
+      "status": "identified",
+      "name": "Sweetgreen",
+      "address": "200 W 2nd St, Austin, TX 78701",
+      "place_id": "ChIJQ4yXW8q1RIYRCkM0yr1OLso",
+      "confidence": "high",
+      "basis": [
+        "surveyed_location"
+      ],
+      "evidence": "Door surveyed on foot for #333; business and address recorded at the time. Yelp + sweetgreen.com (2nd + Colorado) + OSM/Nominatim geocode (POI 'Sweetgreen' at 200 W 2nd).",
+      "reason": null,
+      "views_read": []
+    },
+    "E-012": {
+      "status": "identified",
+      "name": "The Ashton (Ashton Austin residential tower)",
+      "address": "101 Colorado St, Austin, TX 78701",
+      "place_id": null,
+      "confidence": "high",
+      "basis": [
+        "surveyed_location"
+      ],
+      "evidence": "Door surveyed on foot for #333; business and address recorded at the time. Apartments.com/Zillow/Yelp + OSM/Nominatim geocode (address point 101 Colorado St); lobby is a block south of the W 3rd cluster, between W 2nd St and Cesar Chavez. Catalogue candidate 'Ashton Austin' sits 70 m from the surveyed door, outside the map's 40 m match gate, so no place_id is claimed.",
+      "reason": null,
+      "views_read": []
+    },
+    "E-013": {
+      "status": "identified",
+      "name": "JoS. A. Bank",
+      "address": null,
+      "place_id": "ChIJlyD0Wwi1RIYRs8d4z8UUzSs",
+      "confidence": "high",
+      "basis": [
+        "read_sign"
+      ],
+      "evidence": "Name on the brass plaque beside the door, read cleanly in view 1. The census catalogue holds exactly one JoS. A. Bank and it is on Congress Ave.",
+      "reason": null,
+      "views_read": [
+        "IMG_3329",
+        "IMG_3330",
+        "IMG_3331"
+      ]
+    },
+    "E-017": {
+      "status": "unidentified",
+      "name": null,
+      "address": null,
+      "place_id": null,
+      "confidence": null,
+      "basis": [],
+      "evidence": null,
+      "reason": "Every signage surface is redacted by the privacy processing. Only a Boon Edam door-manufacturer decal and an EXIT sign are legible across five views.",
+      "views_read": [
+        "IMG_3356",
+        "IMG_3357",
+        "IMG_3358",
+        "IMG_3359",
+        "IMG_3360"
+      ]
+    },
+    "E-018": {
+      "status": "identified",
+      "name": "Burger Bar on Congress",
+      "address": null,
+      "place_id": null,
+      "confidence": "high",
+      "basis": [
+        "read_sign"
+      ],
+      "evidence": "Window vinyl reading 'Burger Bar on Congress', legible in views 4 and 5.",
+      "reason": null,
+      "views_read": [
+        "IMG_3361",
+        "IMG_3362",
+        "IMG_3363",
+        "IMG_3364",
+        "IMG_3365"
+      ]
+    },
+    "E-019": {
+      "status": "identified",
+      "name": "Starbucks",
+      "address": null,
+      "place_id": null,
+      "confidence": "low",
+      "basis": [
+        "read_sign",
+        "walk_order"
+      ],
+      "evidence": "Wordmark partly legible on a cropped blade sign in views 3 and 4, with 'OPEN 6:00 AM' beside it. The catalogue's 'Starbucks Coffee Company' was NOT claimed: it lies about 230 m west of Congress Ave, while the door photographed four seconds earlier reads 'Burger Bar on Congress'.",
+      "reason": null,
+      "views_read": [
+        "IMG_3366",
+        "IMG_3367",
+        "IMG_3368",
+        "IMG_3369"
+      ]
+    },
+    "E-020": {
+      "status": "identified",
+      "name": "Swift's Attic",
+      "address": "315 Congress Ave",
+      "place_id": null,
+      "confidence": "high",
+      "basis": [
+        "read_sign",
+        "read_street_number"
+      ],
+      "evidence": "Name on the framed menu placard ('Upstairs @ Swift's Attic') plus the Swift Building landmark plaque; transom number 315.",
+      "reason": null,
+      "views_read": [
+        "IMG_3370",
+        "IMG_3371",
+        "IMG_3372",
+        "IMG_3373",
+        "IMG_3374"
+      ]
+    },
+    "E-022": {
+      "status": "identified",
+      "name": "One Medical",
+      "address": null,
+      "place_id": null,
+      "confidence": "high",
+      "basis": [
+        "read_sign"
+      ],
+      "evidence": "Name on window vinyl and the hanging sign. The '323' transom read in view 6 was not carried as this door's address: the next door photographed eight seconds later (E-023) is the 323 Congress Suite 100 entrance.",
+      "reason": null,
+      "views_read": [
+        "IMG_3379",
+        "IMG_3380",
+        "IMG_3381",
+        "IMG_3382",
+        "IMG_3383",
+        "IMG_3384"
+      ]
+    },
+    "E-023": {
+      "status": "identified",
+      "name": "Accenture",
+      "address": "323 Congress Ave, Suite 100",
+      "place_id": null,
+      "confidence": "high",
+      "basis": [
+        "read_sign",
+        "read_street_number"
+      ],
+      "evidence": "Door vinyl in views 2 and 3, with the 323 Congress Suite 100 transom; the neighbouring door (E-024) independently records an accenture decal at 323.",
+      "reason": null,
+      "views_read": [
+        "IMG_3385",
+        "IMG_3386",
+        "IMG_3387"
+      ]
+    },
+    "E-024": {
+      "status": "unidentified",
+      "name": null,
+      "address": "327 Congress Ave",
+      "place_id": null,
+      "confidence": null,
+      "basis": [],
+      "evidence": null,
+      "reason": "The main sign is the building's own street number, '327 CONGRESS', which names no business. The only tenant name in these views is an accenture decal read on the adjacent entrance at 323 Congress, which is E-023, not this door.",
+      "views_read": [
+        "IMG_3388",
+        "IMG_3389",
+        "IMG_3390",
+        "IMG_3391",
+        "IMG_3392",
+        "IMG_3393"
+      ]
+    },
+    "E-025": {
+      "status": "identified",
+      "name": "SoulCycle",
+      "address": null,
+      "place_id": null,
+      "confidence": "low",
+      "basis": [
+        "read_sign",
+        "walk_order"
+      ],
+      "evidence": "No name sign survives on this frontage. The door poster is a Celsius advertisement reading 'Refresh The Ride.' and 'NOW AT SOULCYCLE'; the window carries the SoulCycle wheel graphic and reversed lettering, and activewear hangs on rails inside. Part of the 'SOULCYCLE' text visible in the glass is a reflection of a banner across the street and was not counted. The transom reads Suite 100E, and the walk places this door between 327 Congress and the Mexic-Arte Museum. Confirmed by eye against views 1 and 3.",
+      "reason": null,
+      "views_read": [
+        "IMG_3394",
+        "IMG_3395",
+        "IMG_3396",
+        "IMG_3397",
+        "IMG_3398"
+      ]
+    },
+    "E-026": {
+      "status": "identified",
+      "name": "Mexic-Arte Museum",
+      "address": null,
+      "place_id": null,
+      "confidence": "high",
+      "basis": [
+        "read_sign"
+      ],
+      "evidence": "Wall sign plus the A-frame text, corroborated by the museum's own URL and social handle on the glass.",
+      "reason": null,
+      "views_read": [
+        "IMG_3399",
+        "IMG_3400",
+        "IMG_3401",
+        "IMG_3402",
+        "IMG_3403"
+      ]
+    },
+    "E-027": {
+      "status": "unidentified",
+      "name": null,
+      "address": null,
+      "place_id": null,
+      "confidence": null,
+      "basis": [],
+      "evidence": null,
+      "reason": "All door and window signage is redacted. The only readable text is a mirrored reflection of a neighbouring venue's window across the street.",
+      "views_read": [
+        "IMG_3404",
+        "IMG_3405",
+        "IMG_3406",
+        "IMG_3407",
+        "IMG_3408"
+      ]
+    },
+    "E-030": {
+      "status": "unidentified",
+      "name": null,
+      "address": "515 Congress Ave",
+      "place_id": null,
+      "confidence": null,
+      "basis": [],
+      "evidence": null,
+      "reason": "No tenant name is legible; the door glass carries only the building address '515 CONGRESS' and elevator/garage floor plates.",
+      "views_read": [
+        "IMG_3418",
+        "IMG_3419",
+        "IMG_3420",
+        "IMG_3421",
+        "IMG_3422",
+        "IMG_3423",
+        "IMG_3424"
+      ]
+    },
+    "E-031": {
+      "status": "identified",
+      "name": "Capital One Café",
+      "address": null,
+      "place_id": null,
+      "confidence": "high",
+      "basis": [
+        "read_sign"
+      ],
+      "evidence": "Door decals read 'Capital One Café' with 'café coffee banking', a Verve Coffee Roasters credit and a Member FDIC notice. The digits read as '100' were not carried as a street number: the walk puts this door between 515 and 609 Congress, so 100 Congress Ave is geographically impossible here.",
+      "reason": null,
+      "views_read": [
+        "IMG_3425",
+        "IMG_3426",
+        "IMG_3427",
+        "IMG_3428",
+        "IMG_3429"
+      ]
+    },
+    "E-033": {
+      "status": "unidentified",
+      "name": null,
+      "address": "609 Congress Ave",
+      "place_id": null,
+      "confidence": null,
+      "basis": [],
+      "evidence": null,
+      "reason": "The signage band over the doors is redacted in every view, so no business name is readable — only the door number 609 and Japanese-language window decals. The 7-Eleven notices visible on the adjoining frontage belong to E-034, not to this door.",
+      "views_read": [
+        "IMG_3436",
+        "IMG_3437",
+        "IMG_3438",
+        "IMG_3439",
+        "IMG_3440",
+        "IMG_3441"
+      ]
+    },
+    "E-034": {
+      "status": "identified",
+      "name": "7-Eleven",
+      "address": "613 Congress Ave",
+      "place_id": null,
+      "confidence": "low",
+      "basis": [
+        "read_branding",
+        "read_street_number",
+        "walk_order"
+      ],
+      "evidence": "No fascia name survives the redaction, so this is trade dress rather than a name sign: the orange/green/red 7-Eleven stripe bands frame the doorway, the window posters carry 7-Eleven-exclusive copy ('7-SELECT SODA', 'the 7-Eleven app'), and the reading of the adjoining door at 609 records 7-Eleven notices on this frontage. The door number 613 was read here. Confirmed by eye against view 3.",
+      "reason": null,
+      "views_read": [
+        "IMG_3442",
+        "IMG_3443",
+        "IMG_3444",
+        "IMG_3445",
+        "IMG_3446",
+        "IMG_3447"
+      ]
+    },
+    "E-035": {
+      "status": "unidentified",
+      "name": null,
+      "address": null,
+      "place_id": null,
+      "confidence": null,
+      "basis": [],
+      "evidence": null,
+      "reason": "No business name, street number or street sign is legible; only store hours, door notices and a 'NAMM' fragment.",
+      "views_read": [
+        "IMG_3448",
+        "IMG_3449",
+        "IMG_3450",
+        "IMG_3451",
+        "IMG_3452"
+      ]
+    },
+    "E-037": {
+      "status": "unidentified",
+      "name": null,
+      "address": "721 Congress Ave",
+      "place_id": null,
+      "confidence": null,
+      "basis": [],
+      "evidence": null,
+      "reason": "Only the door number 721 and a fire-department connection placard are legible; any tenant signage is absent or redacted.",
+      "views_read": [
+        "IMG_3459",
+        "IMG_3460",
+        "IMG_3461",
+        "IMG_3462",
+        "IMG_3463"
+      ]
+    },
+    "E-038": {
+      "status": "identified",
+      "name": "Kruger's",
+      "address": null,
+      "place_id": null,
+      "confidence": "high",
+      "basis": [
+        "read_sign"
+      ],
+      "evidence": "The name appears on the neon sign, the door transom, window vinyl and the floor inlay at the entrance.",
+      "reason": null,
+      "views_read": [
+        "IMG_3464",
+        "IMG_3465",
+        "IMG_3466",
+        "IMG_3467",
+        "IMG_3468",
+        "IMG_3469"
+      ]
+    },
+    "E-040": {
+      "status": "unidentified",
+      "name": null,
+      "address": null,
+      "place_id": null,
+      "confidence": null,
+      "basis": [],
+      "evidence": null,
+      "reason": "Unbranded glass-and-metal facade with large redacted regions; no text is legible in any view.",
+      "views_read": [
+        "IMG_3477",
+        "IMG_3478",
+        "IMG_3479",
+        "IMG_3480",
+        "IMG_3481"
+      ]
+    },
+    "E-041": {
+      "status": "unidentified",
+      "name": null,
+      "address": null,
+      "place_id": null,
+      "confidence": null,
+      "basis": [],
+      "evidence": null,
+      "reason": "All signage and window text is redacted across every view.",
+      "views_read": [
+        "IMG_3483",
+        "IMG_3484",
+        "IMG_3485",
+        "IMG_3486",
+        "IMG_3487",
+        "IMG_3488"
+      ]
+    },
+    "E-042": {
+      "status": "unidentified",
+      "name": null,
+      "address": null,
+      "place_id": null,
+      "confidence": null,
+      "basis": [],
+      "evidence": null,
+      "reason": "No storefront name sign is legible; the door carries only generic notices and the interior window text is blurred.",
+      "views_read": [
+        "IMG_3489",
+        "IMG_3490",
+        "IMG_3491",
+        "IMG_3492",
+        "IMG_3493",
+        "IMG_3494"
+      ]
+    },
+    "E-043": {
+      "status": "unidentified",
+      "name": null,
+      "address": null,
+      "place_id": null,
+      "confidence": null,
+      "basis": [],
+      "evidence": null,
+      "reason": "All signage areas are redacted; the storefront is a plain glass entrance with no legible text.",
+      "views_read": [
+        "IMG_3495",
+        "IMG_3496",
+        "IMG_3497",
+        "IMG_3498",
+        "IMG_3499",
+        "IMG_3500"
+      ]
+    },
+    "E-045": {
+      "status": "unidentified",
+      "name": null,
+      "address": null,
+      "place_id": null,
+      "confidence": null,
+      "basis": [],
+      "evidence": null,
+      "reason": "Service doors. Only stairwell identification signs are legible; no business name or address.",
+      "views_read": [
+        "IMG_3505",
+        "IMG_3506",
+        "IMG_3507",
+        "IMG_3508",
+        "IMG_3509"
+      ]
+    },
+    "E-047": {
+      "status": "identified",
+      "name": "L&D ATX",
+      "address": null,
+      "place_id": null,
+      "confidence": "low",
+      "basis": [
+        "read_sign"
+      ],
+      "evidence": "Only a small door decal reading 'L&D ATX' is legible. A happy-hour menu is readable beside it but carries no business name, and there is no catalogue match, so the reading is uncorroborated.",
+      "reason": null,
+      "views_read": [
+        "IMG_3516",
+        "IMG_3517",
+        "IMG_3518",
+        "IMG_3519",
+        "IMG_3520",
+        "IMG_3521"
+      ]
+    },
+    "E-048": {
+      "status": "unidentified",
+      "name": null,
+      "address": null,
+      "place_id": null,
+      "confidence": null,
+      "basis": [],
+      "evidence": null,
+      "reason": "No business signage is legible; the only readable text is a paper notice directing entry and deliveries around the corner to 503 Colorado Street.",
+      "views_read": [
+        "IMG_3522",
+        "IMG_3523",
+        "IMG_3524",
+        "IMG_3525",
+        "IMG_3526",
+        "IMG_3527"
+      ]
+    },
+    "E-049": {
+      "status": "identified",
+      "name": "Ruth's Chris Steak House",
+      "address": null,
+      "place_id": null,
+      "confidence": "high",
+      "basis": [
+        "read_sign"
+      ],
+      "evidence": "The fascia sign reads 'RUT… CHRIS STEAK HO…' around the Ruth's Chris roundel; only a few characters are lost to redaction, and 'U.S. PRIME' appears beside it. Confirmed by eye against view 3.",
+      "reason": null,
+      "views_read": [
+        "IMG_3528",
+        "IMG_3529",
+        "IMG_3530",
+        "IMG_3531",
+        "IMG_3532",
+        "IMG_3533",
+        "IMG_3534"
+      ]
+    },
+    "E-050": {
+      "status": "identified",
+      "name": "Scarbrough Building",
+      "address": "522 Congress Ave",
+      "place_id": null,
+      "confidence": "high",
+      "basis": [
+        "read_sign",
+        "read_street_number",
+        "walk_order"
+      ],
+      "evidence": "Building entrance carrying the building's own name: 'SCARBROUGH' on the tenant directory placard, above a directory listing UATX, Subject Technologies and dbt Labs. The 522 was read on the adjacent door glass in view 6, and the neighbouring door (E-051) reads the same 522 on its own frontage.",
+      "reason": null,
+      "views_read": [
+        "IMG_3535",
+        "IMG_3536",
+        "IMG_3537",
+        "IMG_3538",
+        "IMG_3539",
+        "IMG_3540"
+      ]
+    },
+    "E-051": {
+      "status": "identified",
+      "name": "Velvet Taco",
+      "address": "522 Congress Ave",
+      "place_id": null,
+      "confidence": "high",
+      "basis": [
+        "read_sign",
+        "read_street_number"
+      ],
+      "evidence": "Name on the door decals in view 5. The 522 street number was read at this door, which is what corroborates E-050's reading of the same number next door.",
+      "reason": null,
+      "views_read": [
+        "IMG_3541",
+        "IMG_3542",
+        "IMG_3543",
+        "IMG_3544",
+        "IMG_3545"
+      ]
+    },
+    "E-053": {
+      "status": "unidentified",
+      "name": null,
+      "address": "506 Congress Ave",
+      "place_id": null,
+      "confidence": null,
+      "basis": [],
+      "evidence": null,
+      "reason": "Only the transom number 506 and building-management decals are legible; no business name, and much of the glass is redacted.",
+      "views_read": [
+        "IMG_3552",
+        "IMG_3553",
+        "IMG_3554",
+        "IMG_3555",
+        "IMG_3556"
+      ]
+    },
+    "E-054": {
+      "status": "unidentified",
+      "name": null,
+      "address": null,
+      "place_id": null,
+      "confidence": null,
+      "basis": [],
+      "evidence": null,
+      "reason": "Vacant storefront carrying a Downtown Austin space-activation campaign poster. There is no tenant to identify.",
+      "views_read": [
+        "IMG_3557",
+        "IMG_3558",
+        "IMG_3559",
+        "IMG_3560",
+        "IMG_3561"
+      ]
+    },
+    "E-055": {
+      "status": "identified",
+      "name": "Robinson-Rosner Building",
+      "address": "504 Congress Ave",
+      "place_id": null,
+      "confidence": "high",
+      "basis": [
+        "read_sign",
+        "read_street_number"
+      ],
+      "evidence": "Building entrance, not a storefront. Cast plaque 'ROBINSON-ROSNER BUILDING (1856)' and the 'ROBINSON' floor mosaic, with the 504 transom.",
+      "reason": null,
+      "views_read": [
+        "IMG_3562",
+        "IMG_3563",
+        "IMG_3564",
+        "IMG_3565",
+        "IMG_3566",
+        "IMG_3567"
+      ]
+    },
+    "E-056": {
+      "status": "identified",
+      "name": "CVS",
+      "address": null,
+      "place_id": null,
+      "confidence": "high",
+      "basis": [
+        "read_sign"
+      ],
+      "evidence": "CVS wordmark on the red window vinyl in view 1, with a partial 'pharmacy' above it.",
+      "reason": null,
+      "views_read": [
+        "IMG_3568",
+        "IMG_3569",
+        "IMG_3570",
+        "IMG_3571",
+        "IMG_3572"
+      ]
+    },
+    "E-057": {
+      "status": "unidentified",
+      "name": null,
+      "address": null,
+      "place_id": null,
+      "confidence": null,
+      "basis": [],
+      "evidence": null,
+      "reason": "The transom reads '120' followed by an illegible ordinal street name, so neither a business nor a full address could be read.",
+      "views_read": [
+        "IMG_3573",
+        "IMG_3574",
+        "IMG_3575",
+        "IMG_3576",
+        "IMG_3577",
+        "IMG_3578",
+        "IMG_3579"
+      ]
+    },
+    "E-058": {
+      "status": "unidentified",
+      "name": null,
+      "address": "415 Colorado St",
+      "place_id": null,
+      "confidence": null,
+      "basis": [],
+      "evidence": null,
+      "reason": "Residential building entrance. The transom reads '415 COLORADO ST.' beside 'Residences' and 'LEASING', so the use is clear but the only name on the frontage is the street number itself.",
+      "views_read": [
+        "IMG_3580",
+        "IMG_3581",
+        "IMG_3582",
+        "IMG_3583",
+        "IMG_3584"
+      ]
+    },
+    "E-060": {
+      "status": "identified",
+      "name": "Sushi Roku",
+      "address": null,
+      "place_id": "ChIJtxx1fZO1RIYRR1Gn6q4Rwe8",
+      "confidence": "high",
+      "basis": [
+        "read_sign",
+        "walk_order"
+      ],
+      "evidence": "Name on the entrance mat and the window poster ('SUSHI ROKU AUSTIN'). The catalogue holds exactly one Sushi Roku and it lies about 110 m from the previous identified door, consistent with the walk. The '100' read on the glass is a suite number, not a street number.",
+      "reason": null,
+      "views_read": [
+        "IMG_3592",
+        "IMG_3593",
+        "IMG_3594",
+        "IMG_3595",
+        "IMG_3596"
+      ]
+    },
+    "E-061": {
+      "status": "identified",
+      "name": "Quik Print",
+      "address": null,
+      "place_id": null,
+      "confidence": "high",
+      "basis": [
+        "read_sign"
+      ],
+      "evidence": "Door decal in views 3, 5 and 6, with 'SINCE 1963' beside it.",
+      "reason": null,
+      "views_read": [
+        "IMG_3597",
+        "IMG_3598",
+        "IMG_3599",
+        "IMG_3600",
+        "IMG_3601",
+        "IMG_3602"
+      ]
+    },
+    "E-062": {
+      "status": "identified",
+      "name": "Speakeasy",
+      "address": null,
+      "place_id": null,
+      "confidence": "high",
+      "basis": [
+        "read_sign"
+      ],
+      "evidence": "Name on the entrance mat and the A-frame signage.",
+      "reason": null,
+      "views_read": [
+        "IMG_3603",
+        "IMG_3604",
+        "IMG_3605",
+        "IMG_3606"
+      ]
+    },
+    "E-063": {
+      "status": "identified",
+      "name": "Speakeasy",
+      "address": null,
+      "place_id": null,
+      "confidence": "high",
+      "basis": [
+        "read_sign"
+      ],
+      "evidence": "Window vinyl on both doors. Second street door of the same venue as E-062, photographed one second later.",
+      "reason": null,
+      "views_read": [
+        "IMG_3607",
+        "IMG_3608",
+        "IMG_3609",
+        "IMG_3610",
+        "IMG_3611"
+      ]
+    }
+  }
+}
