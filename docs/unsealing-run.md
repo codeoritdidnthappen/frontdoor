@@ -116,6 +116,13 @@ permitted, and open it as its own pull request so the moment is auditable. Order
 not negotiable: **the evaluation report is committed first, then the entrances are published.**
 Publishing before the report would leave the seal broken with nothing recording what it found.
 
+Permitting them is part of that change, not a flag waiting to be flipped. `frontdoor.scan_publish`
+has no `--include-sealed` and no `allow_sealed`: it derives what it may assess from
+`frontdoor.split`, refuses a sealed entrance before the engine is reached, and the engine refuses
+it again. That is deliberate — while the seal is closed there must be no argument anyone can pass
+that opens it — so freeze day adds the audited doorway, the way `frontdoor.eval` and
+`frontdoor.screening_eval` already have one, rather than discovering it was there all along.
+
 The published records are ordinary Scanned on-site records. They carry their capture dates, they
 pass through the same never-downgrade and Green-or-Gray gates, and nothing about them is marked
 as having been sealed. The seal was a procedure for protecting an evaluation, never a property
