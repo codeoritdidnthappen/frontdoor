@@ -16,8 +16,8 @@ unsealing is recorded in SEAL_AUDIT.log via seal_audit.record_unsealing
 """
 
 import csv
-import fcntl
 import os
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
@@ -28,6 +28,37 @@ from typing import Mapping, Sequence
 from frontdoor import seal_audit
 from frontdoor.manifest import read_manifest
 from frontdoor.split import InvalidEntranceId, assign_split, canonical_entrance_id
+
+# The label sheet is written from a local tool that one operator runs by hand,
+# but the write is still guarded across processes so two windows cannot
+# interleave a read-modify-write of the same CSV. flock is POSIX-only and this
+# module has to import on the labeling operator's machine whatever it runs, so
+# the lock is taken through one small platform shim (TICK-321).
+if os.name == "nt":  # pragma: no cover - exercised on Windows only
+    import msvcrt
+
+    @contextmanager
+    def _exclusive_lock(handle):
+        """Lock one byte of the lock file; LK_LOCK retries before giving up."""
+        handle.seek(0)
+        msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+        try:
+            yield
+        finally:
+            handle.seek(0)
+            msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+
+else:  # pragma: no cover - exercised on POSIX only
+    import fcntl
+
+    @contextmanager
+    def _exclusive_lock(handle):
+        """Take the whole-file advisory lock; closing the handle releases it."""
+        fcntl.flock(handle, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle, fcntl.LOCK_UN)
 
 # Must match the criterion keys in the screening engine's CRITERIA
 # (frontdoor.screening, TICK-245) so eval joins labels to verdicts cleanly.
@@ -265,8 +296,8 @@ def append_future_entrance_labels(
 
     with _future_label_write_lock:
         path.parent.mkdir(parents=True, exist_ok=True)
-        with path.with_name(f"{path.name}.lock").open("w", encoding="utf-8") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX)
+        lock_path = path.with_name(f"{path.name}.lock")
+        with lock_path.open("w", encoding="utf-8") as lock, _exclusive_lock(lock):
             rows = _read_sheet(path) if path.exists() else []
             if path.exists():
                 load_labels(path)

@@ -239,3 +239,34 @@ def test_committed_closeout_is_current_and_records_the_actual_corpus():
         "capture_modes": ["imported"],
         "recorded_lighting": ["direct sun"],
     }
+
+
+def test_a_crlf_sidecar_mismatch_names_line_endings_as_the_cause(tmp_path):
+    # TICK-323: .gitattributes pins sidecars to LF, but a working tree checked
+    # out before that attribute keeps CRLF, and the bytes then hash differently
+    # from the manifest. The content is identical, so the error has to say so
+    # instead of reading like corruption.
+    from frontdoor.dataset_closeout import _line_ending_hint
+
+    body = b'{\r\n "capture_id": "E-001-3217"\r\n}\r\n'
+    path = tmp_path / "E-001-3217.json"
+    path.write_bytes(body)
+    lf_sha = hashlib.sha256(body.replace(b"\r\n", b"\n")).hexdigest()
+
+    hint = _line_ending_hint(path, lf_sha)
+    assert "CRLF" in hint
+    assert "git checkout --" in hint
+
+
+def test_no_line_ending_hint_when_the_content_really_differs(tmp_path):
+    # A genuinely different sidecar must not be excused as a line-ending
+    # problem, whether or not it happens to hold CRLF.
+    from frontdoor.dataset_closeout import _line_ending_hint
+
+    path = tmp_path / "E-001-3217.json"
+    path.write_bytes(b'{\r\n "capture_id": "E-001-9999"\r\n}\r\n')
+    assert _line_ending_hint(path, "0" * 64) == ""
+
+    lf_only = tmp_path / "E-001-3218.json"
+    lf_only.write_bytes(b'{\n "capture_id": "E-001-3218"\n}\n')
+    assert _line_ending_hint(lf_only, "0" * 64) == ""
