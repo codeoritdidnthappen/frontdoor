@@ -10,8 +10,10 @@ import SwiftUI
 /// `docs/capture-protocol.md` -- so the primer, the coaching and the protocol cannot tell an
 /// operator three different things.
 ///
-/// Plain on purpose: the canon boards are with James (#251). What is settled here is what the
-/// operator is told, which restyling will not change.
+/// This is the worked example for `UI/DesignSystem`: every colour, size, space, radius, shadow and
+/// icon on it comes from a token, and nothing here spells a hex, a point size or a system font.
+/// The words are unchanged -- what an operator is told was settled before the boards arrived, and
+/// restyling does not get to revise it.
 struct ScanPrimerView: View {
     let continueTitle: String
     let onContinue: () -> Void
@@ -19,7 +21,9 @@ struct ScanPrimerView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 22) {
+                VStack(alignment: .leading, spacing: EntryMapLayout.space5) {
+                    masthead
+
                     section(
                         "Where to stand",
                         "Photograph the entrance from the public footway. You do not need anyone's "
@@ -27,21 +31,7 @@ struct ScanPrimerView: View {
                             + "the next one. Stop at the threshold: no interiors."
                     )
 
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("What to take").font(.headline)
-                        Text("Six views of the same entrance. The viewfinder will prompt you "
-                             + "through them and keeps track of which are done.")
-                            .font(.subheadline).foregroundStyle(.secondary)
-                        ForEach(ViewSlot.allCases, id: \.self) { slot in
-                            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                Image(systemName: "circle").font(.caption2).foregroundStyle(.secondary)
-                                VStack(alignment: .leading, spacing: 1) {
-                                    Text(slot.label).font(.subheadline.weight(.medium))
-                                    Text(slot.coaching).font(.caption).foregroundStyle(.secondary)
-                                }
-                            }
-                        }
-                    }
+                    viewSet
 
                     section(
                         "What happens to a photo",
@@ -60,26 +50,79 @@ struct ScanPrimerView: View {
                             + "about the entrance."
                     )
                 }
-                .padding()
+                .padding(EntryMapLayout.space4)
             }
+            .background(EntryMapPalette.ground)
             .navigationTitle("Before you scan")
             .navigationBarTitleDisplayMode(.inline)
             .safeAreaInset(edge: .bottom) {
                 Button(action: onContinue) {
-                    Text(continueTitle).font(.headline)
-                        .frame(maxWidth: .infinity).padding(.vertical, 14)
+                    Text(continueTitle)
                 }
-                .buttonStyle(.borderedProminent)
-                .padding()
-                .background(.bar)
+                .buttonStyle(EntryMapButtonStyle(role: .primary))
+                .padding(EntryMapLayout.space4)
+                .background(EntryMapPalette.card)
             }
         }
     }
 
-    private func section(_ title: String, _ body: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title).font(.headline)
-            Text(body).font(.subheadline).foregroundStyle(.secondary)
+    /// The brand lockup is a dark-ground piece of artwork, so it brings its own indigo with it
+    /// rather than sitting on the canvas.
+    private var masthead: some View {
+        HStack(spacing: EntryMapLayout.space4) {
+            EntryMapBrandMark(size: 64, cornerRadius: EntryMapLayout.radiusMedium)
+            Text("Six photographs of one entrance, then a screening.")
+                .entryMapText(EntryMapTypography.callout)
+                .foregroundStyle(EntryMapPalette.subduedInk)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The view set, rendered from `ViewSlot` rather than restated.
+    ///
+    /// Slot labels carry distances and six of them stacked is a column, so they are set in the
+    /// tabular step. Atkinson's figures are proportional by default, and without it the "1.5" and
+    /// the "3-4" sit at different widths down the list.
+    private var viewSet: some View {
+        VStack(alignment: .leading, spacing: EntryMapLayout.space3) {
+            Text("What to take")
+                .entryMapText(EntryMapTypography.heading)
+                .foregroundStyle(EntryMapPalette.ink)
+            Text("Six views of the same entrance. The viewfinder will prompt you "
+                 + "through them and keeps track of which are done.")
+                .entryMapText(EntryMapTypography.body)
+                .foregroundStyle(EntryMapPalette.subduedInk)
+            VStack(alignment: .leading, spacing: EntryMapLayout.space3) {
+                ForEach(ViewSlot.allCases, id: \.self) { slot in
+                    HStack(alignment: .top, spacing: EntryMapLayout.space3) {
+                        EntryMapIconView(icon: .photo, size: 22)
+                        VStack(alignment: .leading, spacing: EntryMapLayout.space1) {
+                            Text(slot.label)
+                                .entryMapText(EntryMapTypography.subheadingNumeric)
+                                .foregroundStyle(EntryMapPalette.ink)
+                            Text(slot.coaching)
+                                .entryMapText(EntryMapTypography.callout)
+                                .foregroundStyle(EntryMapPalette.subduedInk)
+                        }
+                    }
+                    .accessibilityElement(children: .combine)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .entryMapCard()
+    }
+
+    private func section(_ title: String, _ body: String) -> some View {
+        VStack(alignment: .leading, spacing: EntryMapLayout.space2) {
+            Text(title)
+                .entryMapText(EntryMapTypography.heading)
+                .foregroundStyle(EntryMapPalette.ink)
+            Text(body)
+                .entryMapText(EntryMapTypography.body)
+                .foregroundStyle(EntryMapPalette.subduedInk)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .entryMapCard()
     }
 }

@@ -14,11 +14,25 @@ targets:
     platform: iOS
     sources:
       - path: FrontdoorCapture
+        # Prose that documents the tree, not payload. Resources/Fonts/README.md says which font
+        # files belong beside it; bundling it would ship a markdown file to a phone.
+        excludes:
+          - "**/*.md"
     info:
       path: FrontdoorCapture/Resources/Info.plist
       properties:
         CFBundleDisplayName: Frontdoor
         UILaunchScreen: {}
+        # The EntryMap type system (UI/DesignSystem/EntryMapTypography.swift). The files are not
+        # committed -- Resources/Fonts/README.md says which four to drop in and why. Registering a
+        # font that is not there is harmless: iOS logs it and Font.custom falls back to the system
+        # face. EntryMapTypography.Face.fileName is the other half of this list, and
+        # tests/test_ios_design_system.py fails if the two ever disagree.
+        UIAppFonts:
+          - AtkinsonHyperlegibleNext-Regular.ttf
+          - AtkinsonHyperlegibleNext-SemiBold.ttf
+          - AtkinsonHyperlegibleNext-Bold.ttf
+          - NunitoSans-ExtraBold.ttf
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         # D-014: capture geometry is fixed, so the instrument does not rotate.
