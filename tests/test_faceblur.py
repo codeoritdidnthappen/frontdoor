@@ -259,7 +259,9 @@ def test_flat_gray_image_has_no_faces():
 
 def test_boxes_are_reported_in_full_resolution_coordinates(monkeypatch):
     # Detection runs downscaled (DETECT_MAX_SIDE); boxes must come back in the
-    # coordinates of the image the caller handed in.
+    # coordinates of the image the caller handed in. A cascade box is only
+    # returned with a YuNet box agreeing (#350), so YuNet is faked to report
+    # the same face in ITS frame (YUNET_MAX_SIDE: scale 0.64 on 3200px).
     class FakeCascade:
         def __init__(self, boxes):
             self._boxes = boxes
@@ -272,11 +274,125 @@ def test_boxes_are_reported_in_full_resolution_coordinates(monkeypatch):
         "_get_cascades",
         lambda: (FakeCascade([(10, 10, 20, 20)]), FakeCascade([])),
     )
-    big = np.full((2400, 3200, 3), 128, dtype=np.uint8)  # scale = 0.5
+    monkeypatch.setattr(faceblur, "_detect_yunet", lambda small: [(13, 13, 26, 26)])
+    big = np.full((2400, 3200, 3), 128, dtype=np.uint8)  # Haar scale = 0.5
 
     boxes = detect_faces(encode(big))
 
-    assert boxes and all(box == (20, 20, 40, 40) for box in boxes)
+    assert (20, 20, 41, 41) in boxes  # the YuNet box, rescaled from 0.64
+    # The cascade box, rescaled - once per variant the fake cascade ran on
+    # (plain and contrast-boosted), both corroborated by the one YuNet box.
+    assert boxes.count((20, 20, 40, 40)) == 2
+    assert len(boxes) == 3
+
+
+# --- the supplementary pass needs YuNet's agreement (TICK-350, #350) ----------
+#
+# The Haar cascades fire on high-contrast repeating pattern, and storefront
+# lettering is exactly that: nine entrances of the 2026-09-04 run could not be
+# identified because the union pass had mosaicked their fascia. A cascade box
+# is now blurred only when a YuNet box overlaps it (HAAR_CORROBORATION_IOU).
+
+
+class _FixedCascade:
+    def __init__(self, boxes):
+        self._boxes = boxes
+
+    def detectMultiScale(self, img, **kwargs):
+        return list(self._boxes)
+
+
+def test_a_cascade_box_with_no_yunet_box_near_it_is_not_blurred(monkeypatch):
+    monkeypatch.setattr(
+        faceblur, "_get_cascades",
+        lambda: (_FixedCascade([(100, 100, 60, 60)]), _FixedCascade([(200, 40, 30, 30)])),
+    )
+    monkeypatch.setattr(faceblur, "_detect_yunet", lambda small: [])
+    assert detect_faces(encode(noisy_image(400, 600))) == []
+
+
+def test_a_cascade_box_survives_only_where_yunet_agrees(monkeypatch):
+    agreed, alone = (100, 100, 60, 60), (300, 50, 60, 60)
+    monkeypatch.setattr(
+        faceblur, "_get_cascades",
+        lambda: (_FixedCascade([agreed, alone]), _FixedCascade([])),
+    )
+    monkeypatch.setattr(faceblur, "_detect_yunet", lambda small: [(105, 102, 55, 58)])
+
+    boxes = detect_faces(encode(noisy_image(400, 600)))
+
+    assert agreed in boxes
+    assert alone not in boxes
+    assert (105, 102, 55, 58) in boxes
+
+
+def signboard():
+    """Dense storefront lettering: thirty shop words in several faces and
+    sizes, dark on light, and nothing else. Deterministic (seeded layout).
+    On the committed OpenCV build the cascades box this 17 times and YuNet
+    not once - the pattern the nine unidentifiable entrances showed."""
+    words = ["PIZZERIA", "NAPOLETANA", "OPEN", "7 DAYS", "STORE HOURS",
+             "10AM-8PM", "231 W. 3RD", "609", "613", "201", "205", "247",
+             "NO TRESPASSING", "PUSH", "PULL", "SEAFOOD", "OYSTER", "COFFEE",
+             "GROCERY", "LEASING", "512.505.0837", "CLEANERS", "ALTERATIONS",
+             "EXIT", "SHOP ONLINE", "MON-SAT", "SUN 12-6", "EST. 1889", "HOT", "FDC"]
+    fonts = [cv2.FONT_HERSHEY_SIMPLEX, cv2.FONT_HERSHEY_DUPLEX,
+             cv2.FONT_HERSHEY_TRIPLEX, cv2.FONT_HERSHEY_COMPLEX,
+             cv2.FONT_HERSHEY_SCRIPT_COMPLEX, cv2.FONT_HERSHEY_COMPLEX_SMALL,
+             cv2.FONT_HERSHEY_SCRIPT_SIMPLEX, cv2.FONT_ITALIC]
+    sizes = (0.5, 0.7, 0.9, 1.2, 1.6, 2.2)
+    layout = np.random.default_rng(seed=0)
+    img = np.full((1600, 1200, 3), 235, dtype=np.uint8)
+    y = 40
+    while y < 1580:
+        scale = float(layout.choice(sizes))
+        font = int(layout.choice(fonts))
+        thickness = int(max(1, scale * 2))
+        x = 20
+        while x < 1100:
+            text = str(layout.choice(words))
+            (tw, _), _ = cv2.getTextSize(text, font, scale, thickness)
+            cv2.putText(img, text, (x, y), font, scale, (30, 30, 30), thickness,
+                        cv2.LINE_AA)
+            x += tw + int(layout.integers(20, 80))
+        y += int(scale * 40) + 20
+    return img
+
+
+def test_lettering_alone_produces_no_blur_regions():
+    result = process_upload(encode(signboard()))
+    assert result.face_count == 0
+    assert result.blur_regions == ()
+
+
+def test_the_lettering_fixture_is_one_the_cascades_react_to(monkeypatch):
+    # Guards the test above against an inert fixture: with corroboration
+    # waved through, the cascades DO box this lettering, so zero regions
+    # above is the gate's doing and not the cascades' silence.
+    monkeypatch.setattr(faceblur, "_corroborated", lambda box, yunet_boxes: True)
+    assert detect_faces(encode(signboard())), "the cascades found nothing to gate"
+
+
+def test_the_face_fixture_still_produces_a_blur_region_that_covers_it():
+    result = process_upload(encode(drawn_face()))
+    assert result.face_count >= 1
+    assert len(result.blur_regions) == result.face_count
+    assert any(
+        r["x"] <= 100 <= r["x"] + r["w"] and r["y"] <= 100 <= r["y"] + r["h"]
+        for r in result.blur_regions
+    ), f"no recorded region covers the face center: {result.blur_regions}"
+
+
+def test_blur_regions_are_the_pixelated_footprints_not_the_detections(monkeypatch):
+    # The recorded rectangle is the margin-expanded, clamped region _blur
+    # actually wrote, and a box that clamped to nothing leaves no region -
+    # the geometry attests the same work the count does.
+    monkeypatch.setattr(
+        faceblur, "_detect", lambda img: [(100, 80, 60, 60), (10_000, 10_000, 40, 40)]
+    )
+    result = process_upload(encode(noisy_image()))
+    assert result.face_count == 1
+    assert result.blur_regions == ({"x": 82, "y": 62, "w": 96, "h": 96},)
 
 
 # --- EXIF: orientation and GPS -----------------------------------------------
