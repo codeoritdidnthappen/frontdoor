@@ -49,14 +49,23 @@ same class of defect as scoring a rejected response as an abstention, which
 #399 has just finished removing from this codebase; it is not reintroduced here
 from the other side.
 
-WHAT IS NOT STORED
-------------------
-Only a settled answer. An assessment whose reply was refused, truncated,
-rejected, or which produced no verdict at all is a failure of the CALL, and
-freezing one into the store would make a transient failure permanent — the same
-mistake as reading a failure as an abstention, cached. ``is_storable`` is the
-one predicate, and it also requires the privacy audit to have actually answered:
-a one-off missing ``face_check`` key must not quarantine a photograph forever.
+WHAT IS STORED, AND WHAT IS NOT
+-------------------------------
+Exactly what the endpoints will make public, no more and no less. ``is_storable``
+is deliberately the same predicate as `/screen`'s and `/screen/publish`'s success
+gate: an answer good enough to show a contributor is an answer that has to be
+keyed, or that photograph is re-sampled on every submission and can give two
+different public verdicts — this module's own defect, surviving inside it. That
+includes an assessment carrying ``FAILURE_REJECTED`` alongside recovered
+criteria, which is a normal TICK-399 outcome and which both endpoints publish;
+``failure`` and ``rejected_attempts`` round-trip through the record, so a recalled
+answer still says honestly that a field was thrown away.
+
+What is refused is what produced NO public verdict: no criteria, a criteria dict
+whose every field was refused, or ADA checks the validator threw away. Each of
+those makes both endpoints answer 502, so nothing public came of it and re-asking
+costs nothing public — while storing it would serve a permanent 502 for that
+photograph.
 
 STORAGE
 -------
@@ -68,10 +77,13 @@ directory" rule are the ones already proven on the scan store rather than a
 second implementation that drifts from it. ``frontdoor.corrections`` reuses them
 the same way.
 
-The store is append-only and the FIRST record matching a key wins. Nothing here
-writes a second record for a key it already found, but two concurrent misses
-can both append, and first-wins means even then the answer never changes after
-it is first given.
+The store is append-only and the FIRST record matching a key wins, so a key
+that somehow has two lines still answers with one. Two requests for the same
+photograph arriving TOGETHER are held apart by a per-key lock instead: the
+second waits, then reads the first's answer, so one photograph is assessed once
+even in the window before anything is written. That lock is in-process, which
+closes the window on the one-worker machine we deploy and is not sold as more
+than that.
 """
 
 from __future__ import annotations
@@ -79,6 +91,8 @@ from __future__ import annotations
 import hashlib
 import logging
 import os
+import threading
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from importlib import resources
@@ -170,23 +184,44 @@ def content_digest(images):
 
 
 def is_storable(assessment):
-    """Is this a settled answer, or a call that failed?
+    """Did this assessment produce a verdict the service will make public?
 
-    Only a settled answer is worth freezing. Anything else re-asks next time,
-    which is the honest outcome: a refusal, a truncation, a transport error or
-    a validation rejection is the engine failing to get an answer, and a stored
-    failure is a transient fault made permanent. ``face_check`` "unknown" is
-    excluded for the same reason from the privacy side — the audit never
-    answered, and caching that would quarantine a photograph forever on the
-    strength of one missing key.
+    The store's predicate is deliberately the ENDPOINTS' success gate and not
+    something stricter. Anything good enough to be shown to a contributor is
+    good enough to key: if `/screen` and `/screen/publish` will publish an
+    answer that the store refuses to keep, then that photograph is re-sampled
+    on every submission and can give two different public verdicts — the exact
+    defect this module exists to end, surviving inside it.
+
+    That trap is not hypothetical, and it is not a corner case. A reply whose
+    `handrails` verdict came back in the eight-check ADA vocabulary is
+    field-recovered by `validate_verdicts(recover=True)`: three good criteria
+    survive, the fourth is refused, and the assessment carries
+    ``FAILURE_REJECTED`` WITH criteria (TICK-399, and `ImageAssessment`'s own
+    docstring). Both endpoints publish that — `any_verdict` is true, and the
+    publish path writes `verdict_failures` beside it precisely so the refused
+    field stays legible. So it must be keyed too. `failure` and
+    `rejected_attempts` round-trip through the record, so a recalled answer
+    still says honestly that a field was thrown away; what it stops doing is
+    saying something different next time.
+
+    What is refused is what produced NO public verdict: no criteria at all, a
+    criteria dict whose every field was refused, or ADA checks the validator
+    threw away — each of which makes both endpoints answer 502. Nothing public
+    came of it, so re-asking costs nothing public, and storing it would serve a
+    permanent 502 for that photograph.
+
+    `face_check` is not consulted, for the same reason: `/screen` returns the
+    verdicts of a quarantined request, so those verdicts are public and must be
+    stable. The audit's answer is part of the assessment and is stored with it,
+    which also makes the quarantine decision itself a function of the
+    photograph rather than of a sample.
     """
     return (
         isinstance(assessment, ImageAssessment)
-        and assessment.failure is None
         and assessment.criteria is not None
         and any_verdict(assessment)
         and assessment.ada_checks is not None
-        and assessment.face_check != FACE_CHECK_UNKNOWN
     )
 
 
@@ -280,16 +315,23 @@ def find_assessment(path, image_sha256, version):
     """``(record, assessment)`` for the first USABLE match, or ``(None, None)``.
 
     First, not last: the store is append-only and nothing here rewrites a key
-    it found, but two concurrent misses can both append. First-wins means the
-    answer never changes after it has once been given, which is the property
-    the whole module is for.
+    it found, so a key normally has exactly one line. Where it has two, every
+    later read picks the same one, which is what makes the answer stable once
+    it has been stored. (What makes it stable BEFORE that -- two requests
+    missing at the same moment -- is the per-key lock in ``recall_or_assess``,
+    not this function.)
 
-    Usable, not merely matching. A record whose assessment cannot be read back
-    -- hand-edited, or written by some future shape -- is skipped rather than
-    returned. Returning it and letting the caller fall through to a fresh
-    assessment would mean the unusable record is found FIRST every time: every
-    request would re-assess and append another line behind a record that is
-    never served. Skipping means the good line written after it wins.
+    Usable, not merely matching. A record whose assessment cannot be read back,
+    or which cannot say WHEN it was assessed, is skipped rather than returned:
+    hand-edited, or written by some future shape. Returning it and letting the
+    caller fall through to a fresh assessment would mean the unusable record is
+    found FIRST every time -- every request re-assessing and appending another
+    line behind a record that is never served. Skipping means the good line
+    written after it wins. A missing `assessed_at` is disqualifying rather than
+    tolerated because a stored answer that cannot say when it was produced is
+    exactly the thing #435 asked to be visible; serving one with a null
+    timestamp, and writing that null into a scan record, would be the defect
+    wearing the fix's clothes.
 
     A linear scan of the file per request, deliberately. The alternative is an
     index that has to be kept in step with an append-only log, and the cost it
@@ -303,7 +345,7 @@ def find_assessment(path, image_sha256, version):
                 or record.get("engine_version") != version):
             continue
         assessment = assessment_from_record(record)
-        if assessment is not None:
+        if assessment is not None and isinstance(record.get("assessed_at"), str):
             return record, assessment
         logger.warning(
             "skipping an unreadable assessment record for %s in %s",
@@ -348,11 +390,71 @@ class Recall:
         return {**self.reference(), "served_from_store": self.served_from_store}
 
 
+def _hit(image_sha256, version, record, stored):
+    """One Recall for a record that was found. Always carries its timestamp:
+    `find_assessment` refuses a record that cannot say when it was assessed."""
+    logger.info(
+        "serving a stored assessment for %s (assessed %s)",
+        image_sha256[:12], record["assessed_at"],
+    )
+    return Recall(
+        assessment=stored,
+        image_sha256=image_sha256,
+        engine_version=version,
+        assessed_at=record["assessed_at"],
+        served_from_store=True,
+    )
+
+
+#: One lock per key, held across the miss path -- see `_assessing`.
+_key_locks = {}
+_key_locks_guard = threading.Lock()
+
+
+@contextmanager
+def _assessing(key):
+    """Serialize the miss path for ONE key, so one photograph is assessed once.
+
+    Without this, two requests for the same photograph arriving together both
+    miss, both call the model, and both return their OWN sample. First-wins on
+    the read does not save them: the two answers were already handed out, and
+    if one of them was a publish, its scan record durably carries verdicts the
+    store will never serve again. The deployed server is one worker with two
+    threads, so this is reachable rather than theoretical -- the app posts to
+    `/screen` and then to `/screen/publish` with the same frames.
+
+    Holding a lock across a model call is the point, not a cost: the second
+    request waits a few seconds and is then answered from the store, for one
+    assessment's spend instead of two. Locks are per key, so two different
+    photographs never wait on each other, and the entry is dropped when the
+    last waiter leaves so the dict cannot grow with every image ever seen.
+
+    In-process only, and deliberately not sold as more. It closes the window on
+    the machine we deploy; it would not close it across workers or machines,
+    where the honest fix is an atomic create rather than a lock. `--workers 1`
+    is in the Dockerfile, and raising it is what would make that necessary.
+    """
+    with _key_locks_guard:
+        lock, waiters = _key_locks.get(key, (threading.Lock(), 0))
+        _key_locks[key] = (lock, waiters + 1)
+    lock.acquire()
+    try:
+        yield
+    finally:
+        lock.release()
+        with _key_locks_guard:
+            _, waiters = _key_locks[key]
+            if waiters <= 1:
+                del _key_locks[key]
+            else:
+                _key_locks[key] = (lock, waiters - 1)
+
+
 def recall_or_assess(engine, images, *, media_types=None, path=None, now=None):
     """The one entry point ``/screen`` and ``/screen/publish`` both call.
 
     Hit: return the stored assessment with the timestamp it was originally
-    produced, and make NO model call. Miss: assess, store a settled answer, and
+    produced, and make NO model call. Miss: assess, store the answer, and
     return it stamped now.
 
     Fails OPEN on the store, never on the request. An unreadable store is a
@@ -367,22 +469,28 @@ def recall_or_assess(engine, images, *, media_types=None, path=None, now=None):
     image_sha256, digests = content_digest(images)
     prompt_sha = prompt_digest()
     version = engine_version(engine.config.model, prompt_sha=prompt_sha)
+    key = f"{image_sha256}|{version}"
 
     record, stored = find_assessment(path, image_sha256, version)
     if stored is not None:
-        assessed_at = record.get("assessed_at")
-        logger.info(
-            "serving a stored assessment for %s (assessed %s)",
-            image_sha256[:12], assessed_at,
-        )
-        return Recall(
-            assessment=stored,
-            image_sha256=image_sha256,
-            engine_version=version,
-            assessed_at=assessed_at if isinstance(assessed_at, str) else None,
-            served_from_store=True,
+        return _hit(image_sha256, version, record, stored)
+
+    with _assessing(key):
+        # Look again, now that nobody else can be mid-assessment on this key:
+        # whoever held the lock has finished appending, and taking their answer
+        # is both the point of the lock and one model call saved.
+        record, stored = find_assessment(path, image_sha256, version)
+        if stored is not None:
+            return _hit(image_sha256, version, record, stored)
+        return _assess_and_store(
+            engine, images, media_types, path, now,
+            image_sha256, digests, version, prompt_sha,
         )
 
+
+def _assess_and_store(engine, images, media_types, path, now,
+                      image_sha256, digests, version, prompt_sha):
+    """The miss path proper, called with this key's lock held."""
     assessment = engine.assess_images_integrated(images, media_types=media_types)
     assessed_at = now()
     if is_storable(assessment):
