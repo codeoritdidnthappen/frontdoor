@@ -15,6 +15,7 @@ from frontdoor.screening import (
     ADA_STANDARDS_URL,
     CRITERIA_KEYS,
     FACE_CHECK_KEY,
+    FAILURE_REJECTED,
     ScreeningError,
     ScreeningEngine,
     build_integrated_prompt,
@@ -194,10 +195,14 @@ def test_invalid_state_does_not_leak_model_authored_text(caplog):
     secret = "James visible through the window"
     poisoned = json.loads(_payload())
     poisoned["ada_checks"]["threshold"]["result"] = secret
-    engine = ScreeningEngine(client=FakeClient([_Response(json.dumps(poisoned))]))
+    engine = ScreeningEngine(
+        client=FakeClient([_Response(json.dumps(poisoned))] * 2)
+    )
     with caplog.at_level(logging.WARNING):
         result = engine.assess_image(b"jpeg-bytes")
-    assert result.criteria is None
+    # The eight checks are refused; TICK-399 no longer takes the four criteria
+    # down with them, but nothing model-authored reaches the error or the log.
+    assert result.ada_checks is None
     assert secret not in (result.error or "")
     assert secret not in caplog.text
 
@@ -229,11 +234,20 @@ def test_engine_carries_validated_checks_and_rejects_aggregates():
 
     poisoned = json.loads(_payload())
     poisoned["score_percent"] = 99
-    engine = ScreeningEngine(client=FakeClient([_Response(json.dumps(poisoned))]))
+    engine = ScreeningEngine(
+        client=FakeClient([_Response(json.dumps(poisoned))] * 2)
+    )
     result = engine.assess_image(b"jpeg-bytes")
-    assert result.criteria is None
+    # The model's own score is never carried: the checks are refused outright,
+    # so nothing downstream can read a number the model computed. Since
+    # TICK-399 the four criteria in the same reply survive that refusal -- they
+    # were valid, and discarding them was how whole entrances went missing --
+    # and the assessment says a response was rejected.
     assert result.ada_checks is None
+    assert result.failure == FAILURE_REJECTED
     assert "must not supply" in result.error
+    assert set(result.criteria) == set(CRITERIA_KEYS)
+    assert "score_percent" not in result.criteria
 
 
 def test_prompt_asks_for_the_eight_checks_and_forbids_compliance_claims():

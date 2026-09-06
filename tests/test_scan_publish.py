@@ -36,7 +36,12 @@ from frontdoor.scan_publish import (
     publishable_entrances,
 )
 from frontdoor.scan_records import SCAN_SOURCE, load_scan_records
-from frontdoor.screening import CRITERIA_KEYS, ScreeningEngine, SealedSplitError
+from frontdoor.screening import (
+    CRITERIA_KEYS,
+    FAILURE_REJECTED,
+    ScreeningEngine,
+    SealedSplitError,
+)
 from frontdoor.split import assign_split, canonical_entrance_id
 
 REPO = Path(__file__).resolve().parents[1]
@@ -80,12 +85,25 @@ class FakeCapture:
 
 class FakeSummary:
     verdict = "not_visible"
+    rejected = 0
+    failed = 0
+
+
+class RejectedSummary:
+    """No verdict, and a rejection saying why -- never a clean abstention."""
+
+    verdict = None
+    rejected = 1
+    failed = 0
 
 
 class FakeAssessment:
     criteria = {key: {"confidence": 60} for key in CRITERIA_KEYS}
     face_check = "clear"
     error = None
+    failure = None
+    attempts = 1
+    rejected_attempts = 0
 
 
 class FakeScreening:
@@ -95,17 +113,25 @@ class FakeScreening:
 
 
 class FailedAssessment:
-    """What the engine hands back when the model answered off-vocabulary."""
+    """What the engine hands back when the model answered off-vocabulary.
 
-    criteria = {}
+    The engine has already spent its own bounded retry by this point
+    (TICK-399) and salvaged nothing, so there are no criteria and the failure
+    is named as a rejection rather than left as bare text.
+    """
+
+    criteria = None
     face_check = "clear"
-    error = "ScreeningError: criterion handrails has invalid verdict"
+    error = "ResponseRejected: criterion handrails has invalid verdict"
+    failure = FAILURE_REJECTED
+    attempts = 2
+    rejected_attempts = 2
 
 
 class FailedScreening:
     mode = "integrated"
     assessments = (FailedAssessment(),)
-    summary = {key: FakeSummary() for key in CRITERIA_KEYS}
+    summary = {key: RejectedSummary() for key in CRITERIA_KEYS}
 
 
 class FlakyEngine:
@@ -364,6 +390,11 @@ def test_an_off_vocabulary_answer_is_asked_again_and_never_reinterpreted(
     )
     assert stubborn.calls == 3
     assert results["E-001"]["error"]
+    # The record says WHAT went wrong, not just that something did: a rejected
+    # reply is a failure of the call, and every criterion is recorded as not
+    # assessed rather than as a verdict guessed from an off-vocabulary word.
+    assert results["E-001"]["failure"] == FAILURE_REJECTED
+    assert set(results["E-001"]["verdicts"].values()) == {"not_assessed"}
 
 
 def test_a_retry_is_a_fresh_call_into_the_sealed_guard_not_a_way_round_it(

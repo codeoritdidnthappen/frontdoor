@@ -18,12 +18,14 @@ from frontdoor.labels import COLUMNS as LABEL_COLUMNS
 from frontdoor.manifest import COLUMNS as MANIFEST_COLUMNS, manifest_sha256
 from frontdoor.screening import (
     CRITERIA_KEYS,
+    FAILURE_REJECTED,
     CriterionSummary,
     EntranceScreening,
     ImageAssessment,
     ScreeningConfig,
     SealedSplitError,
     SpendCapError,
+    aggregate_assessments,
 )
 from frontdoor.screening_eval import (
     MissingCaptureObjects,
@@ -215,19 +217,23 @@ def test_score_joins_counts_per_criterion_and_skips_unlabeled():
     ]
     per_criterion, joins = score_joins(screenings, labels)
     assert per_criterion["ramp_or_bevel"] == {
-        "correct": 2, "wrong": 0, "abstained": 0, "not_visible": 0, "unlabeled": 0,
+        "correct": 2, "wrong": 0, "abstained": 0, "not_visible": 0,
+        "failed": 0, "rejected": 0, "unlabeled": 0,
     }
     assert per_criterion["handrails"] == {
-        "correct": 0, "wrong": 1, "abstained": 0, "not_visible": 0, "unlabeled": 1,
+        "correct": 0, "wrong": 1, "abstained": 0, "not_visible": 0,
+        "failed": 0, "rejected": 0, "unlabeled": 1,
     }
     # This one abstained by saying not_visible ...
     assert per_criterion["accessible_door_hardware"] == {
-        "correct": 0, "wrong": 0, "abstained": 1, "not_visible": 1, "unlabeled": 1,
+        "correct": 0, "wrong": 0, "abstained": 1, "not_visible": 1,
+        "failed": 0, "rejected": 0, "unlabeled": 1,
     }
     # ... and this one by returning no verdict at all. Both abstain; only the
     # first counts toward the not-visible rate.
     assert per_criterion["accessibility_signage"] == {
-        "correct": 0, "wrong": 0, "abstained": 1, "not_visible": 0, "unlabeled": 1,
+        "correct": 0, "wrong": 0, "abstained": 1, "not_visible": 0,
+        "failed": 0, "rejected": 0, "unlabeled": 1,
     }
     assert len(joins) == 5
     assert all(join["entrance_id"] != DEV_C for join in joins)
@@ -516,9 +522,10 @@ def test_report_json_values(tmp_path):
     signage = written["criteria"]["accessibility_signage"]
     # blank label row means the pair is unlabeled, never guessed
     assert signage == {
-        "correct": 0, "wrong": 0, "abstained": 0, "not_visible": 0, "unlabeled": 2,
+        "correct": 0, "wrong": 0, "abstained": 0, "not_visible": 0,
+        "failed": 0, "rejected": 0, "unlabeled": 2,
         "accuracy_of_committed": None, "abstention_rate": None,
-        "not_visible_rate": None,
+        "not_visible_rate": None, "failure_rate": None, "rejection_rate": None,
     }
 
     overall = written["overall"]
@@ -580,8 +587,8 @@ def test_report_markdown_carries_the_numbers(tmp_path):
     assert "- model: fake-screening-model" in text
     assert "- images: 3" in text
     assert "- spend estimate: $0.15" in text
-    assert "| ramp_or_bevel | 2 | 0 | 0 | 0 | 0 | 1.000 |" in text
-    assert "| handrails | 1 | 1 | 0 | 0 | 0 | 0.500 |" in text
+    assert "| ramp_or_bevel | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 1.000 |" in text
+    assert "| handrails | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0.500 |" in text
     assert "- not visible rate: 0.200" in text
     assert "0.750 (3 correct / 4 committed)" in text
     for dimension in CONDITION_KEYS:
@@ -780,9 +787,15 @@ def test_condition_analysis_treats_an_invalid_model_verdict_as_uncommitted(tmp_p
     ]["2.5"]["criteria"]["ramp_or_bevel"]
     assert metrics["correct"] == 0
     assert metrics["wrong"] == 0
-    assert metrics["abstained"] == 1
+    # TICK-399: a verdict outside the vocabulary is a REJECTED answer, not the
+    # engine looking and declining. It leaves the abstention rate alone and
+    # shows up as a failure instead.
+    assert metrics["abstained"] == 0
+    assert metrics["failed"] == 1
+    assert metrics["rejected"] == 1
     assert metrics["accuracy_of_committed"] is None
-    assert metrics["abstention_rate"] == 1.0
+    assert metrics["abstention_rate"] == 0.0
+    assert metrics["failure_rate"] == 1.0
 
 
 # --- CLI ---------------------------------------------------------------------
@@ -1135,6 +1148,9 @@ def _stub_run_eval(monkeypatch):
         return {
             "run": {"labels_scored": 0, "entrance_count": 0, "duration_s": 1.0},
             "overall": {"accuracy_of_committed": None},
+            "rejected_responses": {
+                "responses": 0, "first_attempt_rejected": 0, "discarded": 0,
+            },
         }
 
     monkeypatch.setattr("frontdoor.screening_eval.run_eval", _capture)
@@ -1273,20 +1289,20 @@ def test_entrance_call_rolls_up_each_entrance_labeled_criteria(tmp_path):
     # DEV_A: one correct, one wrong, one abstained -> it committed to two and
     # got one of them wrong, so the call is not correct.
     assert calls[DEV_A] == {
-        "correct": 1, "wrong": 1, "abstained": 1,
+        "correct": 1, "wrong": 1, "abstained": 1, "failed": 0,
         "accuracy_of_committed": 0.5,
         "all_committed_correct": False,
     }
     # DEV_B: committed to two, both right.
     assert calls[DEV_B] == {
-        "correct": 2, "wrong": 0, "abstained": 0,
+        "correct": 2, "wrong": 0, "abstained": 0, "failed": 0,
         "accuracy_of_committed": 1.0,
         "all_committed_correct": True,
     }
     assert result["entrance_call"]["agreement"] == 0.5
     text = (out_dir / MARKDOWN_NAME).read_text(encoding="utf-8")
     assert "## Entrance-level call" in text
-    assert f"| {DEV_B} | 2 | 0 | 0 | 1.000 | yes |" in text
+    assert f"| {DEV_B} | 2 | 0 | 0 | 0 | 1.000 | yes |" in text
 
 
 def test_an_abstention_never_makes_the_entrance_call_wrong(tmp_path):
@@ -1314,7 +1330,7 @@ def test_an_abstention_never_makes_the_entrance_call_wrong(tmp_path):
     )
     call = result["entrance_call"]["per_entrance"][DEV_A]
     assert call == {
-        "correct": 1, "wrong": 0, "abstained": 1,
+        "correct": 1, "wrong": 0, "abstained": 1, "failed": 0,
         "accuracy_of_committed": 1.0,
         "all_committed_correct": True,
     }
@@ -1371,7 +1387,7 @@ def test_a_screened_entrance_with_no_labels_still_appears(tmp_path):
     calls = result["entrance_call"]["per_entrance"]
     # Screened but unlabeled: it appears with no call rather than vanishing.
     assert calls[DEV_A] == {
-        "correct": 0, "wrong": 0, "abstained": 0,
+        "correct": 0, "wrong": 0, "abstained": 0, "failed": 0,
         "accuracy_of_committed": None,
         "all_committed_correct": None,
     }
@@ -1496,3 +1512,244 @@ def test_the_dev_run_refuses_too_and_names_only_the_entrances_affected(
     assert caught.value.entrances_affected == 1
     assert caught.value.split == "dev"
     assert not (tmp_path / "out").exists()
+
+
+# --- TICK-399: rejected responses are counted, and never as abstentions ------
+#
+# The abstention rate is the honesty signal this product leans on, and it was
+# absorbing failures that were never abstentions. Two runs of the unchanged
+# prompt over the same 28 entrances: one lost nothing, the repeat discarded 68
+# of 154 view responses (44%) and lost every criterion on 7 entrances -- and
+# the report called all of it abstention. A comparison between two arms could
+# be decided by which arm happened to lose more entrances, with nothing in the
+# output saying so.
+
+
+def _rejected_screening(entrance_id, *, views=1, split="dev"):
+    """An entrance every one of whose views the validator refused.
+
+    Built through aggregate_assessments rather than by hand, so the summary is
+    the one the engine would really produce.
+    """
+    assessments = tuple(
+        ImageAssessment(
+            criteria=None,
+            latency_s=1.0,
+            error="ResponseRejected: criterion handrails has invalid verdict",
+            failure=FAILURE_REJECTED,
+            attempts=2,
+            rejected_attempts=2,
+        )
+        for _ in range(views)
+    )
+    return EntranceScreening(
+        entrance_id=entrance_id,
+        split=split,
+        assessments=assessments,
+        summary=aggregate_assessments(assessments),
+    )
+
+
+def _tick399_run(tmp_path, screenings, label_rows, capture_rows):
+    manifest = _write_manifest(tmp_path / "manifest.csv", capture_rows)
+    labels = _write_labels(tmp_path / "labels.csv", label_rows)
+    return _run_eval(
+        tmp_path,
+        manifest_path=manifest,
+        labels_path=labels,
+        out_dir=tmp_path / "out",
+        engine=FakeEngine(screenings),
+        get_capture=_fake_get_capture,
+    )
+
+
+def test_tick_399_ac2_an_entrance_with_every_view_rejected_is_never_an_abstention(
+    tmp_path,
+):
+    """The headline failure: a door the engine never successfully assessed.
+
+    It used to score as four clean abstentions, indistinguishable from an
+    engine that had looked and honestly declined to call it.
+    """
+    result = _tick399_run(
+        tmp_path,
+        {DEV_A: _rejected_screening(DEV_A, views=2)},
+        [(DEV_A, key, "present") for key in CRITERIA_KEYS],
+        [("cap-1", DEV_A), ("cap-2", DEV_A)],
+    )
+    overall = result["overall"]
+    assert overall["abstained"] == 0
+    assert overall["abstention_rate"] == 0.0
+    assert overall["failed"] == 4
+    assert overall["rejected"] == 4
+    assert overall["failure_rate"] == 1.0
+    # The denominator does not quietly shrink: the four cells are still scored,
+    # they are just scored as what they were.
+    assert overall["correct"] + overall["wrong"] == 0
+
+    call = result["entrance_call"]["per_entrance"][DEV_A]
+    assert call["abstained"] == 0 and call["failed"] == 4
+    assert call["all_committed_correct"] is None
+
+    for key in CRITERIA_KEYS:
+        cell = result["criteria"][key]
+        assert cell["abstained"] == 0
+        assert cell["failed"] == 1 and cell["rejected"] == 1
+
+    # ... and nowhere in the report, including the per-view condition analysis.
+    for join in result["condition_analysis"]["joins"]:
+        assert join["outcome"] == "failed"
+        assert join["failure"] == FAILURE_REJECTED
+    for dimension in CONDITION_KEYS:
+        groups = result["condition_analysis"]["dimensions"][dimension]["groups"]
+        for group in groups.values():
+            for key in CRITERIA_KEYS:
+                metrics = group["criteria"][key]
+                assert metrics["abstained"] == 0
+                assert metrics["rejected"] == metrics["failed"] > 0
+
+
+def test_tick_399_ac3_the_report_carries_a_rejected_response_count(tmp_path):
+    result = _tick399_run(
+        tmp_path,
+        {DEV_A: _rejected_screening(DEV_A, views=2)},
+        [(DEV_A, "ramp_or_bevel", "present")],
+        [("cap-1", DEV_A), ("cap-2", DEV_A)],
+    )
+    rejected = result["rejected_responses"]
+    assert rejected["responses"] == 2
+    assert rejected["first_attempt_rejected"] == 2
+    assert rejected["discarded"] == 2
+    assert rejected["discard_rate"] == 1.0
+    assert rejected["retry_calls"] == 2  # one bounded retry each
+    assert rejected["recovered_by_retry"] == 0
+    assert rejected["entrances_with_no_verdicts"] == [DEV_A]
+
+    text = (tmp_path / "out" / MARKDOWN_NAME).read_text(encoding="utf-8")
+    assert "## Rejected responses" in text
+    assert "- responses assessed: 2" in text
+    assert "- first attempt rejected: 2 (1.000)" in text
+    assert "- discarded after retry and recovery: 2 (1.000)" in text
+    assert f"- entrances with no verdict on any criterion: {DEV_A}" in text
+
+
+def test_tick_399_a_retry_that_worked_is_reported_as_recovered_not_as_a_loss(
+    tmp_path,
+):
+    """The retry's whole point, visible in the numbers.
+
+    The response was rejected once and answered on the second attempt, so the
+    view is not lost -- but the report still says a rejection happened, because
+    a rejection rate that only counts the unrecoverable ones understates how
+    often the engine is being refused.
+    """
+    recovered = ImageAssessment(
+        criteria={
+            key: {"verdict": "present", "confidence": 80, "evidence": "seen"}
+            for key in CRITERIA_KEYS
+        },
+        latency_s=1.0,
+        attempts=2,
+        rejected_attempts=1,
+    )
+    screening = EntranceScreening(
+        entrance_id=DEV_A,
+        split="dev",
+        assessments=(recovered,),
+        summary=aggregate_assessments((recovered,)),
+    )
+    result = _tick399_run(
+        tmp_path,
+        {DEV_A: screening},
+        [(DEV_A, "ramp_or_bevel", "present")],
+        [("cap-1", DEV_A)],
+    )
+    stats = result["rejected_responses"]
+    assert stats["first_attempt_rejected"] == 1
+    assert stats["recovered_by_retry"] == 1
+    assert stats["discarded"] == 0
+    assert stats["entrances_with_no_verdicts"] == []
+    assert result["overall"]["correct"] == 1
+    assert result["overall"]["failed"] == 0
+
+
+def test_tick_399_a_partially_recovered_reply_loses_only_the_refused_field(
+    tmp_path,
+):
+    """Three criteria kept, one refused -- and the refused one says so."""
+    partial = ImageAssessment(
+        criteria={
+            "ramp_or_bevel": {
+                "verdict": "present", "confidence": 80, "evidence": "seen"},
+            "handrails": {
+                "verdict": None, "confidence": None, "evidence": None,
+                "rejected": "ada_check_value",
+                "rejected_value": "not_applicable"},
+            "accessible_door_hardware": {
+                "verdict": "absent", "confidence": 80, "evidence": "seen"},
+            "accessibility_signage": {
+                "verdict": "not_visible", "confidence": 80, "evidence": "seen"},
+        },
+        latency_s=1.0,
+        error="ResponseRejected: criterion handrails has invalid verdict",
+        failure=FAILURE_REJECTED,
+        attempts=2,
+        rejected_attempts=2,
+    )
+    screening = EntranceScreening(
+        entrance_id=DEV_A,
+        split="dev",
+        assessments=(partial,),
+        summary=aggregate_assessments((partial,)),
+    )
+    result = _tick399_run(
+        tmp_path,
+        {DEV_A: screening},
+        [
+            (DEV_A, "ramp_or_bevel", "present"),
+            (DEV_A, "handrails", "present"),
+            (DEV_A, "accessible_door_hardware", "absent"),
+            (DEV_A, "accessibility_signage", "present"),
+        ],
+        [("cap-1", DEV_A)],
+    )
+    overall = result["overall"]
+    assert overall["correct"] == 2          # ramp_or_bevel, door hardware
+    assert overall["abstained"] == 1        # signage said not_visible
+    assert overall["failed"] == 1           # handrails was refused
+    assert overall["rejected"] == 1
+    # The refused criterion is NOT scored as the engine declining, and it is
+    # certainly not scored against the label as absent.
+    assert result["criteria"]["handrails"] == {
+        "correct": 0, "wrong": 0, "abstained": 0, "not_visible": 0,
+        "failed": 1, "rejected": 1, "unlabeled": 0,
+        "accuracy_of_committed": None, "abstention_rate": 0.0,
+        "not_visible_rate": 0.0, "failure_rate": 1.0, "rejection_rate": 1.0,
+    }
+    stats = result["rejected_responses"]
+    assert stats["partially_recovered"] == 1
+    assert stats["discarded"] == 0
+    assert stats["entrances_with_no_verdicts"] == []
+
+
+def test_tick_399_a_clean_run_reports_no_rejections(tmp_path):
+    """The counters stay quiet when nothing was refused."""
+    result, _ = _run_report(tmp_path)
+    stats = result["rejected_responses"]
+    assert stats["responses"] == 3
+    assert stats["first_attempt_rejected"] == 0
+    assert stats["retry_calls"] == 0
+    assert stats["discarded"] == 0
+    assert stats["discard_rate"] == 0.0
+    assert stats["entrances_with_no_verdicts"] == []
+    assert result["overall"]["failed"] == 0
+    assert result["overall"]["rejected"] == 0
+
+
+def test_tick_399_classify_keeps_an_honest_abstention_an_abstention():
+    assert classify(None, "present") == "abstained"
+    assert classify("not_visible", "present") == "abstained"
+    # Only a recorded failure turns a missing verdict into a failed cell.
+    assert classify(None, "present", failed=True) == "failed"
+    # A committed verdict is never overwritten by the flag.
+    assert classify("present", "present", failed=True) == "correct"

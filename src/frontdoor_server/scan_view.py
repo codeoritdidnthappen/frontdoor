@@ -370,6 +370,14 @@ def publish():
             "latency_ms": None if assessment.latency_s is None
             else round(assessment.latency_s * 1000),
             "error": assessment.error,
+            # TICK-399: a rejected response is a failure of the call, not the
+            # model abstaining. Named here so a consumer can tell the two
+            # apart -- a criterion whose entry carries "rejected" was thrown
+            # away by validation, and "not seen in this scan" would be a lie
+            # about it. attempts says whether the bounded retry was used.
+            "failure": assessment.failure,
+            "attempts": assessment.attempts,
+            "rejected_attempts": assessment.rejected_attempts,
         },
         "latency_ms": latency_ms,
         "faces_blurred": faces_blurred,
@@ -390,6 +398,10 @@ def publish():
                 "verdict": summary.verdict,
                 "flip_rate": summary.flip_rate,
                 "counts": summary.counts,
+                # A null verdict with rejected 1 is a discarded answer, not an
+                # abstention (TICK-399).
+                "rejected": summary.rejected,
+                "failed": summary.failed,
             }
             for key, summary in integrated_summary(assessment).items()
         }

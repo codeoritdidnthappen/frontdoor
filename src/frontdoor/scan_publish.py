@@ -231,7 +231,24 @@ def _assessment_result(entrance_id, screening, captures, faces_blurred):
         "confidences": confidences,
         "face_check": assessment.face_check,
         "error": assessment.error,
+        # TICK-399: a rejected reply is a failure of the call, not the model
+        # abstaining, and a published record has to be able to say which. A
+        # verdict of NOT_ASSESSED beside failure "rejected" is an answer this
+        # engine threw away; the same word beside failure null is an entrance
+        # nobody could see.
+        "failure": assessment.failure,
+        "attempts": assessment.attempts,
+        "rejected_attempts": assessment.rejected_attempts,
     }
+
+
+def verdict_count(result):
+    """How many criteria this assessment actually produced a verdict for."""
+    verdicts = result.get("verdicts") or {}
+    return sum(
+        1 for key in CRITERIA_KEYS
+        if verdicts.get(key) not in (None, NOT_ASSESSED)
+    )
 
 
 def _fit_for_the_model(image_bytes):
@@ -293,8 +310,14 @@ def _write_cache(cache_dir, entrance_id, result):
 #: off-vocabulary answer meant is exactly the collapsing of `not_visible` into
 #: `absent` this project forbids -- so the fix here is to ask again rather than
 #: to reinterpret, and to publish nothing for the door if it keeps happening.
-#: Fixing the prompt so it stops happening belongs to the screening engine,
-#: which this ticket does not touch.
+#:
+#: TICK-399 moved that idea into the engine, where `/screen` and the eval get
+#: it too: `ScreeningConfig.response_attempts` retries a rejected reply, and
+#: the engine now keeps the criteria a rejected reply DID validate instead of
+#: discarding all four. This loop stays as the outer net -- it re-runs the
+#: whole entrance, privacy pass included, and re-enters the sealed guard each
+#: time -- but it now has much less to catch, and it keeps the best attempt
+#: rather than the last.
 ASSESSMENT_ATTEMPTS = 3
 
 
@@ -326,22 +349,31 @@ def assess_publishable(entrances, *, get_capture, engine, cache_dir=None,
             processed = process_upload(capture.image)
             images.append(_fit_for_the_model(processed.image_bytes))
             faces_blurred += processed.face_count
+        best = None
         for attempt in range(1, max(1, attempts) + 1):
             screening = assess_entrance(
                 engine, entrance_id, images, publishable=publishable
             )
             result = _assessment_result(
                 entrance_id, screening, captures, faces_blurred)
+            # Keep the best attempt, not the last one (TICK-399). Since the
+            # engine recovers the criteria a rejected reply did validate, a
+            # later attempt can carry FEWER verdicts than an earlier one, and
+            # publishing the last would throw away ground the first held.
+            if best is None or verdict_count(result) > verdict_count(best):
+                best = result
             # A run over 46 entrances takes tens of minutes; without this the
             # only sign of a failing assessment is a cache entry that never
             # appears.
             logger.info(
-                "assessed %s over %d view(s), attempt %d/%d: %s",
+                "assessed %s over %d view(s), attempt %d/%d: %s (%d/%d verdicts)",
                 entrance_id, len(images), attempt, max(1, attempts),
                 result["error"] or "ok",
+                verdict_count(result), len(CRITERIA_KEYS),
             )
             if result["error"] is None:
                 break
+        result = best
         results[entrance_id] = result
         if result["error"] is None:
             _write_cache(cache_dir, entrance_id, result)
@@ -720,7 +752,11 @@ def main(argv=None):
     except (OSError, json.JSONDecodeError) as exc:
         print(f"place catalogue unreadable: {exc}", file=sys.stderr)
         return 1
-    failed = sorted(e for e, r in assessments.items() if r["error"] is not None)
+    # Unassessed means NO verdicts, not "the reply had something wrong with
+    # it" (TICK-399): an entrance whose reply lost one criterion and kept
+    # three has been assessed, and dropping it out of matching would take the
+    # whole door off the map over one refused field.
+    failed = sorted(e for e, r in assessments.items() if not verdict_count(r))
     matches = match_entrances(
         assessments, identifications, catalogue, unassessed=failed
     )
