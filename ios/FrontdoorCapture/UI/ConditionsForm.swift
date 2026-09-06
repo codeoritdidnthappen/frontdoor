@@ -16,7 +16,9 @@ struct ConditionsForm: View {
             HStack {
                 TextField("Distance", text: $distance)
                     .keyboardType(.decimalPad)
-                Text("m").foregroundStyle(.secondary)
+                Text("m")
+                    .entryMapText(EntryMapTypography.body)
+                    .foregroundStyle(EntryMapPalette.subduedInk)
             }
             Picker("Lighting", selection: $lighting) {
                 ForEach(Lighting.allCases, id: \.self) { Text($0.label).tag($0) }
@@ -90,9 +92,20 @@ struct ConditionsSheet: View {
                     Text("Applies to captures from here on, not to ones already taken.")
                 }
                 if let rejection {
-                    Section { Text(rejection.message).font(.footnote).foregroundStyle(.red) }
+                    Section {
+                        // No red in the palette; amber plus the words is how this reads.
+                        HStack(alignment: .top, spacing: EntryMapLayout.space2) {
+                            EntryMapIconView(icon: .info, size: 20,
+                                             tint: EntryMapPalette.freshness)
+                            Text(rejection.message)
+                                .entryMapText(EntryMapTypography.caption)
+                                .foregroundStyle(EntryMapPalette.ink)
+                        }
+                    }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(EntryMapPalette.ground)
             .navigationTitle("Conditions")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

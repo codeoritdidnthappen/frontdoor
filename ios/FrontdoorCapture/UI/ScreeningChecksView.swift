@@ -24,7 +24,7 @@ struct ScreeningChecksView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: EntryMapLayout.space4) {
                     header
                     ForEach(ScreeningCriterion.allCases, id: \.self) { criterion in
                         row(criterion)
@@ -34,7 +34,7 @@ struct ScreeningChecksView: View {
                     adaScreening
                     footer
                 }
-                .padding()
+                .padding(EntryMapLayout.space4)
             }
             .navigationTitle("Screening")
             .navigationBarTitleDisplayMode(.inline)
@@ -45,32 +45,39 @@ struct ScreeningChecksView: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Entrance \(run.entranceId)").font(.headline)
+        VStack(alignment: .leading, spacing: EntryMapLayout.space1) {
+            Text("Entrance \(run.entranceId)")
+                .entryMapText(EntryMapTypography.heading)
+                .foregroundStyle(EntryMapPalette.ink)
             // The same live tag the laptop surface carries (#73): every demo moment says whether
             // it is happening now, so a screenshot of this can never be mistaken for a live run.
             Text("LIVE \(run.startedAt.formatted(date: .omitted, time: .standard))")
-                .font(.caption.monospaced()).foregroundStyle(.secondary)
+                .entryMapText(EntryMapTypography.captionNumeric)
+                .foregroundStyle(EntryMapPalette.subduedInk)
             if case .failed(let message) = run.outcome {
                 Text(message)
-                    .font(.footnote)
-                    .padding(10)
+                    .entryMapText(EntryMapTypography.callout)
+                    .padding(EntryMapLayout.space3)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.orange, in: RoundedRectangle(cornerRadius: 10))
-                    .foregroundStyle(.black)
+                    .background(EntryMapPalette.marigold400,
+                                in: RoundedRectangle(cornerRadius: EntryMapLayout.radiusSmall))
+                    .foregroundStyle(EntryMapPalette.onMarigold)
             }
             if case .assessed(let response) = run.outcome, response.quarantined {
                 // Surfaced because it changes what may be kept, not what was assessed. The
                 // verdicts stand; the image is the thing under quarantine.
-                Label(
-                    "Quarantined (\(response.quarantineReason ?? "unspecified")) — the privacy "
-                        + "audit answered \(response.faceCheck). The verdicts below still stand.",
-                    systemImage: "eye.trianglebadge.exclamationmark")
-                    .font(.footnote)
-                    .padding(10)
+                HStack(alignment: .top, spacing: EntryMapLayout.space2) {
+                    EntryMapIconView(icon: .info, size: 20, tint: EntryMapPalette.onMarigold)
+                    Text(
+                        "Quarantined (\(response.quarantineReason ?? "unspecified")) — the privacy "
+                            + "audit answered \(response.faceCheck). The verdicts below still stand.")
+                }
+                    .entryMapText(EntryMapTypography.callout)
+                    .padding(EntryMapLayout.space3)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(.yellow, in: RoundedRectangle(cornerRadius: 10))
-                    .foregroundStyle(.black)
+                    .background(EntryMapPalette.marigold400,
+                                in: RoundedRectangle(cornerRadius: EntryMapLayout.radiusSmall))
+                    .foregroundStyle(EntryMapPalette.onMarigold)
             }
         }
     }
@@ -91,14 +98,19 @@ struct ScreeningChecksView: View {
     }
 
     private func entry(label: String, criterion: ScreeningResponse.Criterion?) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label).font(.headline)
+        VStack(alignment: .leading, spacing: EntryMapLayout.space2) {
+            Text(label)
+                .entryMapText(EntryMapTypography.subheading)
+                .foregroundStyle(EntryMapPalette.ink)
             switch run.outcome {
             case .inFlight:
-                Label("Checking…", systemImage: "hourglass")
-                    .font(.subheadline).foregroundStyle(.secondary)
+                Text("Checking…")
+                    .entryMapText(EntryMapTypography.callout)
+                    .foregroundStyle(EntryMapPalette.subduedInk)
             case .failed:
-                Text("Not assessed").font(.subheadline).foregroundStyle(.secondary)
+                Text("Not assessed")
+                    .entryMapText(EntryMapTypography.callout)
+                    .foregroundStyle(EntryMapPalette.subduedInk)
             case .assessed:
                 verdict(criterion)
             }
@@ -109,67 +121,100 @@ struct ScreeningChecksView: View {
     @ViewBuilder
     private func verdict(_ criterion: ScreeningResponse.Criterion?) -> some View {
         if let criterion, let verdict = criterion.verdict {
-            HStack(spacing: 8) {
+            HStack(spacing: EntryMapLayout.space2) {
+                EntryMapIconView(icon: icon(for: verdict), size: 22, tint: tint(for: verdict))
                 Text(verdict)
-                    .font(.title3.weight(.semibold))
-                    .foregroundStyle(colour(verdict))
+                    .entryMapText(EntryMapTypography.subheading)
+                    .foregroundStyle(EntryMapPalette.ink)
                 if let confidence = criterion.confidence {
                     Text("confidence \(confidence)")
-                        .font(.subheadline).foregroundStyle(.secondary)
+                        .entryMapText(EntryMapTypography.captionNumeric)
+                        .foregroundStyle(EntryMapPalette.subduedInk)
                 }
             }
             if let evidence = criterion.evidence, !evidence.isEmpty {
-                Text(evidence).font(.subheadline).foregroundStyle(.secondary)
+                Text(evidence)
+                    .entryMapText(EntryMapTypography.callout)
+                    .foregroundStyle(EntryMapPalette.subduedInk)
             }
         } else {
             // The server answered, and said nothing about this criterion. Not the same as absent.
-            Text("no verdict").font(.title3.weight(.semibold)).foregroundStyle(.secondary)
+            Text("no verdict")
+                .entryMapText(EntryMapTypography.subheading)
+                .foregroundStyle(EntryMapPalette.subduedInk)
         }
     }
 
     /// An unrecognised verdict is styled as invalid rather than given a plausible colour, so a
     /// value nobody has seen before cannot read as a finding.
-    private func colour(_ verdict: String) -> Color {
-        guard Self.knownVerdicts.contains(verdict) else { return .purple }
+    /// The verdict is carried by an icon and the word, never by a colour.
+    ///
+    /// The approved palette holds no red and no green, and that is not an omission: the map's own
+    /// rule is that colour never delivers a verdict about a business (`map_states`). The same rule
+    /// belongs here -- an operator reading "absent" in red is reading a judgement the product
+    /// explicitly refuses to make.
+    private func icon(for verdict: String) -> EntryMapIcon {
+        guard Self.knownVerdicts.contains(verdict) else { return .info }
         switch verdict {
-        case "present": return .green
-        case "absent": return .red
-        default: return .blue
+        case "present": return .checkOutline
+        case "absent": return .close
+        default: return .confidence
         }
+    }
+
+    /// Amber marks the two cases that need a second look -- a verdict this build does not know,
+    /// and one the photographs could not settle. Everything else is ink.
+    private func tint(for verdict: String) -> Color {
+        guard Self.knownVerdicts.contains(verdict) else { return EntryMapPalette.freshness }
+        return verdict == "not_visible" ? EntryMapPalette.freshness : EntryMapPalette.ink
     }
 
     @ViewBuilder
     private var adaScreening: some View {
         if case .assessed(let response) = run.outcome, let ada = response.adaScreening {
             let presentation = ada.renderModel
-            VStack(alignment: .leading, spacing: 10) {
-                Text("Photo ADA screening").font(.headline)
+            VStack(alignment: .leading, spacing: EntryMapLayout.space3) {
+                Text("Photo ADA screening")
+                    .entryMapText(EntryMapTypography.heading)
+                    .foregroundStyle(EntryMapPalette.ink)
                 Text(presentation.score)
-                    .font(.title2.weight(.semibold))
+                    .entryMapText(EntryMapTypography.title)
+                    .foregroundStyle(EntryMapPalette.ink)
                 Text(presentation.coverage)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .entryMapText(EntryMapTypography.callout)
+                    .foregroundStyle(EntryMapPalette.subduedInk)
                 ForEach(presentation.rows) { row in
                     adaRow(row)
                     Divider()
                 }
-                Text(presentation.summary).font(.subheadline)
-                Text(presentation.disclaimer).font(.footnote).foregroundStyle(.secondary)
+                Text(presentation.summary)
+                    .entryMapText(EntryMapTypography.body)
+                    .foregroundStyle(EntryMapPalette.ink)
+                Text(presentation.disclaimer)
+                    .entryMapText(EntryMapTypography.caption)
+                    .foregroundStyle(EntryMapPalette.subduedInk)
                 if let url = presentation.standardsURL {
                     Link("2010 ADA Standards", destination: url)
-                        .font(.footnote)
+                        .entryMapText(EntryMapTypography.caption)
+                        .foregroundStyle(EntryMapPalette.subduedInk)
                 }
             }
-            .padding(.top, 8)
+            .padding(.top, EntryMapLayout.space2)
         }
     }
 
     private func adaRow(_ row: AdaScreening.RenderRow) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(row.label).font(.headline)
-            Text(row.result).font(.title3.weight(.semibold))
+        VStack(alignment: .leading, spacing: EntryMapLayout.space1) {
+            Text(row.label)
+                .entryMapText(EntryMapTypography.subheading)
+                .foregroundStyle(EntryMapPalette.ink)
+            Text(row.result)
+                .entryMapText(EntryMapTypography.subheading)
+                .foregroundStyle(EntryMapPalette.ink)
             if let evidence = row.evidence, !evidence.isEmpty {
-                Text(evidence).font(.subheadline).foregroundStyle(.secondary)
+                Text(evidence)
+                    .entryMapText(EntryMapTypography.callout)
+                    .foregroundStyle(EntryMapPalette.subduedInk)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -179,14 +224,16 @@ struct ScreeningChecksView: View {
     @ViewBuilder
     private var footer: some View {
         if case .assessed(let response) = run.outcome {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(response.wording).font(.footnote).foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: EntryMapLayout.space2) {
+                Text(response.wording)
+                    .entryMapText(EntryMapTypography.caption)
+                    .foregroundStyle(EntryMapPalette.subduedInk)
                 if response.facesBlurred > 0 {
                     Text("\(response.facesBlurred) face(s) blurred before this photo was assessed.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .entryMapText(EntryMapTypography.caption).foregroundStyle(EntryMapPalette.subduedInk)
                 }
                 Text("status \(response.status) · model \(response.model) · \(response.latencyMs) ms")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .entryMapText(EntryMapTypography.caption).foregroundStyle(EntryMapPalette.subduedInk)
             }
         }
     }

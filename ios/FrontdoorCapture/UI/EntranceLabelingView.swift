@@ -41,16 +41,24 @@ struct EntranceLabelingView: View {
                                 let selected = draft.answers[criterion] == truth
                                 Button { draft.select(truth, for: criterion) } label: {
                                     Text(truth.label)
-                                        .font(.caption.weight(.semibold))
+                                        .entryMapText(EntryMapTypography.overline)
                                         .frame(maxWidth: .infinity)
-                                        .padding(.vertical, 8)
-                                        .foregroundStyle(selected ? .white : .primary)
+                                        .padding(.vertical, EntryMapLayout.space3)
+                                        .foregroundStyle(selected
+                                                         ? EntryMapPalette.onViolet
+                                                         : EntryMapPalette.ink)
                                         .background(
-                                            selected ? Color.accentColor : Color.clear,
-                                            in: RoundedRectangle(cornerRadius: 8))
+                                            selected
+                                            ? EntryMapPalette.violet600 : EntryMapPalette.card,
+                                            in: RoundedRectangle(
+                                                cornerRadius: EntryMapLayout.radiusSmall))
                                         .overlay(
-                                            RoundedRectangle(cornerRadius: 8)
-                                                .stroke(Color.accentColor))
+                                            RoundedRectangle(
+                                                cornerRadius: EntryMapLayout.radiusSmall)
+                                                .stroke(selected
+                                                        ? EntryMapPalette.violet600
+                                                        : EntryMapPalette.edge))
+                                        .frame(minHeight: EntryMapLayout.touchTargetMinimum)
                                 }
                                     .buttonStyle(.plain)
                                     .accessibilityAddTraits(
@@ -61,13 +69,24 @@ struct EntranceLabelingView: View {
                 }
 
                 if let failure {
-                    Text(failure).foregroundStyle(.red)
+                    // No red: the palette has none, so the amber "look again" role plus the
+                    // words carry it.
+                    HStack(alignment: .top, spacing: EntryMapLayout.space2) {
+                        EntryMapIconView(icon: .info, size: 20, tint: EntryMapPalette.freshness)
+                        Text(failure)
+                            .entryMapText(EntryMapTypography.callout)
+                            .foregroundStyle(EntryMapPalette.ink)
+                    }
                 }
 
                 Button("Save labels") { save() }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(EntryMapButtonStyle(role: .primary))
                     .disabled(!canSave)
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
             }
+            .scrollContentBackground(.hidden)
+            .background(EntryMapPalette.ground)
             .navigationTitle("Label \(entranceId)")
             .interactiveDismissDisabled()
             .onAppear(perform: restoreQueuedRecord)
