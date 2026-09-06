@@ -29,6 +29,22 @@ target device an iPhone Pro with LiDAR, and the pre-registered MAE hypothesis is
 window** — not relaxed, not re-scored, untested. D-040 (2026-09-04) narrows current capture and demo
 hardware to James's iPhone 17 Pro (`iPhone18,1`) alone. Every slide that touches results says so.
 
+**Quote A-3 as written, then say what shipped.** The amendment names a LiDAR-capable target
+device, and that is the record. What was built does not use LiDAR at all: the capture app is
+*forbidden* from reaching ARKit by a build guard with its own tests, because motion-derived scale
+must be unavailable rather than merely unused, and the shipped web app runs on any phone with a
+camera. Do not silently correct the amendment on the slide — quote it, then show the app opening
+on a borrowed Android. The gap between what was planned and what works is the honest version and
+it is the better one.
+
+**Four criteria, and the deck says which four.** Every accuracy figure on every slide describes
+`ramp_or_bevel`, `handrails`, `accessible_door_hardware` and `accessibility_signage`. It does
+**not** describe step-free entry, which the interface names as a feature and the engine does not
+assess (#368 — measured, and held rather than shipped, because the version that abstains declines
+on entrances whose ground plane is plainly visible). If a slide shows a feature chip that reads
+"Step-free entry", the number beside it is not about that chip. Say so once, in Section 3, rather
+than hoping nobody asks.
+
 Claims discipline, product-wide (from the #73 product-model thread): never claim a measurement,
 a compliance determination, or a legal status. The line that survives every slide: **"when it
 commits it's 97% right; when it can't see, it says so"** — and the 97% carries its caveat
@@ -81,8 +97,12 @@ and #73 both flag this as the thing most likely to get silently dropped under de
   against whichever arm looked best after unsealing. Source: CHANGES.log (A-2 record restored
   by PR #235 from commit 13e735a; D-022 is the decision-register cross-reference).
 - **A-3** — the pivot, **committed 2026-09-02** (taken by David; requested by James in #67 on
-  2026-09-01). One product — plain-photo screening on an iPhone Pro with LiDAR; the metrology arms
-  are a later version. **D-040 (2026-09-04) fixes that phone to James's iPhone 17 Pro.** Consequence
+  2026-09-01). One product — plain-photo screening; the metrology arms
+  are a later version. **D-040 (2026-09-04) fixes the CAPTURE-APP phone to James's iPhone 17 Pro**,
+  which is a constraint on the native app's field testing, **not on the product**. The shipped web
+  app at `/app` runs in any browser, uses the rear camera through `getUserMedia`, and falls back to
+  the photo picker — no Pro model, no depth sensor, no install. Say that on the slide: the audience
+  can open it on the phone in their pocket. Consequence
   stated on the slide in A-3's own words: **"the primary
   hypothesis is not tested in this window"** — not relaxed, not re-scoped, not re-judged
   against a different arm. Source: CHANGES.log Amendment A-3 entry.
@@ -176,13 +196,20 @@ allowed only if it stays inside the measured claim.
   > **"When it commits, it's 97% right. When it can't see, it says so."**
 - What backs each half, printed on the slide, small but present:
   - *97% right*: 75/77 committed verdicts correct, offline eval on the 12-entrance pilot set,
-    human-adjudicated ground truth (`src/frontdoor/screening.py`, PR #240).
+    human-adjudicated ground truth (`src/frontdoor/screening.py`, PR #240). **This is one run,
+    not a mean of several** (#388) — see the guardrail below, which now has two halves rather
+    than one.
   - *says so*: 4 abstentions on that same eval — and on the Street View Estimated tier, a
     79.5% abstention rate (live pre-catalogue run), because distant imagery honestly can't see
     door hardware.
 - Guardrail printed on the slide itself, not just in speaker notes: **prompt rules were derived
   on the same pilot set; the next capture batch is the held-out validation, and the published
-  number is whatever survives it.** If the frozen sealed number disagrees, this line is
+  number is whatever survives it.** And the second half, added 2026-09-06: **every published
+  figure is a single unrepeated run.** The engine sets no sampling temperature, and the SDK and
+  model in use reject one, so the variation is irreducible rather than a setting nobody turned
+  off (#394). Measured residual, on runs where nothing else was wrong: **1.7 points of accuracy
+  and about 8% of coverage** (#395). A figure that survives to a slide either gets re-measured
+  or carries that band. If the frozen sealed number disagrees, this line is
   rewritten to whatever that number supports before Sep 9.
 
 **Speaker-note stub:** Say this line first, before the research-question slide even, if
@@ -200,11 +227,13 @@ an honest labeled fallback if live fails — and label every single moment as li
 happens, not after.
 
 **Content — three beats:**
-1. **"The map already knows downtown."** Open the public map (rebuilt to the locked UI canon in
-   PR #249): **212 businesses screened into the pre-catalogue at ~$0.03/business** (live
-   pre-catalogue run), provenance stacked from **156 open-licensed Commons photos** (PR #254)
-   and OSM community tags (PR #245). Three tier pins per the launch ladder; every pre-catalogue
-   pin honestly marked Estimated with its imagery date.
+1. **"The map already knows downtown."** Open the public map at
+   `https://frontdoor-measure.fly.dev/app`: **186 pins live as of 2026-09-06**, provenance
+   stacked from open-licensed Commons photos (PR #254) and OSM community tags (PR #245). Three
+   tier pins per the launch ladder; every pre-catalogue pin honestly marked Estimated with its
+   imagery date. **5 of those pins now read Verified Accessible** — the first on-site evidence to
+   reach the public map (PR #343). Read the live counts off `/map/data` on the day rather than
+   from this line.
 2. **Scan an unknown door LIVE on stage.** Photo in → **~7 seconds** → pin drops with the
    per-criterion checklist filling in. This is the marketing pop, and the number behind it is
    Section 3's: 97% committed accuracy on the offline eval, abstention when it can't see.
@@ -223,6 +252,15 @@ happens, not after.
 - Backup if the live scan fails: the **map page `?demo=1` scan animation (PR #249)**, shown
   with the CANNED tag, plus the pre-recorded engine run.
   {{backup_recording_ref: TICK-104 deliverable — file path or link to the captured backup}}
+
+**A fourth beat is now available, and it is the one that answers the obvious objection.**
+"What if you get it wrong?" Tap **Suggest a correction** on any place, write what you saw, attach a
+photo. It reaches a review queue with a named owner and a daily cadence (PR #422). Two things to
+say while it is on screen: a correction **never changes a verdict** — it can only mark a place as
+needing another look, which moves freshness — and the sheet's own words are the promise:
+*"corrections stay human; nothing changes without review."* Worth 20 seconds inside Section 6's
+existing budget, because it converts the honesty rule from a claim into something the audience
+watches work.
 
 **Speaker-note stub:** Rehearse the failure path, not just the happy path — TICK-104 owns this,
 but the deck should never be the first place the fallback is exercised.
