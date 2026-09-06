@@ -23,7 +23,7 @@ struct EntryMapButtonStyle: ButtonStyle {
         /// No chrome at all. "Suggest a correction" and its kind.
         ///
         /// Light grounds only. This is the one role that paints no fill, so its `subduedInk`
-        /// label lands on whatever is behind it -- 1.78:1 on `darkGround`, which is unreadable.
+        /// label lands on whatever is behind it -- 1.55:1 `subduedInk` on `darkGround`, which is unreadable.
         /// A control over live video or a photograph takes `primary`, `secondary` or `scan`,
         /// each of which brings a ground with it.
         case quiet
