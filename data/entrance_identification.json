@@ -816,8 +816,8 @@
       ],
       "place_match": {
         "how": null,
-        "unmatched_reason": "match_pass_pending",
-        "detail": "the identification was revised after the last match pass; run `python -m frontdoor.entrance_matching match` to decide a place for it"
+        "unmatched_reason": "bracket_too_wide",
+        "detail": "bracketed by E-037 and E-050, 261 m apart, over the 120 m a bracket may claim"
       },
       "provenance": {
         "run": "re-identified after #382 blur fix",
@@ -1144,7 +1144,7 @@
       "place_match": {
         "how": null,
         "unmatched_reason": "ambiguous_candidates",
-        "detail": "'CVS Photo' at 7 m; 'CVS' at 17 m; 'CVS Pharmacy' at 17 m"
+        "detail": "'CVS Photo' at 11 m; 'CVS' at 17 m; 'CVS Pharmacy' at 17 m"
       }
     },
     "E-057": {

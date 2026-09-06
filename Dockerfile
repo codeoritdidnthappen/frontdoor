@@ -21,6 +21,12 @@ COPY src /app/src
 # the body. That is what production served until TICK-337.
 COPY data/precatalogue.json /app/data/precatalogue.json
 COPY data/external /app/data/external
+# The curated on-site publication (TICK-333): a committed dataset file like the
+# pre-catalogue, read at request time from a path relative to the working
+# directory, so it is copied in for the same reason. It is NOT the runtime scan
+# store below -- that one lives on the volume and this one ships in the image,
+# and /map/data reads both.
+COPY data/published_scans.jsonl /app/data/published_scans.jsonl
 
 RUN pip install --no-cache-dir ".[server]"
 

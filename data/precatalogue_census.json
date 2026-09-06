@@ -5310,6 +5310,12 @@
       "sweeps": [
         "establishment"
       ]
+    },
+    {
+      "place_id": "ChIJFcBYGGO1RIYR2PPfZtT8wZI",
+      "sweeps": [
+        "store"
+      ]
     }
   ],
   "previous_summaries": [
@@ -5365,12 +5371,90 @@
         ]
       },
       "wall_clock_s": 37.127
+    },
+    {
+      "already_catalogued": 155,
+      "area": "congress-avenue-walk-blocks",
+      "businesses_enumerated": 664,
+      "census": true,
+      "maps_api_calls": {
+        "details": 0,
+        "image": 0,
+        "metadata": 0,
+        "places": 175,
+        "total": 175
+      },
+      "maps_call_cap": 250,
+      "merged_into_existing": {
+        "places_added": 509,
+        "places_already_listed": 155,
+        "places_total": 695
+      },
+      "new_businesses": 509,
+      "stopped": null,
+      "stopped_is_error": false,
+      "sweep_types": [
+        "restaurant",
+        "cafe",
+        "bar",
+        "bakery",
+        "meal_takeaway",
+        "store",
+        "clothing_store",
+        "shoe_store",
+        "jewelry_store",
+        "book_store",
+        "convenience_store",
+        "liquor_store",
+        "florist",
+        "pharmacy",
+        "gym",
+        "hair_care",
+        "beauty_salon",
+        "spa",
+        "laundry",
+        "bank",
+        "lodging",
+        "art_gallery",
+        "museum",
+        "establishment"
+      ],
+      "truncated_blocks": [
+        "congress-avenue-walk-blocks-r0c0",
+        "congress-avenue-walk-blocks-r0c1",
+        "congress-avenue-walk-blocks-r1c0",
+        "congress-avenue-walk-blocks-r1c1",
+        "congress-avenue-walk-blocks-r2c0",
+        "congress-avenue-walk-blocks-r2c1"
+      ],
+      "truncated_types": {
+        "congress-avenue-walk-blocks-r0c0": [
+          "establishment"
+        ],
+        "congress-avenue-walk-blocks-r0c1": [
+          "establishment"
+        ],
+        "congress-avenue-walk-blocks-r1c0": [
+          "establishment"
+        ],
+        "congress-avenue-walk-blocks-r1c1": [
+          "store",
+          "lodging",
+          "establishment"
+        ],
+        "congress-avenue-walk-blocks-r2c0": [
+          "establishment"
+        ],
+        "congress-avenue-walk-blocks-r2c1": [
+          "establishment"
+        ]
+      },
+      "wall_clock_s": 91.423
     }
   ],
   "summary": {
-    "already_catalogued": 155,
     "area": "congress-avenue-walk-blocks",
-    "businesses_enumerated": 664,
+    "businesses_enumerated": 659,
     "census": true,
     "maps_api_calls": {
       "details": 0,
@@ -5380,14 +5464,13 @@
       "total": 175
     },
     "maps_call_cap": 250,
+    "match_pass": true,
     "merged_into_existing": {
-      "places_added": 509,
-      "places_already_listed": 155,
-      "places_total": 695
+      "places_added": 1,
+      "places_already_listed": 658,
+      "places_total": 696
     },
-    "new_businesses": 509,
     "stopped": null,
-    "stopped_is_error": false,
     "sweep_types": [
       "restaurant",
       "cafe",
@@ -5443,7 +5526,6 @@
       "congress-avenue-walk-blocks-r2c1": [
         "establishment"
       ]
-    },
-    "wall_clock_s": 91.423
+    }
   }
 }

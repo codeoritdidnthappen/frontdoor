@@ -271,11 +271,40 @@ def match_entrances(entrances, places, anchors, days,
     return _drop_places_two_doors_claim(results)
 
 
+#: What a standing place_id carrying no recorded provenance is described as.
+#: Only #341's own resolutions predate the ``place_match`` audit trail, so a
+#: record with a place and no ``how`` is one of those and nothing else.
+STANDING_IDENTIFICATION_HOW = {
+    "anchor": "identification",
+    "detail": "resolved by #341 against the committed catalogue",
+}
+
+
+def standing_how(record):
+    """How a door that already has a place_id was actually matched.
+
+    A second ``match`` pass must not restate an earlier pass's decision as
+    something it was not. E-020's place was decided by the #346 pass measuring
+    11.9 m from a geocoded street number to Swift's Attic; rewriting that as
+    "resolved by #341 against the committed catalogue" would replace the real
+    basis with a false one and quietly lower the evidence a reviewer sees.
+    So the recorded provenance is kept verbatim, and the #341 wording is used
+    only where there is none to keep -- which makes the pass idempotent as
+    well as honest.
+    """
+    recorded = (record.get("place_match") or {}).get("how")
+    if isinstance(recorded, dict) and recorded:
+        return recorded
+    return dict(STANDING_IDENTIFICATION_HOW)
+
+
 def _match_one(entrance_id, record, places, located, days, max_distance_m):
     if record.get("place_id"):
-        return {"place_id": record["place_id"],
-                "how": {"anchor": "identification", "detail":
-                        "resolved by #341 against the committed catalogue"}}
+        # "standing" and not the anchor wording is what marks a place this
+        # pass did not decide: since standing_how keeps an earlier pass's real
+        # basis, "identification" is no longer a reliable flag for one.
+        return {"place_id": record["place_id"], "how": standing_how(record),
+                "standing": True}
     if record.get("status") != "identified":
         return _unmatched("not_identified")
     candidates = name_candidates(record["name"], places)
@@ -361,8 +390,7 @@ def _drop_places_two_doors_claim(results):
     for place_id, entrance_ids in claims.items():
         if len(entrance_ids) < 2:
             continue
-        standing = [e for e in entrance_ids
-                    if results[e]["how"]["anchor"] == "identification"]
+        standing = [e for e in entrance_ids if results[e].get("standing")]
         # Only this pass's matches may lose. Two standing identifications on
         # one place would be #341's to resolve, not ours to unpick.
         losers = [e for e in entrance_ids if e not in standing]
@@ -383,8 +411,7 @@ def standing_collisions(results):
     """
     claims = {}
     for entrance_id, result in sorted(results.items()):
-        how = result.get("how") or {}
-        if result["place_id"] and how.get("anchor") == "identification":
+        if result["place_id"] and result.get("standing"):
             claims.setdefault(result["place_id"], []).append(entrance_id)
     return {place_id: doors
             for place_id, doors in claims.items() if len(doors) > 1}

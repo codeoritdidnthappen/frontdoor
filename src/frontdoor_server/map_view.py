@@ -23,9 +23,13 @@ before provenance is attached.
 
 Community scans (TICK-262, #270): published scan records from the JSONL store
 (FRONTDOOR_SCANS, default data/scans.jsonl) are merged into the dataset before
-states are computed — by place_id, falling back to the same distance+name
-matching the external files use. The merge is never-negative by construction
-(frontdoor.scan_records): a scan can add a pin, raise one to the verified
+states are computed. The curated on-site publication (TICK-333,
+FRONTDOOR_PUBLISHED_SCANS, default data/published_scans.jsonl) is merged in the
+same pass and by the same rules — it is a committed dataset file that ships in
+the image, where the community store is runtime state on a mounted volume, and
+the map needs both. Records are keyed by place_id, falling back to the same
+distance+name matching the external files use. The merge is never-negative by
+construction (frontdoor.scan_records): a scan can add a pin, raise one to the verified
 state (the page's Scanned tier), raise a criterion observation, or move
 freshness forward — nothing else. A scanned pin also carries a
 "Scanned on-site — <date>" provenance row.
@@ -45,7 +49,9 @@ from frontdoor.commons_imagery import commons_provenance_for_place
 from frontdoor.external_data import load_side_file, provenance_for_place
 from frontdoor.map_states import prepare_map_payload
 from frontdoor.scan_records import (
+    DEFAULT_PUBLISHED_SCANS_PATH,
     DEFAULT_SCANS_PATH,
+    PUBLISHED_SCANS_ENV,
     SCANS_ENV,
     load_scan_store,
     merge_scans,
@@ -88,13 +94,29 @@ def map_data():
     # pin or raise one — never lower a state, an observation, or a date
     # (frontdoor.scan_records' never-negative contract) — and no scan store,
     # or an unreadable one, changes nothing at all.
+    #
+    # Two stores, read in this order (TICK-333): the curated on-site
+    # publication that ships in the image, then the runtime store on the
+    # mounted volume. Order is presentational only -- merge_scans is
+    # never-negative and monotone, so neither store can undo the other, and a
+    # place carrying both simply ends up with the later capture date and the
+    # higher observation. Either store missing or unreadable is not an error;
+    # the map renders on whichever it has, and says which one failed.
+    published = load_scan_store(
+        os.environ.get(PUBLISHED_SCANS_ENV, DEFAULT_PUBLISHED_SCANS_PATH)
+    )
     scans = load_scan_store(os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH))
-    dataset, scan_meta = merge_scans(dataset, scans.records)
+    dataset, scan_meta = merge_scans(
+        dataset, published.records + scans.records
+    )
     payload = prepare_map_payload(dataset)
     payload["dataset_error"] = dataset_error
     payload["scans_error"] = scans.error
     payload["scans_loaded"] = len(scans.records)
     payload["scans_skipped"] = scans.skipped
+    payload["published_scans_error"] = published.error
+    payload["published_scans_loaded"] = len(published.records)
+    payload["published_scans_skipped"] = published.skipped
     osm_error, commons_error = _attach_provenance(payload["pins"])
     payload["osm_error"] = osm_error
     payload["commons_error"] = commons_error

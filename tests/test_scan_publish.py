@@ -30,6 +30,7 @@ from frontdoor.scan_publish import (
     assess_publishable,
     build_records,
     entrance_captures,
+    load_identifications,
     match_entrance,
     match_entrances,
     publishable_entrances,
@@ -40,9 +41,10 @@ from frontdoor.split import assign_split, canonical_entrance_id
 
 REPO = Path(__file__).resolve().parents[1]
 MANIFEST = REPO / "data" / "manifest.csv"
-STORE = REPO / "data" / "scans.jsonl"
+STORE = REPO / "data" / "published_scans.jsonl"
 MATCHES = REPO / "data" / "scan_matches.json"
 DATASET = REPO / "data" / "precatalogue.json"
+IDENTIFICATIONS = REPO / "data" / "entrance_identification.json"
 
 #: The eighteen withheld until results freeze (docs/unsealing-run.md). Written
 #: out rather than derived so a change to the seed or the manifest has to change
@@ -90,6 +92,34 @@ class FakeScreening:
     mode = "integrated"
     assessments = (FakeAssessment(),)
     summary = {key: FakeSummary() for key in CRITERIA_KEYS}
+
+
+class FailedAssessment:
+    """What the engine hands back when the model answered off-vocabulary."""
+
+    criteria = {}
+    face_check = "clear"
+    error = "ScreeningError: criterion handrails has invalid verdict"
+
+
+class FailedScreening:
+    mode = "integrated"
+    assessments = (FailedAssessment(),)
+    summary = {key: FakeSummary() for key in CRITERIA_KEYS}
+
+
+class FlakyEngine:
+    """Fails its first ``failures`` calls, then answers."""
+
+    def __init__(self, failures):
+        self.failures = failures
+        self.calls = 0
+
+    def screen_entrance_integrated(self, entrance_id, images):
+        self.calls += 1
+        if self.calls <= self.failures:
+            return FailedScreening()
+        return FakeScreening()
 
 
 class RecordingEngine:
@@ -227,66 +257,185 @@ def test_a_view_is_reduced_to_the_size_the_model_reads():
 
 # --- matching -----------------------------------------------------------------
 
-
+#: A published catalogue row (name and location committed) and one the
+#: catalogue holds by identifier alone, which is the shape the walked-blocks
+#: sweep writes under #242.
 CATALOGUE = {
     "ChIJnear": {
         "place_id": "ChIJnear",
         "name": "Example Cafe",
         "location": {"lat": 30.2660, "lng": -97.7460},
     },
-    "ChIJfar": {
-        "place_id": "ChIJfar",
-        "name": "Example Cafe",
-        "location": {"lat": 30.2700, "lng": -97.7460},
-    },
+    "ChIJidonly": {"place_id": "ChIJidonly"},
 }
-HERE = {"name": "Example Cafe", "lat": 30.2660, "lng": -97.7460}
 
 
-def test_an_unambiguous_nearby_place_matches_and_records_its_basis():
-    entry = match_entrance("E-001", HERE, {"ChIJnear": CATALOGUE["ChIJnear"]})
+def _identification(**overrides):
+    record = {
+        "status": "identified",
+        "name": "Example Cafe",
+        "confidence": "high",
+        "basis": ["storefront_signage"],
+        "place_id": "ChIJnear",
+        "place_match": {
+            "how": {"anchor": "address_geocode", "anchor_between": None,
+                    "bracket_span_m": None, "distance_m": 11.9,
+                    "matched_name": "Example Cafe"},
+            "unmatched_reason": None,
+            "detail": None,
+        },
+    }
+    record.update(overrides)
+    return record
+
+
+def test_a_resolved_identification_matches_and_carries_its_own_provenance():
+    entry = match_entrance("E-001", _identification(), CATALOGUE)
     assert entry["matched"] is True
-    assert entry["place_ref"]["place_id"] == "ChIJnear"
-    assert entry["distance_m"] == 0.0
-    assert "names correspond" in entry["basis"]
+    assert entry["renderable"] is True
+    assert entry["place_ref"] == {
+        "place_id": "ChIJnear", "name": "Example Cafe",
+        "lat": 30.2660, "lng": -97.7460,
+    }
+    # The match pass's own basis, not a restatement of it.
+    assert entry["how"]["anchor"] == "address_geocode"
+    assert "11.9 m" in entry["basis"]
+    assert "high confidence" in entry["basis"]
 
 
-def test_a_far_place_does_not_match():
-    entry = match_entrance("E-001", HERE, {"ChIJfar": CATALOGUE["ChIJfar"]})
+def test_the_match_pass_reason_is_carried_through_verbatim_when_unmatched():
+    entry = match_entrance("E-026", _identification(
+        place_id=None,
+        place_match={"how": None, "unmatched_reason": "bracket_too_wide",
+                     "detail": "bracketed by E-024 and E-030, 206 m apart"},
+    ), CATALOGUE)
     assert entry["matched"] is False
     assert entry["place_ref"] is None
-    assert "within 40 m" in entry["basis"]
+    assert entry["not_pinnable_reason"] == "bracket_too_wide"
+    assert "206 m apart" in entry["basis"]
 
 
-def test_two_corresponding_places_are_ambiguous_and_do_not_match():
-    catalogue = dict(CATALOGUE)
-    catalogue["ChIJalso"] = {
-        "place_id": "ChIJalso",
-        "name": "Example Cafe",
-        "location": {"lat": 30.26602, "lng": -97.74601},
-    }
-    entry = match_entrance("E-001", HERE, catalogue)
+def test_a_low_confidence_identification_never_becomes_a_confident_pin():
+    """#341 grades a reading it could not make unambiguously `low`.
+
+    A pin says the business by name and stamps it scanned on-site; there is no
+    room on it for "we think this is whose door it is". So the scan is
+    published with no place at all rather than as a claim we cannot back.
+    """
+    entry = match_entrance("E-034", _identification(confidence="low"), CATALOGUE)
     assert entry["matched"] is False
-    assert "ambiguous" in entry["basis"]
+    assert entry["place_ref"] is None
+    assert entry["not_pinnable_reason"] == "low_confidence_identification"
+    assert "'low'" in entry["basis"]
 
 
-def test_a_different_business_at_the_same_spot_does_not_match():
-    catalogue = {"ChIJother": dict(CATALOGUE["ChIJnear"], name="Royal Blue Grocery")}
-    entry = match_entrance("E-001", HERE, catalogue)
+@pytest.fixture
+def no_image_work(monkeypatch):
+    """The privacy pass and the resize, stubbed. FakeCapture carries no real
+    image bytes, and neither step is what these tests are about."""
+    monkeypatch.setattr(
+        "frontdoor.scan_publish.process_upload",
+        lambda image_bytes: SimpleNamespace(image_bytes=image_bytes, face_count=0),
+    )
+    monkeypatch.setattr("frontdoor.scan_publish._fit_for_the_model", lambda b: b)
+
+
+def test_an_off_vocabulary_answer_is_asked_again_and_never_reinterpreted(
+        no_image_work):
+    """The model sometimes answers `not_applicable` on a four-criterion
+    verdict, which is the ADA-check vocabulary in the wrong block. Guessing
+    what it meant would be exactly the collapsing of `not_visible` into
+    `absent` the project forbids, so the entrance is asked again -- and a door
+    that keeps answering off-vocabulary publishes no verdicts at all."""
+    engine = FlakyEngine(failures=2)
+    results = assess_publishable(
+        {"E-001": ["E-001-1"]},
+        get_capture=lambda capture_id: FakeCapture(capture_id),
+        engine=engine,
+    )
+    assert engine.calls == 3
+    assert results["E-001"]["error"] is None
+
+    stubborn = FlakyEngine(failures=99)
+    results = assess_publishable(
+        {"E-001": ["E-001-1"]},
+        get_capture=lambda capture_id: FakeCapture(capture_id),
+        engine=stubborn,
+    )
+    assert stubborn.calls == 3
+    assert results["E-001"]["error"]
+
+
+def test_a_retry_is_a_fresh_call_into_the_sealed_guard_not_a_way_round_it(
+        no_image_work):
+    """Every attempt goes through assess_entrance, so three attempts are three
+    refusals for a sealed entrance, never one refusal and two free passes."""
+    engine = FlakyEngine(failures=99)
+    with pytest.raises(NotPublishableError):
+        assess_publishable(
+            {"E-002": ["E-002-1"]},
+            get_capture=lambda capture_id: FakeCapture(capture_id),
+            engine=engine,
+        )
+    assert engine.calls == 0
+
+
+def test_an_entrance_whose_assessment_produced_nothing_gets_no_place():
+    """A matched record upgrades the pin to Scanned on-site. The tier says a
+    scan of this door is what did it, so a failed assessment must not carry
+    one: the record is still published, with no place and no claim."""
+    entry = match_entrance("E-010", _identification(), CATALOGUE, assessed=False)
     assert entry["matched"] is False
+    assert entry["place_ref"] is None
+    assert entry["not_pinnable_reason"] == "assessment_produced_no_verdicts"
+    entries = match_entrances(["E-001", "E-010"],
+                              {"E-001": _identification(),
+                               "E-010": _identification()},
+                              CATALOGUE, unassessed=["E-010"])
+    assert [e["matched"] for e in entries] == [True, False]
 
 
-def test_an_entrance_with_no_surveyed_coordinates_is_recorded_unmatched():
+def test_an_unidentified_entrance_is_recorded_unmatched_with_its_reason():
+    entry = match_entrance("E-030", _identification(
+        status="unidentified", name=None, confidence=None, place_id=None,
+        place_match={"how": None, "unmatched_reason": "not_identified",
+                     "detail": "the entrance was never identified"},
+    ), CATALOGUE)
+    assert entry["matched"] is False
+    assert entry["not_pinnable_reason"] == "not_identified"
+
+
+def test_an_entrance_absent_from_the_identification_file_is_unmatched():
     entry = match_entrance("E-030", None, CATALOGUE)
     assert entry["matched"] is False
     assert entry["place_ref"] is None
-    assert "no surveyed door coordinates" in entry["basis"]
+    assert entry["not_pinnable_reason"] == "no_identification_record"
+
+
+def test_a_place_the_catalogue_holds_by_identifier_alone_draws_no_pin():
+    """#242 keeps the walked-blocks rows identifier-only, so there is no name
+    or location to put on a pin -- and none is invented from anywhere else."""
+    entry = match_entrance("E-020", _identification(place_id="ChIJidonly"),
+                           CATALOGUE)
+    assert entry["matched"] is True
+    assert entry["renderable"] is False
+    assert entry["place_ref"] == {"place_id": "ChIJidonly"}
+    assert entry["not_pinnable_reason"] == "place_not_in_published_catalogue"
+    assert "draws no pin yet" in entry["basis"]
 
 
 def test_every_entrance_gets_a_matching_entry_matched_or_not():
-    entries = match_entrances(["E-001", "E-030"], {"E-001": HERE}, CATALOGUE)
+    entries = match_entrances(
+        ["E-001", "E-030"], {"E-001": _identification()}, CATALOGUE)
     assert [entry["entrance_id"] for entry in entries] == ["E-001", "E-030"]
     assert all(entry["basis"] for entry in entries)
+
+
+def test_the_committed_identification_file_loads_and_is_keyed_by_entrance():
+    identifications = load_identifications(IDENTIFICATIONS)
+    assert set(identifications) == set(publishable_entrances(MANIFEST))
+    for entrance_id in SEALED:
+        assert entrance_id not in identifications
 
 
 # --- the records this path builds ---------------------------------------------
@@ -309,8 +458,7 @@ def _assessment(entrance_id, **overrides):
 
 
 def test_a_built_record_carries_the_capture_date_and_references_no_bytes():
-    matches = match_entrances(["E-001"], {"E-001": HERE},
-                              {"ChIJnear": CATALOGUE["ChIJnear"]})
+    matches = match_entrances(["E-001"], {"E-001": _identification()}, CATALOGUE)
     (record,) = build_records({"E-001": _assessment("E-001")}, matches)
     assert record["created_at"] == "2026-09-04T18:00:00Z"
     assert record["entrance_id"] == "E-001"
@@ -339,8 +487,8 @@ def _require_published():
     if not records or not MATCHES.is_file():
         pytest.skip(
             "the on-site publication has not been run on this checkout; "
-            "run python -m frontdoor.scan_publish to produce data/scans.jsonl "
-            "and data/scan_matches.json"
+            "run python -m frontdoor.scan_publish to produce "
+            "data/published_scans.jsonl and data/scan_matches.json"
         )
     return records
 
@@ -406,23 +554,86 @@ def test_no_record_references_an_image(published):
         assert record["image_keys"] == []
 
 
-def test_every_matched_place_exists_in_the_committed_catalogue(matches):
+def test_every_matched_place_is_in_the_catalogue_or_says_it_is_not(matches):
+    """A match either draws a pin from the published catalogue, or records
+    that the catalogue does not carry the place yet. Nothing in between: a
+    place_ref never carries a name or a location from anywhere else."""
     catalogue = json.loads(DATASET.read_text(encoding="utf-8"))
     for entry in matches:
-        if entry["matched"]:
-            assert entry["place_ref"]["place_id"] in catalogue
+        if not entry["matched"]:
+            continue
+        place_id = entry["place_ref"]["place_id"]
+        if entry["renderable"]:
+            assert place_id in catalogue
+            assert catalogue[place_id].get("location")
+        else:
+            assert place_id not in catalogue or not catalogue[place_id].get(
+                "location")
+            assert entry["not_pinnable_reason"] == (
+                "place_not_in_published_catalogue")
+            assert set(entry["place_ref"]) <= {"place_id", "name"}
+
+
+def test_no_published_record_states_a_negative_conclusion(published, matches):
+    """The honesty gate, run over the bytes that ship (#333, #385).
+
+    A published record carries per-criterion verdicts and a place; it must
+    never carry prose that concludes anything about whether a person can get
+    in. Grepping the artefacts themselves is the check, because that is what
+    a reader sees.
+    """
+    forbidden = (
+        "cannot get", "can not get", "may not be able", "not accessible",
+        "inaccessible", "unlikely", "no wheelchair", "not wheelchair",
+        "cannot enter", "unable to enter", "denied entry",
+    )
+    for artefact in (STORE, MATCHES):
+        text = artefact.read_text(encoding="utf-8").casefold()
+        for phrase in forbidden:
+            assert phrase not in text, f"{artefact.name} contains {phrase!r}"
+
+
+def test_no_published_verdict_is_outside_the_screening_vocabulary(published):
+    """`absent` stays `absent` in the record and `not_visible` stays
+    `not_visible`; collapsing one into the other would lose the difference
+    between "the photo shows there is none" and "the photo does not show"."""
+    allowed = {"present", "absent", "not_visible", "not_assessed"}
+    for record in published:
+        # A subset, not an equality: a criterion added after this run was
+        # published is simply absent from these records, and the map renders an
+        # absent criterion as "Not assessed", which is what it is. A verdict
+        # this vocabulary does not contain is the failure worth catching.
+        assert set(record["verdicts"]) <= set(CRITERIA_KEYS), record["entrance_id"]
+        assert record["verdicts"], record["entrance_id"]
+        for key, verdict in record["verdicts"].items():
+            assert verdict in allowed, (record["entrance_id"], key, verdict)
 
 
 # --- what /map/data serves ----------------------------------------------------
 
 
 @pytest.fixture
-def map_payload(monkeypatch, published):
+def map_payload(monkeypatch, tmp_path, published):
+    """/map/data over the CURATED store alone.
+
+    FRONTDOOR_SCANS is pointed at an empty file on purpose: the runtime
+    community store is a mounted volume in production and whatever a developer
+    has published locally must not decide whether this test passes.
+    """
     from frontdoor_server.app import create_app
 
+    runtime = tmp_path / "scans.jsonl"
+    runtime.write_text("", encoding="utf-8")
     monkeypatch.setenv("FRONTDOOR_MAP_DATASET", str(DATASET))
-    monkeypatch.setenv("FRONTDOOR_SCANS", str(STORE))
+    monkeypatch.setenv("FRONTDOOR_PUBLISHED_SCANS", str(STORE))
+    monkeypatch.setenv("FRONTDOOR_SCANS", str(runtime))
     return create_app().test_client().get("/map/data").get_json()
+
+
+def test_the_curated_store_is_the_one_map_data_loads(map_payload, published):
+    assert map_payload["published_scans_loaded"] == len(published)
+    assert map_payload["published_scans_error"] is None
+    assert map_payload["published_scans_skipped"] == 0
 
 
 def test_map_data_serves_every_matched_scan_as_scanned_on_site(
@@ -431,8 +642,8 @@ def test_map_data_serves_every_matched_scan_as_scanned_on_site(
     dates = {
         record["entrance_id"]: record["created_at"][:10] for record in published
     }
-    matched = [entry for entry in matches if entry["matched"]]
-    assert matched, "the publication matched no place at all"
+    matched = [entry for entry in matches if entry["renderable"]]
+    assert matched, "the publication put nothing on the map at all"
     for entry in matched:
         pin = by_place[entry["place_ref"]["place_id"]]
         assert pin["state"] == "verified_accessible"
@@ -458,3 +669,35 @@ def test_an_unmatched_scan_does_not_invent_a_pin(map_payload, matches):
     assert not [
         pin for pin in map_payload["pins"] if pin["place_id"].startswith("scan:")
     ]
+
+
+def test_a_place_held_by_identifier_alone_draws_no_pin_either(
+        map_payload, matches):
+    """It is keyed, and it is invisible until the catalogue carries the place.
+
+    The alternative would be a pin at coordinates taken from somewhere the
+    published catalogue may not keep them, which is the licensing posture #242
+    settled and not something a publication run gets to reopen.
+    """
+    by_place = {pin["place_id"]: pin for pin in map_payload["pins"]}
+    keyed_only = [e for e in matches if e["matched"] and not e["renderable"]]
+    if not keyed_only:
+        pytest.skip("every matched place is in the published catalogue")
+    for entry in keyed_only:
+        assert entry["place_ref"]["place_id"] not in by_place
+
+
+def test_the_map_publishes_no_negative_state_or_wording(map_payload):
+    """Green-or-Gray, checked on what /map/data actually serves."""
+    for pin in map_payload["pins"]:
+        assert pin["state"] in ("verified_accessible", "not_yet_checked")
+        assert pin["label"] in ("Verified Accessible", "Not Yet Checked")
+        for item in pin["checklist"]:
+            assert item["observation"] in (
+                "visible", "not_visible", "not_assessed")
+            assert item["observation_label"] in (
+                "Visible in photos", "Not visible in photos", "Not assessed")
+    served = json.dumps(map_payload).casefold()
+    for phrase in ("cannot get", "may not be able", "not accessible",
+                   "unlikely", "inaccessible"):
+        assert phrase not in served

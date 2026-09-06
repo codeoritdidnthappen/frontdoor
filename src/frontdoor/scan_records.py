@@ -69,6 +69,20 @@ from frontdoor.map_states import (
 SCANS_ENV = "FRONTDOOR_SCANS"
 DEFAULT_SCANS_PATH = "data/scans.jsonl"
 
+#: The curated on-site publication (TICK-333): the study's own operator-captured
+#: entrances, written by `python -m frontdoor.scan_publish` and COMMITTED.
+#:
+#: Deliberately not the same file as the runtime store above. Since #339 the
+#: server appends what a phone publishes to a mounted volume that is not the
+#: repository at all, so one path for both would make an accidental local
+#: publish indistinguishable from the study's own records -- and a deploy, which
+#: replaces the container filesystem, would either lose the curated set or need
+#: the volume seeded before first start. Two files: this one ships inside the
+#: image and is reviewable in a diff, that one is runtime state on the volume,
+#: and /map/data reads both.
+PUBLISHED_SCANS_ENV = "FRONTDOOR_PUBLISHED_SCANS"
+DEFAULT_PUBLISHED_SCANS_PATH = "data/published_scans.jsonl"
+
 #: The one source string a community scan writes. On-site and human-present,
 #: so it is deliberately NOT in map_states.IMAGERY_ONLY_SOURCES: a published
 #: scan is exactly the "human, non-imagery confirmation" the Scanned tier
