@@ -21,6 +21,14 @@ about what is visible in the photos. Never measurements, never compliance or
 legal conclusions. When a feature cannot be confidently seen the verdict is
 not_visible, and not_visible is never collapsed into absent.
 
+Its other half (TICK-399): a reply this engine REFUSED is a failure of the
+call, never an abstention by the model. Nobody looked and declined - the
+answer was thrown away. Every assessment names which happened (`failure`), a
+rejected reply is asked for again once, and the criteria that did validate
+survive the ones that did not. What is never done is guess at a refused
+answer: `not_applicable` is not `absent` and is not `not_visible`, so a
+refused criterion carries no verdict at all rather than a legible one.
+
 Split discipline (D-007): callers pass entrance IDs; this module resolves the
 split itself and refuses sealed-split entrances. The sealed split is scored
 exactly once, at results freeze, through a deliberate human-run path - not
