@@ -360,3 +360,45 @@ def test_tick_399_a_criterion_with_no_verdict_is_not_reported_as_not_seen():
     assert "Ramp or bevel" in rendered.split("Not seen this time:", 1)[0]
     # Nothing anywhere turns the refused word into a verdict.
     assert "not_applicable" not in rendered
+
+
+# --- a missing scan is not silent (TICK-370, #370) ---------------------------
+#
+# /map/data reports scans_error and scans_skipped. This page is the surface a
+# contributor uses to see the scan they just published. Until now neither field
+# was read here, so an unreachable store or a torn record took their scan off
+# the map with no word. The map page already banners both; this page did not.
+# These read the served source the same way the rest of this file does: there
+# is no JS runtime, and the claim that can be stated in the source is which
+# fields are read and how they are shown.
+
+
+def test_the_app_page_tells_a_contributor_when_published_scans_could_not_be_loaded():
+    """An unreachable scan store must not look like an empty publish.
+
+    dataset_error is console.info because this page still has embedded pins to
+    draw. scans_error is not that case: the scan they published is gone, and
+    they will not open a console. The toast names the subsystem; the server's
+    string quotes a filesystem path and this page is public.
+    """
+    live = _block(page().get_data(as_text=True), "function loadLiveMap(){")
+    line = next(ln for ln in live.splitlines() if "j.scans_error" in ln)
+    assert "toast(" in line
+    assert "console." not in line
+    assert "+ j.scans_error" not in live
+    assert "j.scans_error +" not in live
+    assert "+j.scans_error" not in live
+    assert "j.scans_error+" not in live
+
+
+def test_the_app_page_tells_a_contributor_when_a_published_scan_could_not_be_read():
+    """A torn JSONL line is skipped and the rest of the store still loads.
+
+    scans_skipped is a count, not a message: load_scan_store carries on, so this
+    is the only place that loss ever surfaces. A contributor whose scan was the
+    torn line sees every other pin and not theirs. Toast the count; do not wait
+    for scans_error, which is null on a store that otherwise opened.
+    """
+    live = _block(page().get_data(as_text=True), "function loadLiveMap(){")
+    assert "j.scans_skipped" in live
+    assert "toast(" in live.split("j.scans_skipped", 1)[1]

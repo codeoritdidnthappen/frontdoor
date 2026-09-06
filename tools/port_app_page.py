@@ -441,6 +441,10 @@ WIRING_REQUIRED: list[str] = [
     "{kind:'quarantined', body:j}",
     "r.status===503 && assessed",
     "function loadLiveMap(){",
+    # TICK-370: a contributor looks here after publish. Losing these two puts an
+    # unreachable store or a torn record in front of them as an empty map.
+    "if(j.scans_error) toast('Published scans could not be loaded')",
+    "else if(j.scans_skipped) toast(j.scans_skipped===1",
     "PHOTO_API+b.image_keys[0]",
     "const CORRECT_API = '/correct';",
     "fetch(CORRECT_API+'/mine'",
