@@ -196,6 +196,31 @@ def test_yunet_on_a_tiny_flat_frame_returns_no_boxes_without_raising():
     assert faceblur._detect_yunet(np.full((32, 32, 3), 200, dtype=np.uint8)) == []
 
 
+def test_yunet_zero_area_rows_are_skipped(monkeypatch):
+    # The degenerate row this detector emits intermittently on a featureless
+    # frame is finite but has no area (observed: x ~ 1e13, w = h = 0). The
+    # small-box branch tests only an upper bound, so it admitted the row
+    # whatever its score, which is what made the flat-frame test flaky. A box
+    # covering no pixels blurs nothing and, since the cascade corroboration
+    # rule, could license a cascade box while asserting nothing.
+    class _FakeYuNet:
+        def setInputSize(self, size):
+            return None
+
+        def detect(self, image):
+            zero_w = [1.0e13, 0.0, 0.0, 0.0] + [0.0] * 10 + [0.99]
+            zero_h = [10.0, 10.0, 20.0, 0.0] + [0.0] * 10 + [0.99]
+            negative = [10.0, 10.0, -20.0, 20.0] + [0.0] * 10 + [0.99]
+            good = [4.0, 4.0, 8.0, 8.0] + [0.0] * 10 + [0.99]
+            return 1, np.array([zero_w, zero_h, negative, good], dtype=np.float32)
+
+    monkeypatch.setattr(faceblur, "_get_yunet", lambda: _FakeYuNet())
+    monkeypatch.setattr(faceblur, "_boost_luma", lambda img: img)
+    assert faceblur._detect_yunet(
+        np.full((32, 32, 3), 200, dtype=np.uint8)
+    ) == [(4, 4, 8, 8), (4, 4, 8, 8)]
+
+
 def test_yunet_non_finite_rows_are_skipped_and_finite_rows_survive(monkeypatch):
     # The guard, pinned deterministically: the repro above only produces
     # non-finite rows on some OpenCV builds, so a fake detector feeds
