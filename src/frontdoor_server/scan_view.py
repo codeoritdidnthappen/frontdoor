@@ -315,10 +315,10 @@ def publish():
             )
         except FaceDetectorError:
             return _error(
-                "internal error",
-                "face detection did not return a result; the upload was not "
-                "sent to the model.",
-                status=500,
+                "privacy processing unavailable",
+                "face detection did not return a result; the photograph was "
+                "not privacy-assessed and nothing was published. Retry.",
+                status=503,
             )
         else:
             payloads.append(processed.image_bytes)

@@ -69,7 +69,7 @@ def test_it_reports_every_subsystem_and_answers_200_even_when_degraded(clean_env
     assert response.status_code == 200
     body = response.get_json()
     assert set(body["subsystems"]) == {
-        "screening", "photo_storage", "map_dataset", "scan_store",
+        "screening", "photo_storage", "map_dataset", "scan_store", "claims_store",
     }
     assert body["ready"] is False
     assert "screening" in body["degraded"]
@@ -148,7 +148,7 @@ def test_ready_is_true_only_when_everything_is_configured(clean_env, monkeypatch
     clean_env.setenv("FRONTDOOR_IMAGES_ACCESS_KEY", "key")
     clean_env.setenv("FRONTDOOR_IMAGES_SECRET_KEY", "secret")
     body = ready().get_json()
-    if body["subsystems"]["map_dataset"] and body["subsystems"]["scan_store"]:
+    if body["subsystems"]["map_dataset"] and body["subsystems"]["scan_store"] and body["subsystems"]["claims_store"]:
         assert body["ready"] is True
         assert body["degraded"] == []
 
@@ -175,6 +175,19 @@ def test_scan_store_tracks_whether_the_volume_is_mounted(clean_env, tmp_path):
     mounted.mkdir()
     clean_env.setenv("FRONTDOOR_SCANS", str(mounted / "scans.jsonl"))
     assert ready().get_json()["subsystems"]["scan_store"] is True
+
+
+def test_claims_store_tracks_whether_the_volume_is_mounted(clean_env, tmp_path):
+    """Claims are the second thing on the volume; losing them is a credential (#369)."""
+    clean_env.setenv(
+        "FRONTDOOR_CLAIMS", str(tmp_path / "not-mounted" / "claims.jsonl")
+    )
+    assert ready().get_json()["subsystems"]["claims_store"] is False
+
+    mounted = tmp_path / "data"
+    mounted.mkdir()
+    clean_env.setenv("FRONTDOOR_CLAIMS", str(mounted / "claims.jsonl"))
+    assert ready().get_json()["subsystems"]["claims_store"] is True
 
 
 # --- verified, not assumed: the notch past #353 (#370) -----------------------
@@ -239,6 +252,17 @@ def test_a_corrupt_scan_line_makes_the_scan_store_not_ready(
     body = ready().get_json()
     assert body["subsystems"]["scan_store"] is False
     assert "scan_store" in body["degraded"]
+
+
+def test_a_corrupt_claim_line_makes_the_claims_store_not_ready(
+        clean_env, reachable, tmp_path):
+    store = tmp_path / "claims.jsonl"
+    clean_env.setenv("FRONTDOOR_CLAIMS", str(store))
+    assert ready().get_json()["subsystems"]["claims_store"] is True
+    store.write_text('{"claim_id": "torn"\n', encoding="utf-8")
+    body = ready().get_json()
+    assert body["subsystems"]["claims_store"] is False
+    assert "claims_store" in body["degraded"]
 
 
 def test_an_unmounted_volume_still_makes_the_scan_store_not_ready(

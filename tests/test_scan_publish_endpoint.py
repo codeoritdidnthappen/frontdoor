@@ -261,6 +261,35 @@ def test_quarantined_frames_are_never_persisted(
     assert not scans_path.exists()
 
 
+def test_a_detector_that_does_not_answer_is_a_named_503_and_publishes_nothing(
+        scans_path, monkeypatch):
+    """The photograph was never privacy-assessed; that is not an internal error (#369).
+
+    /screen names this as a detector failure. Publish used to let it reach the
+    catch-all, then later caught it as a 500 "internal error" whose wording is
+    /measure's. Neither said the privacy pass did not run, and neither said to
+    retry. The assessment never happened, so this is not the assessed-but-not-
+    published shape.
+    """
+    from frontdoor.faceblur import FaceDetectorError
+
+    def exploding(raw):
+        raise FaceDetectorError("YuNet did not return a detection result")
+
+    monkeypatch.setattr("frontdoor_server.scan_view.process_upload", exploding)
+    engine = FakeEngine()
+    store = FakeStore()
+    response = post_publish(make_client(engine=engine, store=store), [image_part()])
+    assert response.status_code == 503
+    body = response.get_json()
+    ERROR_VALIDATOR.validate(body)
+    assert body["error"] == "privacy processing unavailable"
+    assert "privacy" in body["detail"].lower() or "retry" in body["detail"].lower()
+    assert engine.calls == []
+    assert store.puts == []
+    assert not scans_path.exists()
+
+
 # --- storage failure: assessed-but-not-published, never silent ---------------
 
 
