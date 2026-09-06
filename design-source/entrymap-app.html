@@ -1425,7 +1425,24 @@ ul.prof-card>li:last-child .prof-row{border-bottom:none}
   padding:var(--sp-8) var(--sp-7) var(--sp-8);display:flex;flex-direction:column;align-items:center;
   position:relative;z-index:2;box-shadow:var(--elev-3-dark);
 }
-.wl-h{font-size:var(--fs-h1);font-weight:var(--fw-display);text-align:center;line-height:var(--lh-h1);color:var(--ink);letter-spacing:var(--ls-h1)}
+.wl-h{font-size:var(--fs-h1);font-weight:var(--fw-display);text-align:center;line-height:var(--lh-h1);color:var(--ink);letter-spacing:var(--ls-h1);text-wrap:balance}
+/* ROUND 9.1 -- the welcome line carries the idea, so it is set rather than merely typed.
+   The owner: "the before and access are important. maybe change the font of before or
+   change font of access. or colors?"  COLOUR IS NOT AVAILABLE ON THIS LINE, and that was
+   measured rather than assumed (design/tagline-gallery.html): the three tier tiles sit 95px
+   below this headline on the same white card, and the three accents are spoken for -- sky is
+   Estimated, marigold is Scanned, violet is Owner. Rendering one word in any of them produces
+   a colour BYTE-IDENTICAL to a tile label directly beneath it, so the word would read as
+   pointing at the tile. Any other hue would be a thirteenth colour.
+   So the emphasis is typographic: "Access" one step up, "before" in the italic that the
+   variable face already ships and nothing else in the build uses. Both stay at --fw-display,
+   so no fragment drops below WCAG's large-text threshold at any of the three text sizes, and
+   both stay --ink at 17.30:1. Measured in the gallery: the italic shares the upright's cap
+   height (15.0px) and x-height (12.0px) exactly, so the vertical rhythm is untouched, and the
+   pair renders the same two-line composition at all three text sizes -- which the size-only
+   treatment could not promise, since it fitted on one line at 15px and wrapped at the other two. */
+.wl-h .wl-lead{font-style:normal;font-size:1.16em;letter-spacing:-0.03em}
+.wl-h .wl-em{font-style:italic}
 .wl-p{font-size:var(--fs-body);color:var(--sub);font-weight:var(--fw-body);text-align:center;line-height:var(--lh-body);margin-top:var(--sp-5);max-width:290px;letter-spacing:var(--ls-flat);}
 .wl-tiers{display:flex;gap:var(--sp-3);width:100%;margin-top:var(--sp-7)}
 .wl-tier{
@@ -3076,7 +3093,7 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
         </svg>
       </div>
       <div class="wl-card">
-        <h1 class="wl-h">Access starts before you arrive.</h1>
+        <h1 class="wl-h"><em class="wl-lead">Access</em> starts <em class="wl-em">before</em> you arrive.</h1>
         <p class="wl-p">Find entrances and places that fit your needs.</p>
         <div class="wl-tiers" role="group" aria-label="What the pins mean">
           <div class="wl-tier t-est"><span id="wl-p1" aria-hidden="true"></span><b>Estimated</b></div>
