@@ -301,10 +301,18 @@ def rejected_response_stats(screenings):
             if assessment.rejected_attempts:
                 stats["first_attempt_rejected"] += 1
             if assessment.failure == FAILURE_REJECTED:
-                if assessment.criteria is None:
-                    stats["discarded"] += 1
-                else:
+                # Discarded means no criterion survived - whether the reply was
+                # refused whole or every one of its four fields was refused
+                # separately. Counting the second as a recovery would flatter
+                # the headline number with a response that produced nothing.
+                kept = sum(
+                    1 for key in CRITERIA_KEYS
+                    if criterion_verdict(assessment, key)[0] is not None
+                )
+                if kept:
                     stats["partially_recovered"] += 1
+                else:
+                    stats["discarded"] += 1
             elif assessment.failure is not None:
                 stats["other_failures"] += 1
             elif assessment.rejected_attempts:

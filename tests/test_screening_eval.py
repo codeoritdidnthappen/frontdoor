@@ -1732,6 +1732,41 @@ def test_tick_399_a_partially_recovered_reply_loses_only_the_refused_field(
     assert stats["entrances_with_no_verdicts"] == []
 
 
+def test_tick_399_a_reply_whose_every_field_was_refused_counts_as_discarded(
+    tmp_path,
+):
+    """Recovery that recovered nothing is not a recovery.
+
+    Counting it as `partially_recovered` would flatter the headline number
+    with a response that produced no verdict at all.
+    """
+    nothing_kept = ImageAssessment(
+        criteria={
+            key: {"verdict": None, "confidence": None, "evidence": None,
+                  "rejected": "ada_check_value",
+                  "rejected_value": "cannot_determine"}
+            for key in CRITERIA_KEYS
+        },
+        latency_s=1.0,
+        error="ResponseRejected: criterion handrails has invalid verdict",
+        failure=FAILURE_REJECTED,
+        attempts=2,
+        rejected_attempts=2,
+    )
+    result = _tick399_run(
+        tmp_path,
+        {DEV_A: EntranceScreening(
+            entrance_id=DEV_A, split="dev", assessments=(nothing_kept,),
+            summary=aggregate_assessments((nothing_kept,)))},
+        [(DEV_A, "ramp_or_bevel", "present")],
+        [("cap-1", DEV_A)],
+    )
+    stats = result["rejected_responses"]
+    assert stats["discarded"] == 1
+    assert stats["partially_recovered"] == 0
+    assert stats["entrances_with_no_verdicts"] == [DEV_A]
+
+
 def test_tick_399_a_clean_run_reports_no_rejections(tmp_path):
     """The counters stay quiet when nothing was refused."""
     result, _ = _run_report(tmp_path)
