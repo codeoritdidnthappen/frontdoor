@@ -1,0 +1,29 @@
+    <!-- The wired owner workspace: what GET /claim/<id>/workspace answers, and the two
+         controls that write back to it (attested guided capture, and a dispute note). -->
+    <section class="screen claimscreen" id="claim-workspace" tabindex="-1" aria-label="My business">
+      <div class="screen-body">
+        <div class="flowhead">
+          <button class="backbtn" data-goto="screen-profile" aria-label="Back to Profile">&lsaquo;</button>
+          <h2>My business</h2>
+        </div>
+        <div class="bizhead" id="ws-bizhead"></div>
+        <div class="prof-card" style="margin-top:var(--sp-5)">
+          <div class="chips-title" style="margin:var(--sp-0) var(--sp-0) var(--sp-3)">As customers see it</div>
+          <div id="ws-pin" style="font-weight:var(--fw-strong);font-size:var(--fs-body)"></div>
+          <div class="prof-sub" id="ws-status" style="margin-top:var(--sp-3)"></div>
+        </div>
+        <div class="tax-box" id="ws-incentives" style="margin-top:var(--sp-5)"></div>
+        <div class="card-actions" style="margin-top:var(--sp-6)">
+          <button class="btn primary" id="btn-ws-capture">Guided capture at the door</button>
+        </div>
+        <p class="sheet-p">Camera-roll photos cannot attest. Owner-confirmed only from this in-app capture.</p>
+        <div class="field">
+          <label for="ws-dispute">Correct or dispute what customers see</label>
+          <textarea id="ws-dispute" rows="3" maxlength="500" placeholder="What should change?"></textarea>
+        </div>
+        <div class="card-actions" style="margin-top:var(--sp-5)">
+          <button class="btn ghost" id="btn-ws-dispute">Send dispute</button>
+        </div>
+      </div>
+    </section>
+

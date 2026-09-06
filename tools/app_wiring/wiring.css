@@ -1,0 +1,9 @@
+
+/* ---- wiring: two things the served page needs that the design source does not carry.
+   The review screen names the entrance a scan publishes against (POST /screen/publish
+   wants a place_id, or lat + lng + name), and a run with no server behind it is labelled
+   as simulated. Both belong to the server contract rather than to the visual design, so
+   they are styled here, in the design's own tokens. ---- */
+.entrance-field{width:100%;text-align:left}
+.entrance-hint{font-size:var(--fs-meta);color:var(--sub);font-weight:var(--fw-strong);margin-top:var(--sp-2);line-height:var(--lh-meta);letter-spacing:var(--ls-flat)}
+.sim-tag{display:inline-flex;align-items:center;background:var(--ui-lavender-1,#EEF1F6);color:var(--sub);border:1.5px solid var(--line,#D5D9E6);border-radius:999px;padding:var(--sp-1) var(--sp-4);font-size:var(--fs-meta);font-weight:var(--fw-strong);letter-spacing:var(--ls-caps);text-transform:uppercase;margin-top:var(--sp-1)}
