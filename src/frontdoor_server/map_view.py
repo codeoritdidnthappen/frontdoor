@@ -34,6 +34,15 @@ state (the page's Scanned tier), raise a criterion observation, or move
 freshness forward — nothing else. A scanned pin also carries a
 "Scanned on-site — <date>" provenance row.
 
+Community corrections (TICK-387, #387): the correction store
+(FRONTDOOR_CORRECTIONS, default data/corrections.jsonl) can mark a place as
+needing a re-look, and that is the ONLY thing it can do to a pin. The rows
+carry `needs_relook` and `relook_since` and nothing else -- frontdoor.corrections
+holds the corroboration rule and the argument -- so a correction is not an
+input to any state, label or checklist entry on this payload. It cannot turn a
+green stamp neutral, cannot lower an observation, and cannot add a pin. What it
+does is ask somebody to take a fresh photograph.
+
 The Google Maps API key is supplied by the viewer as a ?key= query parameter
 on /map; the server never sees, stores, or hardcodes it.
 """
@@ -46,6 +55,12 @@ from pathlib import Path
 from flask import Blueprint, Response
 
 from frontdoor.commons_imagery import commons_provenance_for_place
+from frontdoor.corrections import (
+    CORRECTIONS_ENV,
+    DEFAULT_CORRECTIONS_PATH,
+    apply_relook,
+    load_correction_store,
+)
 from frontdoor.external_data import load_side_file, provenance_for_place
 from frontdoor.map_states import prepare_map_payload
 from frontdoor.scan_records import (
@@ -109,6 +124,18 @@ def map_data():
     dataset, scan_meta = merge_scans(
         dataset, published.records + scans.records
     )
+    # Community corrections (TICK-387): freshness ONLY. apply_relook writes
+    # exactly `needs_relook` and `relook_since` onto rows that corroborated
+    # reports say may have moved on since the evidence was taken -- never a
+    # status, a source, a criterion, or a row that did not already exist. The
+    # states above and below are therefore computed from inputs no correction
+    # is part of, and a correction cannot make a pin say anything negative
+    # about a business; the most it can do is ask somebody to go and look
+    # again.
+    corrections = load_correction_store(
+        os.environ.get(CORRECTIONS_ENV, DEFAULT_CORRECTIONS_PATH)
+    )
+    dataset, relook = apply_relook(dataset, corrections.records)
     payload = prepare_map_payload(dataset)
     payload["dataset_error"] = dataset_error
     payload["scans_error"] = scans.error
@@ -117,10 +144,12 @@ def map_data():
     payload["published_scans_error"] = published.error
     payload["published_scans_loaded"] = len(published.records)
     payload["published_scans_skipped"] = published.skipped
+    payload["corrections_error"] = corrections.error
     osm_error, commons_error = _attach_provenance(payload["pins"])
     payload["osm_error"] = osm_error
     payload["commons_error"] = commons_error
     _attach_scan_provenance(payload["pins"], scan_meta)
+    _attach_relook(payload["pins"], dataset, relook)
     return payload
 
 
@@ -177,3 +206,31 @@ def _attach_scan_provenance(pins, scan_meta):
         pin["provenance"] = [line] + pin.get("provenance", [])
         pin["last_scanned"] = date
         pin["scan_count"] = meta["scan_count"]
+
+
+def _attach_relook(pins, dataset, relook):
+    """Surface the re-look request on the pins it applies to.
+
+    Freshness and nothing else: `needs_relook` and `relook_since`, plus one
+    provenance line that says a re-look was asked for and when. The pin's
+    state, label, checklist and owner_confirmed flag were all decided before
+    this ran, from a row apply_relook did not touch, so this cannot turn a
+    green stamp neutral or an observation negative -- it is the input to the
+    app's existing "Could you take another look?" nudge, which asks for a
+    photograph rather than making a claim.
+    """
+    if not relook:
+        return
+    for pin in pins:
+        row = dataset.get(pin["place_id"])
+        if not isinstance(row, dict) or row.get("needs_relook") is not True:
+            continue
+        since = row.get("relook_since")
+        pin["needs_relook"] = True
+        pin["relook_since"] = since
+        line = {
+            "source": "community_correction",
+            "label": f"Re-look requested — {since}",
+            "date": since,
+        }
+        pin["provenance"] = pin.get("provenance", []) + [line]

@@ -4,7 +4,8 @@
    marks verified (its Scanned tier) takes the server's verdicts, count and date, and a pin this
    page does not know is added. A place the server still lists as not-yet-checked keeps the
    embedded detail, which is the same estimate with its evidence text. No server, or a
-   dataset_error, leaves the embedded pins exactly as they are. */
+   dataset_error, leaves the embedded pins exactly as they are.
+   needs_relook rides along on a pin: freshness only, never a state and never a verdict. */
 const OBS_TO_V = {visible:'present', not_visible:'not_visible'};
 const inBBox = loc => loc.lat>=BBOX.lat0-0.001 && loc.lat<=BBOX.lat1+0.001 && loc.lng>=BBOX.lng0-0.001 && loc.lng<=BBOX.lng1+0.001;
 function critFromChecklist(checklist, keymap){
@@ -20,6 +21,11 @@ function mergeServerPin(pin, base){
   const scanned = pin.state==='verified_accessible';
   const p = base || {id:String(pin.place_id), name:pin.name||'Entrance', lat:pin.location.lat, lng:pin.location.lng, crit:{}, tier:'est', date:pin.imagery_date||null};
   if(!base) places.push(p);
+  /* TICK-387: corroborated corrections say the world may have moved. It is a FRESHNESS
+     flag and nothing else -- the tier, the state and every check below are read from the
+     same pin exactly as before -- and the card turns it into the existing
+     "Could you take another look?" nudge, which asks for a photo and claims nothing. */
+  p.relook = pin.needs_relook===true;
   if(scanned){
     if(p.tier==='est') p.tier='scan';
     p.live=true;

@@ -1557,3 +1557,68 @@ committed one, so nothing is copied by hand.
 
 Both `design-source/entrymap-app.html` and the page built from it are snapshots of a design
 round. Refreshing them is one command; see docs/server-deploy.md.
+
+## 2026-09-06 — A correction reaches a review queue instead of a local array (TICK-387, #387)
+
+The place card offered **"Suggest a correction"**. The sheet asked what changed, which entrance,
+what you noticed, and let you attach a photograph. Pressing **Send suggestion** ran
+`corrections.unshift({...})` — a JavaScript array in that one browser. There was no correction
+endpoint on the server. The note then appeared in the sender's own Contributions tab, which is
+what made it look received, and it died when they closed the tab. Somebody who noticed a wrong
+finding, or whose entrance had changed since it was assessed, wrote it down, attached a photo,
+pressed Send, saw it listed, and reasonably believed a person would read it. Nobody would.
+
+This is the same class of defect as a verdict that overstates what a photo shows (TICK-351,
+2026-09-05 above): the interface makes a claim the system does not keep. It is quieter because
+nothing visibly breaks.
+
+`POST /correct` now receives it — place reference, category, note capped where the sheet caps it,
+an optional photo through the same privacy pass every other public upload takes, the contributor
+token the scan path already uses — and appends one record to an append-only JSONL store on the
+volume beside the scan records. A failure says so: the sheet stays open with the note and the
+photo intact, and the confirmation screen is reached only by a request the server answered 201.
+`GET /correct/mine` answers with the sender's own notes and their real status, so the
+Contributions tab shows what the server holds rather than an echo of a button press. The
+confirmation screen's two promises the server does not keep — that the note becomes a dated
+source on the receipt, and that a notification follows — are replaced by what actually happens.
+
+## D-046  A correction changes freshness, never a verdict, and corroboration is what unlocks it
+
+A correction is a report, not a finding. It never changes a criterion verdict, a status, a
+source, or a pin's Green-or-Gray state, and it cannot add a pin. `frontdoor.corrections` is
+written so a third behaviour is not expressible: `apply_relook` is the only function in it that
+touches a dataset row, it writes exactly `needs_relook` and `relook_since`, and a test compares
+the before/after key diff against that list, so wiring a verdict up later fails a test rather
+than shipping.
+
+What a correction MAY do is say the world moved. Two or more distinct contributors reporting a
+world-may-have-moved category (`entrance_features`, `business_identity`) against *this* entrance
+of the same place, more recently than that row's own evidence date, marks it as needing a
+re-look — which surfaces the app's existing "Could you take another look?" nudge and asks for a
+photograph. A note about a different entrance of the same business does not: the nudge asks
+somebody to re-photograph THIS door. One report cannot either: a single anonymous note is exactly what one motivated person can produce for a
+competitor's door, and anonymous notes never corroborate each other because they are all one
+unidentified reporter. Contributor tokens are self-minted in the browser, so this raises the
+cost of manufacturing corroboration rather than preventing it; that is the right trade precisely
+because the entire consequence is a request for a fresh photograph. A re-look is also spent by
+newer evidence — a scan taken since answers it — so a nudge cannot stick to a pin for good.
+
+Reason for the corroboration floor rather than acting on a single report: the map's whole legal
+posture is that it only ever celebrates or stays silent (`frontdoor.map_states`). A
+mechanism by which one stranger can make a named business's pin look stale is a mechanism worth
+abusing, and unlike a scan there is no photograph behind it.
+
+## D-047  A public dispute is an entrance-features correction against a place a human has seen
+
+`/claim/<id>/dispute` hangs off a claimed listing, so only a business owner who has been through
+the claim flow could say a finding is wrong. A passer-by who can see it is wrong had no route.
+The narrowest honest version of one: a correction whose category is `entrance_features`, against
+a place already at the scanned or owner-confirmed tier, is flagged `dispute` on the record and
+sorts to the top of the review queue. Against an estimate the same note is a routine note —
+there is no human finding to dispute yet. The tier is resolved server-side from the same merged
+dataset `/map/data` serves, so a caller cannot promote its own note to a dispute or demote one.
+
+A dispute is queue metadata and is deliberately not published back to the contributor or onto
+the map: a person reading "your note is a dispute" invites a negative reading of a named
+business that nothing has reviewed yet, which is the thing the Green-or-Gray rule exists to
+prevent. Who works the queue, and how often, is in docs/server-deploy.md.

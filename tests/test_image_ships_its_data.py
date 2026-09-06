@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from frontdoor.claims import DEFAULT_CLAIMS_PATH
+from frontdoor.corrections import DEFAULT_CORRECTIONS_PATH
 from frontdoor.scan_records import (
     DEFAULT_PUBLISHED_SCANS_PATH,
     DEFAULT_SCANS_PATH,
@@ -90,9 +91,16 @@ def test_the_dockerfile_copies_it(relative):
 #: time. It is a committed dataset that ships in the image, so a deploy
 #: restores it rather than destroying it, and pointing it at the volume would
 #: turn a reviewable file into runtime state nobody can diff.
+#:
+#: Corrections ARE run-time state, and they are the third entry below. A correction is
+#: somebody's report that a doorway changed, and the whole point of TICK-387 was that the
+#: report used to reach nobody. An ephemeral path is the quieter version of the same defect:
+#: the sender is told truthfully that it was received, and the next deploy erases the queue
+#: with nothing reporting the loss.
 RUNTIME_STORES = (
     ("FRONTDOOR_SCANS", DEFAULT_SCANS_PATH),
     ("FRONTDOOR_CLAIMS", DEFAULT_CLAIMS_PATH),
+    ("FRONTDOOR_CORRECTIONS", DEFAULT_CORRECTIONS_PATH),
 )
 
 
