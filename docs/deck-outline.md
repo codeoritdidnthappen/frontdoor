@@ -194,10 +194,18 @@ allowed only if it stays inside the measured claim.
 **Content:**
 - The line:
   > **"When it commits, it's 97% right. When it can't see, it says so."**
+
+  **The first half cannot be said until #437 lands.** The 97% is agreement with a
+  model-produced reference, not accuracy, so "right" is a word the number does not support.
+  The second half stands on its own and is measured. Either lead with the abstention half
+  alone, or wait for the human-labelled sample's figure and put that number in front.
 - What backs each half, printed on the slide, small but present:
-  - *97% right*: 75/77 committed verdicts correct, offline eval on the 12-entrance pilot set,
-    human-adjudicated ground truth (`src/frontdoor/screening.py`, PR #240). **This is one run,
-    not a mean of several** (#388) — see the guardrail below, which now has two halves rather
+  - *97% right*: 75/77 committed verdicts **agreeing with the reference**, offline eval on the
+    12-entrance pilot set (`src/frontdoor/screening.py`, PR #240). **That reference was produced by
+    a model reading the same photographs** (#437), so this is an agreement figure, not an accuracy
+    figure — two readings by the same kind of system, whose errors correlate. It is real and it is
+    interesting; it is not "right". The accuracy claim comes from the human-labelled sample instead.
+    **It is also one run, not a mean of several** (#388) — see the guardrail below, which now has two halves rather
     than one.
   - *says so*: 4 abstentions on that same eval — and on the Street View Estimated tier, a
     79.5% abstention rate (live pre-catalogue run), because distant imagery honestly can't see
@@ -277,10 +285,13 @@ untested pre-registered bar stated plainly.
 
 **Content:**
 - **Pilot / development numbers (labeled PILOT SET — NOT SEALED-CONFIRMATORY, on the slide):**
-  offline eval on the 12-entrance pilot set, human-adjudicated ground truth — **97%
-  committed-verdict accuracy (75/77), 4 abstentions**, ~7s median per entrance, single
-  integrated call. **On-slide caveat, verbatim: "prompt rules were derived on this same set;
-  held-out validation is owed on the next capture batch."** Source: `src/frontdoor/screening.py`
+  offline eval on the 12-entrance pilot set — **97% agreement with the reference (75/77), 4
+  abstentions**, ~7s median per entrance, single integrated call. **Say "agreement", not
+  "accuracy":** the reference was produced by a model reading the same photographs (#437), so the
+  two readings share their blind spots and the figure cannot see its own. **On-slide caveat,
+  verbatim: "prompt rules were derived on this same set; held-out validation is owed on the next
+  capture batch."** The accuracy claim comes from the human-labelled stratified sample, with its
+  interval, and that is the number this section should lead with once it exists. Source: `src/frontdoor/screening.py`
   (PR #240), eval runner `src/frontdoor/screening_eval.py`.
 - **Estimated tier (labeled LIVE PRE-CATALOGUE RUN):** Street View imagery, same engine —
   **88.9% committed accuracy with 79.5% abstention** over 11 place_id-verified doors. The lone
