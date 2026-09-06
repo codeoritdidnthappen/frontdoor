@@ -92,6 +92,7 @@ def test_saved_buttons_reload_and_write_validator_compatible_csv(tmp_path, monke
         "handrails": "absent",
         "accessible_door_hardware": "",
         "accessibility_signage": "present",
+        "step_free_entry": "absent",
     }
     response = client.post(
         "/api/entrances/E-001",
@@ -105,7 +106,7 @@ def test_saved_buttons_reload_and_write_validator_compatible_csv(tmp_path, monke
     assert reloaded["answers"] == answers
     with labels.open(encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
-    assert len(rows) == 4
+    assert len(rows) == len(CRITERIA_KEYS)
     assert {row["labeled_by"] for row in rows} == {"James"}
     assert {row["labeled_at"] for row in rows} == {"2026-09-04"}
 

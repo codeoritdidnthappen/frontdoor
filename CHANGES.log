@@ -1525,3 +1525,20 @@ committed one, so nothing is copied by hand.
 
 Both `design-source/entrymap-app.html` and the page built from it are snapshots of a design
 round. Refreshing them is one command; see docs/server-deploy.md.
+
+## 2026-09-05 — Step-free entry becomes the fifth screening criterion (TICK-368, #368)
+
+Decision taken by the product owner on #368, on measured evidence: the standalone harness
+assessed step-free entry on the same 52 held-out entrances at 86.5% committed accuracy, but
+with zero abstentions — it committed on entrances where no view showed the ground plane at
+all. The engine gains `step_free_entry` with the same three verdicts and the same rule that
+`not_visible` never collapses into `absent`; the prompt commits to present or absent only when
+a view shows the ground plane running from sidewalk to threshold, and asks for the oblique
+view's riser edge, because the known failure is a same-tone raised platform shot head-on.
+
+Every consumer of the criterion vocabulary is extended generically (aggregation, map states,
+labels and the label sheet, the served page's chips, the phone's criterion list, the eval
+report); none special-cases the fifth key. The 97% and 90% held-out figures describe the four
+original criteria and stay labelled that way; step-free gets its own line. Sealed entrances stay
+unassessed. `data/labels.csv` gains one blank `step_free_entry` row per eligible entrance:
+#302's labelling needs a pass for the fifth criterion before the sealed evaluation runs.

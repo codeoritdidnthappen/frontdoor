@@ -30,7 +30,7 @@ final class LabelQueueTests: XCTestCase {
         else { return XCTFail("save failed") }
         let reloaded = try XCTUnwrap(record(LabelQueue(url: url)))
         XCTAssertEqual(reloaded.labeledBy, "James")
-        XCTAssertEqual(reloaded.answers.count, 4)
+        XCTAssertEqual(reloaded.answers.count, ScreeningCriterion.allCases.count)
         XCTAssertNil(String(data: try Data(contentsOf: url), encoding: .utf8)?
             .range(of: "labeled_at"))
     }
@@ -124,7 +124,7 @@ final class EntranceLabelDraftTests: XCTestCase {
             draft.select(.present, for: criterion)
         }
         draft.select(.absent, for: .handrails)
-        XCTAssertEqual(draft.answers.count, 4)
+        XCTAssertEqual(draft.answers.count, ScreeningCriterion.allCases.count)
         XCTAssertEqual(draft.answers[.handrails], .absent)
         XCTAssertTrue(draft.canSave(operatorName: "James"))
     }

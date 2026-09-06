@@ -2,7 +2,7 @@
 
 Two modes. Per-image: one model call per photo assesses which accessibility
 features are VISIBLE - ramp or beveled threshold, handrails, accessible door
-hardware, accessibility signage - and per entrance the eligible 5-7 views are
+hardware, accessibility signage, step-free entry - and per entrance the eligible 5-7 views are
 aggregated into a majority verdict per criterion with the flip-rate reported
 alongside. Integrated (preferred): ALL of an entrance's views go into ONE
 model call that weighs them together, so the one oblique frame that shows a
@@ -11,7 +11,7 @@ frames that hide it. Offline eval on the 12-entrance pilot set: per-image
 majority voting amplifies shared camera-position blind spots; the integrated
 call raised committed accuracy from ~90% to 97% and cut abstentions 38 -> 4.
 
-The same call also answers a fifth checklist item, face_check (TICK-257
+The same call also answers a separate checklist item, face_check (TICK-257
 follow-up, #232): whether any identifiable face survived the automatic blur
 pass. It is a privacy audit, not an accessibility criterion - it never joins
 CRITERIA or the aggregate, and callers use it to quarantine the image.
@@ -51,12 +51,18 @@ CRITERIA_KEYS = (
     "handrails",
     "accessible_door_hardware",
     "accessibility_signage",
+    # Fifth criterion (#368): level entry from sidewalk to threshold. Same
+    # three verdicts and the same honesty rule as the other four, with the
+    # abstain path made explicit in the prompt - the standalone harness's
+    # version committed on every entrance, including ones where no view showed
+    # the ground plane at the threshold.
+    "step_free_entry",
 )
 
 ALLOWED_VERDICTS = ("present", "absent", "not_visible")
 
 # Eight photo-assessable ADA checks (#318). Separate from CRITERIA_KEYS: those
-# four remain the evaluation vocabulary. These eight are a photo evidence
+# five remain the evaluation vocabulary. These eight are a photo evidence
 # assessment, not a compliance determination. The model returns states; the
 # server alone computes score, counts, and summary.
 ADA_CHECK_KEYS = (
@@ -144,7 +150,7 @@ class ScreeningConfig:
     # Offline eval on the 12-entrance pilot set: claude-sonnet-5 matches opus at
     # 97% committed accuracy in integrated multi-view mode, at a median 7.2s vs
     # 20.6s per entrance and roughly 2.5x cheaper. max_tokens must cover
-    # thinking plus the four criteria and the eight ADA checks: at 2000,
+    # thinking plus the five criteria and the eight ADA checks: at 2000,
     # adaptive thinking used to consume the budget and truncate mid-object.
     model: str = "claude-sonnet-5"
     max_tokens: int = 6000
@@ -245,12 +251,15 @@ def parse_json_response(text):
 
 
 def validate_verdicts(parsed: object) -> dict[str, dict[str, object]]:
-    """Return the four valid criteria or reject the whole model response."""
+    """Return the valid criteria, every key in CRITERIA_KEYS, or reject the
+    whole model response."""
     if not isinstance(parsed, dict):
         raise ScreeningError("model response must be a JSON object")
     crit = parsed.get("criteria")
     if not isinstance(crit, dict) or set(crit) != set(CRITERIA_KEYS):
-        raise ScreeningError("model response must contain exactly the four criteria")
+        raise ScreeningError(
+            f"model response must contain exactly the {len(CRITERIA_KEYS)} criteria"
+        )
     out = {}
     for key in CRITERIA_KEYS:
         entry = crit[key]

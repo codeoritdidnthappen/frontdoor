@@ -167,6 +167,7 @@ enum ScreeningCriterion: String, CaseIterable, Codable, Identifiable {
     case handrails = "handrails"
     case accessibleDoorHardware = "accessible_door_hardware"
     case accessibilitySignage = "accessibility_signage"
+    case stepFreeEntry = "step_free_entry"
 
     var id: String { rawValue }
 
@@ -177,6 +178,7 @@ enum ScreeningCriterion: String, CaseIterable, Codable, Identifiable {
         case .handrails: return "Handrails"
         case .accessibleDoorHardware: return "Accessible door hardware"
         case .accessibilitySignage: return "Accessibility signage"
+        case .stepFreeEntry: return "Step-free entry"
         }
     }
 }

@@ -3405,7 +3405,7 @@ function distLabel(p){
   return ft<1000 ? Math.max(50,Math.round(ft/50)*50)+' ft' : (ft/5280).toFixed(1)+' mi';
 }
 
-const EST_KEYMAP = {accessibility_signage:'signage', accessible_door_hardware:'hardware', handrails:'handrails', ramp_or_bevel:'ramp'};
+const EST_KEYMAP = {accessibility_signage:'signage', accessible_door_hardware:'hardware', handrails:'handrails', ramp_or_bevel:'ramp', step_free_entry:'step_free'};
 const DOOR_KEYMAP = {step_free_entry:'step_free', ramp_present:'ramp', handrails_present:'handrails', auto_door_button:'button',
   lever_or_pull_hardware:'hardware', clear_approach:'approach', accessible_signage:'signage', door_width_adequate:'width'};
 /* ROUND 4: `ic` names the library feature icon for each entrance feature. It
@@ -6591,7 +6591,7 @@ function runProcessing(forceReduced){
 /* review chips (the staged one-photo honest partial) */
 const STAGED = [['step_free',86],['hardware',90],['approach',84]];
 /* the four real /screen criteria, in server order, mapped onto the chip vocabulary */
-const LIVE_CRITERIA = ['ramp_or_bevel','handrails','accessible_door_hardware','accessibility_signage'];
+const LIVE_CRITERIA = ['ramp_or_bevel','handrails','accessible_door_hardware','accessibility_signage','step_free_entry'];
 /* the detected chips -- shared by the processing screen (5.5-6.5 s populate) and the review */
 /* the detected chips -- shared by the processing screen (5.5-6.5 s populate) and the review.
    Three sources, kept apart on purpose: verdicts the server actually returned; the staged
@@ -6670,7 +6670,8 @@ renderReviewChips();
 
 /* /screen criteria keys -> the door-scan crit vocabulary featsOf() reads */
 const LIVE_TO_DOOR = {ramp_or_bevel:'ramp_present', handrails:'handrails_present',
-  accessible_door_hardware:'lever_or_pull_hardware', accessibility_signage:'accessible_signage'};
+  accessible_door_hardware:'lever_or_pull_hardware', accessibility_signage:'accessible_signage',
+  step_free_entry:'step_free_entry'};
 function critFromAssessment(a){
   const crit={};
   LIVE_CRITERIA.forEach(key=>{
