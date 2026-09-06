@@ -339,6 +339,36 @@ Failure posture is fail-open: an unreadable store is a miss, and an append that 
 and the assessment is still returned. Determinism degrades to what it was before the store
 existed; a request never fails because the store did.
 
+#### Owed: the demonstration against the real API
+
+`tests/test_assessment_store.py` pins every property above against an injected engine that
+answers *differently on every call*, so nothing there passes because a fake could only say one
+thing. What it cannot do is prove the guarantee against the live model, and #435 asks for exactly
+that. **There was no API credit when this shipped, and a mock is not a demonstration**, so this
+one criterion is open. To close it once credit is available, from a checkout with a working
+`ANTHROPIC_API_KEY`:
+
+```bash
+# 1. A fresh store, so the first request is unambiguously a miss.
+export FRONTDOOR_ASSESSMENTS=$(mktemp -d)/assessments.jsonl
+
+# 2. Submit ONE photograph twice against a running server.
+for i in 1 2; do
+  curl -s -F "images=@entrance.jpg;type=image/jpeg"     https://frontdoor-measure.fly.dev/screen > "live-$i.json"
+done
+
+# 3. The verdicts must be byte-identical, and the second must say where it came from.
+python -c "import json;a,b=[json.load(open(f'live-{i}.json'))['assessment'] for i in (1,2)];print('criteria identical:', a['criteria']==b['criteria']);print('ada identical:', json.load(open('live-1.json'))['ada_screening']==json.load(open('live-2.json'))['ada_screening']);print('first served_from_store:', a['served_from_store']);print('second served_from_store:', b['served_from_store']);print('assessed_at carried:', a['assessed_at']==b['assessed_at'])"
+
+# 4. And the store holds exactly one line for that photograph.
+wc -l "$FRONTDOOR_ASSESSMENTS"
+```
+
+Expected: `criteria identical: True`, `ada identical: True`, `first served_from_store: False`,
+`second served_from_store: True`, `assessed_at carried: True`, one line. Two runs against the
+UNPATCHED server are the control — #395 measured them differing. Record the result here and
+close #435's first checkbox; the spend is one assessment, not two.
+
 ### The map dataset
 
 `GET /map/data` reads the pre-catalogue dataset from the path in the **`FRONTDOOR_MAP_DATASET`**
