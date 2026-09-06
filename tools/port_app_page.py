@@ -350,9 +350,13 @@ def apply_op(text: str, op: Op, fragments: dict[str, str]) -> tuple[str, int]:
     if op.kind == "replace_region":
         assert op.until is not None
         _require_once(text, op.until, op, "until")
-        end = text.index(op.until, start)
-        if end < start:
-            raise PortError(f"op {op.name!r}: 'until' appears before 'anchor'")
+        try:
+            end = text.index(op.until, start)
+        except ValueError:
+            raise PortError(
+                f"op {op.name!r}: 'until' appears before 'anchor', so there is no region "
+                f"to replace. The design source reordered these two sections."
+            ) from None
         return text[:start] + body + text[end:], end - start
     raise PortError(f"op {op.name!r}: unknown kind {op.kind!r}")
 
