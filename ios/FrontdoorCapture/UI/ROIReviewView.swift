@@ -189,12 +189,37 @@ struct ROIReviewView: View {
 
     private var controls: some View {
         HStack {
-            Button("Discard", role: .destructive, action: onDiscard)
-                .buttonStyle(EntryMapButtonStyle(role: .quiet))
+            // Not the quiet role: its label is subduedInk, which is 1.78:1 on this chrome and
+            // cannot be read. On a dark ground the light half of the palette does the work.
+            //
+            // Discard also keeps a mark of its own. `role: .destructive` buys nothing under a
+            // custom ButtonStyle, and Discard sitting next to Undo in identical chrome is how an
+            // operator throws away six placements while reaching to correct one.
+            Button(role: .destructive, action: onDiscard) {
+                HStack(spacing: EntryMapLayout.space2) {
+                    EntryMapIconView(icon: .close, size: 16, tint: EntryMapPalette.marigold400)
+                    Text("Discard")
+                        .entryMapText(EntryMapTypography.subheading)
+                        .foregroundStyle(EntryMapPalette.marigold400)
+                }
+                .frame(minHeight: EntryMapLayout.touchTargetMinimum)
+                .padding(.horizontal, EntryMapLayout.space3)
+            }
+            .buttonStyle(.plain)
             Spacer()
-            Button("Undo") { undo() }
-                .buttonStyle(EntryMapButtonStyle(role: .quiet))
-                .disabled(marks.isEmpty)
+            Button {
+                undo()
+            } label: {
+                Text("Undo")
+                    .entryMapText(EntryMapTypography.subheading)
+                    .foregroundStyle(marks.isEmpty
+                                     ? EntryMapPalette.onDarkGround.opacity(0.4)
+                                     : EntryMapPalette.onDarkGround)
+                    .frame(minHeight: EntryMapLayout.touchTargetMinimum)
+                    .padding(.horizontal, EntryMapLayout.space3)
+            }
+            .buttonStyle(.plain)
+            .disabled(marks.isEmpty)
             Spacer()
             Button("Use frame") {
                 if case .success(let taps) = ROIValidation.taps(from: marks) { onConfirm(taps) }

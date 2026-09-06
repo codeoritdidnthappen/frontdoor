@@ -145,9 +145,10 @@ struct ScreeningChecksView: View {
         }
     }
 
-    /// An unrecognised verdict is styled as invalid rather than given a plausible colour, so a
-    /// value nobody has seen before cannot read as a finding.
     /// The verdict is carried by an icon and the word, never by a colour.
+    ///
+    /// An unrecognised verdict still gets the treatment it always had: marked as something the
+    /// build does not understand, so a value nobody has seen before cannot read as a finding.
     ///
     /// The approved palette holds no red and no green, and that is not an omission: the map's own
     /// rule is that colour never delivers a verdict about a business (`map_states`). The same rule

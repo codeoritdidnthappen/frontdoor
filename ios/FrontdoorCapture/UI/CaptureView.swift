@@ -216,17 +216,17 @@ struct CaptureView: View {
                 HStack(spacing: EntryMapLayout.space2) {
                     Text(subject.entrance.id)
                         .entryMapText(EntryMapTypography.overline)
-                    Text("·")
+                    Text("·").entryMapText(EntryMapTypography.caption)
                     // How many photos this doorway has, including the extra angles and
                     // deviations the protocol allows. Which of the named views are covered is the
                     // separate question the coaching bar below answers (#289); the app enforces
                     // neither (D-021 moved to capture-protocol.md in the 2026-09-01 pivot).
                     Text("^[\(controller.capturesForSubject) photo](inflect: true)")
                         .entryMapText(EntryMapTypography.captionNumeric)
-                    Text("·")
+                    Text("·").entryMapText(EntryMapTypography.caption)
                     Text(String(format: "%.1f m", subject.conditions.distanceM))
                         .entryMapText(EntryMapTypography.captionNumeric)
-                    Text("·")
+                    Text("·").entryMapText(EntryMapTypography.caption)
                     Text(subject.conditions.lighting.label)
                         .entryMapText(EntryMapTypography.caption)
                     EntryMapIconView(icon: .correction, size: 14, tint: EntryMapPalette.white)
