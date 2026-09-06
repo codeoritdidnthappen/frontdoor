@@ -32,65 +32,73 @@ struct HomeView: View {
         // watched the row vanish with nothing said. AC6 is about not leaving a site unsure.
         if pending > 0 || pendingLabels > 0 || controller.lastDrainMessage != nil
             || controller.lastLabelDrainMessage != nil || controller.labelQueueError != nil {
-            VStack(spacing: 6) {
+            VStack(spacing: EntryMapLayout.space2) {
                 if pending > 0 {
                     Text("^[\(pending) capture](inflect: true) on this phone only")
-                        .font(.subheadline.weight(.medium))
+                        .entryMapText(EntryMapTypography.subheadingNumeric)
+                        .foregroundStyle(EntryMapPalette.ink)
                     Button(controller.isDraining ? "Uploading…" : "Upload now") {
                         Task { await controller.drainQueue() }
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(EntryMapButtonStyle(role: .secondary))
                     .disabled(controller.isDraining)
                 }
                 if pendingLabels > 0 {
                     Text("^[\(pendingLabels) label record](inflect: true) waiting to upload")
-                        .font(.subheadline.weight(.medium))
+                        .entryMapText(EntryMapTypography.subheadingNumeric)
+                        .foregroundStyle(EntryMapPalette.ink)
                     Button("Upload labels now") {
                         Task { await controller.drainLabelQueue() }
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(EntryMapButtonStyle(role: .secondary))
                     ForEach(controller.queuedLabelIds, id: \.self) { entranceId in
                         Button("Edit labels for \(entranceId)") { onEditLabel(entranceId) }
-                            .buttonStyle(.borderless)
+                            .buttonStyle(EntryMapButtonStyle(role: .quiet))
                     }
                 }
                 if let queueError = controller.labelQueueError {
                     Text(queueError)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
+                        .entryMapText(EntryMapTypography.callout)
+                        .foregroundStyle(EntryMapPalette.onMarigold)
                         .multilineTextAlignment(.center)
+                        .padding(EntryMapLayout.space3)
+                        .frame(maxWidth: .infinity)
+                        .background(EntryMapPalette.marigold400,
+                                    in: RoundedRectangle(cornerRadius: EntryMapLayout.radiusSmall))
+                        .padding(.horizontal, EntryMapLayout.space5)
                 }
                 if let outcome = controller.lastDrainMessage {
                     Text(outcome)
-                        .font(.footnote)
+                        .entryMapText(EntryMapTypography.callout)
                         .multilineTextAlignment(.center)
-                        .foregroundStyle(pending > 0 ? .secondary : .primary)
-                        .padding(.horizontal, 24)
+                        .foregroundStyle(pending > 0
+                                         ? EntryMapPalette.subduedInk : EntryMapPalette.ink)
+                        .padding(.horizontal, EntryMapLayout.space5)
                 }
                 if let outcome = controller.lastLabelDrainMessage {
                     Text(outcome)
-                        .font(.footnote)
+                        .entryMapText(EntryMapTypography.callout)
                         .multilineTextAlignment(.center)
-                        .foregroundStyle(.secondary)
-                        .padding(.horizontal, 24)
+                        .foregroundStyle(EntryMapPalette.subduedInk)
+                        .padding(.horizontal, EntryMapLayout.space5)
                 }
             }
-            .padding(.top, 4)
+            .padding(.top, EntryMapLayout.space1)
         }
     }
 
     var body: some View {
-        VStack(spacing: 28) {
+        VStack(spacing: EntryMapLayout.space6) {
             Spacer()
 
-            VStack(spacing: 8) {
-                Image(systemName: "ruler")
-                    .font(.system(size: 44, weight: .light))
-                Text("Frontdoor")
-                    .font(.largeTitle.weight(.semibold))
+            VStack(spacing: EntryMapLayout.space2) {
+                EntryMapBrandMark(size: 88, cornerRadius: EntryMapLayout.radiusLarge)
+                Text("EntryMap")
+                    .entryMapText(EntryMapTypography.display)
+                    .foregroundStyle(EntryMapPalette.ink)
                 Text("Storefront entrance capture")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+                    .entryMapText(EntryMapTypography.callout)
+                    .foregroundStyle(EntryMapPalette.subduedInk)
             }
 
             VStack(spacing: 0) {
@@ -100,28 +108,31 @@ struct HomeView: View {
                         && controller.readiness.cameraAuthorization != .restricted,
                     detail: cameraDetail
                 )
-                Divider().padding(.leading, 48)
+                EntryMapPalette.edge.frame(height: 1).padding(.leading, EntryMapLayout.space7)
                 statusRow(
                     "Device motion",
                     ok: controller.readiness.motionAvailable,
                     detail: controller.readiness.motionAvailable ? "Available" : "Unavailable"
                 )
             }
-            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 12))
-            .padding(.horizontal, 24)
+            .background(EntryMapPalette.card,
+                        in: RoundedRectangle(cornerRadius: EntryMapLayout.radiusMedium))
+            .overlay(RoundedRectangle(cornerRadius: EntryMapLayout.radiusMedium)
+                .stroke(EntryMapPalette.edge, lineWidth: 1))
+            .padding(.horizontal, EntryMapLayout.space5)
 
             if let blocked = controller.readiness.blockingReason {
-                VStack(spacing: 12) {
+                VStack(spacing: EntryMapLayout.space3) {
                     Text(blocked.message)
-                        .font(.footnote)
+                        .entryMapText(EntryMapTypography.callout)
                         .multilineTextAlignment(.center)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(EntryMapPalette.subduedInk)
                     if blocked == .cameraDenied {
                         Button("Open Settings", action: controller.openSystemSettings)
-                            .buttonStyle(.bordered)
+                            .buttonStyle(EntryMapButtonStyle(role: .secondary))
                     }
                 }
-                .padding(.horizontal, 32)
+                .padding(.horizontal, EntryMapLayout.space6)
             }
 
             Spacer()
@@ -134,41 +145,42 @@ struct HomeView: View {
                 Text("Metrology").tag(CaptureMode.metrology)
             }
             .pickerStyle(.segmented)
-            .padding(.horizontal, 24)
+            .padding(.horizontal, EntryMapLayout.space5)
 
             Text(controller.captureMode == .screening
                  ? "Plain photos: entrance ID and condition tags. No caliper, no card, no taps."
                  : "Caliper reading, reference card and ROI taps are required for every capture.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .entryMapText(EntryMapTypography.caption)
+                .foregroundStyle(EntryMapPalette.subduedInk)
                 .multilineTextAlignment(.center)
-                .padding(.horizontal, 32)
+                .padding(.horizontal, EntryMapLayout.space6)
 
+            // The scan action, and the only place the marigold role is used (#367).
             Button(action: onStart) {
                 Text("Start capture")
-                    .font(.headline)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 16)
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(EntryMapButtonStyle(
+                role: .scan,
+                isUnavailable: controller.readiness.blockingReason != nil,
+                unavailableExplanation: controller.readiness.blockingReason?.message))
             .disabled(controller.readiness.blockingReason != nil)
-            .padding(.horizontal, 24)
+            .padding(.horizontal, EntryMapLayout.space5)
 
             Button("How scanning works") { onPrimer() }
-                .font(.footnote)
+                .buttonStyle(EntryMapButtonStyle(role: .quiet))
 
             Button("Import photos already on this phone") { onImport() }
-                .font(.footnote)
+                .buttonStyle(EntryMapButtonStyle(role: .quiet))
 
             Button("Run capability probe") { onDiagnostics() }
-                .font(.footnote)
+                .buttonStyle(EntryMapButtonStyle(role: .quiet))
 
             Text("\(controller.photosTaken) captured this session")
-                .font(.footnote.monospacedDigit())
-                .foregroundStyle(.secondary)
+                .entryMapText(EntryMapTypography.captionNumeric)
+                .foregroundStyle(EntryMapPalette.subduedInk)
 
             pendingRow
-                .padding(.bottom, 12)
+                .padding(.bottom, EntryMapLayout.space3)
         }
     }
 
@@ -183,16 +195,21 @@ struct HomeView: View {
     }
 
     private func statusRow(_ title: String, ok: Bool, detail: String) -> some View {
-        HStack(spacing: 12) {
-            Image(systemName: ok ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                .foregroundStyle(ok ? .green : .orange)
+        HStack(spacing: EntryMapLayout.space3) {
+            // No green and no red: the approved palette contains neither, and the map's own rule
+            // is that colour never carries a verdict. Readiness is an icon plus its words.
+            EntryMapIconView(icon: ok ? .checkOutline : .info, size: 22,
+                             tint: ok ? EntryMapPalette.ink : EntryMapPalette.freshness)
             Text(title)
+                .entryMapText(EntryMapTypography.body)
+                .foregroundStyle(EntryMapPalette.ink)
             Spacer()
             Text(detail)
-                .foregroundStyle(.secondary)
+                .entryMapText(EntryMapTypography.callout)
+                .foregroundStyle(EntryMapPalette.subduedInk)
         }
-        .font(.callout)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
+        .padding(.horizontal, EntryMapLayout.space4)
+        .padding(.vertical, EntryMapLayout.space3)
+        .frame(minHeight: EntryMapLayout.touchTargetMinimum)
     }
 }

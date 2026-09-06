@@ -16,29 +16,33 @@ struct DiagnosticsView: View {
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: EntryMapLayout.space4) {
                     Text(
                         "Answers whether AVFoundation delivers camera calibration data and depth "
                             + "alongside a full-resolution still from the 1x lens (ASM-2, R-9). "
                             + "Run this on a real device; a simulator has no camera and proves nothing."
                     )
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .entryMapText(EntryMapTypography.caption)
+                    .foregroundStyle(EntryMapPalette.subduedInk)
 
                     if let report {
                         Text(report.plainText)
-                            .font(.system(.footnote, design: .monospaced))
+                            .entryMapText(EntryMapTypography.captionNumeric)
+                            .foregroundStyle(EntryMapPalette.ink)
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(12)
-                            .background(.quaternary.opacity(0.4), in: RoundedRectangle(cornerRadius: 10))
+                            .padding(EntryMapLayout.space3)
+                            .background(EntryMapPalette.card,
+                                        in: RoundedRectangle(
+                                            cornerRadius: EntryMapLayout.radiusSmall))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: EntryMapLayout.radiusSmall)
+                                    .stroke(EntryMapPalette.edge))
 
-                        Button {
+                        Button("Copy result") {
                             UIPasteboard.general.string = report.plainText
-                        } label: {
-                            Label("Copy result", systemImage: "doc.on.doc")
                         }
-                        .buttonStyle(.bordered)
+                        .buttonStyle(EntryMapButtonStyle(role: .secondary))
                     }
 
                     Button {
@@ -58,11 +62,12 @@ struct DiagnosticsView: View {
                                 .frame(maxWidth: .infinity)
                         }
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(EntryMapButtonStyle(role: .primary))
                     .disabled(running)
                 }
-                .padding(20)
+                .padding(EntryMapLayout.space5)
             }
+            .background(EntryMapPalette.ground)
             .navigationTitle("Capability probe")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

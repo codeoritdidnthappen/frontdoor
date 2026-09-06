@@ -24,12 +24,13 @@ struct ScreeningReviewView: View {
                 .resizable()
                 .scaledToFit()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(.black)
+                .background(EntryMapPalette.darkGround)
                 .accessibilityLabel("The photo just taken of entrance \(entranceId)")
 
-            VStack(spacing: 12) {
+            VStack(spacing: EntryMapLayout.space3) {
                 Text("Publish this photo of \(entranceId)?")
-                    .font(.headline)
+                    .entryMapText(EntryMapTypography.heading)
+                    .foregroundStyle(EntryMapPalette.ink)
                 // Says what publishing MEANS, rather than assuming the operator infers it. The
                 // honesty rule the screening wording follows applies to the consent question too.
                 // Says what the operator is looking at, now that it is the published image and
@@ -38,25 +39,25 @@ struct ScreeningReviewView: View {
                 Text("This is the photo that will be published: faces blurred, location removed. "
                      + "It will be uploaded and screened. Discarding keeps nothing — the photo is "
                      + "not saved and nothing is counted. After publish it cannot be deleted from this phone.")
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    .entryMapText(EntryMapTypography.callout)
+                    .foregroundStyle(EntryMapPalette.subduedInk)
                     .multilineTextAlignment(.center)
 
-                HStack(spacing: 12) {
+                HStack(spacing: EntryMapLayout.space3) {
                     Button(role: .destructive, action: onDiscard) {
-                        Text("Discard").frame(maxWidth: .infinity).padding(.vertical, 6)
+                        Text("Discard").frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.bordered)
+                    .buttonStyle(EntryMapButtonStyle(role: .secondary))
 
                     Button(action: onPublish) {
-                        Text("Publish").frame(maxWidth: .infinity).padding(.vertical, 6)
+                        Text("Publish").frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(EntryMapButtonStyle(role: .primary))
                 }
             }
-            .padding()
+            .padding(EntryMapLayout.space4)
             .frame(maxWidth: .infinity)
-            .background(.regularMaterial)
+            .background(EntryMapPalette.card)
         }
     }
 }

@@ -33,7 +33,8 @@ struct ImportPhotosView: View {
                     TextField("E-014", text: $entranceId)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
-                        .font(.body.monospaced())
+                        .entryMapText(EntryMapTypography.bodyNumeric)
+                        .foregroundStyle(EntryMapPalette.ink)
                 }
 
                 Section {
@@ -51,19 +52,40 @@ struct ImportPhotosView: View {
                 Section {
                     PhotosPicker(selection: $picked, matching: .images,
                                  photoLibrary: .shared()) {
-                        Label(picked.isEmpty ? "Choose photos"
-                                             : "^[\(picked.count) photo](inflect: true) chosen",
-                              systemImage: "photo.on.rectangle")
+                        HStack(spacing: EntryMapLayout.space3) {
+                            EntryMapIconView(icon: .photo, size: 22,
+                                             tint: EntryMapPalette.violet600)
+                            Text(picked.isEmpty
+                                 ? "Choose photos"
+                                 : "^[\(picked.count) photo](inflect: true) chosen")
+                                .entryMapText(EntryMapTypography.body)
+                                .foregroundStyle(EntryMapPalette.ink)
+                        }
+                        .frame(minHeight: EntryMapLayout.touchTargetMinimum)
                     }
                 }
 
                 if let rejection {
-                    Section { Text(rejection).foregroundStyle(.orange).font(.footnote) }
+                    Section {
+                        HStack(alignment: .top, spacing: EntryMapLayout.space2) {
+                            EntryMapIconView(icon: .info, size: 20,
+                                             tint: EntryMapPalette.freshness)
+                            Text(rejection)
+                                .entryMapText(EntryMapTypography.caption)
+                                .foregroundStyle(EntryMapPalette.ink)
+                        }
+                    }
                 }
                 if let report {
-                    Section { Text(report).font(.footnote) }
+                    Section {
+                        Text(report)
+                            .entryMapText(EntryMapTypography.caption)
+                            .foregroundStyle(EntryMapPalette.ink)
+                    }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(EntryMapPalette.ground)
             .navigationTitle("Import photos")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

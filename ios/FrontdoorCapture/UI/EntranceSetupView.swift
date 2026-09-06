@@ -40,24 +40,29 @@ struct EntranceSetupView: View {
                     TextField("E-014", text: $entranceId)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
-                        .font(.body.monospaced())
+                        .entryMapText(EntryMapTypography.bodyNumeric)
+                        .foregroundStyle(EntryMapPalette.ink)
                     if let known, let rise = known.riseInches, let tool = known.instrument {
                         LabeledContent("Rise") {
-                            Text(String(format: "%.2f in", rise)).monospacedDigit()
+                            Text(String(format: "%.2f in", rise))
+                                .entryMapText(EntryMapTypography.bodyNumeric)
+                                .foregroundStyle(EntryMapPalette.ink)
                         }
                         LabeledContent("Instrument", value: tool)
                         Text("Already recorded. Its reading and split are reused unchanged.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .entryMapText(EntryMapTypography.caption)
+                            .foregroundStyle(EntryMapPalette.subduedInk)
                     } else if known != nil, !mode.carriesMetrologyTruth {
                         Text("Already recorded. Its split is reused unchanged.")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            .entryMapText(EntryMapTypography.caption)
+                            .foregroundStyle(EntryMapPalette.subduedInk)
                     } else if mode.carriesMetrologyTruth {
                         HStack {
                             TextField("Caliper rise", text: $rise)
                                 .keyboardType(.decimalPad)
-                            Text("in").foregroundStyle(.secondary)
+                            Text("in")
+                                .entryMapText(EntryMapTypography.body)
+                                .foregroundStyle(EntryMapPalette.subduedInk)
                         }
                         TextField("Instrument", text: $instrument)
                         if known != nil {
@@ -68,8 +73,8 @@ struct EntranceSetupView: View {
                             // because `resolve` never overwrites an existing entry (D-034).
                             Text("Recorded from a screening capture, so it has no reading yet. "
                                  + "Enter one to capture it in metrology mode.")
-                                .font(.footnote)
-                                .foregroundStyle(.secondary)
+                                .entryMapText(EntryMapTypography.caption)
+                                .foregroundStyle(EntryMapPalette.subduedInk)
                         }
                     }
                 }
@@ -91,12 +96,20 @@ struct EntranceSetupView: View {
 
                 if let rejection {
                     Section {
-                        Text(rejection.message)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
+                        // No red: the palette has none. Amber is the design system's
+                        // "needs another look", and the words carry the rest.
+                        HStack(alignment: .top, spacing: EntryMapLayout.space2) {
+                            EntryMapIconView(icon: .info, size: 20,
+                                             tint: EntryMapPalette.freshness)
+                            Text(rejection.message)
+                                .entryMapText(EntryMapTypography.caption)
+                                .foregroundStyle(EntryMapPalette.ink)
+                        }
                     }
                 }
             }
+            .scrollContentBackground(.hidden)
+            .background(EntryMapPalette.ground)
             .navigationTitle("Capture")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

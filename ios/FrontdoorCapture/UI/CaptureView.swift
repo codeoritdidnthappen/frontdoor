@@ -15,13 +15,13 @@ struct CaptureView: View {
 
     var body: some View {
         ZStack {
-            Color.black.ignoresSafeArea()
+            EntryMapPalette.darkGround.ignoresSafeArea()
 
             switch controller.state {
             case .stopped, .starting:
                 ProgressView("Starting the camera")
-                    .tint(.white)
-                    .foregroundStyle(.white)
+                    .tint(EntryMapPalette.white)
+                    .foregroundStyle(EntryMapPalette.white)
             case .unavailable(let reason):
                 unavailable(reason)
             case .running:
@@ -45,24 +45,26 @@ struct CaptureView: View {
     }
 
     private func unavailable(_ reason: CaptureUnavailable) -> some View {
-        VStack(spacing: 16) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.largeTitle)
-            Text("Cannot capture").font(.headline)
+        VStack(spacing: EntryMapLayout.space4) {
+            EntryMapIconView(icon: .info, size: 40, tint: EntryMapPalette.marigold400)
+            Text("Cannot capture")
+                .entryMapText(EntryMapTypography.heading)
+                .foregroundStyle(EntryMapPalette.white)
             Text(reason.message)
-                .font(.callout)
+                .entryMapText(EntryMapTypography.body)
+                .foregroundStyle(EntryMapPalette.white)
                 .multilineTextAlignment(.center)
-            HStack(spacing: 12) {
+            HStack(spacing: EntryMapLayout.space3) {
                 if reason == .cameraDenied {
                     Button("Open Settings", action: controller.openSystemSettings)
-                        .buttonStyle(.bordered)
+                        .buttonStyle(EntryMapButtonStyle(role: .secondary))
                 }
-                Button("Back", action: close).buttonStyle(.borderedProminent)
+                Button("Back", action: close)
+                    .buttonStyle(EntryMapButtonStyle(role: .primary))
             }
-            .padding(.top, 8)
+            .padding(.top, EntryMapLayout.space2)
         }
-        .foregroundStyle(.white)
-        .padding(32)
+        .padding(EntryMapLayout.space6)
     }
 
     private var viewfinder: some View {
@@ -76,31 +78,33 @@ struct CaptureView: View {
 
             VStack(spacing: 0) {
                 if controller.isMeasuring {
-                    Label("Measuring…", systemImage: "ruler")
-                        .font(.footnote)
-                        .padding(8)
-                        .background(.black.opacity(0.55), in: Capsule())
-                        .foregroundStyle(.white)
+                    Text("Measuring…")
+                        .entryMapText(EntryMapTypography.caption)
+                        .padding(EntryMapLayout.space2)
+                        .background(Self.scrim, in: Capsule())
+                        .foregroundStyle(EntryMapPalette.white)
                 }
                 if let problem = controller.measurementError {
                     // The capture is on disk and queued before a measurement is attempted, so
                     // this says what failed without implying anything was lost (AC4).
                     Text(problem)
-                        .font(.footnote)
+                        .entryMapText(EntryMapTypography.caption)
                         .multilineTextAlignment(.center)
-                        .padding(10)
-                        .background(.orange, in: RoundedRectangle(cornerRadius: 10))
-                        .foregroundStyle(.black)
-                        .padding(.horizontal, 16)
+                        .padding(EntryMapLayout.space3)
+                        .background(EntryMapPalette.marigold400,
+                                    in: RoundedRectangle(
+                                        cornerRadius: EntryMapLayout.radiusSmall))
+                        .foregroundStyle(EntryMapPalette.onMarigold)
+                        .padding(.horizontal, EntryMapLayout.space4)
                 }
                 if let failure = controller.lastCaptureError {
                     Text(failure)
-                        .font(.footnote)
-                        .foregroundStyle(.white)
+                        .entryMapText(EntryMapTypography.caption)
+                        .foregroundStyle(EntryMapPalette.onMarigold)
                         .multilineTextAlignment(.center)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 10)
-                        .background(.orange.opacity(0.85))
+                        .padding(.vertical, EntryMapLayout.space3)
+                        .background(EntryMapPalette.marigold400)
                 }
                 controls
             }
@@ -108,7 +112,7 @@ struct CaptureView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .overlay(alignment: .topLeading) { closeButton }
         .overlay(alignment: .top) {
-            VStack(spacing: 6) {
+            VStack(spacing: EntryMapLayout.space2) {
                 conditionsBar
                 coachingBar
             }
@@ -171,24 +175,27 @@ struct CaptureView: View {
                     }
                 }
             } label: {
-                VStack(spacing: 2) {
-                    HStack(spacing: 6) {
-                        Text(controller.viewSlot.label).fontWeight(.semibold)
-                        Image(systemName: "chevron.down").font(.caption2)
+                VStack(spacing: EntryMapLayout.space1) {
+                    HStack(spacing: EntryMapLayout.space2) {
+                        Text(controller.viewSlot.label)
+                            .entryMapText(EntryMapTypography.overline)
+                        EntryMapIconView(icon: .chevronRight, size: 12,
+                                         tint: EntryMapPalette.white)
+                            .rotationEffect(.degrees(90))
                     }
                     Text(controller.viewSlot.coaching)
-                        .font(.caption)
+                        .entryMapText(EntryMapTypography.caption)
                         .multilineTextAlignment(.center)
                     Text(controller.coverageForSubject.summary)
-                        .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.75))
+                        .entryMapText(EntryMapTypography.captionNumeric)
+                        .foregroundStyle(EntryMapPalette.onDarkGround)
                 }
-                .font(.footnote)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 8)
+                .foregroundStyle(EntryMapPalette.white)
+                .padding(.horizontal, EntryMapLayout.space4)
+                .padding(.vertical, EntryMapLayout.space2)
                 .frame(maxWidth: 320)
-                .background(.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 14))
+                .background(Self.scrim,
+                            in: RoundedRectangle(cornerRadius: EntryMapLayout.radiusMedium))
             }
             .accessibilityLabel(
                 "Next view: \(controller.viewSlot.label). \(controller.viewSlot.coaching) "
@@ -206,29 +213,30 @@ struct CaptureView: View {
     private var conditionsBar: some View {
         if let subject = controller.subject {
             Button { editingConditions = true } label: {
-                HStack(spacing: 6) {
-                    Text(subject.entrance.id).fontWeight(.semibold)
-                    Text("·")
+                HStack(spacing: EntryMapLayout.space2) {
+                    Text(subject.entrance.id)
+                        .entryMapText(EntryMapTypography.overline)
+                    Text("·").entryMapText(EntryMapTypography.caption)
                     // How many photos this doorway has, including the extra angles and
                     // deviations the protocol allows. Which of the named views are covered is the
                     // separate question the coaching bar below answers (#289); the app enforces
                     // neither (D-021 moved to capture-protocol.md in the 2026-09-01 pivot).
                     Text("^[\(controller.capturesForSubject) photo](inflect: true)")
-                        .monospacedDigit()
-                    Text("·")
+                        .entryMapText(EntryMapTypography.captionNumeric)
+                    Text("·").entryMapText(EntryMapTypography.caption)
                     Text(String(format: "%.1f m", subject.conditions.distanceM))
-                        .monospacedDigit()
-                    Text("·")
+                        .entryMapText(EntryMapTypography.captionNumeric)
+                    Text("·").entryMapText(EntryMapTypography.caption)
                     Text(subject.conditions.lighting.label)
-                    Image(systemName: "pencil").font(.caption2)
+                        .entryMapText(EntryMapTypography.caption)
+                    EntryMapIconView(icon: .correction, size: 14, tint: EntryMapPalette.white)
                 }
-                .font(.footnote)
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 8)
-                .background(.black.opacity(0.45), in: Capsule())
+                .foregroundStyle(EntryMapPalette.white)
+                .padding(.horizontal, EntryMapLayout.space3)
+                .padding(.vertical, EntryMapLayout.space2)
+                .background(Self.scrim, in: Capsule())
             }
-            .padding(.top, 8)
+            .padding(.top, EntryMapLayout.space2)
             .accessibilityLabel(
                 "Conditions: \(subject.entrance.id), "
                 + "\(controller.capturesForSubject) photos so far, "
@@ -239,20 +247,18 @@ struct CaptureView: View {
 
     private var closeButton: some View {
         Button(action: close) {
-            Label("Close", systemImage: "xmark")
-                .labelStyle(.iconOnly)
-                .font(.headline)
-                .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .background(.black.opacity(0.45), in: Circle())
+            EntryMapIconView(icon: .close, size: 20, tint: EntryMapPalette.white)
+                .frame(width: EntryMapLayout.touchTargetMinimum,
+                       height: EntryMapLayout.touchTargetMinimum)
+                .background(Self.scrim, in: Circle())
         }
         .accessibilityLabel("Close camera")
-        .padding(.leading, 20)
-        .padding(.top, 12)
+        .padding(.leading, EntryMapLayout.space5)
+        .padding(.top, EntryMapLayout.space3)
     }
 
     private var controls: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: EntryMapLayout.space3) {
             HStack(alignment: .center) {
                 // Last still, held in memory. Proof that a capture actually produced an image
                 // rather than only incrementing a counter.
@@ -262,11 +268,15 @@ struct CaptureView: View {
                             .resizable()
                             .scaledToFill()
                             .frame(width: 52, height: 52)
-                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.6)))
+                            .clipShape(RoundedRectangle(
+                                cornerRadius: EntryMapLayout.radiusSmall))
+                            .overlay(RoundedRectangle(
+                                cornerRadius: EntryMapLayout.radiusSmall)
+                                .stroke(EntryMapPalette.white.opacity(0.6)))
                     } else {
-                        RoundedRectangle(cornerRadius: 8)
-                            .stroke(.white.opacity(0.3), style: StrokeStyle(lineWidth: 1, dash: [4]))
+                        RoundedRectangle(cornerRadius: EntryMapLayout.radiusSmall)
+                            .stroke(EntryMapPalette.white.opacity(0.3),
+                                    style: StrokeStyle(lineWidth: 1, dash: [4]))
                             .frame(width: 52, height: 52)
                     }
                 }
@@ -274,20 +284,19 @@ struct CaptureView: View {
 
                 Button(action: controller.capturePhoto) {
                     Circle()
-                        .strokeBorder(.white, lineWidth: 4)
+                        .strokeBorder(EntryMapPalette.white, lineWidth: 4)
                         .frame(width: 74, height: 74)
-                        .background(Circle().fill(.white.opacity(0.25)))
+                        .background(Circle().fill(EntryMapPalette.white.opacity(0.25)))
                 }
                 .accessibilityLabel("Take photo")
 
-                VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .trailing, spacing: EntryMapLayout.space1) {
                     Text("\(controller.photosTaken)")
-                        .font(.title3.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(.white)
+                        .entryMapText(EntryMapTypography.subheadingNumeric)
+                        .foregroundStyle(EntryMapPalette.white)
                     if controller.lastCaptureError != nil {
-                        Image(systemName: "exclamationmark.triangle.fill")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
+                        EntryMapIconView(icon: .info, size: 16,
+                                         tint: EntryMapPalette.marigold400)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .trailing)
@@ -303,7 +312,7 @@ struct CaptureView: View {
                         onFinish(destination)
                     }
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(EntryMapButtonStyle(role: .primary))
                 .disabled(!CaptureFinishDecision.isEnabled(
                     mode: controller.captureMode, coverage: controller.coverageForSubject))
                 .accessibilityHint(
@@ -312,11 +321,16 @@ struct CaptureView: View {
                         : "Available after all six named views are captured.")
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 16)
-        .padding(.bottom, 28)
-        .background(.black.opacity(0.45))
+        .padding(.horizontal, EntryMapLayout.space5)
+        .padding(.top, EntryMapLayout.space4)
+        .padding(.bottom, EntryMapLayout.space6)
+        .background(Self.scrim)
     }
+
+    /// The viewfinder's scrim. `darkGround` rather than a new colour: the overlays sit on live
+    /// video, so they need a ground of their own, and the palette's deep indigo is the one the
+    /// design system already gives for type on a dark field.
+    private static let scrim = EntryMapPalette.darkGround.opacity(0.55)
 
     private func close() {
         controller.stop()
