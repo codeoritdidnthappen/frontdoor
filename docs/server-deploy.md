@@ -41,20 +41,64 @@ limitations below explain what must be copied before a replacement or redeploy.
 assessed, and whether its photograph will be stored.
 
 ```json
-{"ready": false, "subsystems": {"screening": true, "photo_storage": false, "map_dataset": true},
- "degraded": ["photo_storage"]}
+{"ready": false, "subsystems": {"screening": true, "photo_storage": false, "map_dataset": true,
+ "scan_store": true}, "degraded": ["photo_storage"]}
 ```
 
 `photo_storage` is the one that matters most, because its failure is invisible. Without those
 credentials the endpoint still answers, the assessment still succeeds, and the image simply does
 not persist. That is how `FRONTDOOR_UPLOAD_KEY` went missing for days: nothing was broken enough
-to notice. The deploy workflow now reads this endpoint and raises a warning when photo storage is
-degraded, and fails the run outright when the model key is absent, since nothing works at all
-without it.
+to notice. The deploy workflow reads this endpoint and warns on each degraded subsystem, and fails
+the run outright when the model key is absent, since nothing works at all without it.
 
-It reports presence, never values, and never names the missing variable: a status is enough for
-an operator and useless to anyone else. To find out which credential is missing, look at the
-secrets on the host.
+Each subsystem is **verified, not assumed**, and each one is the notch past the incident it came
+from (#353, #370):
+
+| subsystem | what it proves | why the weaker check was not enough |
+| --- | --- | --- |
+| `screening` | either `ANTHROPIC_API_KEY` or `ANTHROPIC_AUTH_TOKEN` is set | the engine accepts either, so checking one called a working deployment broken. Still presence-only: the cheapest way to verify a model key is a billed model call, on every probe |
+| `photo_storage` | one bounded `GetObject` on a key that need not exist | the variables being set says nothing about a revoked key or a deleted bucket, which are symptomatically identical to the missing credential this endpoint was written for. Two `HEAD`-based probes could not tell those apart at all — see below |
+| `map_dataset` | the file parses **and** `prepare_map_payload` gets at least one pin out of it | a present-but-unparseable file passed a `stat()`; a dict of rows with no usable coordinates passed "non-empty". Both serve an empty map |
+| `scan_store` | the store is readable **and** no record in it was skipped | the parent directory catches the unmounted volume and stops there. A line that will not parse is a contributor's scan off the map for good, and reads keep succeeding, so nothing else notices |
+
+**Why the storage probe is a `GET` and not a `HEAD`.** A `HEAD` response carries no body (RFC
+9110), so the client has no error code to parse and reports `404` for a missing *bucket* and a
+missing *key* alike. Two probes were written on `HEAD` and both passed a deleted bucket: the first
+filtered on the parsed code, which is inert because the code is synthesised from the status; the
+second read the status and which call produced it, which cannot work either, because this project's
+images token is scoped per bucket at the object level (D-020, D-026, D-033) and an object-scoped
+identity is refused bucket-level calls — so `HeadBucket` answers 403 whatever became of the bucket,
+never the 404 that branch waited for. Its `HeadBucket == 200` short-circuit also passed a credential
+that can see the bucket and read nothing in it, which is a green light over photographs that never
+persist.
+
+A `GET` error *does* carry a body, so the provider's own code survives: `NoSuchKey` (healthy, the
+probe key is simply absent) is distinguishable from `NoSuchBucket`, from `AccessDenied`, and from an
+expired or revoked credential. One call, and it exercises the object read the app actually depends
+on. Nothing is written: proving the volume is *writable* would mean writing to the only state this
+app keeps.
+
+Two known limits, neither of them silent. A bare `404` carrying no code is **not** accepted — R2,
+S3 and MinIO all send `<Error><Code>` on a GET, so a 404 without one came from something that
+stripped it and cannot say whether the key or the bucket is missing; the probe reports degraded and
+logs what it saw. And on AWS S3 specifically, an identity without `s3:ListBucket` is answered `403
+AccessDenied` rather than `404 NoSuchKey` for a key that is not there, which this probe reads as
+degraded; that is the conservative direction, and it is not this deployment — the R2 images token is
+Object Read & Write.
+
+It reports presence and status, never values, and never names the missing variable: a status is
+enough for an operator and useless to anyone else. To find out which credential is missing, look at
+the secrets on the host, or at the server log — every degraded subsystem records its own reason
+there, where it is not public.
+
+Both on-disk checks answer from their last read while the file is unchanged. `/ready` is
+unauthenticated and the pre-catalogue is 200 KB, so re-parsing it and the whole scan store on every
+request would make a health probe into a lever. "Unchanged" means the same mtime, size, inode and
+inode-change time, for the file **and** its parent directory — so a published scan, a replaced
+dataset, a chmod, and a volume that came or went all invalidate the answer, and a restart clears it
+entirely. What it would not see is two writes of the same length to the same inode inside one
+filesystem timestamp tick. The storage probe is **not** cached: it is one bounded call, and an
+operator who has just fixed a credential needs the next answer, not the last one.
 
 ### Installing the app on a phone
 
