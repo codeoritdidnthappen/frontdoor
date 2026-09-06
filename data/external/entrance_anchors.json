@@ -190,6 +190,16 @@
       "osm_type": "way",
       "query": "504 Congress Ave, Austin, TX"
     },
+    "E-057": {
+      "address": "120 W 5th St",
+      "display_name": "120, West 5th Street, Downtown, Austin, Travis County, Texas, 78701, United States",
+      "entrance_id": "E-057",
+      "lat": 30.267503,
+      "lng": -97.743963,
+      "osm_id": 3849776301,
+      "osm_type": "node",
+      "query": "120 W 5th St, Austin, TX"
+    },
     "E-058": {
       "address": "415 Colorado St",
       "display_name": "415 Colorado, 415, Colorado Street, Downtown, Austin, Travis County, Texas, 78701, United States",
@@ -202,10 +212,10 @@
     }
   },
   "attribution": "Geocodes from OpenStreetMap via Nominatim (\u00a9 OpenStreetMap contributors), licensed under the Open Database License (ODbL) 1.0. https://www.openstreetmap.org/copyright",
-  "fetched_at": "2026-09-05T22:04:46Z",
+  "fetched_at": "2026-09-06T03:32:46Z",
   "license": "ODbL-1.0",
   "purpose": "Door positions for the entrance-to-place distance gate (#346). Derived from the street numbers recorded on foot or read off the transom in data/entrance_identification.json \u2014 never from a business name, which would make the gate circular.",
-  "record_count": 20,
+  "record_count": 21,
   "segregation": "ODbL-licensed data stored as a segregated side table per the ODbL Collective Database Guideline. Do not merge these records into any proprietary dataset.",
   "source": "openstreetmap_nominatim"
 }

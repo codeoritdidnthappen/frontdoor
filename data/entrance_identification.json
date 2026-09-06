@@ -1,5 +1,5 @@
 {
-  "_comment": "TICK-341 (#341). Which business each captured entrance belongs to, so #333 can key a scan record to a place. E-001..E-012 come from the on-foot door survey. E-013..E-064 were identified by reading the storefront signage in the privacy-processed captures with a vision model, then matching the read name against data/precatalogue_census.json and constraining it with the capture order along the route. No accessibility judgement was made or consulted, and the 18 sealed entrances were excluded before any model call. confidence 'high' means the name was read unambiguously or surveyed on foot; 'low' means it was read from a single partly redacted source or assembled from corroborating text. Anything that could not be pinned to one business is 'unidentified' with a reason: an unmatched entrance is a smaller failure than a scan record attached to the wrong storefront. TICK-346 (#346) added `place_match`: which catalogued place the door resolves to and how, or why it does not. A match needs a business name AND the map's own 40 m distance gate, measured from where the door is evidenced to be - the geocoded street number it read (data/external/entrance_anchors.json), or the stretch of street between the two anchored doors either side of it in the same day's walk. A name on its own is never a match, a candidate past the gate is refused rather than the gate widened, and anything ambiguous stays unmatched. A bracket is weaker evidence than a street number: the distance is measured to the whole stretch, so each match records the span it leaned on and a bracket wider than one downtown block (120 m) is refused as `bracket_too_wide` rather than allowed to stand in for a doorway. The identifications themselves are #341's and were not revisited.",
+  "_comment": "TICK-341 (#341). Which business each captured entrance belongs to, so #333 can key a scan record to a place. E-001..E-012 come from the on-foot door survey. E-013..E-064 were identified by reading the storefront signage in the privacy-processed captures with a vision model, then matching the read name against data/precatalogue_census.json and constraining it with the capture order along the route. No accessibility judgement was made or consulted, and the 18 sealed entrances were excluded before any model call. confidence 'high' means the name was read unambiguously or surveyed on foot; 'low' means it was read from a single partly redacted source or assembled from corroborating text. Anything that could not be pinned to one business is 'unidentified' with a reason: an unmatched entrance is a smaller failure than a scan record attached to the wrong storefront. TICK-346 (#346) added `place_match`: which catalogued place the door resolves to and how, or why it does not. A match needs a business name AND the map's own 40 m distance gate, measured from where the door is evidenced to be - the geocoded street number it read (data/external/entrance_anchors.json), or the stretch of street between the two anchored doors either side of it in the same day's walk. A name on its own is never a match, a candidate past the gate is refused rather than the gate widened, and anything ambiguous stays unmatched. A bracket is weaker evidence than a street number: the distance is measured to the whole stretch, so each match records the span it leaned on and a bracket wider than one downtown block (120 m) is refused as `bracket_too_wide` rather than allowed to stand in for a doorway. The identifications themselves are #341's and were not revisited. Re-read after #382 (TICK-341 follow-up): #350 found that the earlier privacy pass had pixelated the storefront lettering of nine unidentified doors, so once #382 landed those nine, the two whose only failure was an unreadable street number or name (E-035, E-057) and the eight identified doors with no street number (E-018, E-019, E-026, E-038, E-049, E-061, E-062, E-063) were re-blurred with the current pass from their originals and read again the same way. A record that changed carries `provenance` with the fields it replaced; a record that did not change is untouched. A door identified after the last match pass carries `place_match.unmatched_reason` = `match_pass_pending` until `entrance_matching match` is re-run; a door that is still unidentified keeps `not_identified`, which no pass would change.",
   "capture_dates": [
     "2026-08-31",
     "2026-09-04"
@@ -7,7 +7,57 @@
   "method": {
     "model": "claude-opus-5",
     "source_images": "privacy-processed captures only",
-    "catalogue": "data/precatalogue_census.json"
+    "catalogue": "data/precatalogue_census.json",
+    "re_read_after_382": {
+      "model": "claude-opus-5",
+      "source_images": "the originals re-processed with the post-#382 faceblur (privacy-processed bytes only; nothing persisted)",
+      "read_on": "2026-09-05",
+      "entrances_read": [
+        "E-017",
+        "E-018",
+        "E-019",
+        "E-026",
+        "E-027",
+        "E-033",
+        "E-035",
+        "E-038",
+        "E-040",
+        "E-041",
+        "E-042",
+        "E-043",
+        "E-048",
+        "E-049",
+        "E-053",
+        "E-057",
+        "E-061",
+        "E-062",
+        "E-063"
+      ],
+      "records_changed": [
+        "E-017",
+        "E-027",
+        "E-033",
+        "E-035",
+        "E-040",
+        "E-041",
+        "E-042",
+        "E-043",
+        "E-048",
+        "E-053",
+        "E-057"
+      ],
+      "records_unchanged": [
+        "E-018",
+        "E-019",
+        "E-026",
+        "E-038",
+        "E-049",
+        "E-061",
+        "E-062",
+        "E-063"
+      ],
+      "api_spend_usd": 2.06
+    }
   },
   "entrances": {
     "E-001": {
@@ -199,7 +249,7 @@
       "confidence": null,
       "basis": [],
       "evidence": null,
-      "reason": "Every signage surface is redacted by the privacy processing. Only a Boon Edam door-manufacturer decal and an EXIT sign are legible across five views.",
+      "reason": "Re-read after the #382 blur fix. The transom band over the doors is still pixelated in IMG_3358 (a region the primary detector asserted, which #382 leaves alone) and reads as blank dark glass in the other four views; the only legible text is the mirrored BOON EDAM door-manufacturer decal, an interior EXIT sign and no-smoking pictograms. A reflected '…ORLEAND…' belongs to a frontage across the street.",
       "views_read": [
         "IMG_3356",
         "IMG_3357",
@@ -211,6 +261,20 @@
         "how": null,
         "unmatched_reason": "not_identified",
         "detail": "the entrance was never identified, so there is no name to match"
+      },
+      "provenance": {
+        "run": "re-identified after #382 blur fix",
+        "read_on": "2026-09-05",
+        "model": "claude-opus-5",
+        "previous": {
+          "status": "unidentified",
+          "name": null,
+          "address": null,
+          "confidence": null,
+          "basis": [],
+          "evidence": null,
+          "reason": "Every signage surface is redacted by the privacy processing. Only a Boon Edam door-manufacturer decal and an EXIT sign are legible across five views."
+        }
       }
     },
     "E-018": {
@@ -420,7 +484,7 @@
       "confidence": null,
       "basis": [],
       "evidence": null,
-      "reason": "All door and window signage is redacted. The only readable text is a mirrored reflection of a neighbouring venue's window across the street.",
+      "reason": "Re-read after the #382 blur fix, which cleared the glass: the frontage carries no lettering at all. The transom band is plain dark glass and the door and window glass bear no decals or numbers; the only readable words (BOWLING / ARCADE / DARTS / KARAOKE / FOOD / DRINKS) are a mirror-reversed reflection of a venue across the street. An unbranded frontage, not a redaction failure.",
       "views_read": [
         "IMG_3404",
         "IMG_3405",
@@ -432,6 +496,20 @@
         "how": null,
         "unmatched_reason": "not_identified",
         "detail": "the entrance was never identified, so there is no name to match"
+      },
+      "provenance": {
+        "run": "re-identified after #382 blur fix",
+        "read_on": "2026-09-05",
+        "model": "claude-opus-5",
+        "previous": {
+          "status": "unidentified",
+          "name": null,
+          "address": null,
+          "confidence": null,
+          "basis": [],
+          "evidence": null,
+          "reason": "All door and window signage is redacted. The only readable text is a mirrored reflection of a neighbouring venue's window across the street."
+        }
       }
     },
     "E-030": {
@@ -499,7 +577,7 @@
       "confidence": null,
       "basis": [],
       "evidence": null,
-      "reason": "The signage band over the doors is redacted in every view, so no business name is readable — only the door number 609 and Japanese-language window decals. The 7-Eleven notices visible on the adjoining frontage belong to E-034, not to this door.",
+      "reason": "Re-read after the #382 blur fix. The header reads 609 in five views and the window vinyl now reads clearly ('welcome to sushi st…', a large red 'Su…' cut off by a feather banner, 寿司の道, 日本料理, DELICIOUS SUSHI), so this is a sushi restaurant, but the name itself is cropped out of frame in every view and a partial word is not completed into a name. The 7-Eleven notices in IMG_3441 belong to the adjoining frontage at 613 (E-034).",
       "views_read": [
         "IMG_3436",
         "IMG_3437",
@@ -512,6 +590,20 @@
         "how": null,
         "unmatched_reason": "not_identified",
         "detail": "the entrance was never identified, so there is no name to match"
+      },
+      "provenance": {
+        "run": "re-identified after #382 blur fix",
+        "read_on": "2026-09-05",
+        "model": "claude-opus-5",
+        "previous": {
+          "status": "unidentified",
+          "name": null,
+          "address": "609 Congress Ave",
+          "confidence": null,
+          "basis": [],
+          "evidence": null,
+          "reason": "The signage band over the doors is redacted in every view, so no business name is readable — only the door number 609 and Japanese-language window decals. The 7-Eleven notices visible on the adjoining frontage belong to E-034, not to this door."
+        }
       }
     },
     "E-034": {
@@ -555,7 +647,7 @@
       "confidence": null,
       "basis": [],
       "evidence": null,
-      "reason": "No business name, street number or street sign is legible; only store hours, door notices and a 'NAMM' fragment.",
+      "reason": "Re-read after the #382 blur fix. No fascia or name sign is within frame in any of the five views; the readable text is store hours and door notices on the glass, and window-display cards (ABBEY ROAD, PENNY LANE, GOT MUSIC?, AUSTIN MUSIC IS MY … TIME) plus NAMM and 'RECOMMENDED ON …' vinyl, which describe a music shop but name none.",
       "views_read": [
         "IMG_3448",
         "IMG_3449",
@@ -567,6 +659,20 @@
         "how": null,
         "unmatched_reason": "not_identified",
         "detail": "the entrance was never identified, so there is no name to match"
+      },
+      "provenance": {
+        "run": "re-identified after #382 blur fix",
+        "read_on": "2026-09-05",
+        "model": "claude-opus-5",
+        "previous": {
+          "status": "unidentified",
+          "name": null,
+          "address": null,
+          "confidence": null,
+          "basis": [],
+          "evidence": null,
+          "reason": "No business name, street number or street sign is legible; only store hours, door notices and a 'NAMM' fragment."
+        }
       }
     },
     "E-037": {
@@ -624,7 +730,7 @@
       "confidence": null,
       "basis": [],
       "evidence": null,
-      "reason": "Unbranded glass-and-metal facade with large redacted regions; no text is legible in any view.",
+      "reason": "Re-read after the #382 blur fix, which cleared the earlier pixelation: the dark fascia and transom carry no lettering and the glass has no decals; the only characters visible are faint mirrored fragments of signs across the street reflected in the glass. An unbranded frontage, not a redaction failure.",
       "views_read": [
         "IMG_3477",
         "IMG_3478",
@@ -636,6 +742,20 @@
         "how": null,
         "unmatched_reason": "not_identified",
         "detail": "the entrance was never identified, so there is no name to match"
+      },
+      "provenance": {
+        "run": "re-identified after #382 blur fix",
+        "read_on": "2026-09-05",
+        "model": "claude-opus-5",
+        "previous": {
+          "status": "unidentified",
+          "name": null,
+          "address": null,
+          "confidence": null,
+          "basis": [],
+          "evidence": null,
+          "reason": "Unbranded glass-and-metal facade with large redacted regions; no text is legible in any view."
+        }
       }
     },
     "E-041": {
@@ -646,7 +766,7 @@
       "confidence": null,
       "basis": [],
       "evidence": null,
-      "reason": "All signage and window text is redacted across every view.",
+      "reason": "Re-read after the #382 blur fix: no lettering, decal, number or notice is legible anywhere on the frontage across six views; the glass carries only mirror-reversed reflections of the buildings opposite. An unbranded frontage, not a redaction failure.",
       "views_read": [
         "IMG_3483",
         "IMG_3484",
@@ -659,17 +779,33 @@
         "how": null,
         "unmatched_reason": "not_identified",
         "detail": "the entrance was never identified, so there is no name to match"
+      },
+      "provenance": {
+        "run": "re-identified after #382 blur fix",
+        "read_on": "2026-09-05",
+        "model": "claude-opus-5",
+        "previous": {
+          "status": "unidentified",
+          "name": null,
+          "address": null,
+          "confidence": null,
+          "basis": [],
+          "evidence": null,
+          "reason": "All signage and window text is redacted across every view."
+        }
       }
     },
     "E-042": {
-      "status": "unidentified",
-      "name": null,
+      "status": "identified",
+      "name": "Beacon",
       "address": null,
       "place_id": null,
-      "confidence": null,
-      "basis": [],
-      "evidence": null,
-      "reason": "No storefront name sign is legible; the door carries only generic notices and the interior window text is blurred.",
+      "confidence": "low",
+      "basis": [
+        "read_sign"
+      ],
+      "evidence": "Re-read after the #382 blur fix. Window vinyl left of the doors reads 'BEACON' with the tagline 'Spaces that inspire … your best work' in IMG_3489, on this frontage's own glass; confirmed by eye against the re-blurred frame. Low because it is a single small vinyl on one view and the upper wall in that view is still pixelated by the current pass, so no larger name sign corroborates it.",
+      "reason": null,
       "views_read": [
         "IMG_3489",
         "IMG_3490",
@@ -680,8 +816,22 @@
       ],
       "place_match": {
         "how": null,
-        "unmatched_reason": "not_identified",
-        "detail": "the entrance was never identified, so there is no name to match"
+        "unmatched_reason": "match_pass_pending",
+        "detail": "the identification was revised after the last match pass; run `python -m frontdoor.entrance_matching match` to decide a place for it"
+      },
+      "provenance": {
+        "run": "re-identified after #382 blur fix",
+        "read_on": "2026-09-05",
+        "model": "claude-opus-5",
+        "previous": {
+          "status": "unidentified",
+          "name": null,
+          "address": null,
+          "confidence": null,
+          "basis": [],
+          "evidence": null,
+          "reason": "No storefront name sign is legible; the door carries only generic notices and the interior window text is blurred."
+        }
       }
     },
     "E-043": {
@@ -692,7 +842,7 @@
       "confidence": null,
       "basis": [],
       "evidence": null,
-      "reason": "All signage areas are redacted; the storefront is a plain glass entrance with no legible text.",
+      "reason": "Re-read after the #382 blur fix. The fascia band is blank and the glazing is opaque green with no lettering in any of six views; one patch of upper glazing and part of an adjacent image panel in IMG_3495 are still pixelated by the current pass, so text there, if any, cannot be read.",
       "views_read": [
         "IMG_3495",
         "IMG_3496",
@@ -705,6 +855,20 @@
         "how": null,
         "unmatched_reason": "not_identified",
         "detail": "the entrance was never identified, so there is no name to match"
+      },
+      "provenance": {
+        "run": "re-identified after #382 blur fix",
+        "read_on": "2026-09-05",
+        "model": "claude-opus-5",
+        "previous": {
+          "status": "unidentified",
+          "name": null,
+          "address": null,
+          "confidence": null,
+          "basis": [],
+          "evidence": null,
+          "reason": "All signage areas are redacted; the storefront is a plain glass entrance with no legible text."
+        }
       }
     },
     "E-045": {
@@ -762,7 +926,7 @@
       "confidence": null,
       "basis": [],
       "evidence": null,
-      "reason": "No business signage is legible; the only readable text is a paper notice directing entry and deliveries around the corner to 503 Colorado Street.",
+      "reason": "Re-read after the #382 blur fix, which made the door notice fully legible: 'All Entry and Deliveries located around the corner at 503 Colorado Street (McGarrah Jessee Parking Lobby)', beside a PULL decal. No name sign is on this frontage in any of six views; the notice names the lobby to use, not this door, so no business is claimed. 'VALET' is a reflected sidewalk stanchion.",
       "views_read": [
         "IMG_3522",
         "IMG_3523",
@@ -775,6 +939,20 @@
         "how": null,
         "unmatched_reason": "not_identified",
         "detail": "the entrance was never identified, so there is no name to match"
+      },
+      "provenance": {
+        "run": "re-identified after #382 blur fix",
+        "read_on": "2026-09-05",
+        "model": "claude-opus-5",
+        "previous": {
+          "status": "unidentified",
+          "name": null,
+          "address": null,
+          "confidence": null,
+          "basis": [],
+          "evidence": null,
+          "reason": "No business signage is legible; the only readable text is a paper notice directing entry and deliveries around the corner to 503 Colorado Street."
+        }
       }
     },
     "E-049": {
@@ -869,7 +1047,7 @@
       "confidence": null,
       "basis": [],
       "evidence": null,
-      "reason": "Only the transom number 506 and building-management decals are legible; no business name, and much of the glass is redacted.",
+      "reason": "Re-read after the #382 blur fix. The transom number 506 reads clearly and the door and sidelight carry only building-management vinyl ('Leased and Managed by ECR', management and leasing phone numbers, an ENERGY STAR decal, no-trespassing and no-smoking notices): an office-building lobby with no tenant name. A 'SYSTEMS NOMINAL' blade sign is mounted on the wall beside the door but reads as a neighbouring storefront's sign, not this lobby's.",
       "views_read": [
         "IMG_3552",
         "IMG_3553",
@@ -881,6 +1059,20 @@
         "how": null,
         "unmatched_reason": "not_identified",
         "detail": "the entrance was never identified, so there is no name to match"
+      },
+      "provenance": {
+        "run": "re-identified after #382 blur fix",
+        "read_on": "2026-09-05",
+        "model": "claude-opus-5",
+        "previous": {
+          "status": "unidentified",
+          "name": null,
+          "address": "506 Congress Ave",
+          "confidence": null,
+          "basis": [],
+          "evidence": null,
+          "reason": "Only the transom number 506 and building-management decals are legible; no business name, and much of the glass is redacted."
+        }
       }
     },
     "E-054": {
@@ -958,12 +1150,12 @@
     "E-057": {
       "status": "unidentified",
       "name": null,
-      "address": null,
+      "address": "120 W 5th St",
       "place_id": null,
       "confidence": null,
       "basis": [],
       "evidence": null,
-      "reason": "The transom reads '120' followed by an illegible ordinal street name, so neither a business nor a full address could be read.",
+      "reason": "Re-read after the #382 blur fix: the transom reads '120 W. 5TH STREET' clearly in three views, so the address is now complete, but the door glass carries only two wordless graphics (a leaf roundel and a crowned fish) and 'THIS DOOR TO REMAIN UNLOCKED DURING BUSINESS HOURS'. No business name is on the frontage.",
       "views_read": [
         "IMG_3573",
         "IMG_3574",
@@ -977,6 +1169,20 @@
         "how": null,
         "unmatched_reason": "not_identified",
         "detail": "the entrance was never identified, so there is no name to match"
+      },
+      "provenance": {
+        "run": "re-identified after #382 blur fix",
+        "read_on": "2026-09-05",
+        "model": "claude-opus-5",
+        "previous": {
+          "status": "unidentified",
+          "name": null,
+          "address": null,
+          "confidence": null,
+          "basis": [],
+          "evidence": null,
+          "reason": "The transom reads '120' followed by an illegible ordinal street name, so neither a business nor a full address could be read."
+        }
       }
     },
     "E-058": {
