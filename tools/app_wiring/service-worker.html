@@ -1,0 +1,10 @@
+<script>
+/* Installable app (TICK-327). Registered late and defensively: the page is the
+   product, the worker is an optimisation. A browser without service workers, a
+   file:// open, or a registration failure must all still leave a working app. */
+if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("/app-sw.js").catch(function () {});
+  });
+}
+</script>

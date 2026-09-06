@@ -1,20 +1,10 @@
 <!DOCTYPE html>
-<!-- GENERATED FILE - do not edit by hand.
-
-     src/frontdoor_server/app.html is produced by tools/port_app_page.py from the EntryMap
-     design source in design-source/, with this service's wiring applied as a documented,
-     ordered transformation (tools/app_wiring/). Edit the design in the design source and
-     the wiring in tools/app_wiring/, then re-run the port:
-
-         python tools/port_app_page.py
-
-     Any edit made directly to this file is lost on the next run. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<link rel="apple-touch-icon" sizes="180x180" href="/app-icon.png"><link rel="icon" sizes="180x180" href="/app-icon.png"><meta name="apple-mobile-web-app-title" content="EntryMap"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="manifest" href="/app-manifest.json"><meta name="theme-color" content="#1E1142"><meta name="mobile-web-app-capable" content="yes">
-<title>EntryMap</title>
+<link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/codeoritdidnthappen/frontdoor/main/docs/brand/entrymap-touch-icon.png"><meta name="apple-mobile-web-app-title" content="EntryMap"><meta name="apple-mobile-web-app-capable" content="yes">
+<title>EntryMap &mdash; phone prototype</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Round 4 type. The asset library names Atkinson Hyperlegible for UI and Nunito Sans
@@ -2169,15 +2159,6 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
   }
   .notch{display:none}
 }
-/* ---- wiring: two things the served page needs that the design source does not carry.
-   The review screen names the entrance a scan publishes against (POST /screen/publish
-   wants a place_id, or lat + lng + name), and a run with no server behind it is labelled
-   as simulated. Both belong to the server contract rather than to the visual design, so
-   they are styled here, in the design's own tokens. ---- */
-.entrance-field{width:100%;text-align:left}
-.entrance-hint{font-size:var(--fs-meta);color:var(--sub);font-weight:var(--fw-strong);margin-top:var(--sp-2);line-height:var(--lh-meta);letter-spacing:var(--ls-flat)}
-.sim-tag{display:inline-flex;align-items:center;background:var(--ui-lavender-1,#EEF1F6);color:var(--sub);border:1.5px solid var(--line,#D5D9E6);border-radius:999px;padding:var(--sp-1) var(--sp-4);font-size:var(--fs-meta);font-weight:var(--fw-strong);letter-spacing:var(--ls-caps);text-transform:uppercase;margin-top:var(--sp-1)}
-
 </style>
 </head>
 <body>
@@ -2632,7 +2613,7 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
           <div class="coach" id="coach" style="bottom:12px">Center the full doorway</div>
           <div class="live-chip"><span class="dot"></span>LIVE</div>
         </div>
-        <div class="scan-target" id="scan-target"></div>
+        <div class="scan-target">Scanning near W 3rd St &middot; <b id="scan-target-name"></b></div>
         <button class="shutter" id="btn-shutter" aria-label="Capture photo"></button>
         <button class="lib-link" id="btn-library">
           <span class="ic" data-icon="photo" data-size="17" aria-hidden="true"></span>
@@ -2690,13 +2671,6 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
         </div>
         <p class="upload-note" id="upload-note">Faces are blurred automatically on upload &mdash; this preview shows your original frame.</p>
         <div class="quarantine-note" id="quarantine-note"></div>
-
-        <div class="field entrance-field">
-          <label for="entrance-name">Which entrance is this?</label>
-          <input type="text" id="entrance-name" list="entrance-options" autocomplete="off" maxlength="200" placeholder="Business name">
-          <datalist id="entrance-options"></datalist>
-          <div class="entrance-hint" id="entrance-hint"></div>
-        </div>
         <div class="chips-title" style="margin-top:var(--sp-6)">Visually confirmed</div>
         <div class="vc-chips" id="vc-chips"></div>
         <p class="privacy-sub" id="review-hint">One photo &mdash; got it. One more from further back would confirm a ramp, but this already helps.</p>
@@ -2841,6 +2815,10 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
           <label for="claim-email">Work email</label>
           <input type="email" id="claim-email" placeholder="you@yourbusiness.com" autocomplete="off">
         </div>
+        <div class="field">
+          <label for="claim-phone">Business phone</label>
+          <input type="tel" id="claim-phone" placeholder="(512) 555-0137" autocomplete="off">
+        </div>
         <p class="inline-err" id="claim-contact-err">
           <svg class="ie-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16.5v.5" stroke-linecap="round"/></svg>
           <span id="claim-contact-err-text">Add the address or number we should verify you on.</span>
@@ -2909,35 +2887,6 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
             <button class="btn primary" data-go="ow-overview">Open My Business</button>
             <button class="btn ghost" data-goto="screen-profile">Back to Profile</button>
           </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- The wired owner workspace: what GET /claim/<id>/workspace answers, and the two
-         controls that write back to it (attested guided capture, and a dispute note). -->
-    <section class="screen claimscreen" id="claim-workspace" tabindex="-1" aria-label="My business">
-      <div class="screen-body">
-        <div class="flowhead">
-          <button class="backbtn" data-goto="screen-profile" aria-label="Back to Profile">&lsaquo;</button>
-          <h2>My business</h2>
-        </div>
-        <div class="bizhead" id="ws-bizhead"></div>
-        <div class="prof-card" style="margin-top:var(--sp-5)">
-          <div class="chips-title" style="margin:var(--sp-0) var(--sp-0) var(--sp-3)">As customers see it</div>
-          <div id="ws-pin" style="font-weight:var(--fw-strong);font-size:var(--fs-body)"></div>
-          <div class="prof-sub" id="ws-status" style="margin-top:var(--sp-3)"></div>
-        </div>
-        <div class="tax-box" id="ws-incentives" style="margin-top:var(--sp-5)"></div>
-        <div class="card-actions" style="margin-top:var(--sp-6)">
-          <button class="btn primary" id="btn-ws-capture">Guided capture at the door</button>
-        </div>
-        <p class="sheet-p">Camera-roll photos cannot attest. Owner-confirmed only from this in-app capture.</p>
-        <div class="field">
-          <label for="ws-dispute">Correct or dispute what customers see</label>
-          <textarea id="ws-dispute" rows="3" maxlength="500" placeholder="What should change?"></textarea>
-        </div>
-        <div class="card-actions" style="margin-top:var(--sp-5)">
-          <button class="btn ghost" id="btn-ws-dispute">Send dispute</button>
         </div>
       </div>
     </section>
@@ -4814,8 +4763,8 @@ function wireCard(el,p){
   const ps=el.querySelector('.photostrip[data-openrcpt]');
   if(ps) ps.addEventListener('click',()=>openReceipt(p));
   const act=(name,fn)=>{const b=el.querySelector(`[data-act="${name}"]`); if(b) b.addEventListener('click',fn);};
-  act('scan-this',()=>{scanTarget=p; closeSheets(); startScan(true);});
-  act('recheck',()=>{scanTarget=p; closeSheets(); startScan(true);});
+  act('scan-this',()=>{scanTarget=p; closeSheets(); startScan();});
+  act('recheck',()=>{scanTarget=p; closeSheets(); startScan();});
   act('recheck-later',()=>{closeSheets(); toast('No problem \u2014 the estimate stays honest about its age');});
   /* Directions - Save (stubs: the prototype has no routing or account sync) */
   act('directions',()=>toast(`Directions to ${p.name} \u2014 ${distLabel(p)} \u00b7 opens your maps app`));
@@ -6110,59 +6059,23 @@ function paintDoorway(){
 }
 paintDoorway();
 
-/* ===================== live camera + same-origin screening =====================
-   Real rear-camera capture inside the phone frame, checked and published by the server that
-   serves this page. Every URL is relative: one origin, no CORS. Contracts
-   (frontdoor_server/screen_view.py and scan_view.py):
-     POST /screen           assess only, retains nothing. Fired at the shutter so the review
-                            screen shows real verdicts before anything is kept.
-     POST /screen/publish   the consent step, fired by "Publish scan": the same blur → audit →
-                            integrated assessment, and — only when the face audit answers
-                            "clear" — the processed frame is stored and one scan record joins
-                            the live map. multipart/form-data: 1-6 image parts; place_id, or
-                            lat + lng + name; optional X-Frontdoor-Contributor header.
-                            200 {published:true, scan_id, image_keys, faces_blurred,
-                            assessment:{criteria}} · 200 {published:false, quarantined:true,
-                            quarantine_reason:"face_check"} (nothing stored) · 503 {publish_reason,
-                            publish_detail, assessment} when assessed but not stored.
-     GET  /scan/photo/<key> the stored, privacy-processed photo for the card.
-   The simulated pipeline runs only where there is no server to talk to at all — this page
-   opened from a file:// URL — and the review says so. A real request that fails, times out or
-   answers badly is reported as a scan that could not be completed, with a retry; it never
-   becomes verdicts, never takes the Scanned tier, and never enters the scanned count.
-   A server error is shown, never hidden.
-   Privacy: the captured frame lives in these variables only — never localStorage. */
-const SCREEN_API = '/screen';
-const PUBLISH_API = '/screen/publish';
-const PHOTO_API = '/scan/photo/';
-const CLAIM_API = '/claim';
+/* ===================== live camera + live screening (demo insurance) =====================
+   Real rear-camera capture inside the phone frame, POSTed to the real /screen endpoint.
+   Contract (frontdoor_server/screen_view.py): multipart/form-data, 1-6 image file parts
+   (any field name; image/jpeg|png|webp), optional entrance_id field. 200 response:
+   {mode:"integrated", assessment:{criteria:{ramp_or_bevel|handrails|
+   accessible_door_hardware|accessibility_signage: {verdict, confidence, evidence}}},
+   faces_blurred, face_check, quarantined, ...}. Every failure (no camera, denied,
+   CORS-blocked fetch, non-200, timeout) falls back silently to the staged flow.
+   Privacy: the captured frame lives in these variables only -- never localStorage. */
+const SCREEN_API = 'https://frontdoor-measure.fly.dev/screen';
 const camVideo = document.getElementById('cam-video');
 let camStream = null;    /* active MediaStream while the viewfinder is live */
-let liveFrame = null;    /* {blob, dataUrl} of the captured frame — in-memory only */
+let liveFrame = null;    /* {blob, dataUrl} of the captured frame -- in-memory only */
 let liveUpload = null;   /* pending fetch promise */
 let liveSettled = true;  /* false while the POST is in flight */
-let liveResult = null;   /* parsed /screen JSON, or null → simulated verdicts */
+let liveResult = null;   /* parsed /screen JSON, or null -> simulated verdicts */
 let liveAbort = null;
-let liveError = null;    /* the server's error detail when /screen answered but could not assess */
-let liveNetFail = false; /* the POST failed outright: offline, aborted, or timed out */
-let liveTimedOut = false;/* the 30s client abort fired — the same 30s gunicorn allows the model */
-let liveRun = 0;         /* generation: a reset must not be overwritten by the POST it aborted */
-let scanFromCard = false;/* startScan(true) from a card: publish against that place_id */
-let ownerAttest = false; /* workspace guided capture: attested in-app only */
-let fromLibrary = false; /* camera-roll path cannot attest */
-let geoFix = null;       /* {lat,lng} from the phone while scanning; cleared on exit */
-/* There is a server whenever this page came from one. A request to it that fails is a failed
-   scan, not an absent server: only a file:// open — where no relative POST can ever go
-   anywhere — may fall back to the staged pipeline. */
-const HAS_SERVER = location.protocol.startsWith('http');
-const liveSimulated = ()=> !HAS_SERVER || !liveFrame;
-/* why a real scan produced no verdicts. Always a failure; never a substitute for one. */
-function liveFailure(){
-  if(liveError) return 'the server could not check this photo — '+String(liveError).replace(/\.$/,'');
-  if(liveTimedOut) return 'the scan timed out after 30 seconds';
-  if(liveNetFail) return 'this phone could not reach the server';
-  return 'the scan did not finish';
-}
 
 function stopCamera(){
   if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null;}
@@ -6170,10 +6083,8 @@ function stopCamera(){
   document.getElementById('viewfinder').classList.remove('live');
 }
 function resetLive(){
-  liveRun++;                                  /* the aborted POST's handlers become no-ops */
   if(liveAbort){liveAbort.abort();liveAbort=null;}
   liveFrame=null; liveUpload=null; liveResult=null; liveSettled=true;
-  liveError=null; liveNetFail=false; liveTimedOut=false;
 }
 async function tryStartCamera(){
   if(!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia)) return false;
@@ -6187,7 +6098,7 @@ async function tryStartCamera(){
     camVideo.srcObject=camStream; camVideo.hidden=false;
     document.getElementById('viewfinder').classList.add('live');
     return true;
-  }catch(e){ stopCamera(); return false; } /* denied / unavailable → staged capture */
+  }catch(e){ stopCamera(); return false; } /* denied / unavailable -> staged capture */
 }
 function captureFrame(){
   const w=camVideo.videoWidth, h=camVideo.videoHeight;
@@ -6199,75 +6110,19 @@ function captureFrame(){
   const dataUrl=c.toDataURL('image/jpeg',.85);
   return new Promise(res=>c.toBlob(b=>res(b?{blob:b,dataUrl}:null),'image/jpeg',.85));
 }
-function errorText(j, status){ return (j && (j.detail || j.error)) || ('HTTP '+status); }
 function startLiveUpload(frame){
-  liveRun++;                                  /* a second shutter supersedes the first */
-  if(liveAbort) liveAbort.abort();
-  liveResult=null; liveError=null; liveNetFail=false; liveTimedOut=false; liveSettled=false;
+  liveResult=null; liveSettled=false;
   liveAbort = ('AbortController' in window) ? new AbortController() : null;
-  const run=liveRun, mine=()=>run===liveRun;
   const fd=new FormData();
   fd.append('images', frame.blob, 'scan.jpg');
-  /* no entrance_id: map places are place ids, not frontdoor entrance ids — an invalid id would 400 */
-  const ctl=liveAbort;
-  const timer=setTimeout(()=>{if(!mine())return; liveTimedOut=true; if(ctl)ctl.abort();},30000);
-  /* the two outcomes are kept apart on purpose: the rejection handler is the TRANSPORT
-     failing, and a throw inside the fulfilled handler falls to the .catch below as a
-     server-side failure. Neither one is evidence that no server exists, so neither
-     selects the staged pipeline — both land on the review screen as a failed scan. */
+  /* no entrance_id: prototype targets are place ids, not frontdoor entrance ids --
+     an invalid id would 400 the whole request and cost us the live verdicts */
+  const timer=setTimeout(()=>{if(liveAbort)liveAbort.abort();},30000);
   liveUpload = fetch(SCREEN_API,{method:'POST',body:fd,signal:liveAbort?liveAbort.signal:undefined})
-    .then(r=>r.json().catch(()=>({})).then(j=>{
-      if(!mine()) return;
-      if(r.ok && j.assessment && j.assessment.criteria) liveResult=j;
-      else liveError=errorText(j, r.status);          /* answered but could not assess: shown on review */
-    }), ()=>{ if(mine()) liveNetFail=true; })          /* offline, aborted, or timed out */
-    .catch(()=>{ if(mine() && !liveError) liveError='the answer could not be read'; })
-    .then(()=>{ clearTimeout(timer); if(mine()) liveSettled=true; });
-}
-
-/* ---- where a scan publishes: the card it was launched from, or the phone's fix + a typed name ---- */
-function requestGeoFix(){
-  geoFix=null;
-  if(scanFromCard || !navigator.geolocation) return;
-  navigator.geolocation.getCurrentPosition(
-    pos=>{ geoFix={lat:pos.coords.latitude, lng:pos.coords.longitude}; },
-    ()=>{ geoFix=null; },
-    {enableHighAccuracy:true, timeout:8000, maximumAge:60000});
-}
-function nearestPlaces(origin, n){
-  return [...places].sort((a,b)=>Math.hypot(a.lat-origin.lat,a.lng-origin.lng)-Math.hypot(b.lat-origin.lat,b.lng-origin.lng)).slice(0,n);
-}
-function renderEntranceField(){
-  const input=document.getElementById('entrance-name');
-  const origin = geoFix || (scanFromCard ? scanTarget : LOC);
-  document.getElementById('entrance-options').innerHTML =
-    nearestPlaces(origin, 8).map(p=>`<option value="${esc(p.name).replace(/"/g,'&quot;')}"></option>`).join('');
-  if(scanFromCard && !input.value) input.value=scanTarget.name;
-  document.getElementById('entrance-hint').textContent = scanFromCard
-    ? 'Started from this entrance — change the name if it is a different door.'
-    : geoFix ? 'Suggestions are the businesses nearest your location.'
-    : 'Location is off — pick a business from the suggestions.';
-}
-/* {place_id?, name, lat, lng, place?} for /screen/publish, or null when nothing can be sent */
-function resolvePlaceRef(){
-  const text=document.getElementById('entrance-name').value.trim();
-  if(!text) return null;
-  const match = (scanFromCard && scanTarget.name===text) ? scanTarget : places.find(p=>p.name===text);
-  if(match) return {place_id:match.id, name:match.name, lat:match.lat, lng:match.lng, place:match};
-  const at = geoFix || (scanFromCard ? scanTarget : null);
-  if(!at) return null;
-  return {name:text, lat:at.lat, lng:at.lng, place:null};
-}
-/* anonymous contributor token: random, made once, the only thing this app keeps in localStorage */
-let sessionToken=null;
-function contributorToken(){
-  const KEY='entrymap.contributor';
-  const fresh=()=>{ const b=new Uint8Array(16); crypto.getRandomValues(b); return 'em_'+Array.from(b,x=>x.toString(16).padStart(2,'0')).join(''); };
-  try{
-    let t=localStorage.getItem(KEY);
-    if(!/^[A-Za-z0-9._-]{8,64}$/.test(t||'')){ t=fresh(); localStorage.setItem(KEY,t); }
-    return t;
-  }catch(e){ return sessionToken || (sessionToken=fresh()); }
+    .then(r=> r.ok ? r.json() : null)
+    .then(j=>{ liveResult=(j && j.assessment && j.assessment.criteria) ? j : null; })
+    .catch(()=>{ liveResult=null; }) /* CORS / network / abort -> simulated fallback */
+    .then(()=>{ clearTimeout(timer); liveSettled=true; });
 }
 
 /* ===================== scan flow ===================== */
@@ -6275,33 +6130,23 @@ let scanTimers=[];
 function cancelScanTimers(){scanTimers.forEach(clearTimeout);scanTimers=[];}
 function after(ms,fn){scanTimers.push(setTimeout(fn,ms));}
 
-function startScan(fromCard, opts){
+function startScan(){
   cancelScanTimers();
   resetLive();
-  fromLibrary=false;
-  ownerAttest=!!(opts && opts.ownerAttest);
-  document.getElementById('btn-library').hidden=ownerAttest;
-  scanFromCard=!!fromCard;
-  if(!scanFromCard){ /* no card: the nearest estimated pin stands in for the doorway art; the real place is named at review */
+  if(scanTarget.tier!=='est'){ /* already upgraded: pick another estimated pin */
     const next = places.filter(p=>p.tier==='est').sort((a,b)=>(Math.hypot(a.lat-cx,a.lng-cy)-Math.hypot(b.lat-cx,b.lng-cy)))[0];
     if(next) scanTarget=next;
   }
-  document.getElementById('scan-target').innerHTML = scanFromCard
-    ? `Scanning · <b>${esc(scanTarget.name)}</b>`
-    : `Scanning near you · <b>name the entrance after the photo</b>`;
-  document.getElementById('entrance-name').value='';
+  document.getElementById('scan-target-name').textContent=scanTarget.name;
   paintDoorway();
   showScreen('scan-primer');
 }
 document.querySelectorAll('[data-scan-exit]').forEach(b=>b.addEventListener('click',()=>{
-  cancelScanTimers(); resetLive(); geoFix=null; ownerAttest=false; fromLibrary=false;
-  document.getElementById('btn-library').hidden=false;
-  showScreen('screen-map'); renderMap();
+  cancelScanTimers(); resetLive(); showScreen('screen-map'); renderMap();
 }));
 document.getElementById('btn-allow-cam').addEventListener('click',()=>{
   showScreen('scan-capture');
   tryStartCamera(); /* live viewfinder when granted; the illustrated capture stays otherwise */
-  requestGeoFix();  /* places the scan when it was not launched from a card */
 });
 document.getElementById('btn-shutter').addEventListener('click',async ()=>{
   if(camStream){
@@ -6331,7 +6176,7 @@ const PROC_CHECK=1500;   /* per named check -- the ring's thirds land at 2.5 / 4
 const PROC_CHIPS=1000;   /* chips populate */
 const RING_CIRC=408.4;   /* 2pi-65 */
 const ringDur=()=> PROC_CHECK*(gate2?4:3);   /* gate2 adds "Double-checking" as a fourth 1.5 s beat */
-function procLog(t0,label){}   /* the design source's beat timing; not for the served page */
+function procLog(t0,label){ console.log(`[proc] ${label} @ ${((performance.now()-t0)/1000).toFixed(2)}s`); }
 let gate2=false;         /* agreement gating (verified tier): adds "Double-checking", extends the ring */
 let procRun=null;        /* the active run's hooks (gate2 flipping mid-run extends, never restarts) */
 let procReduced=false;
@@ -6469,10 +6314,6 @@ const STAGED = [['step_free',86],['hardware',90],['approach',84]];
 /* the four real /screen criteria, in server order, mapped onto the chip vocabulary */
 const LIVE_CRITERIA = ['ramp_or_bevel','handrails','accessible_door_hardware','accessibility_signage'];
 /* the detected chips -- shared by the processing screen (5.5-6.5 s populate) and the review */
-/* the detected chips -- shared by the processing screen (5.5-6.5 s populate) and the review.
-   Three sources, kept apart on purpose: verdicts the server actually returned; the staged
-   examples, which are reachable only where there is no server at all; and, for a real run
-   that failed, a sentence saying so. A failure never borrows the staged verdicts. */
 function reviewChipsHTML(chipsOnly){
   if(liveResult){
     const crit=liveResult.assessment.criteria;
@@ -6485,16 +6326,11 @@ function reviewChipsHTML(chipsOnly){
       else notSeen.push(FEATS[ck].label);
     });
     if(chipsOnly) return present.join('');
-    return (present.length?present.join(''):`<span class="vc-notseen">No features confirmed from this photo yet — it still helps.</span>`) +
-      (notSeen.length?`<span class="vc-notseen">Not seen this time: ${notSeen.join(' · ')}</span>`:'');
+    return (present.length?present.join(''):`<span class="vc-notseen">No features confirmed from this photo yet \u2014 it still helps.</span>`) +
+      (notSeen.length?`<span class="vc-notseen">Not seen this time: ${notSeen.join(' \u00b7 ')}</span>`:'');
   }
-  if(liveSimulated()){
-    const chips=STAGED.map(([k,c])=>
-      `<span class="fchip scan" style="cursor:default">${FEATS[k].label}${dotTriple(c,'var(--marigold-ink)')}</span>`).join('');
-    return chipsOnly ? chips : chips+`<span class="sim-tag">Simulated</span>`;
-  }
-  if(chipsOnly) return '';
-  return `<span class="vc-notseen">No verdicts — ${esc(liveFailure())}. Publishing checks the photo again.</span>`;
+  return STAGED.map(([k,c])=>
+    `<span class="fchip scan" style="cursor:default">${FEATS[k].label}${dotTriple(c,'var(--marigold-ink)')}</span>`).join('');
 }
 function renderReviewChips(){
   document.getElementById('vc-chips').innerHTML = reviewChipsHTML(false);
@@ -6514,32 +6350,23 @@ function renderReview(){
     note.classList.add('on');
     if(liveResult){
       const n=liveResult.faces_blurred|0;
-      tagText.textContent = n>0 ? `${n} face${n===1?'':'s'} blurred at upload` : 'Blur checked at upload — no faces found';
-      hint.textContent = 'Live verdicts from your photo — statements about what is visible, never measurements.';
+      tagText.textContent = n>0 ? `${n} face${n===1?'':'s'} blurred at upload` : 'Blur checked at upload \u2014 no faces found';
+      hint.textContent = 'Live verdicts from your photo \u2014 statements about what is visible, never measurements.';
       if(liveResult.quarantined){
         qNote.classList.add('on');
-        qNote.textContent = 'Privacy hold: the automatic face check could not confirm every face is blurred, so this photo cannot be stored or published. Retake from further back, or publish to let the server check again.';
+        qNote.textContent = 'Privacy hold: the automatic face check could not confirm every face is blurred, so this photo is quarantined. Your feature verdicts publish \u2014 the photo does not.';
       }
-    } else if(liveSimulated()){
-      tagText.textContent='Simulated — nothing leaves this phone';
-      note.classList.remove('on');   /* nothing is uploaded here, so nothing is blurred here */
-      hint.textContent='This page was opened with no server to check the photo, so the chips are staged examples rather than anything read from it, and nothing will be published.';
     } else {
-      /* say only what happened: on a transport failure or an early 503 the frame never
-         reached the blur step, so "faces blurred at upload" would be its own small lie */
-      tagText.textContent='Not checked — this photo has not left your phone';
-      note.classList.remove('on');
-      hint.textContent='The scan could not be completed — '+liveFailure()+'. Nothing was read from your photo. It is still here: publish to try again, or retake.';
+      tagText.textContent='Faces blurred at upload';
+      hint.textContent='One photo \u2014 got it. One more from further back would confirm a ramp, but this already helps.';
     }
   } else {
     img.hidden=true; img.removeAttribute('src');
     art.style.display=''; band.style.display='';
     tagText.textContent='Auto-blur applied';
     note.classList.remove('on');
-    hint.textContent='Simulated capture — no camera frame, so nothing will be published. Allow the camera or choose a photo to publish a real scan.';
+    hint.textContent='One photo \u2014 got it. One more from further back would confirm a ramp, but this already helps.';
   }
-  document.getElementById('btn-publish').textContent = liveSimulated() ? 'Publish (simulated)' : 'Publish scan';
-  renderEntranceField();
   renderReviewChips();
 }
 renderReviewChips();
@@ -6547,118 +6374,37 @@ renderReviewChips();
 /* /screen criteria keys -> the door-scan crit vocabulary featsOf() reads */
 const LIVE_TO_DOOR = {ramp_or_bevel:'ramp_present', handrails:'handrails_present',
   accessible_door_hardware:'lever_or_pull_hardware', accessibility_signage:'accessible_signage'};
-function critFromAssessment(a){
-  const crit={};
-  LIVE_CRITERIA.forEach(key=>{
-    const c=a.criteria[key]; if(!c) return;
-    crit[LIVE_TO_DOOR[key]]={v:c.verdict, c:+c.confidence||0, e:String(c.evidence||'')};
-  });
-  return crit;
-}
-/* POST /screen/publish → {kind: published | quarantined | held | error | net, body?, detail?} */
-async function publishScan(ref){
-  const fd=new FormData();
-  fd.append('images', liveFrame.blob, 'scan.jpg');
-  if(ref.place_id) fd.append('place_id', ref.place_id);
-  fd.append('name', ref.name); fd.append('lat', String(ref.lat)); fd.append('lng', String(ref.lng));
-  fd.append('capture_kind', fromLibrary ? 'camera_roll' : 'in_app');
-  if(ownerAttest){
-    /* the server proves the attestation against THIS claim's token, not against the
-       existence of somebody's claim, so the guided capture carries the credential */
-    const rec=claimRecord || claimSessionLoad();
-    if(!rec) return {kind:'error', detail:'the approved claim for this door is not in this session — reopen the workspace'};
-    fd.append('attested', '1');
-    fd.append('claim_id', rec.claim_id);
-    fd.append('token', rec.token);
-  }
-  const ctl=('AbortController' in window) ? new AbortController() : null;
-  const timer=setTimeout(()=>{if(ctl)ctl.abort();},45000);
-  let r, j;
-  try{
-    r=await fetch(PUBLISH_API,{method:'POST',body:fd,headers:{'X-Frontdoor-Contributor':contributorToken()},signal:ctl?ctl.signal:undefined});
-    j=await r.json().catch(()=>({}));
-  }catch(e){ clearTimeout(timer); return {kind:'net'}; }
-  clearTimeout(timer);
-  const assessed = !!(j && j.assessment && j.assessment.criteria);
-  if(r.ok && j.published) return {kind:'published', body:j};
-  if(r.ok && assessed && j.quarantined) return {kind:'quarantined', body:j};
-  if(r.status===503 && assessed) return {kind:'held', body:j, detail:j.publish_detail||j.detail||'storage was unavailable'};
-  return {kind:'error', detail:errorText(j, r.status)};
-}
-function placeForRef(ref, id){
-  if(ref.place) return ref.place;
-  const p={id, name:ref.name, lat:ref.lat, lng:ref.lng, crit:{}, tier:'est'};
-  places.push(p);
-  return p;
-}
-/* Only a run the server actually read gets here: it is what moves a pin to Scanned on-site,
-   and therefore what the "N of M entrances scanned" count is counting. A simulated run never
-   calls this — see the publish handler. */
-function upgradePin(p, crit, publish, photo, note){
-  if(p.tier!=='owner') p.tier='scan';
-  p.views=(p.views|0)+1; p.staged=true; p.date=new Date().toISOString().slice(0,10);
-  p.crit=crit; p.publish=publish; p.livePhoto=photo; p.note=note;
-  p.f=featsOf(p);
-}
-document.getElementById('btn-publish').addEventListener('click',async ()=>{
-  const btn=document.getElementById('btn-publish');
-  const ref=resolvePlaceRef();
-  if(!ref){
-    toast(document.getElementById('entrance-name').value.trim() ? 'Pick a business from the suggestions — location is off' : 'Name the entrance first');
-    document.getElementById('entrance-name').focus();
-    return;
-  }
-  let p, simulated=liveSimulated();
-  if(simulated){
-    /* No frame, or no server at all. Nothing read a photograph, so nothing is published and
-       nothing is written anywhere: an entrance already on the map is shown exactly as it was,
-       and one that is not on the map stays off it. The done screen is told the outcome
-       directly, so it never has to read it back off a pin this run did not touch. */
-    p=ref.place || {id:null, name:ref.name, lat:ref.lat, lng:ref.lng, tier:'est'};
+document.getElementById('btn-publish').addEventListener('click',()=>{
+  /* upgrade the target pin with the scan -- real verdicts when the live POST landed */
+  const p=scanTarget;
+  p.tier='scan'; p.views=1; p.staged=true; p.date='2026-09-04';
+  if(liveResult){
+    const crit={};
+    LIVE_CRITERIA.forEach(key=>{
+      const c=liveResult.assessment.criteria[key]; if(!c) return;
+      crit[LIVE_TO_DOOR[key]]={v:c.verdict, c:+c.confidence||0, e:String(c.evidence||'')};
+    });
+    p.crit=crit;
+    p.note='Live on-stage scan, screened by the real model just now. '+
+      (liveResult.quarantined
+        ? 'The photo is under a privacy hold (face check), so only the verdicts are published.'
+        : (liveResult.wording||''));
   } else {
-    btn.disabled=true; btn.textContent='Publishing…';
-    let out;
-    try{ out=await publishScan(ref); } finally{ btn.disabled=false; btn.textContent='Publish scan'; }
-    if(out.kind==='error'){ toast("Couldn't publish — "+out.detail); return; }   /* stays on review to retry or retake */
-    if(out.kind==='net'){
-      if(!liveResult){ toast('Lost the server before publishing — try again'); return; }
-      out={kind:'held', body:liveResult, detail:'the server could not be reached to publish.'};
-    }
-    const b=out.body, crit=critFromAssessment(b.assessment);
-    p=placeForRef(ref, out.kind==='published' ? 'scan:'+b.scan_id : 'scan:held-'+Date.now());
-    if(out.kind==='published'){
-      /* the stored, privacy-processed photo is the card's photo, streamed back from the server */
-      upgradePin(p, crit, {state:'published', scanId:b.scan_id, faces:b.faces_blurred|0},
-        (b.image_keys && b.image_keys.length) ? PHOTO_API+b.image_keys[0] : null,
-        'Published to the live map just now, checked by the model. '+(b.wording||''));
-    } else if(out.kind==='quarantined'){
-      /* privacy hold: the server stored nothing; the verdicts stay on this phone, the photo is withheld */
-      upgradePin(p, crit, {state:'quarantined'}, null,
-        'Privacy hold: the face check could not confirm every face is blurred, so nothing was stored or published. These verdicts are only on this phone.');
-    } else {
-      /* assessed but not published (storage down, or no route): the verdicts stand, kept here, not on the live map */
-      upgradePin(p, crit, {state:'held', detail:out.detail}, liveFrame.dataUrl,
-        'Checked by the model, but not published: '+out.detail+' Saved for later on this phone — it is not on the live map yet.');
-    }
+    p.note='One photo from the sidewalk: level entry to the threshold, D-pull handles within reach, and a clear approach. A second photo from further back would confirm whether there is a ramp.';
+    p.crit={step_free_entry:{v:'present',c:86,e:'Sidewalk runs level to the threshold with no riser shadow in your photo'},
+            lever_or_pull_hardware:{v:'present',c:90,e:'D-pull handle visible on the leaf, graspable without twisting'},
+            clear_approach:{v:'present',c:84,e:'Open sidewalk directly in front of the doorway'}};
   }
-  scanTarget=p;
+  /* the captured frame becomes the pin's photo -- in-memory only, and never when quarantined */
+  p.livePhoto = (liveFrame && !(liveResult && liveResult.quarantined)) ? liveFrame.dataUrl : null;
+  p.f=featsOf(p);
   showScreen('scan-done');
-  runDone(p, simulated);
+  runDone(p);
 });
-function doneHeading(p, simulated){
-  if(simulated) return 'Simulated scan — nothing was published';
-  const s=p.publish&&p.publish.state;
-  return s==='published' ? 'Scan published — thanks for helping your neighbors'
-    : s==='quarantined' ? 'Privacy hold — the photo stays off the map'
-    : 'Scan saved for later — not published yet';
-}
-function runDone(p, simulated){
-  const h=document.querySelector('#scan-done .scan-h');
-  if(h) h.textContent=doneHeading(p, simulated);
+function runDone(p){
   const scans = places.filter(q=>q.tier!=='est').length;
-  document.getElementById('counter-line').textContent = simulated
-    ? `${esc(p.name)} is unchanged — a simulated run publishes nothing · ${scans} of ${places.length} entrances scanned downtown`
-    : `${esc(p.name)} just moved up a tier · ${scans} of ${places.length} entrances scanned downtown`;
+  document.getElementById('counter-line').textContent =
+    `${esc(p.name)} just moved up a tier \u00b7 ${scans} of ${places.length} entrances scanned downtown`;
   document.getElementById('done-legend').innerHTML =
     `<span class="lg">${pinSVG('est',pinPx('est','receipt'))} Estimated</span>
      <span class="lg">${pinSVG('scan',pinPx('scan','receipt'))} Scanned on-site</span>
@@ -6669,7 +6415,7 @@ function runDone(p, simulated){
   mm.innerHTML=groundSVG(W,Hh,16,BBOX);
   const near=places.filter(q=>Math.abs(q.lat-p.lat)<0.0012&&Math.abs(q.lng-p.lng)<0.0016&&q!==p).slice(0,8);
   const box={lat0:p.lat-0.0009,lat1:p.lat+0.0009,lng0:p.lng-0.0013,lng1:p.lng+0.0013};
-  const pr=(la,ln)=>[ (ln-box.lng0)/(box.lng1-box.lng0)*W, (1-(la-box.lat0)/(box.lat1-box.lat0))*Hh ];
+  function pr(la,ln){return [ (ln-box.lng0)/(box.lng1-box.lng0)*W, (1-(la-box.lat0)/(box.lat1-box.lat0))*Hh ];}
   near.forEach(q=>{
     const [x,y]=pr(q.lat,q.lng);
     if(x<10||x>W-10||y<10||y>Hh-10)return;
@@ -6681,10 +6427,9 @@ function runDone(p, simulated){
   });
   const d=document.createElement('div');
   d.style.cssText=`position:absolute;left:${W/2}px;top:${Hh/2}px;pointer-events:none;--mh:34px`;
-  d.className='minipin'+(simulated?'':' pin-drop');
-  /* spec: "Live scan drop: 64 px Scanned on-site pin." The tier is the pin's own, so a
-     simulated run — which upgrades nothing — cannot draw itself a Scanned pin. */
-  d.innerHTML=`<span class="pin">${pinSVG(p.tier,64)}</span>${(simulated||isReduced())?'':'<span class="rippler"></span>'}`;
+  d.className='minipin pin-drop';
+  /* spec: "Live scan drop: 64 px Scanned on-site pin." */
+  d.innerHTML=`<span class="pin">${pinSVG('scan',64)}</span>${isReduced()?'':'<span class="rippler"></span>'}`;
   mm.appendChild(d);
 }
 document.getElementById('btn-done-map').addEventListener('click',()=>{
@@ -6694,8 +6439,7 @@ document.getElementById('btn-done-map').addEventListener('click',()=>{
   /* bounce the upgraded pin on the real map too */
   const b=pinsEl.querySelector(`[data-id="${scanTarget.id}"]`);
   if(b&&!isReduced()){b.classList.add('pin-drop');const r=document.createElement('span');r.className='rippler';b.appendChild(r);setTimeout(()=>{b.classList.remove('pin-drop');r.remove();},2200);}
-  /* a simulated run against an entrance that is not on the map has no card to open */
-  if(places.some(q=>q.id===scanTarget.id)) after(isReduced()?0:600,()=>openCard(scanTarget.id,'medium'));
+  after(isReduced()?0:600,()=>openCard(scanTarget.id,'medium'));
 });
 
 /* ===================== onboarding (guest-first; every step skippable) ===================== */
@@ -6766,99 +6510,51 @@ document.getElementById('ob-needs-skip').addEventListener('click',()=>{
   finishOnboarding();
 });
 
-/* ===================== owner claim flow (same origin) =====================
-   The design source carries this flow as a three-row stub. Here it is the real one:
-   GET  /claim/places?q=          the catalogue search behind the result rows
-   POST /claim                    submit, answering {claim_id, token} for this session only
-   GET  /claim/<id>?token=        the review state; an approved claim opens the workspace
-   GET  /claim/<id>/workspace?token=   what the public pin says today, plus incentives
-   POST /claim/<id>/dispute       an owner's note; it never changes the public pin
-   The claim record lives in sessionStorage, not localStorage: a claim token is a
-   credential for one sitting, and the attested capture path proves itself with it.
-   The design's own a11y machinery is kept intact — roving tabindex on the result rows,
-   an inline error beside the control that blocks a submit, and a spoken announcement. */
-let claimHits=[];
-let claimSel=null;
-let claimRecord=null;
-const CLAIM_CHANNEL={email:'business_email', call:'listed_phone'};
-function claimSessionLoad(){
-  try{
-    const raw=sessionStorage.getItem('entrymap.claim');
-    if(!raw) return null;
-    const rec=JSON.parse(raw);
-    if(rec && rec.claim_id && rec.token) return rec;
-  }catch(e){}
-  return null;
-}
-function claimSessionSave(rec){
-  claimRecord=rec;
-  try{ sessionStorage.setItem('entrymap.claim', JSON.stringify({claim_id:rec.claim_id, token:rec.token})); }catch(e){}
-}
-function bizheadHTML(name, sub){
-  return `<span class="cr-icon" aria-hidden="true">${iconSVG('store',20,'var(--purple-ink)')}</span>
-     <span><span class="cr-name">${esc(name)}</span>
-     <span class="cr-sub">${esc(sub||'')}</span></span>`;
-}
-function renderClaimHits(focusSel){
+/* ===================== owner claim flow (stub; entrance-level, proof-of-control honest) ===================== */
+const CLAIM_RESULTS=[
+  {name:'Royal Blue Grocery', addr:'241 W 3rd St', dist:'0.1 mi', id:'door-04'},
+  {name:'Royal Blue Grocery', addr:'609 Congress Ave', dist:'0.3 mi', id:null},
+  {name:'Royal Blue Grocery', addr:'360 Nueces St', dist:'0.4 mi', id:null}
+];
+let claimSel=0;
+function initClaimFind(focusSel){
   const wrap=document.getElementById('claim-results');
   wrap.innerHTML='';
   wrap.setAttribute('role','radiogroup');
   wrap.setAttribute('aria-label','Choose the entrance you manage');
-  if(!claimHits.length){
-    wrap.innerHTML='<p class="sheet-p">No listings match that search yet.</p>';
-    return;
-  }
-  claimHits.forEach((r,i)=>{
-    const on = !!claimSel && claimSel.place_id===r.place_id;
+  CLAIM_RESULTS.forEach((r,i)=>{
+    const on=i===claimSel;
     const b=document.createElement('button');
     b.className='claim-result'+(on?' sel':'');
     b.type='button';
     b.setAttribute('role','radio');
     b.setAttribute('aria-checked',on);
     b.tabIndex = on ? 0 : -1;             /* roving tabindex: the group is one tab stop */
-    b.setAttribute('aria-label',`${r.name}, ${r.place_id}`);
+    b.setAttribute('aria-label',`${r.name}, ${r.addr}, ${r.dist} away`);
     b.innerHTML=`<span class="cr-icon" aria-hidden="true">${iconSVG('store',20,'var(--purple-ink)')}</span>
       <span aria-hidden="true"><span class="cr-name">${esc(r.name)}</span>
-      <span class="cr-sub">${esc(r.place_id)}</span></span>
+      <span class="cr-sub">${esc(r.addr)}</span></span>
+      <span class="cr-dist" aria-hidden="true">${r.dist}</span>
       <span class="cr-mark" aria-hidden="true">&#10003;</span>`;
-    b.addEventListener('click',()=>{claimSel=r;renderClaimHits(true);});
+    b.addEventListener('click',()=>{claimSel=i;initClaimFind(true);});
     b.addEventListener('keydown',e=>{
       const k=e.key;
       if(k!=='ArrowDown'&&k!=='ArrowRight'&&k!=='ArrowUp'&&k!=='ArrowLeft') return;
       e.preventDefault();
       const d=(k==='ArrowDown'||k==='ArrowRight')?1:-1;
-      claimSel=claimHits[(i+d+claimHits.length)%claimHits.length];
-      renderClaimHits(true);
+      claimSel=(i+d+CLAIM_RESULTS.length)%CLAIM_RESULTS.length;
+      initClaimFind(true);
     });
     wrap.appendChild(b);
   });
   if(focusSel){ const sel=wrap.querySelector('[aria-checked="true"]'); if(sel) sel.focus(); }
 }
-async function searchClaims(){
-  const q=document.getElementById('claim-search').value.trim();
-  if(q.length<2){ claimHits=[]; claimSel=null; renderClaimHits(); return; }
-  try{
-    const r=await fetch(CLAIM_API+'/places?q='+encodeURIComponent(q));
-    const j=await r.json().catch(()=>({places:[]}));
-    claimHits=j.places||[];
-    if(claimSel && !claimHits.some(h=>h.place_id===claimSel.place_id)) claimSel=null;
-    if(!claimSel && claimHits.length) claimSel=claimHits[0];
-    renderClaimHits();
-  }catch(e){ toast("Couldn't search listings"); }
-}
-function initClaimFind(){
-  claimHits=[]; claimSel=null;
-  renderClaimHits();
-  searchClaims();   /* the field arrives with a search in it */
-}
-let claimSearchTimer=null;
-document.getElementById('claim-search').addEventListener('input',()=>{
-  clearTimeout(claimSearchTimer);
-  claimSearchTimer=setTimeout(searchClaims, 180);
-});
 document.getElementById('btn-claim-continue').addEventListener('click',()=>{
-  if(!claimSel){ toast('Pick a listing from the search results'); announceUI('Pick a listing from the search results.'); return; }
-  document.getElementById('claim-bizhead').innerHTML=bizheadHTML(claimSel.name, claimSel.place_id);
+  const r=CLAIM_RESULTS[claimSel];
+  document.getElementById('claim-bizhead').innerHTML=
+    `<span class="cr-icon">${iconSVG('store',20,'var(--purple-ink)')}</span>
+     <span><span class="cr-name">${esc(r.name)}</span>
+     <span class="cr-sub">${esc(r.addr)}, Austin, TX</span></span>`;
   showScreen('claim-confirm');
 });
 document.querySelectorAll('input[name="claim-verify"]').forEach(rb=>rb.addEventListener('change',()=>{
@@ -6867,9 +6563,51 @@ document.querySelectorAll('input[name="claim-verify"]').forEach(rb=>rb.addEventL
   if(rb.value==='email') document.getElementById('vo-call').classList.remove('sel');
   else document.getElementById('vo-email').classList.remove('sel');
 }));
-/* B2b: a blocked submit is a real, perceivable refusal -- an inline error beside the
+/* B2b: a blocked submit is now a real, perceivable refusal -- an inline error beside the
    control that blocks it, aria-invalid + aria-describedby on that control, focus moved to
    it, and an announcement. Clearing the box clears all of it again. */
+/* ---- ROUND 5: FOUR SPEC CLAUSES ANSWERED WITH A DECISION, NOT CODE ----------
+   Written down so each is a decision on the record rather than a silent gap. The
+   conformance audit's closing point was that about ten of its findings need an
+   owner rather than an engineer; these are the four this round can settle.
+
+   1. HAPTICS. The spec asks for a light haptic on press and a medium one on the
+      Scan control and at capture. This is a browser prototype: navigator.vibrate
+      is unimplemented in iOS Safari, which is the platform this demo is shown on,
+      and calling it behind a capability check would fire on Android only and so
+      would demo differently on two devices in the same room. The intent is
+      recorded here and belongs in the native shell, not in this file. No call is
+      made and none is faked.
+
+   2. TOUCH TARGET FIGURE. The spec and interaction-motion.json both say 48x48;
+      the build standardises on 44x44, the WCAG 2.5.5 AAA figure, and Round 1
+      measured every control against it. Raising the floor to 48 would reflow
+      dense rows across 26 screens at two text sizes for a 4px gain over a
+      published accessibility standard the build already meets. Staying at 44 and
+      saying so. The two genuine outliers Round 4 carried -- a 40x40 sheet close
+      and a 52x31 toggle -- are re-measured each round; the only controls now
+      under 44 are three NATIVE inputs on claim-confirm, each inside a row that is
+      itself the 44+ target and toggles it.
+
+   3. THE TEXAS FLAG ON THE MAP. The boards draw it beside a pin on three of four
+      panels; pin-hierarchy.json says the state record is receipt provenance only
+      and never on the pin face; our own canon withdrew the accessory because icon
+      soup around pins was the original complaint. Defaulting to the token spec --
+      no flag on the map -- and flagging it to the product owner rather than
+      settling it silently. The flag still appears at exactly one site, the
+      state-record line inside a receipt.
+
+   4. THE FULL SHEET STOP OVERLAYS THE BOTTOM NAVIGATION. 92% of an 844px screen
+      is 776px and the bar is 86px; they cannot both be on screen. The spec's
+      number wins, and only at the full stop -- peek and medium stay docked above
+      the bar, so Map / Scan / Profile remain reachable in the two stops a reader
+      spends most of their time in.                                              */
+
+/* ROUND 5: the fifth control state, applied at the two places the build already
+   knows a control is not yet usable. aria-disabled, never the disabled attribute:
+   the control keeps its focus ring and its press, and pressing it still fires the
+   inline explanation that says what is missing -- which is the spec's own
+   "Tapping explains what is needed", and is better than a dead button. */
 function setUnavailable(el, on){
   if(!el) return;
   if(on) el.setAttribute('aria-disabled','true'); else el.removeAttribute('aria-disabled');
@@ -6888,38 +6626,39 @@ function syncClaimGate(){
 }
 claimAuthz.addEventListener('change',()=>{ if(claimAuthz.checked) setClaimAuthzError(false); syncClaimGate(); });
 syncClaimGate();
-/* Only one channel asks the claimant to type anything. The listed-phone route calls the
-   number the listing already carries -- a typed number would be input presenting itself
-   as authority -- so there is no phone field to validate, and the inline error is about
-   the work email alone. */
-const claimEmail=document.getElementById('claim-email');
-const claimEmailField=claimEmail.closest('.field');
+/* ROUND 6: the form used to submit with both contact fields empty and then land on
+   a screen reading "We'll email you when your workspace is ready." No address had
+   been collected, so the confirmation promised a message the app could not send --
+   and on the claim path, where the whole point is proving you are reachable at the
+   business's own contact, that is the one promise that must not be loose.
+   The authorization checkbox was the only validated field in the form; it is
+   untouched, and this is the same shape: mark invalid, describe, show, focus, and
+   announce why nothing was submitted. The rule is the narrow one -- whichever
+   channel the radio group selects must have a value -- so a claimant who picks the
+   phone route is not asked for an email they were never going to use. */
+const claimEmail=document.getElementById('claim-email'), claimPhone=document.getElementById('claim-phone');
 function claimChannel(){
   const r=document.querySelector('input[name="claim-verify"]:checked');
   return r && r.value==='call' ? 'call' : 'email';
 }
-function setClaimContactError(on){
+function setClaimContactError(on, which){
   const err=document.getElementById('claim-contact-err');
+  const field = which==='call' ? claimPhone : claimEmail;
+  const other = which==='call' ? claimEmail : claimPhone;
   err.classList.toggle('on', on);
   if(on){
-    document.getElementById('claim-contact-err-text').textContent =
-      "Add the work email we should send the link to, or choose to verify by phone.";
-    claimEmail.setAttribute('aria-invalid','true');
-    claimEmail.setAttribute('aria-describedby','claim-contact-err-text');
-  } else {
-    claimEmail.removeAttribute('aria-invalid');
-    claimEmail.removeAttribute('aria-describedby');
+    document.getElementById('claim-contact-err-text').textContent = which==='call'
+      ? "Add the business phone we should call, or choose to verify by business email."
+      : "Add the work email we should send the link to, or choose to verify by phone.";
+    field.setAttribute('aria-invalid','true');
+    field.setAttribute('aria-describedby','claim-contact-err-text');
   }
+  [field,other].forEach(f=>{ if(!on){ f.removeAttribute('aria-invalid'); f.removeAttribute('aria-describedby'); } });
+  if(on) other.removeAttribute('aria-invalid');
 }
-function syncClaimChannelUi(){
-  const email=claimChannel()==='email';
-  if(claimEmailField) claimEmailField.hidden=!email;
-  if(!email) setClaimContactError(false);
-}
-claimEmail.addEventListener('input',()=>{ if(claimEmail.value.trim()) setClaimContactError(false); });
-document.querySelectorAll('input[name="claim-verify"]').forEach(r=>r.addEventListener('change',()=>{ setClaimContactError(false); syncClaimChannelUi(); }));
-syncClaimChannelUi();
-document.getElementById('btn-claim-submit').addEventListener('click', async ()=>{
+[claimEmail,claimPhone].forEach(f=>f.addEventListener('input',()=>{ if(f.value.trim()) setClaimContactError(false); }));
+document.querySelectorAll('input[name="claim-verify"]').forEach(r=>r.addEventListener('change',()=>setClaimContactError(false)));
+document.getElementById('btn-claim-submit').addEventListener('click',()=>{
   if(!claimAuthz.checked){
     setClaimAuthzError(true);
     claimAuthz.focus();
@@ -6927,97 +6666,25 @@ document.getElementById('btn-claim-submit').addEventListener('click', async ()=>
     return;
   }
   setClaimAuthzError(false);
-  if(!claimSel){ toast('Pick a listing first'); return; }
   const ch=claimChannel();
-  const val=claimEmail.value.trim();
-  if(ch==='email' && !val){
-    setClaimContactError(true);
-    claimEmail.focus();
-    announceUI('Claim not submitted. Add the work email we should send the link to.');
+  const val=(ch==='call' ? claimPhone : claimEmail).value.trim();
+  if(!val){
+    setClaimContactError(true, ch);
+    (ch==='call' ? claimPhone : claimEmail).focus();
+    announceUI(ch==='call'
+      ? 'Claim not submitted. Add the business phone we should call.'
+      : 'Claim not submitted. Add the work email we should send the link to.');
     return;
   }
   setClaimContactError(false);
-  /* the typed address is input, never authority: the server verifies on the channel the
-     listing itself carries, so only the channel choice and the role are sent with it. */
-  const payload={place_id:claimSel.place_id, channel:CLAIM_CHANNEL[ch], role:document.getElementById('claim-role').value};
-  if(ch==='email') payload.email=val;
-  let r, j;
-  try{
-    r=await fetch(CLAIM_API,{method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
-    j=await r.json().catch(()=>({}));
-  }catch(e){ toast("Couldn't submit the claim"); return; }
-  if(!r.ok){ toast(j.detail || j.error || "Couldn't submit the claim"); return; }
-  claimSessionSave(j);
-  /* the confirmation names the channel it actually collected */
+  /* the confirmation now names the channel it actually collected */
   const say=document.getElementById('claim-track-how');
   if(say) say.textContent = ch==='call'
     ? "We'll call the business's listed phone when your workspace is ready."
     : "We'll email you when your workspace is ready.";
   document.getElementById('track-pin').innerHTML=pinSVG('owner',38);
   showScreen('claim-track');
-  refreshClaimTrack();
 });
-async function refreshClaimTrack(){
-  const rec=claimRecord || claimSessionLoad();
-  if(!rec) return;
-  try{
-    const r=await fetch(CLAIM_API+'/'+rec.claim_id+'?token='+encodeURIComponent(rec.token));
-    const j=await r.json().catch(()=>({}));
-    if(r.ok && j.status==='approved'){ openWorkspace(rec); }
-  }catch(e){}
-}
-async function openWorkspace(rec){
-  rec=rec || claimRecord || claimSessionLoad();
-  if(!rec){ toast('No claim in this session'); return; }
-  let r, j;
-  try{
-    r=await fetch(CLAIM_API+'/'+rec.claim_id+'/workspace?token='+encodeURIComponent(rec.token));
-    j=await r.json().catch(()=>({}));
-  }catch(e){ toast("Couldn't open the workspace"); return; }
-  if(!r.ok){ toast(j.detail || 'Workspace is not ready yet'); return; }
-  const pin=j.pin||{};
-  document.getElementById('ws-bizhead').innerHTML=bizheadHTML(pin.name||'', pin.place_id||'');
-  const tier=pin.owner_confirmed?'Owner-confirmed':(pin.state==='verified_accessible'?'Scanned on-site':'Estimated');
-  document.getElementById('ws-pin').textContent=tier+' — '+ (pin.label||'');
-  document.getElementById('ws-status').textContent='Claim '+j.claim.status+'. A claim never changes the public pin; attested in-app capture does.';
-  document.getElementById('ws-incentives').textContent=j.incentives||'';
-  claimSessionSave(rec);
-  showScreen('claim-workspace');
-}
-document.getElementById('btn-ws-capture').addEventListener('click',()=>{
-  const rec=claimRecord || claimSessionLoad();
-  if(!rec){ toast('No approved claim in this session'); return; }
-  fetch(CLAIM_API+'/'+rec.claim_id+'/workspace?token='+encodeURIComponent(rec.token))
-    .then(r=>r.json().then(j=>({ok:r.ok,j})))
-    .then(({ok,j})=>{
-      if(!ok || !j.pin){ toast('Workspace is not ready yet'); return; }
-      scanTarget={id:j.pin.place_id, name:j.pin.name, lat:j.pin.location.lat, lng:j.pin.location.lng};
-      startScan(true, {ownerAttest:true});
-    })
-    .catch(()=>toast("Couldn't start guided capture"));
-});
-document.getElementById('btn-ws-dispute').addEventListener('click', async ()=>{
-  const rec=claimRecord || claimSessionLoad();
-  const note=document.getElementById('ws-dispute').value.trim();
-  if(!rec){ toast('No approved claim in this session'); return; }
-  if(!note){ toast('Write what should change'); return; }
-  try{
-    const r=await fetch(CLAIM_API+'/'+rec.claim_id+'/dispute',{
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({token:rec.token, note})
-    });
-    const j=await r.json().catch(()=>({}));
-    if(!r.ok){ toast(j.detail || "Couldn't send the dispute"); return; }
-    document.getElementById('ws-dispute').value='';
-    toast("Thanks — we'll review your note. The public pin is unchanged.");
-  }catch(e){ toast("Couldn't send the dispute"); }
-});
-function maybeOpenClaimFromHash(){
-  if(location.hash==='#claim'){ closeSheets(); initClaimFind(); showScreen('claim-find'); }
-}
-claimRecord=claimSessionLoad();
-maybeOpenClaimFromHash();
-window.addEventListener('hashchange', maybeOpenClaimFromHash);
 document.querySelectorAll('[data-goto]').forEach(b=>b.addEventListener('click',()=>{
   if(b.dataset.goto==='screen-profile') resetNav();
   showScreen(b.dataset.goto);
@@ -7284,7 +6951,7 @@ function renderOwnerPublished(){
   document.getElementById('pub-feats').innerHTML=owFeatRows();
   document.getElementById('pub-sub').textContent=`${OWNER_PLACE.name} \u00b7 W 3rd St entrance. Customers see your update now.`;
 }
-document.getElementById('pub-taxlink').addEventListener('click',()=>toast('Section 44 / 190 explainer \u2014 ask your accountant'));
+document.getElementById('pub-taxlink').addEventListener('click',()=>toast('Section 44 / 190 explainer \u2014 not tax advice'));
 
 /* ---- 44 public listing: the app's own card renderer, docked at Full under a preview banner ---- */
 function renderOwnerListing(){
@@ -7305,7 +6972,6 @@ document.getElementById('btn-library').addEventListener('click',()=>libInput.cli
 libInput.addEventListener('change',()=>{
   const file=libInput.files && libInput.files[0];
   if(!file) return;
-  fromLibrary=true;
   const reader=new FileReader();
   reader.onload=()=>{
     stopCamera();
@@ -7360,58 +7026,6 @@ function toast(msg){
     setTimeout(()=>{ t.classList.remove('on'); t.classList.remove('swiped'); }, isReduced()?0:160); }
 })();
 
-/* ===================== live map data (same origin) =====================
-   GET /map/data is the server's public pin list: the pre-catalogue merged with every published
-   scan. Its pins merge into the embedded set by place_id and the server wins — a place the server
-   marks verified (its Scanned tier) takes the server's verdicts, count and date, and a pin this
-   page does not know is added. A place the server still lists as not-yet-checked keeps the
-   embedded detail, which is the same estimate with its evidence text. No server, or a
-   dataset_error, leaves the embedded pins exactly as they are. */
-const OBS_TO_V = {visible:'present', not_visible:'not_visible'};
-const inBBox = loc => loc.lat>=BBOX.lat0-0.001 && loc.lat<=BBOX.lat1+0.001 && loc.lng>=BBOX.lng0-0.001 && loc.lng<=BBOX.lng1+0.001;
-function critFromChecklist(checklist, keymap){
-  const crit={};
-  (checklist||[]).forEach(c=>{
-    if(!OBS_TO_V[c.observation]) return;
-    const conf = typeof c.confidence==='number' ? (c.confidence<=1 ? c.confidence*100 : c.confidence) : 0;
-    crit[keymap ? (keymap[c.key]||c.key) : c.key] = {v:OBS_TO_V[c.observation], c:Math.round(conf), e:''};
-  });
-  return crit;
-}
-function mergeServerPin(pin, base){
-  const scanned = pin.state==='verified_accessible';
-  const p = base || {id:String(pin.place_id), name:pin.name||'Entrance', lat:pin.location.lat, lng:pin.location.lng, crit:{}, tier:'est', date:pin.imagery_date||null};
-  if(!base) places.push(p);
-  if(scanned){
-    if(p.tier==='est') p.tier='scan';
-    p.live=true;
-    p.views=pin.scan_count||p.views||1;
-    p.crit=critFromChecklist(pin.checklist, LIVE_TO_DOOR);
-    p.date=pin.last_scanned||pin.imagery_date||p.date||'';
-  } else if(!base){
-    p.crit=critFromChecklist(pin.checklist, null);
-  }
-  p.f=featsOf(p);
-}
-function loadLiveMap(){
-  fetch('/map/data',{headers:{'Accept':'application/json'}})
-    .then(r=>r.ok?r.json():null)
-    .then(j=>{
-      if(!j||!Array.isArray(j.pins)) return;
-      if(j.dataset_error) console.info('EntryMap: /map/data carries no dataset ('+j.dataset_error+') — embedded pins plus any published scans');
-      const byId=new Map(places.map(p=>[p.id,p]));
-      let merged=0;
-      j.pins.forEach(pin=>{
-        if(!pin||!pin.location) return;
-        const base=byId.get(String(pin.place_id));
-        if(!base && !inBBox(pin.location)) return;   /* the map draws the demo area only */
-        mergeServerPin(pin, base); merged++;
-      });
-      if(merged){ renderMap(); renderNearby(); }
-    })
-    .catch(()=>{});  /* no server (file://, offline): embedded pins only */
-}
-
 /* ===================== boot ===================== */
 function fitPhone(){
   const wrap=document.querySelector('.phone-wrap');
@@ -7451,22 +7065,11 @@ renderNotifs();
 syncNotifSub();
 fitPhone();
 renderMap();
-loadLiveMap();
 applyPrefs();
 /* first load: splash -> welcome (guest-first onboarding); a returning session
    (in-memory flag) would go straight to the map */
 if(!onboarded) runSplash();
 addEventListener('resize',()=>{fitPhone();renderMap();});
-</script>
-<script>
-/* Installable app (TICK-327). Registered late and defensively: the page is the
-   product, the worker is an optimisation. A browser without service workers, a
-   file:// open, or a registration failure must all still leave a working app. */
-if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
-  window.addEventListener("load", function () {
-    navigator.serviceWorker.register("/app-sw.js").catch(function () {});
-  });
-}
 </script>
 </body>
 </html>

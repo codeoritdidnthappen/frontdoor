@@ -391,6 +391,29 @@ The page is served from the image, so **a change to `app.html` ships with the ne
 `fly deploy --ha=false`** and the phone picks it up within the page's five-minute `max-age`
 (force-reload sooner). Re-record the digests after that deploy, as below.
 
+**`app.html` is generated — do not edit it.** Its look, copy and interaction come from the
+EntryMap design source, which is worked on separately and lands here as
+`design-source/entrymap-app.html`; the same-origin wiring described above is applied to that
+source by `tools/port_app_page.py`, from the fragments in `tools/app_wiring/`. Rebuild the page
+from the committed design source with:
+
+```bash
+python tools/port_app_page.py
+```
+
+and refresh both the committed design source and the page when a new design round arrives:
+
+```bash
+python tools/port_app_page.py --design-source <the new design source> --update-source
+```
+
+Each op is anchored on the design source's own structure and every anchor must match exactly
+once, so a design change that moves one **fails the port** rather than quietly shipping a page
+with the wiring missing; `--check` asserts, without writing, that the committed page is what the
+port produces. `tests/test_app_page_port.py` pins that, the survival of the wiring, and that a
+change in the design source reaches the page; `tests/test_app_page.py` pins the wiring itself,
+on the served bytes.
+
 ### /screen sizing note — measure before Demo Day
 
 The **69 MiB** footprint in the table was measured serving `GET /health`. It says nothing about
