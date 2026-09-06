@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from frontdoor.assessment_store import DEFAULT_ASSESSMENTS_PATH
 from frontdoor.claims import DEFAULT_CLAIMS_PATH
 from frontdoor.corrections import DEFAULT_CORRECTIONS_PATH
 from frontdoor.scan_records import (
@@ -97,10 +98,16 @@ def test_the_dockerfile_copies_it(relative):
 #: report used to reach nobody. An ephemeral path is the quieter version of the same defect:
 #: the sender is told truthfully that it was received, and the next deploy erases the queue
 #: with nothing reporting the loss.
+#: The assessment store is the fourth, and it is the one whose loss is silent in a new way.
+#: Losing it loses no record a person wrote -- it loses the GUARANTEE that a photograph gets one
+#: answer (TICK-435). An ephemeral path empties it on every deploy, so the same image is
+#: re-sampled and can come back with a different verdict, and the only symptom is a number
+#: quietly changing between two releases.
 RUNTIME_STORES = (
     ("FRONTDOOR_SCANS", DEFAULT_SCANS_PATH),
     ("FRONTDOOR_CLAIMS", DEFAULT_CLAIMS_PATH),
     ("FRONTDOOR_CORRECTIONS", DEFAULT_CORRECTIONS_PATH),
+    ("FRONTDOOR_ASSESSMENTS", DEFAULT_ASSESSMENTS_PATH),
 )
 
 

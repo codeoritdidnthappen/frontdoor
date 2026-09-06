@@ -173,6 +173,13 @@ vite.config.ts.timestamp-*
 # curated dataset files.
 data/scans.jsonl
 
+# One assessment per photograph (TICK-435): runtime server data, appended by
+# /screen and /screen/publish on a cache miss. Digests and verdicts only, never
+# image bytes -- but still runtime state on the volume, not a committed dataset,
+# and a local run's answers must not be committed as though they were the
+# project's.
+data/assessments.jsonl
+
 # Owner claim records (TICK-259): runtime server data, appended by POST /claim.
 data/claims.jsonl
 data/claim_codes.json

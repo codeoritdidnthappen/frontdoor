@@ -294,6 +294,81 @@ is unaffected. Two caveats worth knowing before debugging a key:
   `screening engine failure`, not a 503. Use a standard workspace key from
   console.anthropic.com; the engine sends no workspace header.
 
+### One assessment per photograph (TICK-435)
+
+A verdict is meant to be a function of the photograph, and until #435 it was not. The assessment
+call is sampled and there is no way to turn that off — the SDK's `messages.create` does not take
+a `temperature` argument and the model rejects sampling parameters (#394) — so the same bytes
+could return different verdicts on different submissions. Measured residual between two identical
+runs: 1.7 points of accuracy and about 8% of coverage (#395).
+
+So the determinism is made here rather than asked of the model. Both `/screen` and
+`/screen/publish` hash the **privacy-processed** image and look the hash up before calling the
+model. A hit returns the stored assessment and makes **no** model call; a miss assesses, stores,
+and returns.
+
+- **`FRONTDOOR_ASSESSMENTS`** — path of the append-only JSONL assessment store, default
+  `data/assessments.jsonl`. Same caveat as `FRONTDOOR_SCANS`, and the `Dockerfile` points it at
+  the volume for the same reason — with a twist worth knowing: losing this file loses no record
+  anybody wrote, it loses the *guarantee*, and the only symptom is a percentage quietly changing
+  between two releases.
+
+The key is `(image sha256, engine version)`, and the engine version is the model id plus the
+sha256 of `src/frontdoor/screening_prompts.json`. **Editing a prompt therefore invalidates every
+entry it produced, with nobody remembering to bump a number.** Old entries stay in the store as
+history; they simply stop matching. Changing `ScreeningConfig.model` does the same.
+
+What is hashed is what the model *saw*: the privacy pass runs first, so no unprocessed byte is
+ever keyed on, and the store itself holds **no image bytes at all** — a digest and a verdict is
+the whole record.
+
+A stored answer is visibly a stored answer. Both endpoints report, inside `assessment`:
+`image_sha256`, `engine_version`, `assessed_at` (the timestamp of the **original** assessment)
+and `served_from_store`. A published scan record carries the same three durable fields under
+`assessment_ref`, so a publication made today from an answer produced last week says so.
+
+Not stored: an assessment that failed. A refusal, a truncation, a transport error, a rejected
+reply, or a privacy audit that never answered is a failure of the **call**, and freezing one into
+the store would make a transient fault permanent. Those re-ask on the next submission.
+
+A re-scan with a **new** photograph is a miss, and that is correct — it is new evidence about the
+same door and it gets assessed. This store makes one photograph give one answer; it does not make
+one door give one answer forever.
+
+Failure posture is fail-open: an unreadable store is a miss, and an append that fails is logged
+and the assessment is still returned. Determinism degrades to what it was before the store
+existed; a request never fails because the store did.
+
+#### Owed: the demonstration against the real API
+
+`tests/test_assessment_store.py` pins every property above against an injected engine that
+answers *differently on every call*, so nothing there passes because a fake could only say one
+thing. What it cannot do is prove the guarantee against the live model, and #435 asks for exactly
+that. **There was no API credit when this shipped, and a mock is not a demonstration**, so this
+one criterion is open. To close it once credit is available, from a checkout with a working
+`ANTHROPIC_API_KEY`:
+
+```bash
+# 1. A fresh store, so the first request is unambiguously a miss.
+export FRONTDOOR_ASSESSMENTS=$(mktemp -d)/assessments.jsonl
+
+# 2. Submit ONE photograph twice against a running server.
+for i in 1 2; do
+  curl -s -F "images=@entrance.jpg;type=image/jpeg"     https://frontdoor-measure.fly.dev/screen > "live-$i.json"
+done
+
+# 3. The verdicts must be byte-identical, and the second must say where it came from.
+python -c "import json;a,b=[json.load(open(f'live-{i}.json'))['assessment'] for i in (1,2)];print('criteria identical:', a['criteria']==b['criteria']);print('ada identical:', json.load(open('live-1.json'))['ada_screening']==json.load(open('live-2.json'))['ada_screening']);print('first served_from_store:', a['served_from_store']);print('second served_from_store:', b['served_from_store']);print('assessed_at carried:', a['assessed_at']==b['assessed_at'])"
+
+# 4. And the store holds exactly one line for that photograph.
+wc -l "$FRONTDOOR_ASSESSMENTS"
+```
+
+Expected: `criteria identical: True`, `ada identical: True`, `first served_from_store: False`,
+`second served_from_store: True`, `assessed_at carried: True`, one line. Two runs against the
+UNPATCHED server are the control — #395 measured them differing. Record the result here and
+close #435's first checkbox; the spend is one assessment, not two.
+
 ### The map dataset
 
 `GET /map/data` reads the pre-catalogue dataset from the path in the **`FRONTDOOR_MAP_DATASET`**
@@ -412,8 +487,8 @@ out of scope on #387.
 
 ### What the running server writes, and where it survives
 
-Four stores, and the difference between them is the difference between a durable record and a
-silent loss. `Dockerfile` redirects the first three onto the volume `fly.toml` mounts at
+Five stores, and the difference between them is the difference between a durable record and a
+silent loss. `Dockerfile` redirects the first four onto the volume `fly.toml` mounts at
 `/data`; a test pins that list against both files.
 
 | Store | Variable | In the image | Survives a deploy |
@@ -422,6 +497,7 @@ silent loss. `Dockerfile` redirects the first three onto the volume `fly.toml` m
 | Curated on-site publication | `FRONTDOOR_PUBLISHED_SCANS` | not set — `data/published_scans.jsonl`, copied into the image | yes — it is rebuilt from the repository on every deploy |
 | Owner claims | `FRONTDOOR_CLAIMS` | `/data/claims.jsonl` | yes |
 | Community corrections | `FRONTDOOR_CORRECTIONS` | `/data/corrections.jsonl` | yes |
+| One assessment per photograph | `FRONTDOOR_ASSESSMENTS` | `/data/assessments.jsonl` | yes |
 | Future-capture labels | `FRONTDOOR_LABELS_PATH` | not set — `data/labels.csv` in the container | **no**, by design (TICK-282) |
 
 **Claims lost is a credential lost, not a record lost.** The claim record holds the only bearer

@@ -552,7 +552,14 @@ def test_the_endpoint_has_no_persistence_path_for_image_bytes():
     """The quarantine guarantee is structural: /screen never writes an upload
     anywhere, so a face_visible image needs no deletion step. This pins that
     no persistence facility is even reachable from the module - if one is ever
-    added, this fails and the quarantine design has to be revisited."""
+    added, this fails and the quarantine design has to be revisited.
+
+    TICK-435 gave the endpoint an assessment store, and this test still holds
+    because the guarantee is about BYTES: the store's record is a sha256 and a
+    verdict, and `test_assessment_store.test_the_store_holds_no_image_bytes`
+    pins that no image data reaches it. A facility named here appearing in
+    THIS module would still mean bytes could be written from the request scope
+    itself, which is the thing the quarantine relies on not happening."""
     import inspect
 
     from frontdoor_server import screen_view

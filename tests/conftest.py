@@ -81,6 +81,35 @@ def _load_dotenv_before_any_test():
 
 
 @pytest.fixture(autouse=True)
+def _each_test_gets_an_empty_assessment_store(tmp_path_factory):
+    """Point FRONTDOOR_ASSESSMENTS at a fresh empty file for every test (TICK-435).
+
+    /screen and /screen/publish now serve one assessment per photograph, keyed
+    by the sha256 of the processed bytes. Every endpoint test posts the SAME
+    fixture JPEG, so without this the first test to run would have its verdicts
+    served to every later one -- a fake engine returning `absent` would be
+    ignored in favour of the `present` a previous test stored, and the failure
+    would depend on collection order. It would also write the store into the
+    working tree.
+
+    Fresh per test rather than per session: a test that wants a hit sets its
+    own path (or posts twice), and a test that wants a miss must not inherit
+    another test's answer. Same os.environ-with-restore shape as the fixture
+    below, and for the same ordering reason.
+    """
+    import os
+
+    store = tmp_path_factory.mktemp("assessment-store") / "assessments.jsonl"
+    previous = os.environ.get("FRONTDOOR_ASSESSMENTS")
+    os.environ["FRONTDOOR_ASSESSMENTS"] = str(store)
+    yield
+    if previous is None:
+        os.environ.pop("FRONTDOOR_ASSESSMENTS", None)
+    else:
+        os.environ["FRONTDOOR_ASSESSMENTS"] = previous
+
+
+@pytest.fixture(autouse=True)
 def _curated_publication_off_by_default(tmp_path_factory):
     """Point FRONTDOOR_PUBLISHED_SCANS at nothing unless a test says otherwise.
 
