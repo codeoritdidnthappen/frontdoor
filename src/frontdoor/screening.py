@@ -21,6 +21,14 @@ about what is visible in the photos. Never measurements, never compliance or
 legal conclusions. When a feature cannot be confidently seen the verdict is
 not_visible, and not_visible is never collapsed into absent.
 
+Its other half (TICK-399): a reply this engine REFUSED is a failure of the
+call, never an abstention by the model. Nobody looked and declined - the
+answer was thrown away. Every assessment names which happened (`failure`), a
+rejected reply is asked for again once, and the criteria that did validate
+survive the ones that did not. What is never done is guess at a refused
+answer: `not_applicable` is not `absent` and is not `not_visible`, so a
+refused criterion carries no verdict at all rather than a legible one.
+
 Split discipline (D-007): callers pass entrance IDs; this module resolves the
 split itself and refuses sealed-split entrances. The sealed split is scored
 exactly once, at results freeze, through a deliberate human-run path - not
@@ -37,7 +45,7 @@ import re
 import threading
 import time
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from importlib import resources
 
 import anthropic
@@ -131,12 +139,60 @@ class ScreeningError(ValueError):
     """Raised when the engine cannot produce an honest screening result."""
 
 
+class ResponseRejected(ScreeningError):
+    """The model replied and validation refused what it said (TICK-399).
+
+    Distinct from a refusal, a truncation or a transport error: the call
+    happened, tokens were spent, and the reply is well-formed enough to hold
+    an answer that this engine will not accept. Almost always a formatting
+    slip - most often the eight-check ADA vocabulary (`not_applicable`,
+    `cannot_determine`) appearing inside the four-criterion block, which the
+    same prompt restricts to present/absent/not_visible, and which the shared
+    `handrails` key invites. A rejection is a FAILURE of the call, never an
+    abstention by the model: nobody looked and declined, the answer was thrown
+    away. Recording the two as one number is what let a quarter of a split
+    disappear into the honesty statistic (#399).
+    """
+
+
 class SealedSplitError(ScreeningError):
     """Raised when a caller asks the engine to screen a sealed-split entrance."""
 
 
 class SpendCapError(ScreeningError):
     """Raised when the next call would push the run past its spend cap."""
+
+
+# --- how an assessment failed, when it failed (TICK-399) ---------------------
+#
+# `error` has always carried the text; these say the KIND, so a consumer can
+# separate the formatting slip that is worth another call from the refusal
+# that is not, without parsing an exception name out of a string.
+
+#: Validation refused the reply, wholly or in part. Retried, and reported by
+#: the eval as its own count rather than folded into abstentions.
+FAILURE_REJECTED = "rejected"
+#: The model declined the request. A deliberate answer; not retried.
+FAILURE_REFUSED = "refused"
+#: The reply ran out of tokens. Deterministic; raising max_tokens is the fix,
+#: not another call at the same budget.
+FAILURE_TRUNCATED = "truncated"
+#: Anything else that escaped the call: transport, timeout, an injected client
+#: raising. Out of scope for this ticket's retry.
+FAILURE_ERROR = "error"
+
+# --- why ONE criterion carries no verdict while the rest of the reply stands --
+#
+# Recovery never REINTERPRETS: `not_applicable` is not `absent` and is not
+# `not_visible`, and mapping one onto another is the single collapse this
+# product forbids most strongly. So a refused field is recorded as refused and
+# the criterion has no verdict - exactly as if the model had never answered
+# it - while the three criteria that did validate are kept.
+
+#: The criterion's verdict was one of the eight-check ADA vocabulary values.
+REJECTION_ADA_VALUE = "ada_check_value"
+#: The criteria block did not carry this criterion at all.
+REJECTION_MISSING = "missing_from_criteria"
 
 
 @dataclass(frozen=True)
@@ -148,8 +204,26 @@ class ScreeningConfig:
     # adaptive thinking used to consume the budget and truncate mid-object.
     model: str = "claude-sonnet-5"
     max_tokens: int = 6000
+    # There is deliberately NO temperature here (TICK-394, #394). That ticket
+    # asked for an explicit temperature of 0 so the same photograph gives the
+    # same verdicts, on the premise that the call was running at the API
+    # default of 1.0. The premise no longer holds: sampling parameters were
+    # removed for this model generation. `anthropic` 1.3.0's
+    # `messages.create` does not accept `temperature` at all (it raises
+    # TypeError), and claude-sonnet-5 rejects sampling parameters with a 400.
+    # Sending one would fail every assessment, so the verdict cannot be made a
+    # function of the photograph by configuration. test_screening pins the
+    # call surface, and the SDK signature, so a later attempt to "fix" this
+    # fails a test instead of taking /screen down.
     max_usd_per_run: float = 1.00
     usd_per_image: float = 0.05  # conservative per-image estimate (cents-order)
+    #: How many times one assessment is attempted before its rejection stands
+    #: (TICK-399). Two = one bounded retry. Bounded because a rejection is a
+    #: formatting slip that a second sample usually does not repeat, while an
+    #: unbounded loop against a model that keeps answering the same way spends
+    #: real money to learn nothing. Every attempt books its own cost against
+    #: the spend cap, so the cap remains a cap.
+    response_attempts: int = 2
 
 
 @dataclass(frozen=True)
@@ -170,6 +244,19 @@ class ImageAssessment:
     #: reply was rejected. Score, counts and summary are never stored here:
     #: callers compute them with compute_ada_screening.
     ada_checks: dict | None = None
+    #: How the assessment failed, when it failed: one of FAILURE_REJECTED,
+    #: FAILURE_REFUSED, FAILURE_TRUNCATED, FAILURE_ERROR, or None for a clean
+    #: one (TICK-399). FAILURE_REJECTED can appear WITH criteria: a reply whose
+    #: `handrails` verdict was an ADA value keeps its other three criteria and
+    #: is still a rejected response, because a field was thrown away.
+    failure: str | None = None
+    #: Model calls made for this assessment, including retries. 1 is the clean
+    #: case; 2 means the first reply was rejected and a second was asked for.
+    attempts: int = 1
+    #: How many of those attempts came back rejected. >= 1 says the first reply
+    #: was refused by validation even when the retry then succeeded, which is
+    #: the number the "before" discard rate is read from.
+    rejected_attempts: int = 0
 
 
 @dataclass(frozen=True)
@@ -181,6 +268,14 @@ class CriterionSummary:
     # signal about view disagreement into false confidence.
     flip_rate: float | None  # fraction of valid views disagreeing with verdict
     counts: dict | None  # valid verdict -> number of voting views
+    #: Views that produced no verdict for this criterion because validation
+    #: refused the reply or the field (TICK-399). A verdict of None with
+    #: rejected > 0 is a FAILURE - the engine never got an answer - and must
+    #: never be read as the model having looked and abstained.
+    rejected: int = 0
+    #: Views that produced no verdict for some other recorded failure: a
+    #: refusal, a truncation, a transport error. Also not an abstention.
+    failed: int = 0
 
 
 @dataclass(frozen=True)
@@ -237,39 +332,86 @@ def parse_json_response(text):
     """Parse model output that should be bare JSON; tolerate stray fences."""
     start, end = text.find("{"), text.rfind("}")
     if start == -1 or end == -1:
-        raise ScreeningError(f"no JSON object in response: {text[:200]!r}")
+        raise ResponseRejected(f"no JSON object in response: {text[:200]!r}")
     try:
         return json.loads(text[start : end + 1])
     except json.JSONDecodeError as exc:
-        raise ScreeningError(f"response is not valid JSON: {exc}") from exc
+        raise ResponseRejected(f"response is not valid JSON: {exc}") from exc
 
 
-def validate_verdicts(parsed: object) -> dict[str, dict[str, object]]:
-    """Return the four valid criteria or reject the whole model response."""
+def _rejected_criterion(reason: str, value: str | None = None) -> dict:
+    """The entry for a criterion whose answer was refused.
+
+    Same shape as a valid entry so every consumer that reads
+    ``criteria[key]["verdict"]`` keeps working, with the verdict None it would
+    have had if the model had never answered - and a reason beside it, so a
+    consumer that cares can tell "refused" from "never asked". The model's
+    confidence and evidence are dropped: they were written to justify a
+    verdict this engine refused, and carrying them forward beside no verdict
+    would lend that refused answer weight it has not earned.
+    """
+    return {
+        "verdict": None,
+        "confidence": None,
+        "evidence": None,
+        "rejected": reason,
+        "rejected_value": value,
+    }
+
+
+def validate_verdicts(
+    parsed: object, *, recover: bool = False
+) -> dict[str, dict[str, object]]:
+    """Return the four valid criteria, or reject the response.
+
+    ``recover`` (TICK-399) keeps the criteria that DID validate when the only
+    thing wrong with the others is the failure mode #399 is about: a criterion
+    carrying one of the eight-check ADA values, or missing from the block
+    altogether. Those criteria come back with a None verdict and a ``rejected``
+    reason - never with a verdict inferred from what the model wrote.
+    `not_applicable` is not `absent` and is not `not_visible`.
+
+    Everything else still rejects the whole response, in both modes: a reply
+    that is not an object, has no criteria block, invents a verdict word from
+    outside either vocabulary, or breaks the confidence or evidence rules is a
+    reply whose shape this engine does not recognise, and salvaging fields out
+    of one would be guessing about the rest.
+    """
     if not isinstance(parsed, dict):
-        raise ScreeningError("model response must be a JSON object")
+        raise ResponseRejected("model response must be a JSON object")
     crit = parsed.get("criteria")
-    if not isinstance(crit, dict) or set(crit) != set(CRITERIA_KEYS):
-        raise ScreeningError("model response must contain exactly the four criteria")
+    if not isinstance(crit, dict):
+        raise ResponseRejected("model response must contain exactly the four criteria")
+    if set(crit) != set(CRITERIA_KEYS) and not recover:
+        raise ResponseRejected("model response must contain exactly the four criteria")
     out = {}
     for key in CRITERIA_KEYS:
+        if key not in crit:
+            # Only reachable under recover: the strict path already refused.
+            out[key] = _rejected_criterion(REJECTION_MISSING)
+            continue
         entry = crit[key]
         if not isinstance(entry, dict):
-            raise ScreeningError(f"criterion {key} must be an object")
+            raise ResponseRejected(f"criterion {key} must be an object")
         verdict = str(entry.get("verdict", "")).strip().lower()
         if verdict not in ALLOWED_VERDICTS:
-            raise ScreeningError(f"criterion {key} has invalid verdict {verdict!r}")
+            if recover and verdict in ADA_RESULTS:
+                # The eight-check vocabulary in the four-criterion block: the
+                # known slip. Refuse the field, keep the reply.
+                out[key] = _rejected_criterion(REJECTION_ADA_VALUE, verdict)
+                continue
+            raise ResponseRejected(f"criterion {key} has invalid verdict {verdict!r}")
         confidence = entry.get("confidence")
         if isinstance(confidence, bool) or not isinstance(confidence, int):
-            raise ScreeningError(f"criterion {key} confidence must be an integer")
+            raise ResponseRejected(f"criterion {key} confidence must be an integer")
         if not 0 <= confidence <= 100:
-            raise ScreeningError(f"criterion {key} confidence must be from 0 through 100")
+            raise ResponseRejected(f"criterion {key} confidence must be from 0 through 100")
         evidence = entry.get("evidence")
         if not isinstance(evidence, str) or not evidence.strip():
-            raise ScreeningError(f"criterion {key} evidence must be non-empty text")
+            raise ResponseRejected(f"criterion {key} evidence must be non-empty text")
         evidence = evidence.strip()
         if "\n" in evidence or "\r" in evidence or len(evidence) > 200:
-            raise ScreeningError(
+            raise ResponseRejected(
                 f"criterion {key} evidence must be one line of at most 200 characters"
             )
         out[key] = {
@@ -287,20 +429,20 @@ def validate_ada_checks(parsed: object) -> dict[str, dict[str, str]]:
     object are forbidden here: the server computes those after validation.
     """
     if not isinstance(parsed, dict):
-        raise ScreeningError("model response must be a JSON object")
+        raise ResponseRejected("model response must be a JSON object")
     if "ada_screening" in parsed:
-        raise ScreeningError("model must not supply ada_screening")
+        raise ResponseRejected("model must not supply ada_screening")
     supplied = ADA_MODEL_AGGREGATE_KEYS & parsed.keys()
     if supplied:
-        raise ScreeningError("model must not supply aggregate fields")
+        raise ResponseRejected("model must not supply aggregate fields")
     checks = parsed.get("ada_checks")
     if not isinstance(checks, dict) or set(checks) != set(ADA_CHECK_KEYS):
-        raise ScreeningError(
+        raise ResponseRejected(
             "model response must contain exactly the eight photo checks"
         )
     supplied = ADA_MODEL_AGGREGATE_KEYS & checks.keys()
     if supplied:
-        raise ScreeningError("model must not supply aggregate fields")
+        raise ResponseRejected("model must not supply aggregate fields")
     out = {}
     for key in ADA_CHECK_KEYS:
         out[key] = _validate_ada_entry(key, checks[key])
@@ -310,29 +452,29 @@ def validate_ada_checks(parsed: object) -> dict[str, dict[str, str]]:
 def _validate_ada_entry(key: str, entry: object) -> dict[str, str]:
     """Validate one check without echoing model-authored values into errors."""
     if not isinstance(entry, dict):
-        raise ScreeningError(f"check {key} must be an object")
+        raise ResponseRejected(f"check {key} must be an object")
     result = entry.get("result")
     if isinstance(result, bool) or not isinstance(result, str):
-        raise ScreeningError(f"check {key} has an invalid result")
+        raise ResponseRejected(f"check {key} has an invalid result")
     result = result.strip().lower()
     if result not in ADA_RESULTS:
-        raise ScreeningError(f"check {key} has an invalid result")
+        raise ResponseRejected(f"check {key} has an invalid result")
     evidence = entry.get("evidence")
     if not isinstance(evidence, str) or not evidence.strip():
-        raise ScreeningError(f"check {key} evidence must be non-empty text")
+        raise ResponseRejected(f"check {key} evidence must be non-empty text")
     if any(character in evidence for character in _LINE_BREAKS):
-        raise ScreeningError(
+        raise ResponseRejected(
             f"check {key} evidence must be one line of at most 200 characters"
         )
     evidence = evidence.strip()
     if len(evidence) > 200:
-        raise ScreeningError(
+        raise ResponseRejected(
             f"check {key} evidence must be one line of at most 200 characters"
         )
     if _ADA_UNSAFE_CLAIM_RE.search(evidence):
-        raise ScreeningError(f"check {key} evidence contains a prohibited claim")
+        raise ResponseRejected(f"check {key} evidence contains a prohibited claim")
     if _ADA_NUMERIC_MEASUREMENT_RE.search(evidence):
-        raise ScreeningError(
+        raise ResponseRejected(
             f"check {key} evidence contains an unsupported numeric measurement"
         )
     return {"result": result, "evidence": evidence}
@@ -448,24 +590,95 @@ def validate_face_check(parsed):
     return FACE_CHECK_UNKNOWN
 
 
+def criterion_verdict(assessment, key):
+    """``(verdict, failure)`` for ONE criterion of ONE assessment (TICK-399).
+
+    The single place that answers "did this view produce a verdict here, and
+    if not, why not". ``verdict`` is None whenever there is no usable answer;
+    ``failure`` says whether that None is a recorded failure (one of the
+    FAILURE_* kinds) or None, which is the only case a caller may read as the
+    model having looked. A caller that ignores the second value and treats
+    every None as an abstention is the defect this ticket fixes, so there is
+    one function to get right rather than four copies of the same branch.
+    """
+    if assessment.criteria is None:
+        return None, assessment.failure or FAILURE_ERROR
+    entry = assessment.criteria.get(key)
+    if not isinstance(entry, dict):
+        return None, FAILURE_REJECTED
+    if entry.get("rejected"):
+        return None, FAILURE_REJECTED
+    verdict = entry.get("verdict")
+    if verdict not in ALLOWED_VERDICTS:
+        # A verdict outside the vocabulary never reached here through the
+        # validator; a hand-built assessment could still carry one, and it is
+        # not an answer.
+        return None, FAILURE_REJECTED
+    return verdict, None
+
+
+def any_verdict(assessment):
+    """True when at least one criterion of this assessment carries a verdict.
+
+    The question every publishing path has to ask since recovery arrived
+    (TICK-399). `criteria is not None` used to mean "the engine produced
+    verdicts", because a refused reply carried nothing at all. It can now be a
+    dict whose every field was refused separately, which produces exactly as
+    much as a refused reply did: nothing. A path that keeps using the old
+    check publishes a scan with four null verdicts and no way to tell that
+    from a door nobody could see.
+    """
+    return any(
+        criterion_verdict(assessment, key)[0] is not None
+        for key in CRITERIA_KEYS
+    )
+
+
+def rejected_criteria(assessment):
+    """Criterion -> why its answer was refused, for the criteria that were.
+
+    Empty for a clean assessment. What a published record carries so a null
+    verdict in it can say whether the engine could not see the feature or its
+    answer was thrown away.
+    """
+    criteria = assessment.criteria or {}
+    return {
+        key: entry["rejected"]
+        for key, entry in criteria.items()
+        if isinstance(entry, dict) and entry.get("rejected")
+    }
+
+
 def aggregate_assessments(assessments):
     """Majority verdict per criterion across views, with the flip-rate shown.
 
     Only valid verdicts vote. Ties resolve to the most conservative verdict
     among the tied ones. flip_rate is the fraction of voting views that
     disagree with the majority verdict - reported, never hidden.
+
+    Views that produced no verdict are counted as what they were: `rejected`
+    when validation refused the reply or the field, `failed` for a refusal, a
+    truncation or a transport error. Neither votes, and neither is silent -
+    a summary with no verdict and a rejected count is a failure to report, not
+    an abstention (TICK-399).
     """
     summary = {}
     for key in CRITERIA_KEYS:
         counts = Counter()
+        rejected = failed = 0
         for assessment in assessments:
-            if assessment.criteria is None:
-                continue
-            verdict = assessment.criteria[key]["verdict"]
-            if verdict in ALLOWED_VERDICTS:
+            verdict, failure = criterion_verdict(assessment, key)
+            if verdict is not None:
                 counts[verdict] += 1
+            elif failure == FAILURE_REJECTED:
+                rejected += 1
+            elif failure is not None:
+                failed += 1
         if not counts:
-            summary[key] = CriterionSummary(verdict=None, flip_rate=None, counts={})
+            summary[key] = CriterionSummary(
+                verdict=None, flip_rate=None, counts={},
+                rejected=rejected, failed=failed,
+            )
             continue
         top = max(counts.values())
         majority = next(
@@ -476,6 +689,8 @@ def aggregate_assessments(assessments):
             verdict=majority,
             flip_rate=(total - counts[majority]) / total,
             counts=dict(counts),
+            rejected=rejected,
+            failed=failed,
         )
     return summary
 
@@ -492,12 +707,14 @@ def integrated_summary(assessment):
     """
     summary = {}
     for key in CRITERIA_KEYS:
-        verdict = None
-        if assessment.criteria is not None:
-            candidate = assessment.criteria[key]["verdict"]
-            if candidate in ALLOWED_VERDICTS:
-                verdict = candidate
-        summary[key] = CriterionSummary(verdict=verdict, flip_rate=None, counts=None)
+        verdict, failure = criterion_verdict(assessment, key)
+        summary[key] = CriterionSummary(
+            verdict=verdict,
+            flip_rate=None,
+            counts=None,
+            rejected=1 if failure == FAILURE_REJECTED else 0,
+            failed=1 if failure not in (None, FAILURE_REJECTED) else 0,
+        )
     return summary
 
 
@@ -538,14 +755,16 @@ class ScreeningEngine:
                        "data": base64.standard_b64encode(image).decode("ascii")},
         }
 
-    def _call_model(self, content, *, expect_face_check=False):
-        """One model call over the given content blocks; refusals, truncation
-        and parse failures are recorded errors, never silent.
+    def _attempt(self, content, *, expect_face_check):
+        """ONE model call, validated. Never raises: every outcome is recorded.
 
-        With expect_face_check the reply's face_check privacy answer is
-        validated and carried on the result; without it the question was never
-        asked, so the answer is "unknown" - never "clear", which would assert
-        a check that did not happen - and no missing-key warning is logged."""
+        Criteria and ADA checks are validated independently (TICK-399). They
+        used to share one try, so an ADA evidence line the validator disliked
+        also threw away four perfectly good criteria - the same
+        whole-response loss this ticket is about, arriving from the other
+        side. Each half now stands or falls on its own, and the assessment
+        says which fell.
+        """
         t0 = time.perf_counter()
         try:
             response = self._get_client().messages.create(
@@ -564,18 +783,150 @@ class ScreeningEngine:
                 )
             text = next((b.text for b in response.content if b.type == "text"), "")
             parsed = parse_json_response(text)
-            criteria = validate_verdicts(parsed)
-            ada_checks = validate_ada_checks(parsed)
+        except Exception as exc:
+            latency = time.perf_counter() - t0
+            return self._failed_attempt(exc, latency)
+
+        # Everything below is still inside a recorded-outcome guard: an
+        # unexpected escape here would be an exception out of assess_image,
+        # which is the one thing this engine has never done.
+        try:
+            errors = []
+            try:
+                criteria = validate_verdicts(parsed)
+            except ResponseRejected as exc:
+                # The known slip, and only the known slip: keep the criteria
+                # that validated, refuse the ones that did not, and never guess
+                # what a refused one meant. If nothing is salvageable this
+                # falls through to the whole-response rejection the engine has
+                # always recorded.
+                errors.append(f"{type(exc).__name__}: {exc}")
+                try:
+                    criteria = validate_verdicts(parsed, recover=True)
+                except ResponseRejected:
+                    criteria = None
+            try:
+                ada_checks = validate_ada_checks(parsed)
+            except ResponseRejected as exc:
+                errors.append(f"{type(exc).__name__}: {exc}")
+                ada_checks = None
             face_check = (validate_face_check(parsed) if expect_face_check
                           else FACE_CHECK_UNKNOWN)
         except Exception as exc:
-            latency = time.perf_counter() - t0
-            error = f"{type(exc).__name__}: {exc}"
-            logger.warning("assessment failed: %s", error)
-            return ImageAssessment(criteria=None, latency_s=round(latency, 3),
-                                   error=error)
+            return self._failed_attempt(exc, time.perf_counter() - t0)
+        if errors:
+            error = "; ".join(errors)
+            logger.warning("assessment rejected: %s", error)
+            return ImageAssessment(
+                criteria=criteria, latency_s=round(latency, 3), error=error,
+                face_check=face_check, ada_checks=ada_checks,
+                failure=FAILURE_REJECTED, rejected_attempts=1,
+            )
         return ImageAssessment(criteria=criteria, latency_s=round(latency, 3),
                                face_check=face_check, ada_checks=ada_checks)
+
+    @staticmethod
+    def _failed_attempt(exc, latency):
+        """One attempt that produced nothing, with the kind of nothing named."""
+        error = f"{type(exc).__name__}: {exc}"
+        if isinstance(exc, ResponseRejected):
+            failure = FAILURE_REJECTED
+        elif isinstance(exc, ScreeningError) and "refused" in str(exc):
+            failure = FAILURE_REFUSED
+        elif isinstance(exc, ScreeningError) and "truncated" in str(exc):
+            failure = FAILURE_TRUNCATED
+        else:
+            failure = FAILURE_ERROR
+        logger.warning("assessment failed (%s): %s", failure, error)
+        return ImageAssessment(
+            criteria=None, latency_s=round(latency, 3), error=error,
+            failure=failure,
+            rejected_attempts=1 if failure == FAILURE_REJECTED else 0,
+        )
+
+    @staticmethod
+    def _rejection_cost(assessment):
+        """How much of a reply was thrown away; smaller is better.
+
+        Used to keep the best attempt when a retry is also rejected, so a
+        second bad reply can never lose ground a first one held.
+        """
+        if assessment.criteria is None:
+            missing = len(CRITERIA_KEYS) + 1  # worse than losing every field
+        else:
+            missing = sum(
+                1 for key in CRITERIA_KEYS
+                if criterion_verdict(assessment, key)[0] is None
+            )
+        return (
+            missing,
+            0 if assessment.ada_checks is not None else 1,
+            # Last, so it only breaks ties: between two attempts that kept the
+            # same fields, the one nothing was refused in is the better record.
+            0 if assessment.failure is None else 1,
+        )
+
+    def _book_retry(self, cost):
+        """Reserve a retry's spend, or say no. A retry is a real call.
+
+        The cap is a ceiling on what one run may spend without a person
+        looking again; a retry that booked nothing would let a run of
+        rejections quietly double its bill under a cap that still read as
+        held.
+        """
+        try:
+            with self._lock:
+                self._check_spend_cap(cost)
+                self.spent_usd += cost
+        except SpendCapError as exc:
+            logger.warning(
+                "a rejected response was not retried: %s", exc)
+            return False
+        return True
+
+    def _call_model(self, content, *, expect_face_check=False, retry_cost=None):
+        """The assessment call, with one bounded retry on a rejected reply.
+
+        Refusals, truncation and parse failures are recorded errors, never
+        silent. A REJECTED reply - the model answered and validation refused
+        it - is retried up to ``config.response_attempts`` times, because that
+        failure is a formatting slip a second sample usually does not repeat
+        (TICK-399). A refusal or a truncation is not retried: one is a
+        deliberate answer, the other repeats at the same token budget.
+
+        The publication path already loops over whole assessments for the same
+        reason (`scan_publish.ASSESSMENT_ATTEMPTS`, which recovered four
+        entrances). This is that idea moved into the engine so `/screen` and
+        the eval get it too; the outer loop stays, and now retries only what
+        this one could not.
+
+        With expect_face_check the reply's face_check privacy answer is
+        validated and carried on the result; without it the question was never
+        asked, so the answer is "unknown" - never "clear", which would assert
+        a check that did not happen - and no missing-key warning is logged."""
+        if retry_cost is None:
+            retry_cost = self.config.usd_per_image
+        attempts = max(1, self.config.response_attempts)
+        best = None
+        rejected_attempts = 0
+        made = 0
+        for attempt in range(1, attempts + 1):
+            result = self._attempt(content, expect_face_check=expect_face_check)
+            made += 1
+            rejected_attempts += result.rejected_attempts
+            if best is None or self._rejection_cost(result) < self._rejection_cost(best):
+                best = result
+            if result.failure != FAILURE_REJECTED:
+                break
+            if attempt == attempts:
+                break
+            if not self._book_retry(retry_cost):
+                break
+            logger.info(
+                "retrying a rejected response (attempt %d of %d)",
+                attempt + 1, attempts,
+            )
+        return replace(best, attempts=made, rejected_attempts=rejected_attempts)
 
     def assess_image(self, image, *, media_type="image/jpeg"):
         """One model call over one image; refusals and parse failures are
@@ -589,7 +940,7 @@ class ScreeningEngine:
         return self._call_model([
             self._image_block(image, media_type),
             {"type": "text", "text": build_prompt()},
-        ], expect_face_check=True)
+        ], expect_face_check=True, retry_cost=self.config.usd_per_image)
 
     def assess_images_integrated(self, images, *, media_types=None):
         """ALL of an entrance's views in ONE model call, one integrated result.
@@ -615,7 +966,8 @@ class ScreeningEngine:
             for image, media_type in zip(images, media_types)
         ]
         content.append({"type": "text", "text": build_integrated_prompt(len(images))})
-        return self._call_model(content, expect_face_check=True)
+        # A retry re-sends every view, so it books what the first call booked.
+        return self._call_model(content, expect_face_check=True, retry_cost=cost)
 
     def _resolve_split_or_refuse(self, entrance_id, *, allow_sealed=False):
         """Canonicalize, resolve and log the split; refuse sealed entrances.

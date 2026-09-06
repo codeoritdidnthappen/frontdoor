@@ -69,7 +69,12 @@ from frontdoor.scan_records import (
     new_scan_record,
     physical_key,
 )
-from frontdoor.screening import ScreeningError, integrated_summary
+from frontdoor.screening import (
+    ScreeningError,
+    any_verdict,
+    integrated_summary,
+    rejected_criteria,
+)
 from frontdoor.split import InvalidEntranceId, assign_split, canonical_entrance_id
 from frontdoor.storage import StorageError, image_store
 from frontdoor_server.screen_view import (
@@ -335,7 +340,12 @@ def publish():
         )
     latency_ms = round((time.perf_counter() - t0) * 1000)
 
-    if assessment.criteria is None:
+    # `criteria is not None` is no longer the same question as "did the engine
+    # produce anything" (TICK-399): recovery can return a dict whose every
+    # field was refused. Publishing that writes a record with four null
+    # verdicts, and a scan record takes a pin to the verified tier whatever it
+    # says -- a green pin from an assessment that never happened.
+    if assessment.criteria is None or not any_verdict(assessment):
         return _error(
             "screening engine failure",
             f"the integrated assessment failed: {assessment.error or 'unknown error'}",
@@ -370,6 +380,14 @@ def publish():
             "latency_ms": None if assessment.latency_s is None
             else round(assessment.latency_s * 1000),
             "error": assessment.error,
+            # TICK-399: a rejected response is a failure of the call, not the
+            # model abstaining. Named here so a consumer can tell the two
+            # apart -- a criterion whose entry carries "rejected" was thrown
+            # away by validation, and "not seen in this scan" would be a lie
+            # about it. attempts says whether the bounded retry was used.
+            "failure": assessment.failure,
+            "attempts": assessment.attempts,
+            "rejected_attempts": assessment.rejected_attempts,
         },
         "latency_ms": latency_ms,
         "faces_blurred": faces_blurred,
@@ -390,6 +408,10 @@ def publish():
                 "verdict": summary.verdict,
                 "flip_rate": summary.flip_rate,
                 "counts": summary.counts,
+                # A null verdict with rejected 1 is a discarded answer, not an
+                # abstention (TICK-399).
+                "rejected": summary.rejected,
+                "failed": summary.failed,
             }
             for key, summary in integrated_summary(assessment).items()
         }
@@ -444,6 +466,11 @@ def publish():
             key: entry.get("confidence")
             for key, entry in assessment.criteria.items()
         },
+        # Why a null verdict is null, for the criteria the engine's answer was
+        # refused for (TICK-399). Without it the record cannot tell a feature
+        # nobody could see from an answer that was thrown away, which is the
+        # loss this ticket exists to end. Absent when nothing was refused.
+        verdict_failures=rejected_criteria(assessment),
         faces_blurred=faces_blurred,
         quarantined_count=0,
         image_keys=image_keys,

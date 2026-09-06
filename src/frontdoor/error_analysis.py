@@ -146,7 +146,12 @@ def _criterion_figure(report: Mapping[str, JSONValue]) -> str:
         correct = _count(metrics.get("correct"), f"criteria.{criterion}.correct")
         wrong = _count(metrics.get("wrong"), f"criteria.{criterion}.wrong")
         abstained = _count(metrics.get("abstained"), f"criteria.{criterion}.abstained")
-        scored = correct + wrong + abstained
+        # TICK-399 split failures out of `abstained` into `failed`. The rates
+        # this figure plots are computed over both, so n must count both or the
+        # sample size printed under the bars disagrees with the bars. Defaults
+        # to 0 so a report written before that split still reads.
+        failed = _count(metrics.get("failed", 0), f"criteria.{criterion}.failed")
+        scored = correct + wrong + abstained + failed
         accuracy = _rate(
             metrics.get("accuracy_of_committed"),
             f"criteria.{criterion}.accuracy_of_committed",
@@ -174,7 +179,8 @@ def _criterion_figure(report: Mapping[str, JSONValue]) -> str:
     title_prefix = "EXPLORATORY — " if split == "dev" else ""
     return _svg_document(
         f"{title_prefix}Per-criterion screening results",
-        f"{split} split; accuracy is over committed verdicts; sample sizes include abstentions",
+        f"{split} split; accuracy is over committed verdicts; sample sizes include "
+        f"abstentions and failed assessments",
         "; ".join(descriptions) + ".",
         118 + len(CRITERIA_KEYS) * ROW_HEIGHT * 2,
         body,

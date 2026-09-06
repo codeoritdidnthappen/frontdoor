@@ -9,9 +9,17 @@ per-entrance cross-view flip rates, and latency against the 15-second budget.
 
 Scoring vocabulary: labels are presence-only ("present"/"absent") because the
 operator stood at the door; the engine may also answer not_visible or produce
-no verdict at all. A not_visible (or missing) majority verdict is an
-ABSTENTION - scored separately, never counted correct or wrong, because
-declining to guess is the honest answer the engine is instructed to give.
+no verdict at all. A not_visible majority verdict is an ABSTENTION - scored
+separately, never counted correct or wrong, because declining to guess is the
+honest answer the engine is instructed to give.
+
+A missing verdict is NOT an abstention when the engine never got an answer
+(TICK-399). A rejected response, a refusal, a truncation or a transport error
+is scored as a FAILURE, in its own column, with rejected responses counted
+again as their own sub-total. Folding them into the abstention rate is how a
+repeat run silently discarded 68 of 154 view responses and lost every
+criterion on seven of twenty-eight entrances, while the report read as an
+engine that had looked and honestly declined.
 
 Split discipline (D-007, D-017): the split is resolved here from each entrance
 ID via the committed seed, exactly like the screening engine. Day to day the
@@ -44,12 +52,13 @@ from frontdoor.dataset_closeout import DatasetCloseoutError, load_eligible_entra
 from frontdoor.labels import SPLITS, labels_for_eval, load_labels
 from frontdoor.manifest import read_manifest
 from frontdoor.screening import (
-    ALLOWED_VERDICTS,
     CRITERIA_KEYS,
+    FAILURE_REJECTED,
     ScreeningConfig,
     ScreeningEngine,
     SealedSplitError,
     SpendCapError,
+    criterion_verdict,
 )
 from frontdoor.seal_audit import SealAuditError
 from frontdoor.split import assign_split, canonical_entrance_id
@@ -153,11 +162,40 @@ def collect_entrances(
     return {eid: sorted(caps) for eid, caps in sorted(entrances.items())}
 
 
-def classify(verdict, truth):
-    """One join cell: engine majority verdict vs human truth."""
+#: The outcome of one scored cell. `failed` is TICK-399's addition: the engine
+#: produced no verdict because the call failed, which is NOT the engine looking
+#: and declining. Folding the two together is what let seven of twenty-eight
+#: entrances vanish into the abstention rate - the honesty signal this product
+#: leans on - with nothing in the report saying so.
+OUTCOMES = ("correct", "wrong", "abstained", "failed")
+
+
+def classify(verdict, truth, *, failed=False):
+    """One join cell: engine majority verdict vs human truth.
+
+    `failed` says the missing verdict is a recorded failure (a rejected
+    response, a refusal, a truncation, a transport error) rather than an
+    abstention. Without it a discarded answer is indistinguishable from the
+    engine having looked and said it could not tell.
+    """
+    if verdict is None and failed:
+        return "failed"
     if verdict is None or verdict == "not_visible":
         return "abstained"
     return "correct" if verdict == truth else "wrong"
+
+
+def _scored(counts):
+    """Cells the engine was asked about: committed, abstained or failed.
+
+    Unchanged in total by TICK-399 - failures used to be inside `abstained`
+    and are now beside it - so the denominator does not move and the two
+    reports remain comparable.
+    """
+    return (
+        counts["correct"] + counts["wrong"] + counts["abstained"]
+        + counts["failed"]
+    )
 
 
 def accuracy_of_committed(counts):
@@ -187,6 +225,13 @@ def score_joins(screenings, labels):
             # both abstentions, but only the first is the not-visible rate
             # TICK-079 asks the sealed run to report.
             "not_visible": 0,
+            # An outcome in its own right (TICK-399): the engine produced no
+            # verdict because the call failed. It used to land in `abstained`.
+            "failed": 0,
+            # A sub-count of failed, the way not_visible is a sub-count of
+            # abstained: the failures that were a rejected response rather
+            # than a refusal, a truncation or a transport error.
+            "rejected": 0,
             "unlabeled": 0,
         }
         for key in CRITERIA_KEYS
@@ -195,15 +240,19 @@ def score_joins(screenings, labels):
     for entrance_id in sorted(screenings):
         summary = screenings[entrance_id].summary
         for key in CRITERIA_KEYS:
-            verdict = summary[key].verdict
+            cell = summary[key]
+            verdict = cell.verdict
+            failed = verdict is None and bool(cell.rejected or cell.failed)
             label = truth.get((entrance_id, key))
             if label is None:
                 per_criterion[key]["unlabeled"] += 1
                 continue
-            outcome = classify(verdict, label)
+            outcome = classify(verdict, label, failed=failed)
             per_criterion[key][outcome] += 1
             if verdict == "not_visible":
                 per_criterion[key]["not_visible"] += 1
+            if outcome == "failed" and cell.rejected:
+                per_criterion[key]["rejected"] += 1
             joins.append(
                 {
                     "entrance_id": entrance_id,
@@ -211,9 +260,76 @@ def score_joins(screenings, labels):
                     "verdict": verdict,
                     "truth": label,
                     "outcome": outcome,
+                    # How many views produced nothing here, and why. Zero on a
+                    # clean cell; a nonzero `rejected` beside a null verdict is
+                    # the discarded answer this ticket exists to make visible.
+                    "rejected_views": cell.rejected,
+                    "failed_views": cell.failed,
                 }
             )
     return per_criterion, joins
+
+
+def rejected_response_stats(screenings):
+    """View-level accounting of rejected responses (TICK-399, AC4).
+
+    Reported beside the abstention rate and never inside it. `responses` is
+    one per model call the engine made an assessment out of - per view in
+    per-image mode, per entrance in integrated mode.
+
+    `first_attempt_rejected` is the number the OLD engine would have discarded
+    outright: every one of these lost all four criteria for that view and was
+    scored as an abstention. `discarded` is what is still lost after the
+    bounded retry and field-level recovery, so the pair is this fix's before
+    and after, measured on the same run rather than across two.
+    """
+    stats = {
+        "responses": 0,
+        "first_attempt_rejected": 0,
+        "retry_calls": 0,
+        "recovered_by_retry": 0,
+        "partially_recovered": 0,
+        "discarded": 0,
+        "other_failures": 0,
+        "entrances_with_no_verdicts": [],
+    }
+    for entrance_id in sorted(screenings):
+        screening = screenings[entrance_id]
+        for assessment in screening.assessments:
+            stats["responses"] += 1
+            stats["retry_calls"] += max(0, assessment.attempts - 1)
+            if assessment.rejected_attempts:
+                stats["first_attempt_rejected"] += 1
+            if assessment.failure == FAILURE_REJECTED:
+                # Discarded means no criterion survived - whether the reply was
+                # refused whole or every one of its four fields was refused
+                # separately. Counting the second as a recovery would flatter
+                # the headline number with a response that produced nothing.
+                kept = sum(
+                    1 for key in CRITERIA_KEYS
+                    if criterion_verdict(assessment, key)[0] is not None
+                )
+                if kept:
+                    stats["partially_recovered"] += 1
+                else:
+                    stats["discarded"] += 1
+            elif assessment.failure is not None:
+                stats["other_failures"] += 1
+            elif assessment.rejected_attempts:
+                stats["recovered_by_retry"] += 1
+        summary = screening.summary
+        if all(summary[key].verdict is None for key in CRITERIA_KEYS) and any(
+            summary[key].rejected or summary[key].failed for key in CRITERIA_KEYS
+        ):
+            # AC2: an entrance the engine never successfully assessed. It is
+            # named, not left to be inferred from an abstention count.
+            stats["entrances_with_no_verdicts"].append(entrance_id)
+    responses = stats["responses"]
+    stats["first_attempt_rejection_rate"] = (
+        stats["first_attempt_rejected"] / responses if responses else None
+    )
+    stats["discard_rate"] = stats["discarded"] / responses if responses else None
+    return stats
 
 
 def entrance_calls(screenings, joins):
@@ -227,11 +343,16 @@ def entrance_calls(screenings, joins):
     is not the same as a failed one, so it is None and stays out of the
     agreement figure.
 
+    Failed cells (TICK-399) are counted in their own column, not in
+    `abstained`. An entrance whose every view was rejected therefore shows
+    four failures and no abstentions, instead of reading as a door the engine
+    looked at and honestly declined to call.
+
     Every screened entrance appears, including one with no labels at all -
     vanishing from the report is how an entrance goes unnoticed.
     """
     counts = {
-        entrance_id: {"correct": 0, "wrong": 0, "abstained": 0}
+        entrance_id: {outcome: 0 for outcome in OUTCOMES}
         for entrance_id in screenings
     }
     for join in joins:
@@ -270,18 +391,19 @@ def _condition_joins(screenings, captures, labels):
                 label = truth.get((entrance_id, key))
                 if label is None:
                     continue
-                verdict = None
-                if assessment.criteria is not None:
-                    candidate = assessment.criteria[key]["verdict"]
-                    if candidate in ALLOWED_VERDICTS:
-                        verdict = candidate
+                verdict, failure = criterion_verdict(assessment, key)
                 joins.append({
                     "capture_id": capture.capture_id,
                     "entrance_id": entrance_id,
                     "criterion": key,
                     "verdict": verdict,
                     "truth": label,
-                    "outcome": classify(verdict, label),
+                    "outcome": classify(
+                        verdict, label, failed=failure is not None),
+                    # Which failure, when there was one, so a condition cell
+                    # full of failures is not read as a condition the engine
+                    # honestly abstains under (TICK-399).
+                    "failure": failure,
                     "conditions": recorded,
                 })
     return joins
@@ -302,8 +424,12 @@ def _condition_sort_key(dimension, value):
 def _outcome_metrics(rows):
     counts = {
         outcome: sum(row["outcome"] == outcome for row in rows)
-        for outcome in ("correct", "wrong", "abstained")
+        for outcome in OUTCOMES
     }
+    rejected = sum(
+        1 for row in rows
+        if row["outcome"] == "failed" and row.get("failure") == FAILURE_REJECTED
+    )
     scored = sum(counts.values())
     entrance_count = len({row["entrance_id"] for row in rows})
     return {
@@ -312,8 +438,10 @@ def _outcome_metrics(rows):
         "entrance_count": entrance_count,
         "underpowered": entrance_count < MIN_CONDITION_ENTRANCES,
         **counts,
+        "rejected": rejected,
         "accuracy_of_committed": accuracy_of_committed(counts),
         "abstention_rate": counts["abstained"] / scored if scored else None,
+        "failure_rate": counts["failed"] / scored if scored else None,
     }
 
 
@@ -401,21 +529,25 @@ def build_result(
 ):
     per_criterion, joins = score_joins(screenings, labels)
     overall = {
-        "correct": 0, "wrong": 0, "abstained": 0, "not_visible": 0, "unlabeled": 0,
+        "correct": 0, "wrong": 0, "abstained": 0, "not_visible": 0,
+        "failed": 0, "rejected": 0, "unlabeled": 0,
     }
     criteria = {}
     for key in CRITERIA_KEYS:
         counts = per_criterion[key]
         for outcome, n in counts.items():
             overall[outcome] += n
-        scored = counts["correct"] + counts["wrong"] + counts["abstained"]
+        scored = _scored(counts)
         criteria[key] = {
             **counts,
             "accuracy_of_committed": accuracy_of_committed(counts),
             "abstention_rate": counts["abstained"] / scored if scored else None,
             "not_visible_rate": counts["not_visible"] / scored if scored else None,
+            # Reported beside the abstention rate, never inside it (TICK-399).
+            "failure_rate": counts["failed"] / scored if scored else None,
+            "rejection_rate": counts["rejected"] / scored if scored else None,
         }
-    scored = overall["correct"] + overall["wrong"] + overall["abstained"]
+    scored = _scored(overall)
     calls = entrance_calls(screenings, joins)
     call_outcomes = [
         call["all_committed_correct"]
@@ -432,7 +564,12 @@ def build_result(
             "accuracy_of_committed": accuracy_of_committed(overall),
             "abstention_rate": overall["abstained"] / scored if scored else None,
             "not_visible_rate": overall["not_visible"] / scored if scored else None,
+            "failure_rate": overall["failed"] / scored if scored else None,
+            "rejection_rate": overall["rejected"] / scored if scored else None,
         },
+        # AC4: the rejected-response count, as its own block rather than a
+        # share of the abstention rate.
+        "rejected_responses": rejected_response_stats(screenings),
         "entrance_call": {
             "per_entrance": calls,
             "agreement": (
@@ -480,23 +617,31 @@ def render_markdown(result):
         "",
         "Verdicts are screening statements about what is visible in photos - "
         "never measurements, never compliance conclusions. An abstention "
-        "(not_visible / no verdict) is scored separately, not as an error.",
+        "(not_visible / no verdict) is scored separately, not as an error. A "
+        "FAILURE - a rejected response, a refusal, a truncation, a transport "
+        "error - is scored separately again: the engine never got an answer, "
+        "which is not the engine looking and declining to call it (TICK-399).",
         "",
         "## Per-criterion accuracy",
         "",
-        "| criterion | correct | wrong | abstained | not visible | unlabeled "
-        "| accuracy of committed | abstention rate | not visible rate |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| criterion | correct | wrong | abstained | not visible | failed "
+        "| rejected | unlabeled | accuracy of committed | abstention rate "
+        "| not visible rate | failure rate |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
     ]
     for key in CRITERIA_KEYS:
         c = result["criteria"][key]
         lines.append(
             f"| {key} | {c['correct']} | {c['wrong']} | {c['abstained']} "
-            f"| {c['not_visible']} | {c['unlabeled']} "
+            f"| {c['not_visible']} | {c['failed']} | {c['rejected']} "
+            f"| {c['unlabeled']} "
             f"| {_fmt(c['accuracy_of_committed'])} "
-            f"| {_fmt(c['abstention_rate'])} | {_fmt(c['not_visible_rate'])} |"
+            f"| {_fmt(c['abstention_rate'])} | {_fmt(c['not_visible_rate'])} "
+            f"| {_fmt(c['failure_rate'])} |"
         )
     overall = result["overall"]
+    rejected = result["rejected_responses"]
+    lost = rejected["entrances_with_no_verdicts"]
     lines += [
         "",
         "## Overall",
@@ -509,23 +654,53 @@ def render_markdown(result):
         f"({overall['abstained']} abstained)",
         f"- not visible rate: {_fmt(overall['not_visible_rate'])} "
         f"({overall['not_visible']} of those said not visible)",
+        f"- failure rate: {_fmt(overall['failure_rate'])} "
+        f"({overall['failed']} produced no verdict because the call failed, "
+        f"{overall['rejected']} of them a rejected response)",
+        "",
+        "## Rejected responses",
+        "",
+        "A rejected response is a model reply this engine refused - most often "
+        "an eight-check ADA value (`not_applicable`, `cannot_determine`) "
+        "inside the four-criterion block. It is a failure of the call, not an "
+        "abstention, and it is counted here rather than in the abstention "
+        "rate. `first attempt rejected` is what the pre-TICK-399 engine would "
+        "have discarded outright; `discarded` is what is still lost after one "
+        "bounded retry and field-level recovery.",
+        "",
+        f"- responses assessed: {rejected['responses']}",
+        f"- first attempt rejected: {rejected['first_attempt_rejected']} "
+        f"({_fmt(rejected['first_attempt_rejection_rate'])})",
+        f"- retry calls made: {rejected['retry_calls']}",
+        f"- recovered by retry: {rejected['recovered_by_retry']}",
+        f"- partially recovered (some criteria kept): "
+        f"{rejected['partially_recovered']}",
+        f"- discarded after retry and recovery: {rejected['discarded']} "
+        f"({_fmt(rejected['discard_rate'])})",
+        f"- other failures (refusal, truncation, transport): "
+        f"{rejected['other_failures']}",
+        "- entrances with no verdict on any criterion: "
+        + (", ".join(lost) if lost else "none"),
         "",
         "## Entrance-level call",
         "",
         "An entrance's call is correct when every verdict the engine committed "
         "to for it was right. Abstentions are shown but never make the call "
-        "wrong; an entrance the engine committed to nothing on has no call.",
+        "wrong; an entrance the engine committed to nothing on has no call. "
+        "Failures are shown in their own column, so an entrance the engine "
+        "never successfully assessed cannot read as one it honestly declined.",
         "",
-        "| entrance | correct | wrong | abstained | accuracy of committed "
-        "| all committed correct |",
-        "| --- | --- | --- | --- | --- | --- |",
+        "| entrance | correct | wrong | abstained | failed "
+        "| accuracy of committed | all committed correct |",
+        "| --- | --- | --- | --- | --- | --- | --- |",
         *(
             f"| {entrance_id} | {call['correct']} | {call['wrong']} "
-            f"| {call['abstained']} | {_fmt(call['accuracy_of_committed'])} "
+            f"| {call['abstained']} | {call['failed']} "
+            f"| {_fmt(call['accuracy_of_committed'])} "
             f"| {'n/a' if call['all_committed_correct'] is None else ('yes' if call['all_committed_correct'] else 'no')} |"
             for entrance_id, call in result["entrance_call"]["per_entrance"].items()
         ),
-        f"| agreement | | | | | {_fmt(result['entrance_call']['agreement'])} |",
+        f"| agreement | | | | | | {_fmt(result['entrance_call']['agreement'])} |",
     ]
     condition_analysis = result["condition_analysis"]
     for dimension in CONDITION_KEYS:
@@ -537,9 +712,10 @@ def render_markdown(result):
             "**Exploratory — descriptive associations only; not causal.**",
             "",
             "| analysis | value | criterion | captures | entrances | status "
-            "| correct | wrong | abstained | accuracy of committed "
-            "| abstention rate |",
-            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+            "| correct | wrong | abstained | failed | rejected "
+            "| accuracy of committed | abstention rate |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- "
+            "| --- | --- |",
         ]
         for value, group in groups.items():
             for key in CRITERIA_KEYS:
@@ -551,7 +727,8 @@ def render_markdown(result):
                     f"| exploratory | {value} | {key} | "
                     f"{metrics['capture_count']} | {metrics['entrance_count']} | "
                     f"{status} | {metrics['correct']} | {metrics['wrong']} | "
-                    f"{metrics['abstained']} | "
+                    f"{metrics['abstained']} | {metrics['failed']} | "
+                    f"{metrics['rejected']} | "
                     f"{_fmt(metrics['accuracy_of_committed'])} | "
                     f"{_fmt(metrics['abstention_rate'])} |"
                 )
@@ -895,11 +1072,15 @@ def main(argv=None, *, from_cli=False):
             )
         return 1
     run = result["run"]
+    rejected = result["rejected_responses"]
     print(
         f"scored {run['labels_scored']} labeled pairs over "
         f"{run['entrance_count']} entrances in {_fmt(run['duration_s'], 1)}s; "
         f"accuracy of committed verdicts: "
         f"{_fmt(result['overall']['accuracy_of_committed'])}; "
+        f"rejected responses: {rejected['first_attempt_rejected']} of "
+        f"{rejected['responses']} on first attempt, {rejected['discarded']} "
+        f"still discarded after retry; "
         f"report in {args.out}"
     )
     return 0

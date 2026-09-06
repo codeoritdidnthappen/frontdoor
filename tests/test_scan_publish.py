@@ -35,8 +35,14 @@ from frontdoor.scan_publish import (
     match_entrances,
     publishable_entrances,
 )
+from frontdoor.map_states import _observation
 from frontdoor.scan_records import SCAN_SOURCE, load_scan_records
-from frontdoor.screening import CRITERIA_KEYS, ScreeningEngine, SealedSplitError
+from frontdoor.screening import (
+    CRITERIA_KEYS,
+    FAILURE_REJECTED,
+    ScreeningEngine,
+    SealedSplitError,
+)
 from frontdoor.split import assign_split, canonical_entrance_id
 
 REPO = Path(__file__).resolve().parents[1]
@@ -80,12 +86,25 @@ class FakeCapture:
 
 class FakeSummary:
     verdict = "not_visible"
+    rejected = 0
+    failed = 0
+
+
+class RejectedSummary:
+    """No verdict, and a rejection saying why -- never a clean abstention."""
+
+    verdict = None
+    rejected = 1
+    failed = 0
 
 
 class FakeAssessment:
     criteria = {key: {"confidence": 60} for key in CRITERIA_KEYS}
     face_check = "clear"
     error = None
+    failure = None
+    attempts = 1
+    rejected_attempts = 0
 
 
 class FakeScreening:
@@ -95,17 +114,25 @@ class FakeScreening:
 
 
 class FailedAssessment:
-    """What the engine hands back when the model answered off-vocabulary."""
+    """What the engine hands back when the model answered off-vocabulary.
 
-    criteria = {}
+    The engine has already spent its own bounded retry by this point
+    (TICK-399) and salvaged nothing, so there are no criteria and the failure
+    is named as a rejection rather than left as bare text.
+    """
+
+    criteria = None
     face_check = "clear"
-    error = "ScreeningError: criterion handrails has invalid verdict"
+    error = "ResponseRejected: criterion handrails has invalid verdict"
+    failure = FAILURE_REJECTED
+    attempts = 2
+    rejected_attempts = 2
 
 
 class FailedScreening:
     mode = "integrated"
     assessments = (FailedAssessment(),)
-    summary = {key: FakeSummary() for key in CRITERIA_KEYS}
+    summary = {key: RejectedSummary() for key in CRITERIA_KEYS}
 
 
 class FlakyEngine:
@@ -364,6 +391,11 @@ def test_an_off_vocabulary_answer_is_asked_again_and_never_reinterpreted(
     )
     assert stubborn.calls == 3
     assert results["E-001"]["error"]
+    # The record says WHAT went wrong, not just that something did: a rejected
+    # reply is a failure of the call, and every criterion is recorded as not
+    # assessed rather than as a verdict guessed from an off-vocabulary word.
+    assert results["E-001"]["failure"] == FAILURE_REJECTED
+    assert set(results["E-001"]["verdicts"].values()) == {"not_assessed"}
 
 
 def test_a_retry_is_a_fresh_call_into_the_sealed_guard_not_a_way_round_it(
@@ -701,3 +733,134 @@ def test_the_map_publishes_no_negative_state_or_wording(map_payload):
     for phrase in ("cannot get", "may not be able", "not accessible",
                    "unlikely", "inaccessible"):
         assert phrase not in served
+
+
+class RecoveredScreening:
+    """All four verdicts, out of a reply that was still refused somewhere.
+
+    What the engine hands back when it recovered every criterion but the ADA
+    half of the same reply was refused: usable verdicts, and an error beside
+    them.
+    """
+
+    mode = "integrated"
+    summary = {key: FakeSummary() for key in CRITERIA_KEYS}
+
+    class _Assessment:
+        criteria = {key: {"confidence": 60} for key in CRITERIA_KEYS}
+        face_check = "clear"
+        error = "ResponseRejected: model must not supply aggregate fields"
+        failure = FAILURE_REJECTED
+        attempts = 2
+        rejected_attempts = 2
+
+    assessments = (_Assessment(),)
+
+
+class RecoveredThenCleanEngine:
+    """First call recovers everything but is still rejected; second is clean."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def screen_entrance_integrated(self, entrance_id, images):
+        self.calls += 1
+        return RecoveredScreening() if self.calls == 1 else FakeScreening()
+
+
+def test_tick_399_a_clean_attempt_beats_a_recovered_one_with_the_same_verdicts(
+        no_image_work, tmp_path):
+    """Verdict count alone is not enough to pick the attempt to publish.
+
+    A first attempt that recovered all four criteria out of a rejected reply
+    carries the same four verdicts as a clean second attempt -- and an error.
+    Keeping it publishes a record that says the assessment failed when a clean
+    answer was in hand, and blocks the cache write, so the next run pays for
+    the whole entrance again.
+    """
+    engine = RecoveredThenCleanEngine()
+    results = assess_publishable(
+        {"E-001": ["E-001-1"]},
+        get_capture=lambda capture_id: FakeCapture(capture_id),
+        engine=engine,
+        cache_dir=tmp_path,
+    )
+    assert engine.calls == 2
+    result = results["E-001"]
+    assert result["error"] is None
+    assert result["failure"] is None
+    assert (tmp_path / "E-001.json").is_file()  # cached, so a resume is free
+
+
+class PartiallyRecoveredScreening:
+    """Three criteria kept, one refused -- what recovery usually produces."""
+
+    mode = "integrated"
+    summary = {
+        key: (RejectedSummary() if key == "handrails" else FakeSummary())
+        for key in CRITERIA_KEYS
+    }
+
+    class _Assessment:
+        criteria = {
+            key: (
+                {"verdict": None, "confidence": None, "evidence": None,
+                 "rejected": "ada_check_value",
+                 "rejected_value": "not_applicable"}
+                if key == "handrails"
+                else {"verdict": "not_visible", "confidence": 60,
+                      "evidence": f"{key} seen"}
+            )
+            for key in CRITERIA_KEYS
+        }
+        face_check = "clear"
+        error = "ResponseRejected: criterion handrails has invalid verdict"
+        failure = FAILURE_REJECTED
+        attempts = 2
+        rejected_attempts = 2
+
+    assessments = (_Assessment(),)
+
+
+class PartiallyRecoveringEngine:
+    def screen_entrance_integrated(self, entrance_id, images):
+        return PartiallyRecoveredScreening()
+
+
+def test_tick_399_the_batch_record_says_which_verdicts_were_refused(
+        no_image_work):
+    """The published record distinguishes "could not see it" from "answer refused".
+
+    Both write NOT_ASSESSED into `verdicts`. Only `verdict_failures` says which
+    of the two happened, and a record that cannot say carries exactly the loss
+    this ticket exists to end.
+    """
+    results = assess_publishable(
+        {"E-001": ["E-001-1"]},
+        get_capture=lambda capture_id: FakeCapture(capture_id),
+        engine=PartiallyRecoveringEngine(),
+    )
+    result = results["E-001"]
+    assert result["verdicts"]["ramp_or_bevel"] == "not_visible"
+    assert result["verdicts"]["handrails"] == "not_assessed"
+    assert result["verdict_failures"] == {"handrails": "ada_check_value"}
+
+    (record,) = build_records(results, [])
+    assert record["verdicts"]["handrails"] == "not_assessed"
+    assert record["verdict_failures"] == {"handrails": "ada_check_value"}
+    # Both publishing paths write a criterion nobody assessed as something the
+    # map reads as not-assessed -- this one the word, /screen/publish a null --
+    # and neither ever writes the refused word as a verdict.
+    assert _observation({"verdict": record["verdicts"]["handrails"]}) == \
+        _observation({"verdict": None})
+    assert "not_applicable" not in json.dumps(record)
+
+
+def test_tick_399_a_clean_batch_record_carries_no_failure_key(no_image_work):
+    results = assess_publishable(
+        {"E-001": ["E-001-1"]},
+        get_capture=lambda capture_id: FakeCapture(capture_id),
+        engine=RecordingEngine(),
+    )
+    (record,) = build_records(results, [])
+    assert "verdict_failures" not in record

@@ -169,12 +169,19 @@ def physical_key(image_key):
 def new_scan_record(*, place_ref, created_at, verdicts, confidences,
                     faces_blurred, quarantined_count, image_keys,
                     contributor=None, entrance_id=None,
-                    capture_kind=None, attested=False, blur_regions=None):
+                    capture_kind=None, attested=False, blur_regions=None,
+                    verdict_failures=None):
     """One scan record, with a fresh scan_id.
 
     blur_regions, when given, is one list per uploaded frame (upload order)
     of the {"x", "y", "w", "h"} rectangles the privacy pass pixelated in that
     frame (#350). Additive: records written before it carry no key.
+
+    verdict_failures maps a criterion to why the engine's answer for it was
+    refused (TICK-399). A null verdict beside an entry here is an answer that
+    was thrown away; a null verdict with no entry is a feature nobody could
+    see. Also additive, and omitted entirely when nothing was refused, so a
+    clean record is byte-identical to one written before this existed.
     """
     record = {
         "scan_id": uuid.uuid4().hex,
@@ -194,6 +201,8 @@ def new_scan_record(*, place_ref, created_at, verdicts, confidences,
         record["attested"] = True
     if blur_regions is not None:
         record["blur_regions"] = [list(regions) for regions in blur_regions]
+    if verdict_failures:
+        record["verdict_failures"] = dict(verdict_failures)
     return record
 
 

@@ -45,7 +45,13 @@ from importlib import resources
 from flask import Blueprint, Response, current_app, request
 
 from frontdoor.faceblur import FaceDetectorError, InvalidImageError, process_upload
-from frontdoor.screening import ScreeningError, ScreeningEngine, compute_ada_screening, integrated_summary
+from frontdoor.screening import (
+    ScreeningError,
+    ScreeningEngine,
+    any_verdict,
+    compute_ada_screening,
+    integrated_summary,
+)
 from frontdoor.split import InvalidEntranceId, assign_split, canonical_entrance_id
 
 ALLOWED_IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp")
@@ -92,7 +98,19 @@ def _get_engine():
 
 
 def ada_screening_from_assessment(assessment):
-    """Server-computed ADA block, or ScreeningError if the checks are missing."""
+    """Server-computed ADA block, or ScreeningError if the checks are missing.
+
+    When the engine refused the reply's eight checks it carries None here and
+    the reason on the assessment (TICK-399). Raising with that reason keeps the
+    endpoint saying WHY the checks were refused - "the model must not supply
+    aggregate fields" rather than the generic shape complaint compute_
+    ada_screening would make about the None.
+    """
+    if assessment.ada_checks is None:
+        raise ScreeningError(
+            assessment.error
+            or "the model reply carried no usable ADA checks"
+        )
     return compute_ada_screening(assessment.ada_checks)
 
 
@@ -220,7 +238,12 @@ def screen():
         )
     latency_ms = round((time.perf_counter() - t0) * 1000)
 
-    if assessment.criteria is None:
+    # `criteria is not None` is no longer the same question as "did the engine
+    # produce anything" (TICK-399): recovery can return a dict whose every
+    # field was refused. Publishing that writes a record with four null
+    # verdicts, and a scan record takes a pin to the verified tier whatever it
+    # says -- a green pin from an assessment that never happened.
+    if assessment.criteria is None or not any_verdict(assessment):
         return _error(
             "screening engine failure",
             f"the integrated assessment failed: {assessment.error or 'unknown error'}",
@@ -262,6 +285,14 @@ def screen():
             "latency_ms": None if assessment.latency_s is None
             else round(assessment.latency_s * 1000),
             "error": assessment.error,
+            # TICK-399: a rejected response is a failure of the call, not the
+            # model abstaining. Named here so a consumer can tell the two
+            # apart -- a criterion whose entry carries "rejected" was thrown
+            # away by validation, and "not seen in this scan" would be a lie
+            # about it. attempts says whether the bounded retry was used.
+            "failure": assessment.failure,
+            "attempts": assessment.attempts,
+            "rejected_attempts": assessment.rejected_attempts,
         },
         "latency_ms": latency_ms,
         "faces_blurred": faces_blurred,
@@ -291,6 +322,10 @@ def screen():
                 "verdict": summary.verdict,
                 "flip_rate": summary.flip_rate,
                 "counts": summary.counts,
+                # A null verdict with rejected 1 is a discarded answer, not an
+                # abstention (TICK-399).
+                "rejected": summary.rejected,
+                "failed": summary.failed,
             }
             for key, summary in integrated_summary(assessment).items()
         }

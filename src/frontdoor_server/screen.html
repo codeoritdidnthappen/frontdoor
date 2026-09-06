@@ -139,10 +139,18 @@ const el = (tag, cls, text) => {
 // Any verdict the server sends that this page does not recognise is rendered as-is and
 // styled as invalid, never silently mapped to something legible. An out-of-vocabulary
 // verdict arrives as "INVALID:<what the model said>" and the operator should see that.
-function verdictCell(verdict) {
+function verdictCell(entry) {
+  const verdict = entry && entry.verdict;
   const known = ["present", "absent", "not_visible"];
   const cls = known.includes(verdict) ? verdict : "invalid";
-  const label = verdict === null || verdict === undefined ? "no verdict" : verdict;
+  // TICK-399: a criterion whose answer the server refused is a rejected
+  // response, not the model looking and declining. The operator sees that it
+  // was thrown away, and sees the word that was thrown away -- never a verdict
+  // guessed from it. `not_applicable` is not `absent` and is not `not_visible`.
+  let label = verdict === null || verdict === undefined ? "no verdict" : verdict;
+  if (entry && entry.rejected) {
+    label = "rejected" + (entry.rejected_value ? " (" + entry.rejected_value + ")" : "");
+  }
   return el("span", "verdict " + cls, label);
 }
 
@@ -158,9 +166,11 @@ function criteriaTable(criteria) {
     name.appendChild(document.createTextNode(CRITERION_LABELS[key]));
     row.appendChild(name);
     const v = el("td");
-    v.appendChild(verdictCell(entry.verdict));
+    v.appendChild(verdictCell(entry));
     row.appendChild(v);
-    row.appendChild(el("td", null, entry.confidence === undefined ? "—" : String(entry.confidence)));
+    row.appendChild(el("td", null,
+      entry.confidence === undefined || entry.confidence === null
+        ? "—" : String(entry.confidence)));
     row.appendChild(el("td", null, entry.evidence || "—"));
     table.appendChild(row);
   });

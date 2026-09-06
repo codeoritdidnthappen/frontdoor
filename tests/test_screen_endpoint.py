@@ -16,6 +16,7 @@ from frontdoor.screening import (
     ADA_DISCLAIMER,
     ADA_STANDARDS_URL,
     CRITERIA_KEYS,
+    FAILURE_REJECTED,
     ImageAssessment,
     ScreeningConfig,
     ScreeningEngine,
@@ -653,3 +654,104 @@ def test_screen_never_returns_unsafe_model_authored_evidence(unsafe_evidence):
     assert response.status_code == 502
     assert "ada_screening" not in response.get_json()
     assert unsafe_evidence not in response.get_data(as_text=True)
+
+
+# --- TICK-399: the rejection reaches the caller as a failure -----------------
+#
+# The same path runs behind /screen, so a user whose photo triggered it was
+# shown "not seen in this scan" for a door the engine never successfully
+# assessed. That is a rejected response presented as an observation, which is
+# the one thing this product's rules forbid.
+
+
+def test_tick_399_a_rejected_response_is_named_as_a_failure_in_the_response():
+    engine = FakeEngine(ImageAssessment(
+        criteria=None, latency_s=0.5,
+        error="ResponseRejected: criterion handrails has invalid verdict",
+        failure=FAILURE_REJECTED, attempts=2, rejected_attempts=2,
+    ))
+    response = post_screen(make_client(engine), [image_part()])
+    # No verdicts at all: the request fails loudly rather than answering with
+    # four criteria nobody assessed.
+    assert response.status_code == 502
+    assert "ResponseRejected" in response.get_json()["detail"]
+
+
+def test_tick_399_a_recovered_reply_answers_with_the_criteria_that_survived():
+    """One criterion refused, three kept -- and the response says which.
+
+    The refused one carries no verdict and a reason. It is NOT rendered as
+    absent, and it is NOT rendered as not_visible: `not_applicable` is neither,
+    and turning it into either is the collapse this product forbids most
+    strongly.
+    """
+    criteria = {
+        key: {"verdict": "present", "confidence": 80, "evidence": f"{key} seen"}
+        for key in CRITERIA_KEYS
+    }
+    criteria["handrails"] = {
+        "verdict": None, "confidence": None, "evidence": None,
+        "rejected": "ada_check_value", "rejected_value": "not_applicable",
+    }
+    engine = FakeEngine(ImageAssessment(
+        criteria=criteria, latency_s=0.5,
+        error="ResponseRejected: criterion handrails has invalid verdict",
+        failure=FAILURE_REJECTED, attempts=2, rejected_attempts=2,
+        face_check="clear", ada_checks=ok_ada_checks(),
+    ))
+    response = post_screen(make_client(engine), [image_part(), image_part()])
+    assert response.status_code == 200
+    body = response.get_json()
+
+    assessment = body["assessment"]
+    assert assessment["failure"] == FAILURE_REJECTED
+    assert assessment["attempts"] == 2
+    assert assessment["rejected_attempts"] == 2
+
+    entry = assessment["criteria"]["handrails"]
+    assert entry["verdict"] is None
+    assert entry["rejected"] == "ada_check_value"
+    assert entry["rejected_value"] == "not_applicable"
+
+    aggregate = body["aggregate"]
+    assert aggregate["handrails"]["verdict"] is None
+    assert aggregate["handrails"]["rejected"] == 1
+    assert aggregate["ramp_or_bevel"]["verdict"] == "present"
+    assert aggregate["ramp_or_bevel"]["rejected"] == 0
+    # Nothing anywhere in the body turned the refused answer into a verdict.
+    assert "not_applicable" not in json.dumps(aggregate)
+
+
+def test_tick_399_a_clean_reply_reports_no_failure_and_one_attempt():
+    engine = FakeEngine()
+    body = post_screen(make_client(engine), [image_part()]).get_json()
+    assert body["assessment"]["failure"] is None
+    assert body["assessment"]["attempts"] == 1
+    assert body["assessment"]["rejected_attempts"] == 0
+
+
+def test_tick_399_a_reply_whose_every_criterion_was_refused_is_a_failure():
+    """Recovery that recovered nothing answers like the refusal it was.
+
+    `criteria is not None` stopped being the same question as "did the engine
+    produce anything": a dict whose every field was refused carries exactly as
+    much as a wholly refused reply. Answering 200 with four null verdicts would
+    hand a caller an assessment that never happened.
+    """
+    criteria = {
+        key: {"verdict": None, "confidence": None, "evidence": None,
+              "rejected": "ada_check_value", "rejected_value": "not_applicable"}
+        for key in CRITERIA_KEYS
+    }
+    engine = FakeEngine(ImageAssessment(
+        criteria=criteria, latency_s=0.5,
+        error="ResponseRejected: criterion handrails has invalid verdict",
+        failure=FAILURE_REJECTED, attempts=2, rejected_attempts=2,
+        face_check="clear", ada_checks=ok_ada_checks(),
+    ))
+    response = post_screen(make_client(engine), [image_part()])
+    assert response.status_code == 502
+    body = response.get_json()
+    assert "ResponseRejected" in body["detail"]
+    # No verdict of any kind reaches the caller.
+    assert "present" not in json.dumps(body)

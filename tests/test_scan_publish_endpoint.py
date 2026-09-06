@@ -575,3 +575,84 @@ def test_posting_to_screen_writes_no_scan_record(scans_path):
     )
     assert response.status_code == 200
     assert not scans_path.exists()
+
+
+# --- TICK-399: a scan with no verdicts is never published ---------------------
+
+
+def _rejected_criteria_dict(rejected_keys, verdict="present"):
+    criteria = {}
+    for key in CRITERIA_KEYS:
+        if key in rejected_keys:
+            criteria[key] = {
+                "verdict": None, "confidence": None, "evidence": None,
+                "rejected": "ada_check_value",
+                "rejected_value": "not_applicable",
+            }
+        else:
+            criteria[key] = {
+                "verdict": verdict, "confidence": 80, "evidence": f"{key} seen"}
+    return criteria
+
+
+def _partial(rejected_keys):
+    return ImageAssessment(
+        criteria=_rejected_criteria_dict(rejected_keys),
+        latency_s=0.5,
+        error="ResponseRejected: criterion handrails has invalid verdict",
+        failure="rejected",
+        attempts=2,
+        rejected_attempts=2,
+        face_check="clear",
+        ada_checks=ok_ada_checks(),
+    )
+
+
+def test_tick_399_a_reply_whose_every_criterion_was_refused_publishes_nothing(
+        scans_path):
+    """`criteria is not None` stopped being the same question as "any verdict".
+
+    Recovery can return a dict whose every field was refused, which produces
+    exactly as much as a wholly refused reply did: nothing. Publishing it would
+    write a record with four null verdicts — and a scan record takes a pin to
+    the verified tier whatever it says, so the map would show a green pin from
+    an assessment that never happened.
+    """
+    store = FakeStore()
+    engine = FakeEngine(_partial(set(CRITERIA_KEYS)))
+    response = post_publish(make_client(engine=engine, store=store),
+                            [image_part()])
+    assert response.status_code == 502
+    assert not scans_path.exists() or scans_path.read_text(encoding="utf-8") == ""
+    assert store.puts == []
+
+
+def test_tick_399_the_published_record_says_which_verdicts_were_refused(
+        scans_path):
+    """Three criteria survive and publish; the fourth says why it is null.
+
+    A null verdict with no entry here is a feature nobody could see. A null
+    verdict named in `verdict_failures` is an answer that was thrown away.
+    Without the distinction the published record carries exactly the loss this
+    ticket exists to end.
+    """
+    store = FakeStore()
+    engine = FakeEngine(_partial({"handrails"}))
+    response = post_publish(make_client(engine=engine, store=store),
+                            [image_part()])
+    assert response.status_code == 200
+    record = load_scan_records(scans_path)[0]
+    assert record["verdicts"]["ramp_or_bevel"] == "present"
+    assert record["verdicts"]["handrails"] is None
+    assert record["verdict_failures"] == {"handrails": "ada_check_value"}
+    # ...and the refused value is never turned into a verdict anywhere.
+    assert "not_applicable" not in json.dumps(record["verdicts"])
+
+
+def test_tick_399_a_clean_record_carries_no_failure_key(scans_path):
+    """Additive: a record written from a clean reply is unchanged."""
+    response = post_publish(
+        make_client(engine=FakeEngine(), store=FakeStore()), [image_part()])
+    assert response.status_code == 200
+    record = load_scan_records(scans_path)[0]
+    assert "verdict_failures" not in record

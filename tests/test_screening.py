@@ -14,11 +14,19 @@ import pytest
 from frontdoor.screening import (
     ALLOWED_VERDICTS,
     ADA_CHECK_KEYS,
+    ADA_RESULTS,
     CRITERIA_KEYS,
     FACE_CHECK_KEY,
+    FAILURE_ERROR,
+    FAILURE_REFUSED,
+    FAILURE_REJECTED,
+    FAILURE_TRUNCATED,
     PROMPT_RESOURCE,
+    REJECTION_ADA_VALUE,
+    REJECTION_MISSING,
     EntranceScreening,
     ImageAssessment,
+    ResponseRejected,
     ScreeningError,
     ScreeningConfig,
     ScreeningEngine,
@@ -27,6 +35,8 @@ from frontdoor.screening import (
     aggregate_assessments,
     build_integrated_prompt,
     build_prompt,
+    criterion_verdict,
+    integrated_summary,
     validate_face_check,
     validate_verdicts,
 )
@@ -582,3 +592,377 @@ def test_the_spend_cap_is_checked_and_reserved_atomically():
         "the check and the reservation are not atomic and the cap can be exceeded"
     )
     assert engine.spent_usd == pytest.approx(0.10)
+
+
+# --- TICK-399: a rejected response is a failure, not an abstention ------------
+#
+# The defect: the model sometimes puts an eight-check ADA value
+# (`not_applicable`, `cannot_determine`) inside the FOUR-criterion block, which
+# the same prompt restricts to present/absent/not_visible. validate_verdicts
+# then refused the WHOLE reply, all four criteria were lost for that view,
+# there was no retry, and downstream the loss was indistinguishable from the
+# model having looked and abstained. Measured over the same 28 entrances: one
+# run lost nothing, the repeat run discarded 68 of 154 view responses (44%) and
+# lost every criterion on 7 entrances -- all scored as clean abstentions.
+#
+# Three things are pinned here: the failure is named, the reply is asked for
+# again, and the criteria that DID validate survive - without ever turning an
+# ADA value into a criterion verdict, which is the one collapse this product
+# forbids most strongly.
+
+
+def _ada_bleed_payload(value="not_applicable"):
+    """A reply with the eight-check vocabulary in the four-criterion block."""
+    return _payload(handrails={
+        "verdict": value, "confidence": 70,
+        "evidence": "no steps or ramp serve this entrance",
+    })
+
+
+def test_tick_399_ac1_a_rejected_response_is_recorded_as_a_failure():
+    """A rejection is a FAILURE of the call, and the record says so.
+
+    Before this, the only trace was an `error` string that a consumer had to
+    parse an exception name out of, next to criteria of None that looked
+    exactly like a view nobody could assess.
+    """
+    engine = ScreeningEngine(
+        client=FakeClient([_Response("not JSON at all")] * 2)
+    )
+    result = engine.assess_image(b"jpeg-bytes")
+    assert result.failure == FAILURE_REJECTED
+    assert result.criteria is None
+    assert result.rejected_attempts == 2
+
+
+@pytest.mark.parametrize("stop_reason,expected", [
+    ("refusal", FAILURE_REFUSED),
+    ("max_tokens", FAILURE_TRUNCATED),
+])
+def test_tick_399_ac1_other_failures_are_named_and_not_confused_with_rejection(
+    stop_reason, expected
+):
+    client = FakeClient([_Response(_payload(), stop_reason=stop_reason)] * 3)
+    result = ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
+    assert result.failure == expected
+    # Neither is a formatting slip: one is a deliberate answer, the other
+    # repeats at the same token budget. Asking again would only spend money.
+    assert len(client.calls) == 1
+    assert result.attempts == 1
+
+
+def test_tick_399_ac1_a_transport_error_is_a_failure_but_not_a_rejection():
+    client = FakeClient([RuntimeError("connection reset")] * 3)
+    result = ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
+    assert result.failure == FAILURE_ERROR
+    assert len(client.calls) == 1
+
+
+def test_tick_399_ac4_a_rejected_response_is_asked_again_once():
+    """The bounded retry: a second attempt is made, and it recovers the view."""
+    client = FakeClient([
+        _Response(_ada_bleed_payload()),   # rejected
+        _Response(_payload("absent")),     # the retry answers in vocabulary
+    ])
+    result = ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
+    assert len(client.calls) == 2
+    assert result.attempts == 2
+    assert result.rejected_attempts == 1
+    assert result.failure is None
+    assert result.error is None
+    assert all(
+        result.criteria[key]["verdict"] == "absent" for key in CRITERIA_KEYS
+    )
+
+
+def test_tick_399_ac4_the_retry_is_bounded_not_a_loop():
+    client = FakeClient([_Response(_ada_bleed_payload()) for _ in range(10)])
+    result = ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
+    assert len(client.calls) == 2  # ScreeningConfig.response_attempts
+    assert result.attempts == 2
+    assert result.rejected_attempts == 2
+
+
+def test_tick_399_the_retry_count_is_configurable():
+    client = FakeClient([_Response(_ada_bleed_payload()) for _ in range(10)])
+    engine = ScreeningEngine(
+        client=client, config=ScreeningConfig(response_attempts=4)
+    )
+    engine.assess_image(b"jpeg-bytes")
+    assert len(client.calls) == 4
+
+    single = FakeClient([_Response(_ada_bleed_payload()) for _ in range(10)])
+    ScreeningEngine(
+        client=single, config=ScreeningConfig(response_attempts=1)
+    ).assess_image(b"jpeg-bytes")
+    assert len(single.calls) == 1
+
+
+def test_tick_399_the_retry_books_its_own_spend():
+    """A retry is a real call. A cap that ignored it would hold on paper."""
+    client = FakeClient([_Response(_ada_bleed_payload())] * 2)
+    engine = ScreeningEngine(
+        client=client, config=ScreeningConfig(usd_per_image=0.05))
+    engine.assess_image(b"jpeg-bytes")
+    assert len(client.calls) == 2
+    assert engine.spent_usd == pytest.approx(0.10)
+
+
+def test_tick_399_a_retry_that_would_break_the_spend_cap_is_not_made():
+    client = FakeClient([_Response(_ada_bleed_payload())] * 2)
+    engine = ScreeningEngine(
+        client=client,
+        config=ScreeningConfig(max_usd_per_run=0.05, usd_per_image=0.05),
+    )
+    result = engine.assess_image(b"jpeg-bytes")
+    assert len(client.calls) == 1
+    assert engine.spent_usd == pytest.approx(0.05)
+    # The rejection stands and is still recorded as one; the run is not aborted
+    # part-way over a formatting slip.
+    assert result.failure == FAILURE_REJECTED
+
+
+def test_tick_399_ac3_an_ada_value_in_one_criterion_keeps_the_other_three():
+    """Recovery: the reply loses the field it got wrong, not all four.
+
+    Both attempts answer the same way, so this is what survives when the retry
+    does not help either.
+    """
+    client = FakeClient([_Response(_ada_bleed_payload())] * 2)
+    result = ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
+    assert result.failure == FAILURE_REJECTED  # still a rejected response
+    for key in ("ramp_or_bevel", "accessible_door_hardware",
+                "accessibility_signage"):
+        assert result.criteria[key]["verdict"] == "present"
+    assert result.criteria["handrails"]["verdict"] is None
+
+
+@pytest.mark.parametrize("value", ADA_RESULTS)
+def test_tick_399_ac3_an_ada_value_is_never_reinterpreted_as_a_verdict(value):
+    """`not_applicable` is not `absent` and is not `not_visible`.
+
+    Guessing what an off-vocabulary answer meant is the single collapse this
+    product forbids most strongly, so the refused field carries NO verdict at
+    all, and says it was refused rather than pretending it was never asked.
+    """
+    client = FakeClient([_Response(_ada_bleed_payload(value))] * 2)
+    result = ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
+    entry = result.criteria["handrails"]
+    assert entry["verdict"] is None
+    assert entry["verdict"] not in ALLOWED_VERDICTS
+    assert entry["rejected"] == REJECTION_ADA_VALUE
+    assert entry["rejected_value"] == value
+    # The confidence and evidence written to justify the refused answer do not
+    # travel with it.
+    assert entry["confidence"] is None
+    assert entry["evidence"] is None
+
+
+def test_tick_399_recovery_covers_a_criterion_missing_from_the_block():
+    """The other observed shape: a criteria object that was not exactly four."""
+    parsed = json.loads(_payload())
+    del parsed["criteria"]["accessibility_signage"]
+    client = FakeClient([_Response(json.dumps(parsed))] * 2)
+    result = ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
+    assert result.criteria["ramp_or_bevel"]["verdict"] == "present"
+    entry = result.criteria["accessibility_signage"]
+    assert entry["verdict"] is None
+    assert entry["rejected"] == REJECTION_MISSING
+
+
+def test_tick_399_recovery_does_not_widen_to_a_reply_of_unknown_shape():
+    """A verdict word from NEITHER vocabulary still rejects the whole reply.
+
+    Recovery is for the one understood failure mode. A reply that invents a
+    word is a reply whose shape the engine does not recognise, and salvaging
+    fields out of one would be guessing about the rest.
+    """
+    parsed = json.loads(_payload())
+    parsed["criteria"]["handrails"]["verdict"] = "maybe"
+    client = FakeClient([_Response(json.dumps(parsed))] * 2)
+    result = ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
+    assert result.criteria is None
+    assert result.failure == FAILURE_REJECTED
+    with pytest.raises(ResponseRejected, match="handrails.*invalid verdict"):
+        validate_verdicts(parsed, recover=True)
+
+
+def test_tick_399_a_refused_ada_block_no_longer_takes_the_criteria_with_it():
+    """The same whole-response loss, arriving from the other half of the reply.
+
+    The eight checks and the four criteria are validated independently now.
+    The refused half is refused outright -- nothing the model wrote about it
+    is carried -- and the half that validated stands.
+    """
+    parsed = json.loads(_payload())
+    parsed["ada_checks"]["threshold"]["evidence"] = "this entrance is compliant"
+    client = FakeClient([_Response(json.dumps(parsed))] * 2)
+    result = ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
+    assert result.ada_checks is None
+    assert result.failure == FAILURE_REJECTED
+    assert set(result.criteria) == set(CRITERIA_KEYS)
+    assert "compliant" not in (result.error or "")
+
+
+def test_tick_399_ac2_aggregation_separates_rejected_views_from_abstentions():
+    """Two views, both refused: the summary reports failure, not abstention."""
+    rejected = ImageAssessment(
+        criteria=None, latency_s=1.0, error="ResponseRejected: ...",
+        failure=FAILURE_REJECTED,
+    )
+    summary = aggregate_assessments((rejected, rejected))
+    for key in CRITERIA_KEYS:
+        assert summary[key].verdict is None
+        assert summary[key].rejected == 2
+        assert summary[key].failed == 0
+
+    abstained = _assessment({key: "not_visible" for key in CRITERIA_KEYS})
+    honest = aggregate_assessments((abstained,))
+    for key in CRITERIA_KEYS:
+        # The honest abstention still reads as one: a verdict, and nothing
+        # counted against the engine.
+        assert honest[key].verdict == "not_visible"
+        assert honest[key].rejected == 0 and honest[key].failed == 0
+
+
+def test_tick_399_ac2_a_recovered_field_is_rejected_only_for_that_criterion():
+    client = FakeClient([_Response(_ada_bleed_payload())] * 2)
+    result = ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
+    summary = aggregate_assessments((result,))
+    assert summary["handrails"].verdict is None
+    assert summary["handrails"].rejected == 1
+    assert summary["ramp_or_bevel"].verdict == "present"
+    assert summary["ramp_or_bevel"].rejected == 0
+
+
+def test_tick_399_integrated_summary_says_a_criterion_was_rejected():
+    client = FakeClient([_Response(_ada_bleed_payload())] * 2)
+    result = ScreeningEngine(client=client).assess_images_integrated([b"a"])
+    summary = integrated_summary(result)
+    assert summary["handrails"].verdict is None
+    assert summary["handrails"].rejected == 1
+    assert summary["accessibility_signage"].verdict == "present"
+    assert summary["accessibility_signage"].rejected == 0
+
+
+def test_tick_399_an_integrated_retry_books_every_view_again():
+    client = FakeClient([_Response(_ada_bleed_payload())] * 2)
+    engine = ScreeningEngine(
+        client=client, config=ScreeningConfig(
+            max_usd_per_run=10.0, usd_per_image=0.05))
+    engine.assess_images_integrated([b"a", b"b", b"c"])
+    # A retry re-sends all three views, so it books what the first call booked.
+    assert engine.spent_usd == pytest.approx(0.30)
+
+
+def test_tick_399_a_clean_retry_wins_over_a_recovered_first_attempt():
+    """An extra key in the criteria block: recoverable, but a clean reply is better.
+
+    Both attempts carry all four verdicts, so nothing is lost either way -- but
+    only the second one has nothing refused in it, and that is the record to
+    keep.
+    """
+    noisy = json.loads(_payload())
+    noisy["criteria"]["door_width"] = dict(noisy["criteria"]["handrails"])
+    client = FakeClient([
+        _Response(json.dumps(noisy)),
+        _Response(_payload("not_visible")),
+    ])
+    result = ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
+    assert len(client.calls) == 2
+    assert result.failure is None
+    assert result.error is None
+    assert result.rejected_attempts == 1
+    assert all(
+        result.criteria[key]["verdict"] == "not_visible" for key in CRITERIA_KEYS
+    )
+    # The key the model invented never becomes a criterion.
+    assert set(result.criteria) == set(CRITERIA_KEYS)
+
+
+def test_tick_399_a_worse_retry_never_loses_ground_the_first_attempt_held():
+    """Attempt 1 keeps three criteria; attempt 2 is unparseable. Keep the three."""
+    client = FakeClient([
+        _Response(_ada_bleed_payload()),
+        _Response("I cannot answer in JSON"),
+    ])
+    result = ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
+    assert result.criteria is not None
+    assert result.criteria["ramp_or_bevel"]["verdict"] == "present"
+    assert result.criteria["handrails"]["verdict"] is None
+    assert result.failure == FAILURE_REJECTED
+
+
+def test_tick_399_criterion_verdict_is_the_one_place_none_is_explained():
+    clean = _assessment({"ramp_or_bevel": "present"})
+    assert criterion_verdict(clean, "ramp_or_bevel") == ("present", None)
+    assert criterion_verdict(clean, "handrails") == ("not_visible", None)
+
+    dead = ImageAssessment(criteria=None, latency_s=1.0,
+                           error="boom", failure=FAILURE_ERROR)
+    assert criterion_verdict(dead, "handrails") == (None, FAILURE_ERROR)
+
+
+# --- TICK-394: there is no temperature to set on this model ------------------
+#
+# #394 asked for an explicit temperature of 0 on the assessment call, so a
+# contributor who rescans the same door gets the same answer, on the premise
+# that the call was running at the API default of 1.0. The premise no longer
+# holds. Sampling parameters were removed for this model generation: the
+# installed SDK's `messages.create` does not accept `temperature` at all, and
+# claude-sonnet-5 rejects sampling parameters with a 400. Sending one fails
+# EVERY assessment -- /screen answers 502 for every request -- so the engine
+# sends none, and these tests are the tripwire that keeps it that way.
+
+
+def test_tick_394_the_call_sends_no_sampling_parameter():
+    """No temperature, no top_p, no top_k -- because the model rejects them."""
+    client = FakeClient([_Response(_payload())])
+    ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
+    call = client.calls[0]
+    for name in ("temperature", "top_p", "top_k"):
+        assert name not in call
+    assert not hasattr(ScreeningConfig(), "temperature")
+
+    integrated = FakeClient([_Response(_payload())])
+    ScreeningEngine(client=integrated).assess_images_integrated([b"a", b"b"])
+    assert "temperature" not in integrated.calls[0]
+
+
+def test_tick_394_the_sdk_still_has_no_temperature_to_set():
+    """The reason the engine sends none, pinned against the installed SDK.
+
+    A tripwire on purpose: if a future SDK or model reinstates sampling
+    parameters, this fails and #394 becomes answerable again. Reading the
+    signature rather than calling anything - the check needs no API key and
+    makes no request.
+    """
+    import inspect
+
+    from anthropic.resources.messages import Messages
+
+    parameters = inspect.signature(Messages.create).parameters
+    assert "temperature" not in parameters, (
+        "the SDK accepts a temperature again; #394 asked for an explicit 0 and "
+        "is worth revisiting -- but measure it before trusting it, and check "
+        "the model accepts one rather than answering 400"
+    )
+
+
+def test_tick_394_the_same_reply_twice_gives_the_same_verdicts():
+    """The engine's own half of determinism: same input, same output.
+
+    All of it that is in this repository's gift. The model's half is not
+    configurable on this model generation, so the run-to-run variation #394
+    was opened about cannot be removed here -- which is why #399's fix
+    matters more: most of the swing it blamed on sampling was rejected
+    responses being discarded, not the model changing its mind.
+    """
+    payload = _payload("absent")
+    first = ScreeningEngine(
+        client=FakeClient([_Response(payload)])).assess_image(b"jpeg-bytes")
+    second = ScreeningEngine(
+        client=FakeClient([_Response(payload)])).assess_image(b"jpeg-bytes")
+    assert first.criteria == second.criteria
+    assert first.ada_checks == second.ada_checks
+    assert first.face_check == second.face_check

@@ -1622,3 +1622,51 @@ A dispute is queue metadata and is deliberately not published back to the contri
 the map: a person reading "your note is a dispute" invites a negative reading of a named
 business that nothing has reviewed yet, which is the thing the Green-or-Gray rule exists to
 prevent. Who works the queue, and how often, is in docs/server-deploy.md.
+
+## D-048  A rejected model response is a failure, never an abstention, and recovery never reinterprets
+
+The screening engine refused a reply whose criteria block carried an eight-check ADA value
+(`not_applicable`, `cannot_determine`) — the vocabulary bleed the shared `handrails` key invites —
+and refusing it threw away all four criteria for that view, with no retry. Downstream, the loss
+was indistinguishable from the model having looked and abstained. Two runs of the unchanged
+prompt over the same 28 entrances measured it: one lost nothing, the repeat discarded 68 of 154
+view responses (44%) and lost every criterion on 7 entrances, all scored as clean abstentions.
+The abstention rate is the honesty signal this product leans on, and it was absorbing failures
+that were never abstentions; an arm-to-arm comparison could be decided by which arm happened to
+lose more entrances with nothing in the output saying so. The same path runs behind `/screen`, so
+a contributor could be shown "not seen in this scan" for a door the engine never assessed.
+
+Three rules, in the engine so every caller gets them:
+
+- **A rejection is a failure with a name.** `ImageAssessment.failure` is `rejected`, `refused`,
+  `truncated` or `error`; `CriterionSummary` carries `rejected` and `failed` counts; the eval
+  scores a failed cell as `failed` (with `rejected` as its sub-count, the way `not_visible` is a
+  sub-count of `abstained`) and reports a rejected-response block of its own. The scored
+  denominator is unchanged, so the two reports stay comparable — only the split moves.
+- **One bounded retry, on a rejection only.** `ScreeningConfig.response_attempts` defaults to 2.
+  A refusal is a deliberate answer and a truncation repeats at the same token budget, so neither
+  is retried. Every attempt books its own cost against the spend cap, and a retry that would
+  break the cap is not made. `scan_publish.ASSESSMENT_ATTEMPTS` stays as the outer net.
+- **Recovery keeps the fields that validated, and never guesses at the one that did not.** A
+  criterion carrying an ADA value, or missing from the block, comes back with NO verdict and a
+  reason; the other three keep theirs. `not_applicable` is not `absent` and is not `not_visible`,
+  and mapping one onto another is the collapse this product forbids most strongly, so the refused
+  field carries neither — nor the confidence and evidence written to justify it. A reply that
+  invents a word from outside BOTH vocabularies is still refused whole: recovery is for the one
+  understood failure mode, and salvaging fields out of a reply of unknown shape would be guessing
+  about the rest. The four criteria and the eight ADA checks are validated independently for the
+  same reason — an evidence line the ADA validator disliked used to take four good criteria with
+  it, which is this same whole-response loss arriving from the other side.
+
+Alongside it, TICK-394 asked for an explicit temperature of 0 on the same call, so a contributor
+who rescans the same door gets the same answer. **It cannot be done, and the engine deliberately
+sends no sampling parameter.** Sampling parameters were removed for this model generation:
+`anthropic` 1.3.0's `messages.create` does not accept `temperature` (TypeError), and
+`claude-sonnet-5` rejects sampling parameters with a 400. Sending one fails every assessment and
+answers `/screen` 502 for every request. So a screening verdict cannot be made a pure function of
+the photograph by configuration — which is the more important reason #399 came first: the
+measurement that opened #394 blamed sampling for swings (`handrails` 10 committed to 3 between
+identical runs) that were mostly discarded responses. Two tests pin it: the call surface carries
+no `temperature`, `top_p` or `top_k`, and the SDK signature is asserted to have no temperature to
+set, so a later SDK or model that reinstates one fails a test and reopens the question rather
+than letting somebody add a parameter that takes production down.
