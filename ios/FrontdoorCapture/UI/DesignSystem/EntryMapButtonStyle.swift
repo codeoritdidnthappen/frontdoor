@@ -45,6 +45,12 @@ struct EntryMapButtonStyle: ButtonStyle {
     /// Named so it cannot be mistaken for -- or collide with -- `ButtonStyle`'s own `Body`
     /// associated type.
     private struct StyledButton: View {
+        /// Reading the environment is how a style learns about focus: a `ButtonStyleConfiguration`
+        /// carries `isPressed` and nothing else. On iOS this is driven by keyboard focus, Full
+        /// Keyboard Access and Switch Control rather than by touch, which is exactly the audience
+        /// the spec put the ring there for. Worth confirming on a Mac with Full Keyboard Access
+        /// turned on — if the value never becomes true, the symptom is a ring that never appears,
+        /// which is the quiet kind of failure.
         @Environment(\.isFocused) private var isFocused
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
