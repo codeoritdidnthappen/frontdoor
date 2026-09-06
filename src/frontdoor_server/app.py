@@ -90,6 +90,64 @@ def _error(message, detail, field=None, status=400):
     return body, status
 
 
+#: Last (stamp, answer) per path for the two on-disk /ready checks (#370).
+#: Process-local and never persisted: a restart re-reads everything.
+_READY_CACHE = {}
+
+
+def _stamp(path):
+    """What identifies this file on disk, or None when it is not there.
+
+    Four fields, because the answer can change while any three hold still:
+
+    * `st_mtime_ns` and `st_size` -- the file was written.
+    * `st_ctime_ns` -- on Linux this is the inode-change time, so it moves on a
+      `chmod` or `chown`. Permission-denied is one of the five states these
+      checks exist to separate: without this field an operator who fixes a
+      mount's ownership is told the deployment is still broken until the
+      process restarts, and -- worse -- a file whose read access was just
+      revoked goes on reporting healthy. (Windows spells st_ctime as the
+      creation time, so the local suite cannot prove that half; the deploy
+      target is Linux.)
+    * `st_ino` -- the file was REPLACED. An atomic `os.replace` is how a dataset
+      is normally deployed and can preserve both mtime and length.
+
+    The PARENT is stamped too, and that is not belt-and-braces: the scan store
+    is a file that legitimately does not exist yet, so "absent" alone cannot
+    tell an empty store on a mounted volume from a volume that went away.
+    """
+    def one(target):
+        try:
+            stat = target.stat()
+            return (stat.st_mtime_ns, stat.st_size, stat.st_ctime_ns, stat.st_ino)
+        except OSError:
+            return None
+
+    return (one(path), one(path.parent))
+
+
+def _answer_if_changed(path, compute):
+    """`compute(path)`, reusing the last answer while the file has not changed.
+
+    /ready is unauthenticated and both of its on-disk checks parse a whole file
+    -- a 200 KB pre-catalogue and every scan ever published. Re-reading both on
+    every request makes a health probe into a lever anyone can pull (#370), and
+    the answer cannot change while nothing `_stamp` watches does.
+
+    What would still be missed: two writes of the same length, to the same
+    inode, inside one filesystem timestamp tick. Nothing here does that --
+    scans are appended, and a dataset arrives with a deploy, which restarts the
+    process anyway.
+    """
+    stamp = _stamp(path)
+    cached = _READY_CACHE.get(str(path))
+    if cached is not None and cached[0] == stamp:
+        return cached[1]
+    answer = compute(path)
+    _READY_CACHE[str(path)] = (stamp, answer)
+    return answer
+
+
 def _map_dataset_ready(path):
     """True only when the map dataset holds at least one row /map/data can render.
 
@@ -326,15 +384,19 @@ def create_app():
 
         # The map dataset, which is what /map/data serves. Existence alone
         # is not enough: an empty or unparseable file still yields zero pins.
-        subsystems["map_dataset"] = _map_dataset_ready(
-            Path(os.environ.get("FRONTDOOR_MAP_DATASET", "data/precatalogue.json"))
+        # Both disk checks answer from the last read while the bytes on disk
+        # are unchanged, so an unauthenticated probe does not re-parse them.
+        subsystems["map_dataset"] = _answer_if_changed(
+            Path(os.environ.get("FRONTDOOR_MAP_DATASET", "data/precatalogue.json")),
+            _map_dataset_ready,
         )
 
         # The scan store's parent directory is the volume. A missing file
         # inside a mounted volume is the empty store; a missing parent is
         # the unmounted-volume incident.
-        subsystems["scan_store"] = _scan_store_ready(
-            os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH)
+        subsystems["scan_store"] = _answer_if_changed(
+            Path(os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH)),
+            _scan_store_ready,
         )
 
         ready_state = all(subsystems.values())

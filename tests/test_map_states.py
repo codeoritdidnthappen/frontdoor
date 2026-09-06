@@ -483,24 +483,61 @@ def test_map_data_reports_a_missing_scan_volume(client, tmp_path, monkeypatch):
     assert payload["scans_skipped"] == 0
 
 
-def test_the_map_page_reads_every_error_the_payload_reports(client):
+# The map page is browser JavaScript and this suite has no JS runtime, so the
+# two tests below read the served source. That is a weak instrument and it is
+# used narrowly: each one asserts a structural claim that can be stated in the
+# source alone -- which payload fields are read at all, and whether the reader
+# sits outside the branch that returns early.
+
+
+def test_the_map_page_reads_every_problem_the_payload_reports(client):
     """A JSON key nobody reads is not an observation channel (#370).
 
-    /map/data reports scans_error, osm_error and commons_error; the page
-    bannered dataset_error and nothing else, and only when the pin list was
-    empty -- so a dropped scan store or a lost attribution side file, both of
-    which leave a full map, were reported to nobody.
+    The list comes from a live /map/data response rather than a literal, so a
+    channel added to the payload without a reader on the page fails here. The
+    page bannered dataset_error and nothing else, and only when the pin list
+    was empty -- so a dropped scan store, a scan record that would not parse,
+    and a lost attribution side file, all three of which leave a full map of
+    pins, were reported to nobody.
+    """
+    payload = client.get("/map/data").get_json()
+    channels = [name for name in payload
+                if name.endswith("_error") or name == "scans_skipped"]
+    assert set(channels) >= {
+        "dataset_error", "scans_error", "scans_skipped",
+        "osm_error", "commons_error",
+    }
+    page = client.get("/map").get_data(as_text=True)
+    for field in channels:
+        assert f"payload.{field}" in page, f"/map never reads {field}"
+
+
+def test_the_map_page_reports_a_problem_it_still_has_pins_to_draw_over(client):
+    """The reader ran only inside `if (!pins.length)`, which is the branch that
+    almost never runs: scans supply pins, so a missing dataset, an unreachable
+    store and a lost side file all rendered as a normal map. The problem list
+    is now built before that branch and reported on both sides of it."""
+    page = client.get("/map").get_data(as_text=True)
+    empty_branch = page.index("if (!pins.length)")
+    assert page.index("problems = [") < empty_branch, (
+        "the problem list is built inside the branch that returns early"
+    )
+    assert "if (incomplete) banner(incomplete);" in page[empty_branch:], (
+        "a map with pins still has no way to say what is missing from it"
+    )
+
+
+def test_the_map_banner_names_the_subsystem_and_not_the_server_path(client):
+    """The banner is public, and every one of those strings quotes a path.
+
+    map_view builds dataset_error as f"dataset not found: {path}";
+    external_data and scan_records do the same with theirs, and an OSError
+    quotes the filename it failed on. /ready reports which subsystem and never
+    the value for exactly this reason (TICK-263), and moving the banner out of
+    the empty-pin branch is what would otherwise have put a deployment path in
+    front of every anonymous visitor.
     """
     page = client.get("/map").get_data(as_text=True)
-    for field in ("scans_error", "osm_error", "commons_error"):
-        assert field in page, f"/map never reads {field}"
-
-
-def test_the_map_page_does_not_call_an_unreachable_store_an_empty_dataset(client):
-    """The empty-pin branch returned early, so "No doors in the dataset yet"
-    was printed over an unmounted volume -- reuniting the three causes
-    /map/data had just gone to the trouble of separating."""
-    page = client.get("/map").get_data(as_text=True)
-    assert 'No doors in the dataset yet.") + alsoIncomplete' in page, (
-        "the empty-pin branch still returns without saying what was missing"
-    )
+    for field in ("dataset_error", "scans_error", "osm_error", "commons_error"):
+        assert f"+ payload.{field}" not in page, f"{field} is concatenated into a banner"
+        assert f"payload.{field} +" not in page, f"{field} is concatenated into a banner"

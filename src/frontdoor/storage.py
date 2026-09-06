@@ -447,43 +447,37 @@ def image_store():
     return ObjectStore(load_image_creds())
 
 
-def _probe_status(call, **kwargs):
-    """The HTTP status of one bounded metadata call, or None if it never got one.
-
-    STATUS, not the parsed error code, and that is the whole point (#370): a
-    HEAD response carries no body (RFC 9110), so botocore has nothing to parse
-    and synthesizes `{"Code": "404"}` for a missing bucket and a missing key
-    alike. Only the status, and which call produced it, separates them.
-    """
-    try:
-        call(**kwargs)
-        return 200
-    except Exception as exc:
-        response = getattr(exc, "response", None) or {}
-        return response.get("ResponseMetadata", {}).get("HTTPStatusCode")
-
-
 def image_bucket_is_reachable():
-    """True when the images bucket answers a metadata probe.
+    """True when the images bucket answers, on the operation the app performs.
 
     Environment variables being set is not the same as the bucket existing and
     the credential working, and a revoked key or a deleted bucket looks
-    identical to the missing-credential incident from outside. Nothing is
-    written. Failures log for the operator so /ready can stay a boolean that
-    never echoes a value.
+    identical to the missing-credential incident this endpoint was written for.
+    Nothing is written. Failures log for the operator so /ready can stay a
+    boolean that never echoes a value.
 
-    Two questions, asked in the order that makes the common case one call:
+    ONE GetObject on a key that need not exist, and it MUST be a GET (#370). A
+    HEAD response carries no body (RFC 9110), so botocore has no code to parse
+    and synthesizes `{"Code": "404"}` for a missing key and a missing bucket
+    alike; two probes were built on HEAD and both passed a deleted bucket. A GET
+    error does carry a body, so the provider's own code survives, and NoSuchKey
+    -- healthy, the probe key is simply absent -- is the ONE code that passes.
+    NoSuchBucket, AccessDenied and an expired token are failures, and so is a
+    bare `404` with no code: S3, R2 and MinIO all send `<Error><Code>` on a GET,
+    so a 404 without one came from something that stripped it and restores the
+    very ambiguity this call was chosen to remove.
 
-    * HeadBucket. 200 is a pass, and its 404 is the ONLY answer that can mean
-      "this bucket is gone" -- head_object's 404 cannot, because a missing
-      bucket and a missing key are the same bodyless 404 (#370).
-    * Anything else from HeadBucket -- 403 above all -- is inconclusive about
-      existence, because this project's tokens are scoped per bucket at the
-      object level (D-020, D-026, D-033) and an object-scoped identity is
-      refused bucket-level calls while every operation the app performs works.
-      So ask the question the app actually asks: HeadObject on a key that need
-      not exist. 200 or 404 means the request was signed, routed and answered;
-      a 403 there is a credential that genuinely cannot work.
+    It is also the operation the app actually performs, which a bucket-level
+    call is not: this project's images token is scoped per bucket at the object
+    level (D-020, D-026, D-033).
+
+    One known false negative, in the safe direction: AWS S3 answers an identity
+    without `s3:ListBucket` with 403 AccessDenied rather than 404 NoSuchKey for
+    a key that is not there, so such a deployment reads as degraded. That costs
+    a warning on the deploy summary, not photographs, and it is not this
+    deployment -- the R2 images token is Object Read & Write.
+
+    docs/server-deploy.md carries the rest of the account, once.
     """
     try:
         creds = load_image_creds()
@@ -493,22 +487,27 @@ def image_bucket_is_reachable():
                        type(exc).__name__, exc)
         return False
 
-    bucket_status = _probe_status(client.head_bucket, Bucket=creds.bucket)
-    if bucket_status == 200:
-        return True
-    if bucket_status == 404:
-        logger.warning("image bucket probe: the bucket does not exist")
+    try:
+        response = client.get_object(Bucket=creds.bucket, Key=PROBE_KEY)
+    except Exception as exc:
+        code = str((getattr(exc, "response", None) or {})
+                   .get("Error", {}).get("Code", ""))
+        # The one error that means "the bucket answered, and this key is not in
+        # it". NoSuchBucket, AccessDenied and an expired token are all failures.
+        if code == "NoSuchKey":
+            return True
+        # The code, not the message: messages from some providers quote the
+        # endpoint, and this line is the operator's only account of why.
+        logger.warning("image bucket probe failed (%s)",
+                       code or type(exc).__name__)
         return False
-
-    key_status = _probe_status(
-        client.head_object, Bucket=creds.bucket, Key=PROBE_KEY)
-    if key_status in (200, 404):
-        return True
-    logger.warning(
-        "image bucket probe failed: bucket call answered %s, object call "
-        "answered %s", bucket_status, key_status,
-    )
-    return False
+    # PROBE_KEY is normally absent, but `frontdoor.storage_probe` writes one,
+    # and botocore hands back a stream it has not read. Close it rather than
+    # holding a connection open on every /ready.
+    body = response.get("Body")
+    if body is not None:
+        body.close()
+    return True
 
 
 def main(argv=None):

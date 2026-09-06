@@ -804,30 +804,51 @@ async function init() {
   var pins = payload.pins || [];
   setupLayers(pins);
   // A map that is MISSING something still renders, and rendered as if nothing
-  // were wrong (#370): /map/data reports scans_error, osm_error and
-  // commons_error, and the only reader on this page was dataset_error. A
-  // dropped scan store takes published scans off the map; a lost side file
-  // takes every provenance and attribution line off it, and that attribution
-  // is a licence obligation rather than a nicety.
+  // were wrong (#370): /map/data reports dataset_error, scans_error,
+  // scans_skipped, osm_error and commons_error, and the only one this page
+  // read was dataset_error -- and only when the pin list came back empty. A
+  // dropped scan store takes published scans off the map; a scan line that
+  // will not parse takes one contributor's scan off it for good; a lost side
+  // file takes every provenance and attribution line off it, and that
+  // attribution is a licence obligation rather than a nicety. Every one of
+  // those can leave a full map of pins, so the only branch that could say
+  // anything was the one branch that did not run.
   //
-  // Computed BEFORE the empty-pin branch and appended to whatever that
-  // branch says, because the empty case is where the difference matters most:
-  // "No doors in the dataset yet" is a false statement about an unmounted
-  // volume, and /map/data went to the trouble of separating "nobody has
-  // published" from "the store is unreachable" precisely so the page would
-  // stop saying it.
-  var incomplete = [
-    payload.scans_error, payload.osm_error, payload.commons_error
-  ].filter(Boolean).join("; ");
-  var alsoIncomplete = incomplete ? " This map is incomplete — " + incomplete + "." : "";
+  // `problems` is therefore built before the empty-pin branch and reported in
+  // BOTH: a missing dataset is a fact about the map whether or not scans
+  // happened to supply the pins, and "No doors in the dataset yet" is a false
+  // statement about an unmounted volume -- /map/data went to the trouble of
+  // separating "nobody has published" from "the store is unreachable"
+  // precisely so this page would stop saying it.
+  //
+  // WHICH subsystem, never the server's own message. Every one of these
+  // strings embeds a filesystem path or an OSError that quotes one
+  // (map_view.py, external_data.py, scan_records.py), and this banner is
+  // public — /ready makes exactly the same trade for exactly the same reason,
+  // and the operator's copy of the detail is in the log, which is not.
+  var problems = [];
+  if (payload.dataset_error) problems.push("the place dataset could not be loaded");
+  if (payload.scans_error) problems.push("published scans could not be loaded");
+  // A count, not a message: load_scan_store SKIPS a record it cannot read and
+  // carries on, so scans_skipped is the only place that loss ever surfaces.
+  if (payload.scans_skipped) {
+    problems.push(payload.scans_skipped + (payload.scans_skipped === 1
+      ? " published scan could not be read"
+      : " published scans could not be read"));
+  }
+  if (payload.osm_error) problems.push("accessibility provenance is missing");
+  if (payload.commons_error) problems.push("photo attribution is missing");
+  var incomplete = problems.length
+    ? "This map is incomplete — " + problems.join("; ") + "."
+    : "";
 
   if (!pins.length) {
-    banner((payload.dataset_error
-      ? "No map data loaded (" + payload.dataset_error + ")"
-      : "No doors in the dataset yet.") + alsoIncomplete);
+    banner(incomplete
+      ? "No doors to show. " + incomplete
+      : "No doors in the dataset yet.");
     return;
   }
-  if (incomplete) banner(alsoIncomplete.trim());
+  if (incomplete) banner(incomplete);
 
   var bounds = new google.maps.LatLngBounds();
   var contents = [];
