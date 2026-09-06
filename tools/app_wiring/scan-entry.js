@@ -33,7 +33,21 @@ document.getElementById('btn-shutter').addEventListener('click',async ()=>{
     if(frame){ liveFrame=frame; startLiveUpload(frame); }
     else resetLive();
   } else resetLive();
-  showScreen('scan-processing');runProcessing();
+  /* ROUND 9, V20 beat 1: the white shutter wash. The frame is already captured, so
+     the wash is over a frozen image, which is what a shutter looks like. Under
+     reduced motion there is no wash and no wait -- a flash IS the motion here, and
+     nothing depends on it: the capture is confirmed by the processing screen, its
+     progressbar and its live region.
+     Carried verbatim from the design source, which owns this beat; this handler is
+     inside the region the scan_entry op replaces, so the beat only reaches the served
+     page through here. */
+  const wash=document.getElementById('shutter-wash');
+  if(isReduced()){
+    showScreen('scan-processing'); runProcessing();
+  } else {
+    wash.classList.remove('on'); void wash.offsetWidth; wash.classList.add('on');
+    after(180,()=>{ wash.classList.remove('on'); showScreen('scan-processing'); runProcessing(); });
+  }
 });
 document.getElementById('btn-retake').addEventListener('click',()=>{
   const wasLive=!!liveFrame;

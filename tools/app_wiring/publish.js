@@ -140,7 +140,9 @@ function runDone(p, simulated){
 }
 document.getElementById('btn-done-map').addEventListener('click',()=>{
   showScreen('screen-map');
-  if(zoomedOut) setZoom(false); else renderMap();
+  setZoom(false, null);   /* ROUND 9: zoom AND centre back to the pilot frame.
+                             setZoom took a second argument this round; carried from
+                             the design source, which owns this line. */
   renderNearby();
   /* bounce the upgraded pin on the real map too */
   const b=pinsEl.querySelector(`[data-id="${scanTarget.id}"]`);
