@@ -7524,17 +7524,24 @@ const LIVE_CRITERIA = ['ramp_or_bevel','handrails','accessible_door_hardware','a
 function reviewChipsHTML(chipsOnly){
   if(liveResult){
     const crit=liveResult.assessment.criteria;
-    const present=[], notSeen=[];
+    const present=[], notSeen=[], notAssessed=[];
     LIVE_CRITERIA.forEach(key=>{
       const c=crit[key]; if(!c) return;
       const ck=EST_KEYMAP[key], conf=+c.confidence||0;
       if(c.verdict==='present')
         present.push(`<span class="fchip scan" style="cursor:default">${FEATS[ck].label}${dotTriple(conf,'var(--marigold-ink)')}</span>`);
-      else notSeen.push(FEATS[ck].label);
+      /* A criterion with NO verdict is not "not seen" (TICK-399). The server
+         refused the model's answer for this one field and kept the rest, so
+         nobody looked -- and telling somebody at a door that a feature was
+         not seen, when the engine never got an answer about it, is a rejected
+         response presented as an observation. Its own line, its own words. */
+      else if(c.verdict==='absent' || c.verdict==='not_visible') notSeen.push(FEATS[ck].label);
+      else notAssessed.push(FEATS[ck].label);
     });
     if(chipsOnly) return present.join('');
     return (present.length?present.join(''):`<span class="vc-notseen">No features confirmed from this photo yet — it still helps.</span>`) +
-      (notSeen.length?`<span class="vc-notseen">Not seen this time: ${notSeen.join(' · ')}</span>`:'');
+      (notSeen.length?`<span class="vc-notseen">Not seen this time: ${notSeen.join(' · ')}</span>`:'') +
+      (notAssessed.length?`<span class="vc-notseen">Not assessed this time: ${notAssessed.join(' · ')} — the check did not come back. Publishing checks the photo again.</span>`:'');
   }
   if(liveSimulated()){
     const chips=STAGED.map(([k,c])=>

@@ -453,6 +453,10 @@ WIRING_REQUIRED: list[str] = [
     "Corrections stay human \u2014 a person reads every note before anything changes",
     "p.relook = pin.needs_relook===true",
     "function fetchMyCorrections(){",
+    # TICK-399: a criterion the server refused an answer for is not a feature
+    # that was looked for and not found. Losing this line puts a rejected
+    # response in front of a person at a door as an observation.
+    "Not assessed this time:",
 ]
 
 # ...and none of these. The design source is worked on against a deployed host and a

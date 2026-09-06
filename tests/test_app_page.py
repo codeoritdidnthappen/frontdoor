@@ -271,3 +271,29 @@ def test_the_page_registers_the_worker_and_links_the_manifest():
     html = page().get_data(as_text=True)
     assert '<link rel="manifest" href="/app-manifest.json">' in html
     assert 'navigator.serviceWorker.register("/app-sw.js")' in html
+
+
+def test_tick_399_a_criterion_with_no_verdict_is_not_reported_as_not_seen():
+    """A refused answer is never presented to the person at the door as an observation.
+
+    Since TICK-399 the server keeps the criteria a rejected reply DID validate
+    and refuses only the field it got wrong, so a 200 response can carry a
+    criterion with a null verdict. The chips used to say "not seen this time"
+    for anything that was not `present`, which would tell somebody standing at
+    a door that a feature was not there when the engine never got an answer
+    about it -- a rejected response presented as an observation, which is the
+    one thing this product's rules forbid.
+    """
+    html = page().get_data(as_text=True)
+    chips = html.split("function reviewChipsHTML(chipsOnly){", 1)[1].split(
+        "\n}", 1)[0]
+    # The "not seen" bucket is entered only on a verdict the model actually gave.
+    assert "c.verdict==='absent' || c.verdict==='not_visible'" in chips
+    assert "notAssessed.push(" in chips
+    assert "Not assessed this time:" in chips
+    # ...and it is not the same sentence as the one about a feature that was looked
+    # for and not found.
+    assert "Not seen this time:" in chips
+    not_seen_line = chips.split("Not seen this time:", 1)[1].split("</span>", 1)[0]
+    assert "notSeen.join" in not_seen_line
+    assert "notAssessed" not in not_seen_line
