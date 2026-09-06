@@ -83,7 +83,7 @@ from frontdoor.split import InvalidEntranceId, assign_split, canonical_entrance_
 from frontdoor.storage import StorageError, image_store
 from frontdoor_server.map_view import DATASET_ENV, DEFAULT_DATASET_PATH
 from frontdoor_server.scan_view import CONTRIBUTOR_HEADER, _contributor
-from frontdoor_server.screen_view import ALLOWED_IMAGE_TYPES, _error
+from frontdoor_server.screen_view import ALLOWED_IMAGE_TYPES, _error, _json_not_multipart
 
 #: app.config key tests use to inject a fake object store, same shape as the
 #: scan path's STORE_KEY; production leaves it unset and gets image_store().
@@ -199,6 +199,13 @@ def _normalise(value, aliases, allowed):
 
 @correct_page.post("/correct")
 def correct():
+    refused = _json_not_multipart(
+        "POST /correct",
+        "the optional photo travels in the same request as the place reference.",
+    )
+    if refused is not None:
+        return refused
+
     place_ref, ref_error = _parse_place_ref(request.form)
     if ref_error is not None:
         return ref_error

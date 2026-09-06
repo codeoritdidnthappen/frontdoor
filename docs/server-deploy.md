@@ -315,7 +315,10 @@ Either way, verify with `curl https://frontdoor-measure.fly.dev/map/data` and co
 
 `POST /screen/publish` is the consent step after `/screen`: the same blur → audit → integrated
 assessment, and then — only when the face audit answered exactly `clear` — it stores the
-**processed** image bytes and appends one scan record. It needs two things beyond `/screen`:
+**processed** image bytes and appends one scan record. Callers send `multipart/form-data`
+(image file parts plus a place reference as form fields). A JSON body is 415
+`unsupported content type` — the same answer `POST /correct` gives — because the photographs
+travel in the same request. It needs two things beyond `/screen`:
 
 - **Object storage** — the same images-bucket credential the `/upload` path already uses
   (`FRONTDOOR_IMAGES_BUCKET` / `FRONTDOOR_IMAGES_ACCESS_KEY` / `FRONTDOOR_IMAGES_SECRET_KEY`,
@@ -345,7 +348,10 @@ silently, and no credential material ever appears in a response.
 `POST /correct` is the endpoint behind the app's **"Suggest a correction"** sheet. Before it
 existed the sheet pushed the note into a JavaScript array in one browser: the sender saw it in
 their Contributions tab and reasonably believed somebody would read it, and it died when they
-closed the tab.
+closed the tab. The place reference, category, note, and optional photo are
+`multipart/form-data` fields, matching `/screen/publish`. A JSON post is 415
+`unsupported content type`, not "missing place reference": the body was never read as form
+fields, and a photo cannot ride in a JSON request.
 
 It needs:
 

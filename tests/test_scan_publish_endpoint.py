@@ -362,6 +362,20 @@ def test_publish_without_a_place_reference_is_refused_before_the_engine(
     assert engine.calls == []
 
 
+def test_a_json_post_names_multipart_not_a_missing_place(scans_path):
+    """#423: /screen/publish and /correct refuse JSON the same way."""
+    engine = FakeEngine()
+    response = make_client(engine=engine, store=FakeStore()).post(
+        "/screen/publish",
+        json={"place_id": "ChIJexample", "name": "Example Cafe"},
+    )
+    assert response.status_code == 415
+    body = response.get_json()
+    assert body["error"] == "unsupported content type"
+    assert "multipart/form-data" in body["detail"]
+    assert engine.calls == []
+
+
 def test_coordinates_without_a_name_are_not_a_place_reference(scans_path):
     response = post_publish(make_client(store=FakeStore()), [image_part()],
                             form={"lat": "40.0", "lng": "-75.0"})
