@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 240 48" role="img" aria-labelledby="title desc">
+  <title id="title">Current freshness badge</title><desc id="desc">EntryMap Current freshness badge asset.</desc>
+  
+  <rect x="2" y="2" width="236" height="44" rx="22" fill="#F2EEFF" stroke="#E2DAFF" stroke-width="2"/><g transform="translate(12 8) scale(.85)"><g fill="none" stroke="#4020B5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="16" cy="16" r="12"/><path d="M16 9v8l5 3"/></g></g><text x="52" y="30" font-family="Atkinson Hyperlegible, Aptos, Arial, sans-serif" font-size="16" font-weight="650" fill="#17103D">Seen 3 weeks ago</text>
+</svg>

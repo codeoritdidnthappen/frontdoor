@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 32 32" role="img" aria-labelledby="title desc">
+  <title id="title">Owner provenance icon</title><desc id="desc">EntryMap Owner provenance icon asset.</desc>
+  
+  <g fill="none" stroke="#4020B5" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 13h22L24 6H8Z"/><path d="M7 13v15h18V13M12 28v-9h8v9"/><path d="M5 13c0 4 5 5 7 2 3 3 6 3 8 0 3 3 6 3 8-2"/></g>
+</svg>
