@@ -9,6 +9,7 @@ unchanged against it.
 import json
 import logging
 import os
+import re
 from importlib import resources
 from pathlib import Path
 
@@ -462,6 +463,16 @@ def create_app():
             .joinpath("app-sw.js")
             .read_text(encoding="utf-8")
         )
+        # The cache name carries the deployed commit, so a deploy invalidates
+        # the shell instead of leaving a phone on the previous release. The
+        # worker's own comment claimed this for a fixed "entrymap-v1", which
+        # never changed; a design port then shipped and the old page kept
+        # being served from the phone's cache while the server answered
+        # correctly. Unknown commits fall back to a constant, which is the
+        # old behaviour and no worse.
+        commit = os.environ.get("FRONTDOOR_COMMIT", "").strip()
+        stamp = re.sub(r"[^A-Za-z0-9]", "", commit)[:40] or "unversioned"
+        body = body.replace("__COMMIT__", stamp)
         response = Response(body, mimetype="text/javascript")
         response.headers["Cache-Control"] = "no-cache"
         response.headers["Service-Worker-Allowed"] = "/"

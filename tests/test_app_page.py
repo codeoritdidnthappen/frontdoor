@@ -204,6 +204,54 @@ def test_the_service_worker_is_served_uncached_with_root_scope():
     assert response.headers["Service-Worker-Allowed"] == "/"
 
 
+def test_the_worker_cache_name_carries_the_deployed_commit(monkeypatch):
+    """A fixed cache name means a deploy never reaches a phone that already
+    opened the app.
+
+    The worker's own comment claimed "a new deploy changes CACHE", but CACHE
+    was the literal "entrymap-v1" and nothing changed it. A design port then
+    shipped and a phone that had opened /app before was served the previous
+    release out of its own cache, showing the old artwork while the server
+    answered correctly. The name now carries the commit.
+    """
+    monkeypatch.setenv("FRONTDOOR_COMMIT", "0321be0cb620b33a2309febac8f09e6812fc00d4")
+    body = create_app().test_client().get("/app-sw.js").get_data(as_text=True)
+    assert 'const CACHE = "entrymap-0321be0cb620b33a2309febac8f09e6812fc00d4";' in body
+    assert "__COMMIT__" not in body
+
+
+def test_two_commits_produce_two_cache_names(monkeypatch):
+    """The point is the difference, not the format: same worker source, two
+    deploys, two names, so activate drops the older shell."""
+    names = []
+    for commit in ("aaaaaaa1", "bbbbbbb2"):
+        monkeypatch.setenv("FRONTDOOR_COMMIT", commit)
+        body = create_app().test_client().get("/app-sw.js").get_data(as_text=True)
+        names.append(body.split('const CACHE = "')[1].split('"')[0])
+    assert names[0] != names[1]
+
+
+def test_an_unknown_commit_still_yields_a_usable_cache_name(monkeypatch):
+    """Locally, and in any environment that does not set the variable, the
+    worker must still install. A missing commit falls back to a constant,
+    which is exactly the behaviour that shipped before and no worse."""
+    monkeypatch.delenv("FRONTDOOR_COMMIT", raising=False)
+    body = create_app().test_client().get("/app-sw.js").get_data(as_text=True)
+    assert 'const CACHE = "entrymap-unversioned";' in body
+    assert "__COMMIT__" not in body
+
+
+def test_a_hostile_commit_value_cannot_break_out_of_the_string(monkeypatch):
+    """The value arrives from the environment, so it is stripped to letters
+    and digits before it reaches a JavaScript string literal."""
+    monkeypatch.setenv("FRONTDOOR_COMMIT", 'x"; caches.delete("entrymap-v1"); //')
+    body = create_app().test_client().get("/app-sw.js").get_data(as_text=True)
+    name = body.split('const CACHE = "')[1].split('"')[0]
+    assert name.startswith("entrymap-")
+    assert name.removeprefix("entrymap-").isalnum()
+    assert "caches.delete" not in name
+
+
 def test_the_worker_never_caches_an_answer_about_a_real_doorway():
     """Screening, map and photo responses must not be served from a cache.
 
