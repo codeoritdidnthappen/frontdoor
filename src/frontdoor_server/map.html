@@ -836,6 +836,19 @@ async function init() {
       ? " published scan could not be read"
       : " published scans could not be read"));
   }
+  // The curated on-site publication (TICK-333) is a second store, read from
+  // the image rather than the volume, and it fails independently of the
+  // community one. Reported separately for the same reason the two files are
+  // separate: "scans are missing" is not one problem with one cause.
+  if (payload.published_scans_error) {
+    problems.push("the on-site scan publication could not be loaded");
+  }
+  if (payload.published_scans_skipped) {
+    problems.push(payload.published_scans_skipped
+      + (payload.published_scans_skipped === 1
+        ? " on-site scan could not be read"
+        : " on-site scans could not be read"));
+  }
   if (payload.osm_error) problems.push("accessibility provenance is missing");
   if (payload.commons_error) problems.push("photo attribution is missing");
   var incomplete = problems.length

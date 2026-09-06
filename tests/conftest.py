@@ -78,3 +78,39 @@ def _load_dotenv_before_any_test():
     for name in SERVER_CONFIG_NOT_FROM_DOTENV:
         os.environ.pop(name, None)
 
+
+
+@pytest.fixture(autouse=True)
+def _curated_publication_off_by_default(tmp_path_factory):
+    """Point FRONTDOOR_PUBLISHED_SCANS at nothing unless a test says otherwise.
+
+    `data/published_scans.jsonl` is a COMMITTED dataset (TICK-333), unlike
+    `data/scans.jsonl`, which is runtime state and normally absent from a
+    checkout. So the moment it landed, every test that asks /map/data what it
+    serves started seeing 46 real scan records it never set up -- five pins
+    silently green in tests about a missing dataset, an empty store, or one
+    published record. A test must not depend on which datasets happen to be in
+    the tree.
+
+    The tests that DO care set the variable themselves and win, because an
+    autouse fixture is applied before the test body runs: `test_scan_publish`
+    points it at the real file and pins what the publication serves, and
+    `test_map_states` points it at fixtures and pins the two-store merge.
+
+    Deliberately NOT `monkeypatch`: an autouse fixture in this file is set up
+    before a test module's own autouse fixtures, so requesting `monkeypatch`
+    here would build it first and tear it down LAST -- reversing the order two
+    tests in test_server_needs_the_library depend on, where a module reload has
+    to run after monkeypatch has put `ARM_NAMES` back. os.environ with an
+    explicit restore keeps this fixture out of that ordering entirely.
+    """
+    import os
+
+    absent = tmp_path_factory.mktemp("no-curated-publication") / "absent.jsonl"
+    previous = os.environ.get("FRONTDOOR_PUBLISHED_SCANS")
+    os.environ["FRONTDOOR_PUBLISHED_SCANS"] = str(absent)
+    yield
+    if previous is None:
+        os.environ.pop("FRONTDOOR_PUBLISHED_SCANS", None)
+    else:
+        os.environ["FRONTDOOR_PUBLISHED_SCANS"] = previous

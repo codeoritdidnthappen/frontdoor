@@ -8,3 +8,7 @@
 !data/precatalogue.json
 !data/external
 !data/external/**
+# The curated on-site publication (TICK-333). Same failure mode as the dataset
+# above: without it the map builds, serves 200, and is missing the 46 on-site
+# scans with nothing anywhere saying so.
+!data/published_scans.jsonl

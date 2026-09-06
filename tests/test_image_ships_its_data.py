@@ -12,7 +12,10 @@ from pathlib import Path
 import pytest
 
 from frontdoor.claims import DEFAULT_CLAIMS_PATH
-from frontdoor.scan_records import DEFAULT_SCANS_PATH
+from frontdoor.scan_records import (
+    DEFAULT_PUBLISHED_SCANS_PATH,
+    DEFAULT_SCANS_PATH,
+)
 from frontdoor_server.map_view import (
     DEFAULT_DATASET_PATH,
     DEFAULT_EXTERNAL_COMMONS_PATH,
@@ -24,6 +27,11 @@ SERVER_READS = (
     DEFAULT_DATASET_PATH,
     DEFAULT_EXTERNAL_OSM_PATH,
     DEFAULT_EXTERNAL_COMMONS_PATH,
+    # The curated on-site publication (TICK-333). Read at request time from a
+    # relative path exactly like the map dataset, so it fails exactly the same
+    # silent way if it is left out of the image: 200, a map, and 46 scans
+    # missing with nothing saying so.
+    DEFAULT_PUBLISHED_SCANS_PATH,
 )
 
 
@@ -78,10 +86,23 @@ def test_the_dockerfile_copies_it(relative):
 #: container and those rows are lost on redeploy, which TICK-282 records as a known limitation
 #: of that first version rather than a defect; docs/server-deploy.md says to download them
 #: first. If it is ever given a volume, add it here.
+#: FRONTDOOR_PUBLISHED_SCANS is deliberately absent: nothing writes it at run
+#: time. It is a committed dataset that ships in the image, so a deploy
+#: restores it rather than destroying it, and pointing it at the volume would
+#: turn a reviewable file into runtime state nobody can diff.
 RUNTIME_STORES = (
     ("FRONTDOOR_SCANS", DEFAULT_SCANS_PATH),
     ("FRONTDOOR_CLAIMS", DEFAULT_CLAIMS_PATH),
 )
+
+
+def test_the_curated_publication_is_not_redirected_onto_the_volume():
+    dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
+    assert "ENV FRONTDOOR_PUBLISHED_SCANS=" not in dockerfile, (
+        "the curated publication is a committed dataset, not runtime state; "
+        "redirecting it onto the volume makes a deploy lose it instead of "
+        "restoring it"
+    )
 
 
 @pytest.mark.parametrize("variable, default", RUNTIME_STORES, ids=lambda value: str(value))

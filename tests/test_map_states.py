@@ -468,6 +468,61 @@ def test_map_data_reports_skipped_scan_lines(client, tmp_path, monkeypatch):
     assert payload["scans_skipped"] == 1
 
 
+def test_map_data_merges_the_curated_publication_as_well_as_the_volume(
+        client, tmp_path, monkeypatch):
+    """Two stores, both merged, each reported on its own (TICK-333).
+
+    The curated publication ships inside the image and the community store
+    lives on a mounted volume, so they fail independently and a single
+    scans_error would say the wrong thing about whichever one is fine.
+    """
+    dataset_path = tmp_path / "precatalogue.json"
+    dataset_path.write_text(
+        json.dumps({"green": row(), "onsite": row()}), encoding="utf-8")
+
+    def scan(place_id, date):
+        return json.dumps({
+            "scan_id": place_id,
+            "place_ref": {"place_id": place_id},
+            "created_at": date,
+            "verdicts": {"ramp_or_bevel": "present"},
+            "confidences": {"ramp_or_bevel": 80},
+            "faces_blurred": 0,
+            "quarantined_count": 0,
+            "image_keys": [],
+        }) + "\n"
+
+    published_path = tmp_path / "published_scans.jsonl"
+    published_path.write_text(scan("onsite", "2026-09-04T10:00:00Z"),
+                              encoding="utf-8")
+    community_path = tmp_path / "scans.jsonl"
+    community_path.write_text(scan("green", "2026-09-05T10:00:00Z"),
+                              encoding="utf-8")
+
+    monkeypatch.setenv("FRONTDOOR_MAP_DATASET", str(dataset_path))
+    monkeypatch.setenv("FRONTDOOR_PUBLISHED_SCANS", str(published_path))
+    monkeypatch.setenv("FRONTDOOR_SCANS", str(community_path))
+    payload = client.get("/map/data").get_json()
+
+    states = {pin["place_id"]: pin["state"] for pin in payload["pins"]}
+    assert states == {"green": "verified_accessible",
+                      "onsite": "verified_accessible"}
+    assert payload["published_scans_loaded"] == 1
+    assert payload["published_scans_error"] is None
+    assert payload["published_scans_skipped"] == 0
+    assert payload["scans_loaded"] == 1
+
+    # And one store failing leaves the other's records on the map.
+    monkeypatch.setenv(
+        "FRONTDOOR_PUBLISHED_SCANS", str(tmp_path / "gone" / "published.jsonl"))
+    payload = client.get("/map/data").get_json()
+    assert payload["published_scans_error"] is not None
+    assert payload["scans_loaded"] == 1
+    states = {pin["place_id"]: pin["state"] for pin in payload["pins"]}
+    assert states["green"] == "verified_accessible"
+    assert states["onsite"] == "not_yet_checked"
+
+
 def test_map_data_reports_a_missing_scan_volume(client, tmp_path, monkeypatch):
     dataset_path = tmp_path / "precatalogue.json"
     dataset_path.write_text(json.dumps({"green": row()}), encoding="utf-8")

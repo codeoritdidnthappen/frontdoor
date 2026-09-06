@@ -1,0 +1,711 @@
+[
+ {
+  "basis": "identified as 'DeSano Pizzeria Napoletana' (high confidence, surveyed_location) and matched to ChIJH1vZsj21RIYR9QNowHxmpDU by the match pass: resolved by #341 against the committed catalogue",
+  "entrance_id": "E-001",
+  "how": {
+   "anchor": "identification",
+   "detail": "resolved by #341 against the committed catalogue"
+  },
+  "identification": {
+   "confidence": "high",
+   "name": "DeSano Pizzeria Napoletana",
+   "status": "identified"
+  },
+  "matched": true,
+  "not_pinnable_reason": null,
+  "place_ref": {
+   "lat": 30.266317,
+   "lng": -97.74595939999999,
+   "name": "DeSano Pizzeria Napoletana - Downtown Austin",
+   "place_id": "ChIJH1vZsj21RIYR9QNowHxmpDU"
+  },
+  "renderable": true
+ },
+ {
+  "basis": "the match pass left this entrance without a place (no_catalogue_entry): no catalogued place carries this business name",
+  "entrance_id": "E-003",
+  "how": null,
+  "identification": {
+   "confidence": "high",
+   "name": "Which Wich",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "no_catalogue_entry",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the assessment of this entrance produced no verdicts, so there is nothing a pin could report; the record is published with no place rather than stamping a business scanned on no observation",
+  "entrance_id": "E-004",
+  "how": null,
+  "identification": null,
+  "matched": false,
+  "not_pinnable_reason": "assessment_produced_no_verdicts",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (outside_match_distance): nearest candidate 'Diafar' is 287 m away, over the 40 m gate",
+  "entrance_id": "E-007",
+  "how": null,
+  "identification": {
+   "confidence": "high",
+   "name": "RedFarm",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "outside_match_distance",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "identified as 'SEV Laser' (high confidence, surveyed_location) and matched to ChIJj29QlJe1RIYRrFSOVy2A4Xs by the match pass: resolved by #341 against the committed catalogue",
+  "entrance_id": "E-008",
+  "how": {
+   "anchor": "identification",
+   "detail": "resolved by #341 against the committed catalogue"
+  },
+  "identification": {
+   "confidence": "high",
+   "name": "SEV Laser",
+   "status": "identified"
+  },
+  "matched": true,
+  "not_pinnable_reason": null,
+  "place_ref": {
+   "lat": 30.2653485,
+   "lng": -97.7455286,
+   "name": "SEV Laser",
+   "place_id": "ChIJj29QlJe1RIYRrFSOVy2A4Xs"
+  },
+  "renderable": true
+ },
+ {
+  "basis": "the match pass left this entrance without a place (outside_match_distance): nearest candidate 'USA Compression Partners LP' is 109 m away, over the 40 m gate",
+  "entrance_id": "E-009",
+  "how": null,
+  "identification": {
+   "confidence": "high",
+   "name": "Austin Transit Partnership",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "outside_match_distance",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "identified as 'Sweetgreen' (high confidence, surveyed_location) and matched to ChIJQ4yXW8q1RIYRCkM0yr1OLso by the match pass: resolved by #341 against the committed catalogue",
+  "entrance_id": "E-010",
+  "how": {
+   "anchor": "identification",
+   "detail": "resolved by #341 against the committed catalogue"
+  },
+  "identification": {
+   "confidence": "high",
+   "name": "Sweetgreen",
+   "status": "identified"
+  },
+  "matched": true,
+  "not_pinnable_reason": null,
+  "place_ref": {
+   "lat": 30.2649421,
+   "lng": -97.7457,
+   "name": "sweetgreen - Healthy Salads, Wraps, and Bowls",
+   "place_id": "ChIJQ4yXW8q1RIYRCkM0yr1OLso"
+  },
+  "renderable": true
+ },
+ {
+  "basis": "the match pass left this entrance without a place (outside_match_distance): nearest candidate 'Ashton Austin' is 70 m away, over the 40 m gate",
+  "entrance_id": "E-012",
+  "how": null,
+  "identification": {
+   "confidence": "high",
+   "name": "The Ashton (Ashton Austin residential tower)",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "outside_match_distance",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "identified as 'JoS. A. Bank' (high confidence, read_sign) and matched to ChIJlyD0Wwi1RIYRs8d4z8UUzSs by the match pass: resolved by #341 against the committed catalogue",
+  "entrance_id": "E-013",
+  "how": {
+   "anchor": "identification",
+   "detail": "resolved by #341 against the committed catalogue"
+  },
+  "identification": {
+   "confidence": "high",
+   "name": "JoS. A. Bank",
+   "status": "identified"
+  },
+  "matched": true,
+  "not_pinnable_reason": null,
+  "place_ref": {
+   "lat": 30.2660751,
+   "lng": -97.744018,
+   "name": "JoS. A. Bank",
+   "place_id": "ChIJlyD0Wwi1RIYRs8d4z8UUzSs"
+  },
+  "renderable": true
+ },
+ {
+  "basis": "the match pass left this entrance without a place (not_identified): the entrance was never identified, so there is no name to match",
+  "entrance_id": "E-017",
+  "how": null,
+  "identification": {
+   "confidence": null,
+   "name": null,
+   "status": "unidentified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "not_identified",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (no_location_evidence): 2 name candidate(s) in the catalogue, none of them testable",
+  "entrance_id": "E-018",
+  "how": null,
+  "identification": {
+   "confidence": "high",
+   "name": "Burger Bar on Congress",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "no_location_evidence",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (no_location_evidence): 2 name candidate(s) in the catalogue, none of them testable",
+  "entrance_id": "E-019",
+  "how": null,
+  "identification": {
+   "confidence": "low",
+   "name": "Starbucks",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "no_location_evidence",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "identified as \"Swift's Attic\" (high confidence, read_sign, read_street_number) and matched to ChIJOZxxaAi1RIYRe3j7KpIprWo by the match pass: the geocoded street number is 11.9 m from \"Swift's Attic\"; the published catalogue does not carry this place's name and location, so the record is keyed to it but draws no pin yet",
+  "entrance_id": "E-020",
+  "how": {
+   "anchor": "address_geocode",
+   "anchor_between": null,
+   "bracket_span_m": null,
+   "distance_m": 11.9,
+   "matched_name": "Swift's Attic"
+  },
+  "identification": {
+   "confidence": "high",
+   "name": "Swift's Attic",
+   "status": "identified"
+  },
+  "matched": true,
+  "not_pinnable_reason": "place_not_in_published_catalogue",
+  "place_ref": {
+   "place_id": "ChIJOZxxaAi1RIYRe3j7KpIprWo"
+  },
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (no_catalogue_entry): no catalogued place carries this business name",
+  "entrance_id": "E-022",
+  "how": null,
+  "identification": {
+   "confidence": "high",
+   "name": "One Medical",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "no_catalogue_entry",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the assessment of this entrance produced no verdicts, so there is nothing a pin could report; the record is published with no place rather than stamping a business scanned on no observation",
+  "entrance_id": "E-023",
+  "how": null,
+  "identification": null,
+  "matched": false,
+  "not_pinnable_reason": "assessment_produced_no_verdicts",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (not_identified): the entrance was never identified, so there is no name to match",
+  "entrance_id": "E-024",
+  "how": null,
+  "identification": {
+   "confidence": null,
+   "name": null,
+   "status": "unidentified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "not_identified",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (no_catalogue_entry): no catalogued place carries this business name",
+  "entrance_id": "E-025",
+  "how": null,
+  "identification": {
+   "confidence": "low",
+   "name": "SoulCycle",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "no_catalogue_entry",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (bracket_too_wide): bracketed by E-024 and E-030, 206 m apart, over the 120 m a bracket may claim",
+  "entrance_id": "E-026",
+  "how": null,
+  "identification": {
+   "confidence": "high",
+   "name": "Mexic-Arte Museum",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "bracket_too_wide",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (not_identified): the entrance was never identified, so there is no name to match",
+  "entrance_id": "E-027",
+  "how": null,
+  "identification": {
+   "confidence": null,
+   "name": null,
+   "status": "unidentified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "not_identified",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (not_identified): the entrance was never identified, so there is no name to match",
+  "entrance_id": "E-030",
+  "how": null,
+  "identification": {
+   "confidence": null,
+   "name": null,
+   "status": "unidentified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "not_identified",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "identified as 'Capital One Caf\u00e9' (high confidence, read_sign) and matched to ChIJmzg1xQm1RIYRxzAFpBcfK78 by the match pass: bracketed by E-030 and E-033 over 74.3 m and 0.6 m from 'Capital One Caf\u00e9'; the published catalogue does not carry this place's name and location, so the record is keyed to it but draws no pin yet",
+  "entrance_id": "E-031",
+  "how": {
+   "anchor": "walk_order_bracket",
+   "anchor_between": [
+    "E-030",
+    "E-033"
+   ],
+   "bracket_span_m": 74.3,
+   "distance_m": 0.6,
+   "matched_name": "Capital One Caf\u00e9"
+  },
+  "identification": {
+   "confidence": "high",
+   "name": "Capital One Caf\u00e9",
+   "status": "identified"
+  },
+  "matched": true,
+  "not_pinnable_reason": "place_not_in_published_catalogue",
+  "place_ref": {
+   "place_id": "ChIJmzg1xQm1RIYRxzAFpBcfK78"
+  },
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (not_identified): the entrance was never identified, so there is no name to match",
+  "entrance_id": "E-033",
+  "how": null,
+  "identification": {
+   "confidence": null,
+   "name": null,
+   "status": "unidentified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "not_identified",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "identified as '7-Eleven' at confidence 'low' and matched to ChIJE7BdYAi1RIYRU1hwvbVXfwU by the match pass, but a pin states the business as fact, so the scan is published with no place rather than as a confident claim about whose door it is",
+  "entrance_id": "E-034",
+  "how": {
+   "anchor": "address_geocode",
+   "anchor_between": null,
+   "bracket_span_m": null,
+   "distance_m": 1.5,
+   "matched_name": "7-Eleven"
+  },
+  "identification": {
+   "confidence": "low",
+   "name": "7-Eleven",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "low_confidence_identification",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (not_identified): the entrance was never identified, so there is no name to match",
+  "entrance_id": "E-035",
+  "how": null,
+  "identification": {
+   "confidence": null,
+   "name": null,
+   "status": "unidentified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "not_identified",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (not_identified): the entrance was never identified, so there is no name to match",
+  "entrance_id": "E-037",
+  "how": null,
+  "identification": {
+   "confidence": null,
+   "name": null,
+   "status": "unidentified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "not_identified",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (bracket_too_wide): bracketed by E-037 and E-050, 261 m apart, over the 120 m a bracket may claim",
+  "entrance_id": "E-038",
+  "how": null,
+  "identification": {
+   "confidence": "high",
+   "name": "Kruger's",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "bracket_too_wide",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (not_identified): the entrance was never identified, so there is no name to match",
+  "entrance_id": "E-040",
+  "how": null,
+  "identification": {
+   "confidence": null,
+   "name": null,
+   "status": "unidentified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "not_identified",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (not_identified): the entrance was never identified, so there is no name to match",
+  "entrance_id": "E-041",
+  "how": null,
+  "identification": {
+   "confidence": null,
+   "name": null,
+   "status": "unidentified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "not_identified",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (bracket_too_wide): bracketed by E-037 and E-050, 261 m apart, over the 120 m a bracket may claim",
+  "entrance_id": "E-042",
+  "how": null,
+  "identification": {
+   "confidence": "low",
+   "name": "Beacon",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "bracket_too_wide",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (not_identified): the entrance was never identified, so there is no name to match",
+  "entrance_id": "E-043",
+  "how": null,
+  "identification": {
+   "confidence": null,
+   "name": null,
+   "status": "unidentified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "not_identified",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (not_identified): the entrance was never identified, so there is no name to match",
+  "entrance_id": "E-045",
+  "how": null,
+  "identification": {
+   "confidence": null,
+   "name": null,
+   "status": "unidentified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "not_identified",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (no_catalogue_entry): no catalogued place carries this business name",
+  "entrance_id": "E-047",
+  "how": null,
+  "identification": {
+   "confidence": "low",
+   "name": "L&D ATX",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "no_catalogue_entry",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (not_identified): the entrance was never identified, so there is no name to match",
+  "entrance_id": "E-048",
+  "how": null,
+  "identification": {
+   "confidence": null,
+   "name": null,
+   "status": "unidentified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "not_identified",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (bracket_too_wide): bracketed by E-037 and E-050, 261 m apart, over the 120 m a bracket may claim",
+  "entrance_id": "E-049",
+  "how": null,
+  "identification": {
+   "confidence": "high",
+   "name": "Ruth's Chris Steak House",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "bracket_too_wide",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (no_catalogue_entry): no catalogued place carries this business name",
+  "entrance_id": "E-050",
+  "how": null,
+  "identification": {
+   "confidence": "high",
+   "name": "Scarbrough Building",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "no_catalogue_entry",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "identified as 'Velvet Taco' (high confidence, read_sign, read_street_number) and matched to ChIJIQ4kr4e1RIYRbQ_afrDF1p0 by the match pass: the geocoded street number is 28.8 m from 'Velvet Taco'; the published catalogue does not carry this place's name and location, so the record is keyed to it but draws no pin yet",
+  "entrance_id": "E-051",
+  "how": {
+   "anchor": "address_geocode",
+   "anchor_between": null,
+   "bracket_span_m": null,
+   "distance_m": 28.8,
+   "matched_name": "Velvet Taco"
+  },
+  "identification": {
+   "confidence": "high",
+   "name": "Velvet Taco",
+   "status": "identified"
+  },
+  "matched": true,
+  "not_pinnable_reason": "place_not_in_published_catalogue",
+  "place_ref": {
+   "place_id": "ChIJIQ4kr4e1RIYRbQ_afrDF1p0"
+  },
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (not_identified): the entrance was never identified, so there is no name to match",
+  "entrance_id": "E-053",
+  "how": null,
+  "identification": {
+   "confidence": null,
+   "name": null,
+   "status": "unidentified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "not_identified",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (not_identified): the entrance was never identified, so there is no name to match",
+  "entrance_id": "E-054",
+  "how": null,
+  "identification": {
+   "confidence": null,
+   "name": null,
+   "status": "unidentified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "not_identified",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (no_catalogue_entry): no catalogued place carries this business name",
+  "entrance_id": "E-055",
+  "how": null,
+  "identification": {
+   "confidence": "high",
+   "name": "Robinson-Rosner Building",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "no_catalogue_entry",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (ambiguous_candidates): 'CVS Photo' at 11 m; 'CVS' at 17 m; 'CVS Pharmacy' at 17 m",
+  "entrance_id": "E-056",
+  "how": null,
+  "identification": {
+   "confidence": "high",
+   "name": "CVS",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "ambiguous_candidates",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (not_identified): the entrance was never identified, so there is no name to match",
+  "entrance_id": "E-057",
+  "how": null,
+  "identification": {
+   "confidence": null,
+   "name": null,
+   "status": "unidentified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "not_identified",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (not_identified): the entrance was never identified, so there is no name to match",
+  "entrance_id": "E-058",
+  "how": null,
+  "identification": {
+   "confidence": null,
+   "name": null,
+   "status": "unidentified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "not_identified",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "identified as 'Sushi Roku' (high confidence, read_sign, walk_order) and matched to ChIJtxx1fZO1RIYRR1Gn6q4Rwe8 by the match pass: resolved by #341 against the committed catalogue",
+  "entrance_id": "E-060",
+  "how": {
+   "anchor": "identification",
+   "detail": "resolved by #341 against the committed catalogue"
+  },
+  "identification": {
+   "confidence": "high",
+   "name": "Sushi Roku",
+   "status": "identified"
+  },
+  "matched": true,
+  "not_pinnable_reason": null,
+  "place_ref": {
+   "lat": 30.2665443,
+   "lng": -97.7443354,
+   "name": "SUSHI ROKU AUSTIN",
+   "place_id": "ChIJtxx1fZO1RIYRR1Gn6q4Rwe8"
+  },
+  "renderable": true
+ },
+ {
+  "basis": "the match pass left this entrance without a place (no_location_evidence): 1 name candidate(s) in the catalogue, none of them testable",
+  "entrance_id": "E-061",
+  "how": null,
+  "identification": {
+   "confidence": "high",
+   "name": "Quik Print",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "no_location_evidence",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (no_location_evidence): 1 name candidate(s) in the catalogue, none of them testable",
+  "entrance_id": "E-062",
+  "how": null,
+  "identification": {
+   "confidence": "high",
+   "name": "Speakeasy",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "no_location_evidence",
+  "place_ref": null,
+  "renderable": false
+ },
+ {
+  "basis": "the match pass left this entrance without a place (no_location_evidence): 1 name candidate(s) in the catalogue, none of them testable",
+  "entrance_id": "E-063",
+  "how": null,
+  "identification": {
+   "confidence": "high",
+   "name": "Speakeasy",
+   "status": "identified"
+  },
+  "matched": false,
+  "not_pinnable_reason": "no_location_evidence",
+  "place_ref": null,
+  "renderable": false
+ }
+]

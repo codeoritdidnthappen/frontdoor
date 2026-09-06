@@ -327,6 +327,13 @@ assessment, and then — only when the face audit answered exactly `clear` — i
   `data/scans.jsonl` (relative, like the map dataset — same caveat: point it at a **mounted
   volume** in `fly.toml`'s `[env]`, or the records vanish with the machine's rootfs on the next
   deploy).
+- **`FRONTDOOR_PUBLISHED_SCANS`** — path of the *curated* on-site publication (TICK-333),
+  default `data/published_scans.jsonl`. A separate file on purpose. It is a committed dataset
+  like `data/precatalogue.json`, `COPY`d into the image, and it must **not** be pointed at the
+  volume: a deploy replaces the container filesystem but the repository file comes back with it,
+  which is exactly the behaviour a curated dataset wants and exactly the opposite of what runtime
+  scans want. `/map/data` reads both stores and merges them in one pass; either one missing or
+  unreadable is reported in the payload and changes nothing else.
 
 `GET /map/data` merges the store into the pre-catalogue automatically; no scan store, or an
 unreadable one, changes nothing. If storage is down or misconfigured, publish degrades to a 503
@@ -342,6 +349,7 @@ a test pins that list against both files.
 | Store | Variable | In the image | Survives a deploy |
 |---|---|---|---|
 | Community scans | `FRONTDOOR_SCANS` | `/data/scans.jsonl` | yes |
+| Curated on-site publication | `FRONTDOOR_PUBLISHED_SCANS` | not set — `data/published_scans.jsonl`, copied into the image | yes — it is rebuilt from the repository on every deploy |
 | Owner claims | `FRONTDOOR_CLAIMS` | `/data/claims.jsonl` | yes |
 | Future-capture labels | `FRONTDOOR_LABELS_PATH` | not set — `data/labels.csv` in the container | **no**, by design (TICK-282) |
 

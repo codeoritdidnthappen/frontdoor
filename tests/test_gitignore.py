@@ -13,6 +13,11 @@ COMMITTED_ARTEFACTS = [
     "SEAL_AUDIT.log",
     "CHANGES.log",
     "data/manifest.csv",
+    # The curated on-site publication /map/data merges (TICK-333, #333).
+    # NOT data/scans.jsonl, which is the runtime community store and stays
+    # ignored: the two were one file until the deploy made the difference
+    # between committed data and volume state load-bearing.
+    "data/published_scans.jsonl",
     "src/frontdoor/split_seed.json",
     "src/frontdoor/capture_sidecar.schema.json",
     "config/abstention.yaml",

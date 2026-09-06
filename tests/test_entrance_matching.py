@@ -160,6 +160,54 @@ def test_an_identification_already_resolved_is_left_alone():
     assert results["E-013"]["how"]["anchor"] == "identification"
 
 
+def test_a_second_pass_keeps_the_basis_the_first_pass_measured():
+    """Re-running `match` must not restate a measurement as a recollection.
+
+    E-020's place was decided by measuring 11.9 m from a geocoded street
+    number. Overwriting that with "resolved by #341 against the committed
+    catalogue" replaces the real basis with a false one and lowers the
+    evidence a reviewer sees, so the recorded provenance is kept verbatim.
+    """
+    measured = {"anchor": "address_geocode", "anchor_between": None,
+                "bracket_span_m": None, "distance_m": 11.9,
+                "matched_name": "Swift's Attic"}
+    entrances = {"E-020": dict(identified("Swift's Attic", place_id="kept"),
+                               place_match={"how": measured,
+                                            "unmatched_reason": None,
+                                            "detail": None})}
+    results = match_entrances(entrances, [], {}, {"E-020": DAY})
+    assert results["E-020"]["place_id"] == "kept"
+    assert results["E-020"]["how"] == measured
+    # And the pass is idempotent: write the result back, run it again, and
+    # nothing changes.
+    again = match_entrances(apply_matches(entrances, results), [], {},
+                            {"E-020": DAY})
+    assert again["E-020"]["how"] == measured
+
+
+def test_a_standing_place_still_beats_a_new_claimant_after_the_fix():
+    """The collision rule keys off "this pass did not decide it", not off the
+    anchor wording -- which a preserved basis no longer sets to
+    "identification"."""
+    measured = {"anchor": "walk_order_bracket", "anchor_between": ["A", "B"],
+                "bracket_span_m": 74.3, "distance_m": 0.6,
+                "matched_name": "Speakeasy"}
+    entrances = {
+        "E-062": dict(identified("Speakeasy", place_id="shared"),
+                      place_match={"how": measured, "unmatched_reason": None,
+                                   "detail": None}),
+        "E-063": identified("Speakeasy", address="1 Congress Ave"),
+    }
+    places = [catalogued("shared", "Speakeasy", 30.0, -97.0)]
+    results = match_entrances(entrances, places, {"E-063": anchor(30.0, -97.0)},
+                              {"E-062": DAY, "E-063": DAY})
+    assert results["E-062"]["place_id"] == "shared"
+    assert results["E-062"]["how"] == measured
+    assert results["E-063"]["place_id"] is None
+    assert results["E-063"]["unmatched_reason"] == (
+        "place_claimed_by_another_entrance")
+
+
 # --- walk-order brackets ----------------------------------------------------
 
 

@@ -167,19 +167,45 @@ def test_a_re_read_record_keeps_what_it_replaced(entrances):
         assert record["views_read"], entrance_id
 
 
-def test_a_door_identified_after_the_last_match_pass_says_so(entrances):
-    """A re-read that names a door invalidates the place decision recorded for
-    it. The record must not keep the old verdict; it carries the pending
-    reason until `entrance_matching match` re-runs. A door still unidentified
-    keeps `not_identified`, which no pass would change."""
+def test_the_committed_file_carries_no_pending_match_decision(entrances):
+    """`match_pass_pending` is a state the committed file is never left in.
+
+    A re-read that names a door invalidates the place decision recorded for it,
+    so #384 wrote `match_pass_pending` onto E-042 rather than leave a verdict
+    that no longer described the record. That marker is an instruction to run
+    `python -m frontdoor.entrance_matching match`, not a verdict, and #333 ran
+    it: every door now carries a decision the pass actually made. A door still
+    unidentified keeps `not_identified`, which no pass changes.
+    """
     for entrance_id, record in sorted(entrances.items()):
-        if "provenance" not in record:
-            continue
         match = record["place_match"]
+        assert match["unmatched_reason"] != "match_pass_pending", (
+            f"{entrance_id} is waiting on a match pass that was never run"
+        )
         if record["status"] == "unidentified":
             assert match["unmatched_reason"] == "not_identified", entrance_id
+            assert match["how"] is None, entrance_id
+
+
+def test_every_door_with_a_place_records_how_it_was_matched(entrances):
+    """Provenance survives a second match pass.
+
+    Re-running `match` used to overwrite an earlier pass's real basis -- a
+    geocoded street number measured 11.9 m from the place -- with "resolved by
+    #341 against the committed catalogue", which is a different and weaker
+    claim about the same door. The pass now keeps what it finds, so a door
+    matched on a measurement still says so.
+    """
+    anchors = {"identification", "address_geocode", "walk_order_bracket"}
+    measured = 0
+    for entrance_id, record in sorted(entrances.items()):
+        if not record["place_id"]:
             continue
-        if record["place_id"]:
-            continue
-        assert match["unmatched_reason"] == "match_pass_pending", entrance_id
-        assert match["how"] is None, entrance_id
+        how = record["place_match"]["how"]
+        assert isinstance(how, dict) and how, entrance_id
+        assert how["anchor"] in anchors, (entrance_id, how["anchor"])
+        if how["anchor"] != "identification":
+            assert isinstance(how["distance_m"], (int, float)), entrance_id
+            assert how["matched_name"], entrance_id
+            measured += 1
+    assert measured, "no door records a measured match any more"
