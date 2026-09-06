@@ -196,15 +196,17 @@ class ScreeningConfig:
     # adaptive thinking used to consume the budget and truncate mid-object.
     model: str = "claude-sonnet-5"
     max_tokens: int = 6000
-    # Explicit, and 0 (TICK-394, #394). The call used to set no temperature at
-    # all, so every assessment ran at the API default of 1.0 and a contributor
-    # who rescanned the same door could get a different answer with nothing
-    # about the world having changed. This product's position is that a verdict
-    # reports what a photograph shows, so the verdict is a function of the
-    # photograph. Configured rather than a literal so a deliberate
-    # sampling experiment stays possible - and pinned by a test, because this
-    # was absent silently and must not be dropped silently.
-    temperature: float = 0.0
+    # There is deliberately NO temperature here (TICK-394, #394). That ticket
+    # asked for an explicit temperature of 0 so the same photograph gives the
+    # same verdicts, on the premise that the call was running at the API
+    # default of 1.0. The premise no longer holds: sampling parameters were
+    # removed for this model generation. `anthropic` 1.3.0's
+    # `messages.create` does not accept `temperature` at all (it raises
+    # TypeError), and claude-sonnet-5 rejects sampling parameters with a 400.
+    # Sending one would fail every assessment, so the verdict cannot be made a
+    # function of the photograph by configuration. test_screening pins the
+    # call surface, and the SDK signature, so a later attempt to "fix" this
+    # fails a test instead of taking /screen down.
     max_usd_per_run: float = 1.00
     usd_per_image: float = 0.05  # conservative per-image estimate (cents-order)
     #: How many times one assessment is attempted before its rejection stands
@@ -728,9 +730,6 @@ class ScreeningEngine:
             response = self._get_client().messages.create(
                 model=self.config.model,
                 max_tokens=self.config.max_tokens,
-                # Explicit and 0 by default (TICK-394): the same photograph
-                # assessed twice returns the same verdicts.
-                temperature=self.config.temperature,
                 system=_prompt("system"),
                 messages=[{"role": "user", "content": content}],
             )
@@ -748,26 +747,33 @@ class ScreeningEngine:
             latency = time.perf_counter() - t0
             return self._failed_attempt(exc, latency)
 
-        errors = []
+        # Everything below is still inside a recorded-outcome guard: an
+        # unexpected escape here would be an exception out of assess_image,
+        # which is the one thing this engine has never done.
         try:
-            criteria = validate_verdicts(parsed)
-        except ResponseRejected as exc:
-            # The known slip, and only the known slip: keep the criteria that
-            # validated, refuse the ones that did not, and never guess what a
-            # refused one meant. If nothing is salvageable this re-raises into
-            # the whole-response rejection the engine has always recorded.
-            errors.append(f"{type(exc).__name__}: {exc}")
+            errors = []
             try:
-                criteria = validate_verdicts(parsed, recover=True)
-            except ResponseRejected:
-                criteria = None
-        try:
-            ada_checks = validate_ada_checks(parsed)
-        except ResponseRejected as exc:
-            errors.append(f"{type(exc).__name__}: {exc}")
-            ada_checks = None
-        face_check = (validate_face_check(parsed) if expect_face_check
-                      else FACE_CHECK_UNKNOWN)
+                criteria = validate_verdicts(parsed)
+            except ResponseRejected as exc:
+                # The known slip, and only the known slip: keep the criteria
+                # that validated, refuse the ones that did not, and never guess
+                # what a refused one meant. If nothing is salvageable this
+                # falls through to the whole-response rejection the engine has
+                # always recorded.
+                errors.append(f"{type(exc).__name__}: {exc}")
+                try:
+                    criteria = validate_verdicts(parsed, recover=True)
+                except ResponseRejected:
+                    criteria = None
+            try:
+                ada_checks = validate_ada_checks(parsed)
+            except ResponseRejected as exc:
+                errors.append(f"{type(exc).__name__}: {exc}")
+                ada_checks = None
+            face_check = (validate_face_check(parsed) if expect_face_check
+                          else FACE_CHECK_UNKNOWN)
+        except Exception as exc:
+            return self._failed_attempt(exc, time.perf_counter() - t0)
         if errors:
             error = "; ".join(errors)
             logger.warning("assessment rejected: %s", error)
@@ -812,7 +818,13 @@ class ScreeningEngine:
                 1 for key in CRITERIA_KEYS
                 if criterion_verdict(assessment, key)[0] is None
             )
-        return (missing, 0 if assessment.ada_checks is not None else 1)
+        return (
+            missing,
+            0 if assessment.ada_checks is not None else 1,
+            # Last, so it only breaks ties: between two attempts that kept the
+            # same fields, the one nothing was refused in is the better record.
+            0 if assessment.failure is None else 1,
+        )
 
     def _book_retry(self, cost):
         """Reserve a retry's spend, or say no. A retry is a real call.

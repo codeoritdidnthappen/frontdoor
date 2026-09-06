@@ -357,12 +357,7 @@ def test_tick_245_ac_6_model_call_uses_exact_surface_without_sampling():
     ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
     call = client.calls[0]
     assert call["model"] == "claude-sonnet-5"
-    assert set(call) == {"model", "max_tokens", "temperature", "system", "messages"}
-    # TICK-394: no temperature used to be sent at all, so every assessment ran
-    # at the API default of 1.0 and the same photograph could come back with a
-    # different verdict. The surface is still exactly these keys -- no top_p,
-    # no top_k -- and the sampling it now states explicitly is none.
-    assert call["temperature"] == 0
+    assert set(call) == {"model", "max_tokens", "system", "messages"}
     # Offline eval: 2000 tokens truncates sonnet's JSON on hard entrances once
     # adaptive thinking has eaten the budget; the default must stay >= 4000.
     assert call["max_tokens"] >= 4000
@@ -860,6 +855,44 @@ def test_tick_399_an_integrated_retry_books_every_view_again():
     assert engine.spent_usd == pytest.approx(0.30)
 
 
+def test_tick_399_a_clean_retry_wins_over_a_recovered_first_attempt():
+    """An extra key in the criteria block: recoverable, but a clean reply is better.
+
+    Both attempts carry all four verdicts, so nothing is lost either way -- but
+    only the second one has nothing refused in it, and that is the record to
+    keep.
+    """
+    noisy = json.loads(_payload())
+    noisy["criteria"]["door_width"] = dict(noisy["criteria"]["handrails"])
+    client = FakeClient([
+        _Response(json.dumps(noisy)),
+        _Response(_payload("not_visible")),
+    ])
+    result = ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
+    assert len(client.calls) == 2
+    assert result.failure is None
+    assert result.error is None
+    assert result.rejected_attempts == 1
+    assert all(
+        result.criteria[key]["verdict"] == "not_visible" for key in CRITERIA_KEYS
+    )
+    # The key the model invented never becomes a criterion.
+    assert set(result.criteria) == set(CRITERIA_KEYS)
+
+
+def test_tick_399_a_worse_retry_never_loses_ground_the_first_attempt_held():
+    """Attempt 1 keeps three criteria; attempt 2 is unparseable. Keep the three."""
+    client = FakeClient([
+        _Response(_ada_bleed_payload()),
+        _Response("I cannot answer in JSON"),
+    ])
+    result = ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
+    assert result.criteria is not None
+    assert result.criteria["ramp_or_bevel"]["verdict"] == "present"
+    assert result.criteria["handrails"]["verdict"] is None
+    assert result.failure == FAILURE_REJECTED
+
+
 def test_tick_399_criterion_verdict_is_the_one_place_none_is_explained():
     clean = _assessment({"ramp_or_bevel": "present"})
     assert criterion_verdict(clean, "ramp_or_bevel") == ("present", None)
@@ -870,43 +903,60 @@ def test_tick_399_criterion_verdict_is_the_one_place_none_is_explained():
     assert criterion_verdict(dead, "handrails") == (None, FAILURE_ERROR)
 
 
-# --- TICK-394: an explicit temperature ---------------------------------------
+# --- TICK-394: there is no temperature to set on this model ------------------
+#
+# #394 asked for an explicit temperature of 0 on the assessment call, so a
+# contributor who rescans the same door gets the same answer, on the premise
+# that the call was running at the API default of 1.0. The premise no longer
+# holds. Sampling parameters were removed for this model generation: the
+# installed SDK's `messages.create` does not accept `temperature` at all, and
+# claude-sonnet-5 rejects sampling parameters with a 400. Sending one fails
+# EVERY assessment -- /screen answers 502 for every request -- so the engine
+# sends none, and these tests are the tripwire that keeps it that way.
 
 
-def test_tick_394_the_call_sets_an_explicit_temperature_of_zero():
-    """Pinned, because it was absent silently and must not be dropped silently.
-
-    Before this the call passed no temperature at all, so every assessment ran
-    at the API default of 1.0 and a contributor who rescanned the same door
-    could get a different answer with nothing about the world having changed.
-    """
-    assert ScreeningConfig().temperature == 0
+def test_tick_394_the_call_sends_no_sampling_parameter():
+    """No temperature, no top_p, no top_k -- because the model rejects them."""
     client = FakeClient([_Response(_payload())])
     ScreeningEngine(client=client).assess_image(b"jpeg-bytes")
-    assert client.calls[0]["temperature"] == 0
+    call = client.calls[0]
+    for name in ("temperature", "top_p", "top_k"):
+        assert name not in call
+    assert not hasattr(ScreeningConfig(), "temperature")
+
+    integrated = FakeClient([_Response(_payload())])
+    ScreeningEngine(client=integrated).assess_images_integrated([b"a", b"b"])
+    assert "temperature" not in integrated.calls[0]
 
 
-def test_tick_394_the_integrated_call_sets_it_too():
-    client = FakeClient([_Response(_payload())])
-    ScreeningEngine(client=client).assess_images_integrated([b"a", b"b"])
-    assert client.calls[0]["temperature"] == 0
+def test_tick_394_the_sdk_still_has_no_temperature_to_set():
+    """The reason the engine sends none, pinned against the installed SDK.
 
+    A tripwire on purpose: if a future SDK or model reinstates sampling
+    parameters, this fails and #394 becomes answerable again. Reading the
+    signature rather than calling anything - the check needs no API key and
+    makes no request.
+    """
+    import inspect
 
-def test_tick_394_temperature_is_configured_not_a_literal():
-    client = FakeClient([_Response(_payload())])
-    ScreeningEngine(
-        client=client, config=ScreeningConfig(temperature=0.7)
-    ).assess_image(b"jpeg-bytes")
-    assert client.calls[0]["temperature"] == 0.7
+    from anthropic.resources.messages import Messages
+
+    parameters = inspect.signature(Messages.create).parameters
+    assert "temperature" not in parameters, (
+        "the SDK accepts a temperature again; #394 asked for an explicit 0 and "
+        "is worth revisiting -- but measure it before trusting it, and check "
+        "the model accepts one rather than answering 400"
+    )
 
 
 def test_tick_394_the_same_reply_twice_gives_the_same_verdicts():
     """The engine's own half of determinism: same input, same output.
 
-    Temperature 0 is what makes the model's half hold; this pins that nothing
-    in the engine adds variation of its own. The end-to-end demonstration
-    against the real API is in the pull request, not here - the suite makes no
-    live calls.
+    All of it that is in this repository's gift. The model's half is not
+    configurable on this model generation, so the run-to-run variation #394
+    was opened about cannot be removed here -- which is why #399's fix
+    matters more: most of the swing it blamed on sampling was rejected
+    responses being discarded, not the model changing its mind.
     """
     payload = _payload("absent")
     first = ScreeningEngine(

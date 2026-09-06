@@ -1658,7 +1658,15 @@ Three rules, in the engine so every caller gets them:
   same reason — an evidence line the ADA validator disliked used to take four good criteria with
   it, which is this same whole-response loss arriving from the other side.
 
-Alongside it (TICK-394): the assessment call set no `temperature` at all, so it ran at the API
-default of 1.0 and a contributor who rescanned the same door could get a different answer with
-nothing about the world having changed. `ScreeningConfig.temperature` is explicit and 0, and a
-test pins it — it was absent silently and must not be dropped silently.
+Alongside it, TICK-394 asked for an explicit temperature of 0 on the same call, so a contributor
+who rescans the same door gets the same answer. **It cannot be done, and the engine deliberately
+sends no sampling parameter.** Sampling parameters were removed for this model generation:
+`anthropic` 1.3.0's `messages.create` does not accept `temperature` (TypeError), and
+`claude-sonnet-5` rejects sampling parameters with a 400. Sending one fails every assessment and
+answers `/screen` 502 for every request. So a screening verdict cannot be made a pure function of
+the photograph by configuration — which is the more important reason #399 came first: the
+measurement that opened #394 blamed sampling for swings (`handrails` 10 committed to 3 between
+identical runs) that were mostly discarded responses. Two tests pin it: the call surface carries
+no `temperature`, `top_p` or `top_k`, and the SDK signature is asserted to have no temperature to
+set, so a later SDK or model that reinstates one fails a test and reopens the question rather
+than letting somebody add a parameter that takes production down.
