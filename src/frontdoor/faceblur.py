@@ -241,6 +241,19 @@ def _detect_yunet(small):
                 if not all(math.isfinite(float(v)) for v in (x, y, w, h)):
                     discarded += 1
                     continue
+                # A box with no area asserts a face that occupies no pixels.
+                # It cannot be blurred, and since #382 a YuNet box is also
+                # what licenses a Haar box to be blurred - so a degenerate
+                # row could corroborate a cascade box while covering nothing.
+                # The small-box rule below tests only an UPPER bound, so
+                # w = h = 0 passed it regardless of score: this is where the
+                # detector's intermittent garbage row on a featureless frame
+                # (x ~ 1e13, w = h = 0) was getting in. Counted as discarded,
+                # like the non-finite rows, so the assertion is not lost
+                # silently.
+                if float(w) <= 0 or float(h) <= 0:
+                    discarded += 1
+                    continue
                 if score >= YUNET_SCORE_THRESHOLD or max(w, h) <= small_limit:
                     boxes.append(
                         (round(float(x)), round(float(y)),
