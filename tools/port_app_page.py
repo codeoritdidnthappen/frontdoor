@@ -100,7 +100,12 @@ OPS: list[Op] = [
         name="wiring_css",
         why="styles for the two elements the wiring adds: the entrance field and the simulated tag",
         kind="insert_before",
-        anchor="\n</style>\n</head>",
+        # The anchor is the close of the one stylesheet, not `</style>\n</head>`: Round 8
+        # put a script between the two (the reduced-motion floor, which has to run before
+        # first paint and so cannot move down the document). The wiring's styles belong at
+        # the end of the stylesheet either way, and `</style>` is the structural mark for
+        # that -- there is exactly one of it in the design source.
+        anchor="\n</style>\n",
         fragment="wiring.css",
     ),
     Op(
