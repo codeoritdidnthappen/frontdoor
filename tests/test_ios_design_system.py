@@ -140,6 +140,7 @@ def test_the_numeric_steps_are_tabular_and_the_rest_are_not():
         (name, body)
         for name, body in re.findall(
             r"static let (\w+) = EntryMapTextStyle\((.*?)\)\n", source, re.S))
+    assert len(steps) >= 10, "the type scale did not parse; this guard is pinning nothing"
     for name, body in steps.items():
         tabular = "tabularNumerals: true" in body
         expected = name.endswith("Numeric") or name == "display"
@@ -324,7 +325,12 @@ def test_the_pin_body_is_the_masters_own_path():
     source = read(LAYER / "EntryMapPin.swift")
     literal = source.split("private static let bodyCommands =", 1)[1].split('Z"', 1)[0] + 'Z"'
     declared = "".join(re.findall(r'"([^"]*)"', literal))
-    for master in sorted((SVG / "pins").glob("*.svg")):
+    # Without this the guard is worse than useless: an unparsed literal leaves `declared` empty,
+    # and the empty string is a substring of every file, so it would pass against anything.
+    assert len(declared) > 100, "bodyCommands did not parse; this guard is pinning nothing"
+    masters = sorted((SVG / "pins").glob("*.svg"))
+    assert len(masters) == 3, f"expected three pin masters, found {len(masters)}"
+    for master in masters:
         assert declared in read(master), (
             f"the pin body no longer matches {master.name}")
 
@@ -383,7 +389,9 @@ def test_every_icon_is_the_approved_master_and_not_a_redrawing():
 
 def test_every_icon_case_has_a_master_committed_beside_it():
     source = read(LAYER / "EntryMapIcons.swift")
-    for _, relative_path in re.findall(r'case (\w+) = "([\w/-]+)"', source):
+    cases = re.findall(r'case (\w+) = "([\w/-]+)"', source)
+    assert len(cases) == 28, f"expected 28 icon cases, read {len(cases)}"
+    for _, relative_path in cases:
         assert (SVG / f"{relative_path}.svg").exists(), f"no master for {relative_path}"
 
 
