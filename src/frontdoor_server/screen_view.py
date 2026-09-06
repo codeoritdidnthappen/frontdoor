@@ -83,6 +83,22 @@ def _error(message, detail, status=400, *, latency_ms=None):
     return body, status
 
 
+def _json_not_multipart(endpoint, why):
+    """415 when a caller sent JSON to a multipart-only write path.
+
+    Flask leaves request.form empty for application/json, so reading it looks
+    like a missing place reference even when the body named one. Photographs
+    travel as file parts of the same request, which JSON cannot carry.
+    """
+    if not request.is_json:
+        return None
+    return _error(
+        "unsupported content type",
+        f"{endpoint} takes multipart/form-data, not JSON: {why}",
+        status=415,
+    )
+
+
 def _get_engine():
     """Return the injected engine, a fresh real one, or None when keyless.
 

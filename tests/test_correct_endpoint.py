@@ -199,6 +199,24 @@ def test_a_correction_without_a_place_reference_is_refused(client, store_paths):
     assert response.get_json()["error"] == "missing place reference"
 
 
+def test_a_json_post_names_multipart_not_a_missing_place(client, store_paths):
+    """#423: the place was in the body; the endpoint never looked at JSON."""
+    response = client.post(
+        "/correct",
+        json={
+            "place_id": "ChIJexample",
+            "category": "other",
+            "note": "The knob is now a lever.",
+        },
+    )
+    assert response.status_code == 415
+    body = response.get_json()
+    assert body["error"] == "unsupported content type"
+    assert "multipart/form-data" in body["detail"]
+    assert "place reference" not in body["error"]
+    assert not store_paths["corrections"].exists()
+
+
 def test_an_unknown_category_is_refused(client, store_paths):
     response = post_correct(client, form={"category": "verdict_is_wrong"})
     assert response.status_code == 422

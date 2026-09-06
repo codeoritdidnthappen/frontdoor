@@ -83,6 +83,7 @@ from frontdoor_server.screen_view import (
     WORDING,
     _error,
     _get_engine,
+    _json_not_multipart,
     ada_screening_from_assessment,
 )
 
@@ -216,6 +217,13 @@ def _not_published(body, reason, detail, status=200):
 
 @scan_page.post("/screen/publish")
 def publish():
+    refused = _json_not_multipart(
+        "POST /screen/publish",
+        "image file parts and the place reference travel in the same request.",
+    )
+    if refused is not None:
+        return refused
+
     files = [f for key in request.files for f in request.files.getlist(key)]
     if not files:
         return _error(
