@@ -196,6 +196,50 @@ OPS: list[Op] = [
         ),
     ),
     Op(
+        name="fifth_criterion_est_keymap",
+        why=(
+            "the server assesses five criteria (#368); the chip vocabulary the design "
+            "source maps the /screen keys onto already carries step_free, so the map is "
+            "extended here rather than waiting on a design round"
+        ),
+        kind="replace",
+        anchor=(
+            "const EST_KEYMAP = {accessibility_signage:'signage', accessible_door_hardware:"
+            "'hardware', handrails:'handrails', ramp_or_bevel:'ramp'};"
+        ),
+        replacement=(
+            "const EST_KEYMAP = {accessibility_signage:'signage', accessible_door_hardware:"
+            "'hardware', handrails:'handrails', ramp_or_bevel:'ramp', step_free_entry:'step_free'};"
+        ),
+    ),
+    Op(
+        name="fifth_criterion_live_keys",
+        why="the /screen criteria the review chips and the publish upgrade read, in server order",
+        kind="replace",
+        anchor=(
+            "const LIVE_CRITERIA = ['ramp_or_bevel','handrails','accessible_door_hardware',"
+            "'accessibility_signage'];"
+        ),
+        replacement=(
+            "const LIVE_CRITERIA = ['ramp_or_bevel','handrails','accessible_door_hardware',"
+            "'accessibility_signage','step_free_entry'];"
+        ),
+    ),
+    Op(
+        name="fifth_criterion_door_keymap",
+        why="a published step_free_entry verdict lands on the pin under the door-scan key of the same name",
+        kind="replace",
+        anchor=(
+            "const LIVE_TO_DOOR = {ramp_or_bevel:'ramp_present', handrails:'handrails_present',\n"
+            "  accessible_door_hardware:'lever_or_pull_hardware', accessibility_signage:'accessible_signage'};"
+        ),
+        replacement=(
+            "const LIVE_TO_DOOR = {ramp_or_bevel:'ramp_present', handrails:'handrails_present',\n"
+            "  accessible_door_hardware:'lever_or_pull_hardware', accessibility_signage:'accessible_signage',\n"
+            "  step_free_entry:'step_free_entry'};"
+        ),
+    ),
+    Op(
         name="review",
         why=(
             "the review screen reports what actually happened: server verdicts, staged "
@@ -309,6 +353,9 @@ WIRING_REQUIRED: list[str] = [
     "r.status===503 && assessed",
     "function loadLiveMap(){",
     "PHOTO_API+b.image_keys[0]",
+    "step_free_entry:'step_free'",
+    "'accessibility_signage','step_free_entry']",
+    "step_free_entry:'step_free_entry'",
 ]
 
 # ...and none of these. The design source is worked on against a deployed host and a

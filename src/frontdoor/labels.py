@@ -68,6 +68,7 @@ CRITERIA_KEYS = (
     "handrails",
     "accessible_door_hardware",
     "accessibility_signage",
+    "step_free_entry",
 )
 
 # Presence-only vocabulary: the labeler saw the door, so the feature was
@@ -241,7 +242,7 @@ def save_entrance_labels(
     labeled_by: str,
     labeled_at: date,
 ) -> None:
-    """Atomically save all four reviewed answers for one eligible entrance."""
+    """Atomically save every reviewed answer for one eligible entrance."""
     if entrance_id not in entrance_ids:
         raise LabelError(f"entrance {entrance_id!r} is not evaluation eligible")
     if set(answers) != set(CRITERIA_KEYS):
@@ -277,7 +278,7 @@ def append_future_entrance_labels(
     labeled_by: str,
     labeled_at: date,
 ) -> bool:
-    """Append one immutable four-row future-capture label atomically.
+    """Append one immutable future-capture label (one row per criterion) atomically.
 
     Returns ``True`` for a new record and ``False`` for an identical retry.
     The process lock covers concurrent threads and the sibling lock file covers
@@ -336,7 +337,7 @@ def append_future_entrance_labels(
 
 
 def labeling_progress(path: Path, entrance_ids: Sequence[str]) -> LabelingProgress:
-    """Count entrances whose four choices have all been deliberately reviewed."""
+    """Count entrances whose every choice has been deliberately reviewed."""
     rows = read_labeling_sheet(path, entrance_ids)
     reviewed = {
         entrance_id

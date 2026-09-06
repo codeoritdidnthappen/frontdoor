@@ -57,6 +57,7 @@ def test_criteria_keys_match_screening_engine():
         "handrails",
         "accessible_door_hardware",
         "accessibility_signage",
+        "step_free_entry",
     )
 
 
@@ -70,7 +71,7 @@ def test_template_one_blank_row_per_entrance_criterion(tmp_path):
     with open(path, encoding="utf-8", newline="") as handle:
         rows = list(csv.DictReader(handle))
     assert len(rows) == 2 * len(CRITERIA_KEYS)
-    assert [r["entrance_id"] for r in rows[: len(CRITERIA_KEYS)]] == ["E-001"] * 4
+    assert [r["entrance_id"] for r in rows[: len(CRITERIA_KEYS)]] == ["E-001"] * len(CRITERIA_KEYS)
     assert [r["criterion"] for r in rows[: len(CRITERIA_KEYS)]] == list(CRITERIA_KEYS)
     assert all(r["truth"] == "" for r in rows)
     assert all(r["labeled_by"] == "" for r in rows)
@@ -79,7 +80,8 @@ def test_template_one_blank_row_per_entrance_criterion(tmp_path):
 
 def test_template_canonicalizes_and_deduplicates_ids():
     rows = template_rows(["e-001 ", "E-001", "E-002"])
-    assert [r["entrance_id"] for r in rows] == ["E-001"] * 4 + ["E-002"] * 4
+    n = len(CRITERIA_KEYS)
+    assert [r["entrance_id"] for r in rows] == ["E-001"] * n + ["E-002"] * n
 
 
 def test_template_rejects_invalid_entrance_id():
@@ -113,6 +115,7 @@ def test_labeling_sheet_saves_four_button_answers_and_tracks_review(tmp_path):
             "handrails": "absent",
             "accessible_door_hardware": "",
             "accessibility_signage": "present",
+            "step_free_entry": "",
         },
         labeled_by="James",
         labeled_at=date(2026, 9, 4),
@@ -120,7 +123,7 @@ def test_labeling_sheet_saves_four_button_answers_and_tracks_review(tmp_path):
 
     rows = read_labeling_sheet(path, eligible)
     saved = [row for row in rows if row["entrance_id"] == "E-001"]
-    assert [row["truth"] for row in saved] == ["present", "absent", "", "present"]
+    assert [row["truth"] for row in saved] == ["present", "absent", "", "present", ""]
     assert {row["labeled_by"] for row in saved} == {"James"}
     assert {row["labeled_at"] for row in saved} == {"2026-09-04"}
     assert labeling_progress(path, eligible).reviewed_entrances == 1

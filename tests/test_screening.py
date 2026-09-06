@@ -119,7 +119,7 @@ def test_missing_or_extra_criterion_rejects_the_whole_response():
             del parsed["criteria"]["accessibility_signage"]
         else:
             parsed["criteria"]["door_width"] = parsed["criteria"]["handrails"]
-        with pytest.raises(ScreeningError, match="exactly the four criteria"):
+        with pytest.raises(ScreeningError, match="exactly the 5 criteria"):
             validate_verdicts(parsed)
 
 
@@ -187,6 +187,78 @@ def test_prompt_carries_the_face_check_question_as_a_fifth_item():
     prompt = build_prompt()
     assert FACE_CHECK_KEY in prompt
     assert "reflections in glass" in prompt
+
+
+def test_the_vocabulary_is_exactly_the_five_criteria_in_order():
+    # Pinned (#368): the label sheet, the map checklist, the phone's enum and the
+    # eval report all enumerate this tuple. A sixth key, or a reordering, is a
+    # change to every one of them and must be made deliberately.
+    assert CRITERIA_KEYS == (
+        "ramp_or_bevel",
+        "handrails",
+        "accessible_door_hardware",
+        "accessibility_signage",
+        "step_free_entry",
+    )
+    assert ALLOWED_VERDICTS == ("present", "absent", "not_visible")
+
+
+@pytest.mark.parametrize("prompt", [build_prompt(), build_integrated_prompt(3)])
+def test_step_free_entry_is_asked_with_an_explicit_abstain_path(prompt):
+    """The harness version of this criterion committed on 52 of 52 held-out
+    entrances with 0 abstentions (#368). The shipped prompt names the one
+    condition under which present/absent may be answered - a view showing the
+    ground plane from sidewalk to threshold - and says what to answer otherwise."""
+    assert "five criteria" in prompt
+    start = prompt.index("- step_free_entry:")
+    rule = prompt[start:prompt.index("\n", start)]
+    assert "level with the sidewalk" in rule
+    assert "same concrete tone" in rule
+    assert "ground plane running from sidewalk to threshold" in rule
+    assert "riser edge" in rule
+    assert "answer not_visible" in rule
+    # ...and the JSON shape the model is told to return carries the fifth key.
+    assert '"step_free_entry": {"verdict": "...", "confidence": 0, "evidence": "..."}' in prompt
+
+
+def test_a_not_visible_step_free_verdict_validates_and_is_not_absent():
+    parsed = json.loads(_payload("present", step_free_entry={
+        "verdict": "not_visible", "confidence": 35,
+        "evidence": "No view shows the ground plane at the threshold",
+    }))
+    out = validate_verdicts(parsed)
+    assert set(out) == set(CRITERIA_KEYS)
+    assert out["step_free_entry"]["verdict"] == "not_visible"
+    assert out["ramp_or_bevel"]["verdict"] == "present"
+
+
+def test_step_free_not_visible_survives_per_image_aggregation():
+    # A not_visible majority stays not_visible, and a tie with present resolves
+    # to not_visible: the abstention is never collapsed into absent or upgraded
+    # into a commitment.
+    summary = aggregate_assessments([
+        _assessment({"step_free_entry": "not_visible"}),
+        _assessment({"step_free_entry": "not_visible"}),
+        _assessment({"step_free_entry": "present"}),
+    ])
+    assert summary["step_free_entry"].verdict == "not_visible"
+    tied = aggregate_assessments([
+        _assessment({"step_free_entry": "present"}),
+        _assessment({"step_free_entry": "not_visible"}),
+    ])
+    assert tied["step_free_entry"].verdict == "not_visible"
+    assert tied["step_free_entry"].counts == {"present": 1, "not_visible": 1}
+
+
+def test_step_free_not_visible_survives_the_integrated_path():
+    client = FakeClient([_Response(_payload("present", step_free_entry={
+        "verdict": "not_visible", "confidence": 40,
+        "evidence": "All views are head-on; the threshold's ground plane is not shown",
+    }))])
+    engine = ScreeningEngine(client=client)
+    result = engine.screen_entrance_integrated(DEV_ID, [b"a", b"b"])
+    assert result.summary["step_free_entry"].verdict == "not_visible"
+    assert result.summary["ramp_or_bevel"].verdict == "present"
 
 
 def test_face_check_is_not_an_accessibility_criterion():

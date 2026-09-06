@@ -17,6 +17,7 @@ ANSWERS = {
     "handrails": "absent",
     "accessible_door_hardware": "",
     "accessibility_signage": "present",
+    "step_free_entry": "present",
 }
 
 
@@ -148,10 +149,10 @@ def test_ac_9_concurrent_submissions_cannot_lose_or_interleave_rows(app):
     rows = _rows(Path(app.config["LABELS_PATH"]))
     assert len(rows) == len(entrances) * len(CRITERIA_KEYS)
     assert {
-        rows[index]["entrance_id"] for index in range(0, len(rows), 4)
+        rows[index]["entrance_id"] for index in range(0, len(rows), len(CRITERIA_KEYS))
     } == set(entrances)
-    for index in range(0, len(rows), 4):
-        assert {row["entrance_id"] for row in rows[index : index + 4]} == {
+    for index in range(0, len(rows), len(CRITERIA_KEYS)):
+        assert {row["entrance_id"] for row in rows[index : index + len(CRITERIA_KEYS)]} == {
             rows[index]["entrance_id"]
         }
 

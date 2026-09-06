@@ -30,6 +30,7 @@ CRITERION_LABELS = {
     "handrails": "Handrails",
     "accessible_door_hardware": "Accessible door hardware",
     "accessibility_signage": "Accessibility signage",
+    "step_free_entry": "Step-free entry",
 }
 
 

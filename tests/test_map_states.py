@@ -22,7 +22,9 @@ from importlib import resources
 import pytest
 
 from frontdoor.map_states import (
+    CRITERIA,
     OBSERVATION_LABELS,
+    OBSERVATION_NOT_VISIBLE,
     STAMP_LABELS,
     STATE_NEUTRAL,
     STATE_VERIFIED,
@@ -32,6 +34,7 @@ from frontdoor.map_states import (
     prepare_map_payload,
     state_for_row,
 )
+from frontdoor.screening import CRITERIA_KEYS as SCREENING_CRITERIA_KEYS
 from frontdoor_server.app import create_app
 
 
@@ -119,6 +122,27 @@ def test_state_for_row_is_total_over_junk():
         assert state_for_row(value) in STATES
 
 
+def test_the_checklist_carries_step_free_entry_in_the_public_vocabulary():
+    """The fifth criterion (#368) is published like the other four: a
+    not_visible verdict is an observation, never a negative claim, and the
+    display order is the engine's."""
+    assert [key for key, _ in CRITERIA] == list(SCREENING_CRITERIA_KEYS)
+    assert dict(CRITERIA)["step_free_entry"] == "Step-free entry"
+    checklist = checklist_for_row(row(criteria={
+        "step_free_entry": {"verdict": "not_visible", "confidence": 0.4},
+    }))
+    by_key = {item["key"]: item for item in checklist}
+    entry = by_key["step_free_entry"]
+    assert entry["label"] == "Step-free entry"
+    assert entry["observation"] == OBSERVATION_NOT_VISIBLE
+    assert entry["observation_label"] == "Not visible in photos"
+    assert entry["confidence"] == 0.4
+    absent = checklist_for_row(row(criteria={
+        "step_free_entry": {"verdict": "absent", "confidence": 0.9},
+    }))
+    assert {i["key"]: i["observation"] for i in absent}["step_free_entry"] == OBSERVATION_NOT_VISIBLE
+
+
 def test_checklist_uses_only_public_vocabulary():
     adversarial = row(criteria={
         "ramp_or_bevel": {"verdict": "DANGEROUS", "confidence": 2},
@@ -127,7 +151,7 @@ def test_checklist_uses_only_public_vocabulary():
         # accessibility_signage missing entirely
     })
     checklist = checklist_for_row(adversarial)
-    assert len(checklist) == 4
+    assert len(checklist) == len(CRITERIA)
     for item in checklist:
         assert item["observation"] in OBSERVATION_LABELS
         assert item["observation_label"] in OBSERVATION_LABELS.values()
@@ -144,7 +168,7 @@ def test_checklist_uses_only_public_vocabulary():
 def test_checklist_total_over_missing_criteria():
     for value in ({}, None, "x", row(criteria=None), row(criteria=[1, 2])):
         checklist = checklist_for_row(value)
-        assert [item["observation"] for item in checklist] == ["not_assessed"] * 4
+        assert [item["observation"] for item in checklist] == ["not_assessed"] * len(CRITERIA)
 
 
 def test_pin_carries_state_label_and_freshness():

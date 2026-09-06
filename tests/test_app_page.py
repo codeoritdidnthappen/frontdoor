@@ -5,8 +5,12 @@ POSTs, so every call it makes is same-origin; these tests pin that wiring on the
 served bytes, not on a copy elsewhere.
 """
 
+import json
+import re
+import subprocess
 from importlib import resources
 
+from frontdoor.screening import CRITERIA_KEYS
 from frontdoor_server.app import MAX_REQUEST_BYTES, create_app
 
 
@@ -223,3 +227,54 @@ def test_the_page_registers_the_worker_and_links_the_manifest():
     html = page().get_data(as_text=True)
     assert '<link rel="manifest" href="/app-manifest.json">' in html
     assert 'navigator.serviceWorker.register("/app-sw.js")' in html
+
+
+def _between(html, start, end):
+    begin = html.index(start)
+    return html[begin : html.index(end, begin) + len(end)]
+
+
+def test_the_review_chips_render_every_criterion_the_server_assesses():
+    """The chip the interface already showed for step-free entry starts being filled
+    by a real verdict (#368). The page's own chip renderer runs in node over a
+    /screen-shaped result: a present verdict is a chip, and a not_visible one is
+    named under "Not seen this time" rather than dropped."""
+    html = page().get_data(as_text=True)
+    assert "const LIVE_CRITERIA = " + json.dumps(list(CRITERIA_KEYS)).replace(
+        '"', "'"
+    ).replace(", ", ",") + ";" in html
+    pieces = [
+        re.search(r"^const EST_KEYMAP = .*;$", html, re.M).group(0),
+        _between(html, "const FEATS = {", "};"),
+        re.search(r"^const LIVE_CRITERIA = .*;$", html, re.M).group(0),
+        _between(html, "function dotTriple(conf, cls){", "\n}\n"),
+        html[html.index("function reviewChipsHTML(chipsOnly){") : html.index(
+            "function renderReviewChips(){"
+        )],
+    ]
+    criteria = {
+        key: {"verdict": "present", "confidence": 88, "evidence": "seen"}
+        for key in CRITERIA_KEYS
+    }
+    script = "\n".join([
+        "function liveSimulated(){ return false; }",
+        "function liveFailure(){ return ''; }",
+        "function esc(s){ return String(s); }",
+        *pieces,
+        "let liveResult = {assessment: {criteria: " + json.dumps(criteria) + "}};",
+        "const present = reviewChipsHTML(true);",
+        "liveResult.assessment.criteria.step_free_entry.verdict = 'not_visible';",
+        "const withheld = reviewChipsHTML(false);",
+        "console.log(JSON.stringify({present, withheld}));",
+    ])
+    completed = subprocess.run(
+        ["node"], input=script, text=True, capture_output=True, check=True,
+        encoding="utf-8",
+    )
+    out = json.loads(completed.stdout)
+    assert out["present"].count('class="fchip scan"') == len(CRITERIA_KEYS)
+    assert "Step-free entry" in out["present"]
+    # not_visible is withheld from the chips and named as not seen -- never
+    # rendered as a chip, and never silently dropped.
+    assert out["withheld"].count('class="fchip scan"') == len(CRITERIA_KEYS) - 1
+    assert "Not seen this time: Step-free entry" in out["withheld"]

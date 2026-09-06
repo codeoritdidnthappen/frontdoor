@@ -30,7 +30,10 @@ window** — not relaxed, not re-scored, untested. D-040 (2026-09-04) narrows cu
 hardware to James's iPhone 17 Pro (`iPhone18,1`) alone. Every slide that touches results says so.
 
 Claims discipline, product-wide (from the #73 product-model thread): never claim a measurement,
-a compliance determination, or a legal status. The line that survives every slide: **"when it
+a compliance determination, or a legal status. The 97% and ~90% figures below describe the four
+original criteria (ramp/bevel, handrails, accessible hardware, signage) and stay labelled that
+way; step-free entry, added to the engine by #368, was not evaluated under the frozen protocol
+and gets its own line with its own number, never folded into these. The line that survives every slide: **"when it
 commits it's 97% right; when it can't see, it says so"** — and the 97% carries its caveat
 (Section 5) everywhere it appears.
 

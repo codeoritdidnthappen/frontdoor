@@ -74,7 +74,7 @@ class LabelSubmission:
 
         raw_answers = raw["answers"]
         if not isinstance(raw_answers, dict) or set(raw_answers) != set(CRITERIA_KEYS):
-            raise LabelError("answers must contain exactly the four screening criteria")
+            raise LabelError("answers must contain exactly the screening criteria")
         allowed = {*ALLOWED_TRUTHS, ""}
         answers: dict[str, str] = {}
         for criterion in CRITERIA_KEYS:
