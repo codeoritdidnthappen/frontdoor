@@ -36,7 +36,7 @@ struct EntranceSetupView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Entrance") {
+                Section {
                     TextField("E-014", text: $entranceId)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
@@ -77,6 +77,8 @@ struct EntranceSetupView: View {
                                 .foregroundStyle(EntryMapPalette.subduedInk)
                         }
                     }
+                } header: {
+                    Text("Entrance").entryMapSectionHeader()
                 }
 
                 Section {
@@ -84,7 +86,7 @@ struct EntranceSetupView: View {
                                    surface: $surface, occlusion: $occlusion,
                                    showsSurface: mode.carriesMetrologyTruth)
                 } header: {
-                    Text("Conditions for this shot")
+                    Text("Conditions for this shot").entryMapSectionHeader()
                 } footer: {
                     Text(mode.carriesMetrologyTruth
                          ? "Capture angle is not entered. It is derived from the recovered plane "
@@ -92,6 +94,7 @@ struct EntranceSetupView: View {
                          : "Angle, lighting and occlusion stay uncontrolled on purpose — "
                            + "realistic capture is the condition under evaluation "
                            + "(docs/capture-protocol.md).")
+                        .entryMapSectionFooter()
                 }
 
                 if let rejection {
@@ -108,8 +111,7 @@ struct EntranceSetupView: View {
                     }
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(EntryMapPalette.ground)
+            .entryMapForm()
             .navigationTitle("Capture")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -127,6 +129,10 @@ struct EntranceSetupView: View {
                 Text(confirmingRise.map { TruthRejected.riseImplausible($0).message } ?? "")
             }
         }
+        // Tints the toolbar buttons, picker values and text cursors. It goes here rather
+        // than on the content because a toolbar is attached to the content but is not inside
+        // it, and it does not survive the sheet boundary from the root either.
+        .tint(EntryMapPalette.violet600)
         .onAppear {
             guard let initialConditions else { return }
             distance = ConditionsSheet.text(for: initialConditions.distanceM)

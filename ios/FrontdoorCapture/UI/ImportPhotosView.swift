@@ -29,12 +29,14 @@ struct ImportPhotosView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Entrance") {
+                Section {
                     TextField("E-014", text: $entranceId)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
                         .entryMapText(EntryMapTypography.bodyNumeric)
                         .foregroundStyle(EntryMapPalette.ink)
+                } header: {
+                    Text("Entrance").entryMapSectionHeader()
                 }
 
                 Section {
@@ -42,11 +44,12 @@ struct ImportPhotosView: View {
                                    surface: $surface, occlusion: $occlusion,
                                    showsSurface: false)
                 } header: {
-                    Text("Conditions these photos were taken in")
+                    Text("Conditions these photos were taken in").entryMapSectionHeader()
                 } footer: {
                     Text("Recorded now, from memory, because the photos were taken earlier. "
                          + "That is weaker than tagging at the door and is why importing is a "
                          + "rescue path, not the normal one.")
+                        .entryMapSectionFooter()
                 }
 
                 Section {
@@ -84,8 +87,7 @@ struct ImportPhotosView: View {
                     }
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(EntryMapPalette.ground)
+            .entryMapForm()
             .navigationTitle("Import photos")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -98,6 +100,10 @@ struct ImportPhotosView: View {
                 }
             }
         }
+        // Tints the toolbar buttons, picker values and text cursors. It goes here rather
+        // than on the content because a toolbar is attached to the content but is not inside
+        // it, and it does not survive the sheet boundary from the root either.
+        .tint(EntryMapPalette.violet600)
     }
 
     private func runImport() async {

@@ -87,9 +87,10 @@ struct ConditionsSheet: View {
                                    surface: $surface, occlusion: $occlusion,
                                    showsSurface: mode.carriesMetrologyTruth)
                 } header: {
-                    Text("Conditions for the next shot")
+                    Text("Conditions for the next shot").entryMapSectionHeader()
                 } footer: {
                     Text("Applies to captures from here on, not to ones already taken.")
+                        .entryMapSectionFooter()
                 }
                 if let rejection {
                     Section {
@@ -104,8 +105,7 @@ struct ConditionsSheet: View {
                     }
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(EntryMapPalette.ground)
+            .entryMapForm()
             .navigationTitle("Conditions")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -123,5 +123,9 @@ struct ConditionsSheet: View {
                 }
             }
         }
+        // Tints the toolbar buttons, picker values and text cursors. It goes here rather
+        // than on the content because a toolbar is attached to the content but is not inside
+        // it, and it does not survive the sheet boundary from the root either.
+        .tint(EntryMapPalette.violet600)
     }
 }

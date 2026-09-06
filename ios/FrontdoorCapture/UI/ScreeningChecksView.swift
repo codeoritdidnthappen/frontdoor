@@ -42,6 +42,10 @@ struct ScreeningChecksView: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Done", action: onDone) }
             }
         }
+        // Tints the toolbar buttons, picker values and text cursors. It goes here rather
+        // than on the content because a toolbar is attached to the content but is not inside
+        // it, and it does not survive the sheet boundary from the root either.
+        .tint(EntryMapPalette.violet600)
     }
 
     private var header: some View {

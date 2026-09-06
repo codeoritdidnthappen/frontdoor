@@ -87,7 +87,31 @@ struct HomeView: View {
         }
     }
 
+    /// Scrolls, and still centres when it fits.
+    ///
+    /// A bare VStack truncated two explanations at the DEFAULT text size once the restyle landed:
+    /// 32 pt between every child, an 88 pt brand mark, 44 pt display type and 48 pt minimum touch
+    /// targets are each right on their own and do not fit together. SwiftUI does not push a
+    /// too-tall VStack off the screen -- it shrinks the flexible children, so "Device motion is
+    /// unavailable, so the gravity vect..." was the operator's whole explanation of why capture
+    /// was blocked.
+    ///
+    /// `minHeight: geo.size.height` is what keeps the old look: when the content is shorter than
+    /// the screen the VStack is stretched to fill it and the Spacers below still centre
+    /// everything, which they cannot do inside a plain ScrollView. `basedOnSize` stops the screen
+    /// rubber-banding on the phones where it does fit.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
+        GeometryReader { geo in
+            ScrollView {
+                content.frame(minHeight: geo.size.height)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+    }
+
+    private var content: some View {
         VStack(spacing: EntryMapLayout.space6) {
             Spacer()
 
@@ -140,12 +164,8 @@ struct HomeView: View {
             // Which contract this session records against (D-034). Screening is the protocol the
             // field is running; metrology is still reachable because whether it is alive is an
             // open team question (A-3, #67), not one this screen should settle by omission.
-            Picker("Mode", selection: $controller.captureMode) {
-                Text("Screening").tag(CaptureMode.screening)
-                Text("Metrology").tag(CaptureMode.metrology)
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, EntryMapLayout.space5)
+            modePicker
+                .padding(.horizontal, EntryMapLayout.space5)
 
             Text(controller.captureMode == .screening
                  ? "Plain photos: entrance ID and condition tags. No caliper, no card, no taps."
@@ -184,6 +204,40 @@ struct HomeView: View {
         }
     }
 
+    /// The mode switch, built from the tokens.
+    ///
+    /// `.pickerStyle(.segmented)` put a grey system control with the system font in the middle of
+    /// a restyled screen. The design canon has no segmented control of its own, so this composes
+    /// one from tokens already in the library -- a violet pill on the lavender edge colour,
+    /// nothing new invented. Worth a designer's eye before it spreads to a second screen.
+    private var modePicker: some View {
+        HStack(spacing: 0) {
+            modeSegment("Screening", mode: .screening)
+            modeSegment("Metrology", mode: .metrology)
+        }
+        .padding(EntryMapLayout.space1)
+        .background(EntryMapPalette.edge, in: Capsule())
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("Capture mode")
+    }
+
+    private func modeSegment(_ title: String, mode: CaptureMode) -> some View {
+        let selected = controller.captureMode == mode
+        return Button {
+            controller.captureMode = mode
+        } label: {
+            Text(title)
+                .entryMapText(EntryMapTypography.subheading)
+                .foregroundStyle(selected ? EntryMapPalette.onViolet : EntryMapPalette.subduedInk)
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: EntryMapLayout.touchTargetMinimum)
+                .background(selected ? EntryMapPalette.violet600 : Color.clear, in: Capsule())
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
     private var cameraDetail: String {
         switch controller.readiness.cameraAuthorization {
         case .authorized: return "Allowed"
@@ -194,19 +248,31 @@ struct HomeView: View {
         }
     }
 
+    /// Label and value side by side, until they no longer fit.
+    ///
+    /// At the accessibility text sizes an HStack gives each half less than a word: the row read
+    /// "Came / ra" against "Will / ask on / first / captur / e". Stacking is what the OS's own
+    /// settings rows do at those sizes, and it is the difference between a readable explanation
+    /// and a column of syllables.
     private func statusRow(_ title: String, ok: Bool, detail: String) -> some View {
-        HStack(spacing: EntryMapLayout.space3) {
+        HStack(alignment: .firstTextBaseline, spacing: EntryMapLayout.space3) {
             // No green and no red: the approved palette contains neither, and the map's own rule
             // is that colour never carries a verdict. Readiness is an icon plus its words.
             EntryMapIconView(icon: ok ? .checkOutline : .info, size: 22,
                              tint: ok ? EntryMapPalette.ink : EntryMapPalette.freshness)
-            Text(title)
-                .entryMapText(EntryMapTypography.body)
-                .foregroundStyle(EntryMapPalette.ink)
-            Spacer()
-            Text(detail)
-                .entryMapText(EntryMapTypography.callout)
-                .foregroundStyle(EntryMapPalette.subduedInk)
+            let stack = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: EntryMapLayout.space1))
+                : AnyLayout(HStackLayout(spacing: EntryMapLayout.space3))
+            stack {
+                Text(title)
+                    .entryMapText(EntryMapTypography.body)
+                    .foregroundStyle(EntryMapPalette.ink)
+                if !dynamicTypeSize.isAccessibilitySize { Spacer(minLength: 0) }
+                Text(detail)
+                    .entryMapText(EntryMapTypography.callout)
+                    .foregroundStyle(EntryMapPalette.subduedInk)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.horizontal, EntryMapLayout.space4)
         .padding(.vertical, EntryMapLayout.space3)

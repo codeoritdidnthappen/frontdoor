@@ -94,7 +94,12 @@ def test_no_hex_colour_is_spelled_outside_the_palette():
         if swift.name == "EntryMapPalette.swift":
             continue
         body = "\n".join(re.sub(r"//.*", "", line) for line in read(swift).splitlines())
-        found = re.findall(r"Color\(|0x[0-9A-Fa-f]{6}\b|#[0-9A-Fa-f]{6}\b", body)
+        # `\bColor\(` so `UIColor(EntryMapPalette.ink)` is not read as a raw colour -- converting
+        # an approved token for UIKit is the opposite of spelling one. `UIColor(` on anything else
+        # is still caught, which is what stops that becoming the loophole.
+        found = re.findall(
+            r"\bColor\(|UIColor\((?!EntryMapPalette\.)|0x[0-9A-Fa-f]{6}\b|#[0-9A-Fa-f]{6}\b",
+            body)
         # `Color(entryMapHex:)` is fileprivate to the palette, so any `Color(` here is a raw one.
         if found:
             offenders[swift.name] = found
@@ -729,6 +734,26 @@ def test_no_screen_names_a_style_of_its_own():
         if found:
             offenders[swift.name] = found
     assert offenders == {}, f"screens styling themselves instead of using the tokens: {offenders}"
+
+
+def test_no_screen_takes_a_system_control_style():
+    """A grey segmented control in the middle of a restyled screen is what this catches.
+
+    The screens passed every other guard here while `Picker(...).pickerStyle(.segmented)` sat on
+    the home screen in the system font and the system greys, because the guards look for styling a
+    screen *writes* and a system control style is a request for styling nobody wrote. Any control
+    style the design system has no token for is the same bug waiting to happen.
+    """
+    styles = ["pickerStyle(.segmented)", "pickerStyle(.wheel)", "pickerStyle(.menu)",
+              "buttonStyle(.bordered", "buttonStyle(.borderless", "datePickerStyle(",
+              "toggleStyle(.switch)", "progressViewStyle(.circular)", "labelStyle(.titleAndIcon)"]
+    offenders = {}
+    for swift in screens():
+        body = "\n".join(re.sub(r"//.*", "", line) for line in read(swift).splitlines())
+        found = [style for style in styles if style in body]
+        if found:
+            offenders[swift.name] = found
+    assert offenders == {}, f"screens taking a system control style: {offenders}"
 
 
 def test_no_screen_spells_a_colour_swiftui_supplies():
