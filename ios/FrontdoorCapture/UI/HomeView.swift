@@ -87,6 +87,10 @@ struct HomeView: View {
         }
     }
 
+    /// Read by ``statusRow(_:ok:detail:)``, which stacks its two halves at the accessibility
+    /// sizes rather than letting them share a line.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     /// Scrolls, and still centres when it fits.
     ///
     /// A bare VStack truncated two explanations at the DEFAULT text size once the restyle landed:
@@ -100,8 +104,6 @@ struct HomeView: View {
     /// the screen the VStack is stretched to fill it and the Spacers below still centre
     /// everything, which they cannot do inside a plain ScrollView. `basedOnSize` stops the screen
     /// rubber-banding on the phones where it does fit.
-    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-
     var body: some View {
         GeometryReader { geo in
             ScrollView {

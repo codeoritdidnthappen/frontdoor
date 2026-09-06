@@ -16,9 +16,16 @@ extension View {
     /// way to reach a `Picker`'s label or a `LabeledContent`'s title -- those views are built by
     /// SwiftUI and take the font of whatever contains them.
     ///
-    /// The tint is deliberately not here. A toolbar is attached to the Form but is not inside it,
-    /// so a tint applied at this level leaves "Close" and "Import" in the system blue. It goes on
-    /// at the root instead, where it reaches every sheet.
+    /// The tint is deliberately not here, and not at the root either. Both were tried:
+    ///
+    /// - On the Form, "Close" and "Import" stay system blue. A toolbar is attached to the
+    ///   content but is not inside it, so the Form's environment never reaches it.
+    /// - At the root, nothing is tinted at all, and the picker values that the Form-level tint
+    ///   had coloured go grey. `.tint` does not survive the sheet boundary.
+    ///
+    /// It goes on each `NavigationStack`, which is the one ancestor of both the toolbar and the
+    /// content. See ``EntryMapSheet`` --- each screen carries a one-line pointer back here rather
+    /// than its own copy of this.
     func entryMapForm() -> some View {
         self
             .scrollContentBackground(.hidden)

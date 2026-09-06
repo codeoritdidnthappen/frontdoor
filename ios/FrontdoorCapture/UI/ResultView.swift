@@ -38,9 +38,8 @@ struct ResultView: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Done", action: onDone) }
             }
         }
-        // Tints the toolbar buttons, picker values and text cursors. It goes here rather
-        // than on the content because a toolbar is attached to the content but is not inside
-        // it, and it does not survive the sheet boundary from the root either.
+        // Toolbar buttons, picker values and cursors. Here and not on the Form or the root --
+        // see `entryMapForm()` for why both of those were tried and dropped.
         .tint(EntryMapPalette.violet600)
     }
 
