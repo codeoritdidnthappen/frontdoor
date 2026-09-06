@@ -52,12 +52,36 @@ def pin_tokens():
 # --------------------------------------------------------------------------- colour
 
 
-def test_the_palette_is_the_eleven_official_colours_and_nothing_else():
+def palette_colours():
+    return {name: value.lstrip("#").upper() for name, value in design_tokens()["color"].items()}
+
+
+ROLE_DECLARATION = re.compile(r"((?:^[ ]*///.*\n)*)^[ ]*static let (\w+) = (\w+)$", re.M)
+
+
+def palette_roles():
+    """`{role: the token or role it is}`, read off `static let <role> = <name>`."""
+    source = read(LAYER / "EntryMapPalette.swift")
+    return {match.group(2): match.group(3) for match in ROLE_DECLARATION.finditer(source)}
+
+
+def resolve(name):
+    """A role or token name, followed to the hex the token file gives it."""
+    colours, roles = palette_colours(), palette_roles()
+    seen = set()
+    while name not in colours:
+        assert name in roles and name not in seen, f"{name} is neither a token nor a role"
+        seen.add(name)
+        name = roles[name]
+    return colours[name]
+
+
+def test_the_palette_is_the_official_colours_and_nothing_else():
     source = read(LAYER / "EntryMapPalette.swift")
     declared = dict(
         re.findall(r"static let (\w+) = Color\(entryMapHex: 0x([0-9A-F]{6})\)", source))
-    official = {name: value.lstrip("#").upper()
-                for name, value in design_tokens()["color"].items()}
+    official = palette_colours()
+    assert len(official) >= 11, "the token file's colour block did not parse"
     assert declared == official, (
         "the palette and the token file disagree; the token file is the one that is right"
     )
@@ -129,6 +153,216 @@ def test_every_semantic_pairing_the_layer_uses_is_an_approved_one():
         assert (fg, bg) in approved or (bg, fg) in approved, (
             f"{foreground} on {background} (#{fg} on #{bg}) is not a pairing the contrast "
             "report approves")
+
+
+# ------------------------------------------------- the canonical palette and its stated figures
+#
+# The library's `2026-09-05` version moved ten of the eleven colours it had previously named --
+# every one except white -- and added `lavenderPath`. Nothing measured against the retired set
+# carries over, and the tests below are what stops a figure from outliving the colour it described.
+
+RETIRED_COLOURS = {
+    "indigo900": "17103D",
+    "indigo800": "211054",
+    "violet600": "5B35F5",
+    "violet800": "4020B5",
+    "sky400": "69B7FF",
+    "sky700": "1266A6",
+    "marigold400": "FFBF24",
+    "amber700": "9A5700",
+    "lavender100": "F2EEFF",
+    "lavender200": "E2DAFF",
+}
+
+FIGURE = re.compile(r"\d+\.\d+:1")
+EXPLICIT_FIGURE = re.compile(r"(\d+\.\d+):1 `(\w+)` on `(\w+)`")
+ROLE_FIGURE = re.compile(r"(\d+\.\d+):1 on `(\w+)`")
+
+
+def layer_sources():
+    return sorted(LAYER.glob("*.swift")) + [PRIMER]
+
+
+def stated_figures():
+    """Every contrast figure written in the layer, and every one written unparseably.
+
+    Two forms are allowed. ``R:1 `foreground` on `background``` states both sides; ``R:1 on
+    `background```, inside a role's own documentation, takes its foreground from the role being
+    documented. A figure that is deliberately historical carries the word "retired" on its line.
+
+    Anything else lands in the second list and fails, because a figure nothing can recompute is
+    exactly what survived the last palette change.
+    """
+    figures, unparsed = [], []
+    for swift in layer_sources():
+        source = read(swift)
+        documented = {}
+        for match in ROLE_DECLARATION.finditer(source):
+            if not match.group(1):
+                continue
+            first = source[:match.start(1)].count("\n")
+            for offset in range(match.group(1).count("\n")):
+                documented[first + offset] = match.group(2)
+        for number, line in enumerate(source.splitlines()):
+            for figure in FIGURE.finditer(line):
+                explicit = EXPLICIT_FIGURE.match(line, figure.start())
+                short = ROLE_FIGURE.match(line, figure.start())
+                if explicit:
+                    figures.append((swift.name, number + 1, explicit.group(2), explicit.group(3),
+                                    float(explicit.group(1))))
+                elif short and number in documented:
+                    figures.append((swift.name, number + 1, documented[number], short.group(2),
+                                    float(short.group(1))))
+                elif "retired" not in line:
+                    unparsed.append(f"{swift.name}:{number + 1}: {line.strip()}")
+    return figures, unparsed
+
+
+def test_every_contrast_figure_in_the_layer_is_recomputed_from_the_token_file():
+    """The layer's old figures were measured against colours that no longer exist. Ten of eleven
+    moved, so every one of them was wrong and none of them looked wrong."""
+    figures, unparsed = stated_figures()
+    assert unparsed == [], (
+        "these figures are not in a form this guard can recompute, and an unchecked figure is how "
+        f"the retired numbers survived the last palette change: {unparsed}")
+    assert len(figures) >= 12, (
+        f"only {len(figures)} figures parsed out of the layer; this guard is pinning nothing")
+    for name, line, foreground, background, stated in figures:
+        actual = wcag_ratio(resolve(foreground), resolve(background))
+        assert abs(actual - stated) < 0.02, (
+            f"{name}:{line} says {foreground} on {background} is {stated}:1; against the token "
+            f"file it is {actual:.2f}:1")
+
+
+def test_the_figures_the_packages_report_also_states_agree_with_it():
+    """Recomputing is not enough on its own: an arithmetically true figure for a pairing the
+    library approves must also be the figure the library published for it."""
+    approved = approved_pairings()
+    figures, _ = stated_figures()
+    checked = 0
+    for name, line, foreground, background, stated in figures:
+        pair = (resolve(foreground), resolve(background))
+        published = approved.get(pair, approved.get((pair[1], pair[0])))
+        if published is None:
+            continue
+        checked += 1
+        # Exactly, not approximately: the layer is restating the report's own published number.
+        assert published == stated, (
+            f"{name}:{line} states {stated}:1 where the report publishes {published}:1")
+    assert checked >= 6, (
+        f"only {checked} of the layer's figures matched a report row; the report did not parse")
+
+
+def test_body_copy_clears_the_packages_seven_to_one_floor():
+    """The package sets a 7:1 floor for body copy. The pairing that could not meet it was white on
+    the violet; the canonical violet is what lifts it."""
+    assert "at least 7:1" in read(TOKENS / "contrast-report.md"), (
+        "the contrast report no longer states a body floor")
+    body = [
+        ("ink", "card"), ("ink", "ground"), ("subduedInk", "card"),
+        ("onDarkGround", "darkGround"), ("onViolet", "violet600"), ("onMarigold", "marigold400"),
+    ]
+    for foreground, background in body:
+        actual = wcag_ratio(resolve(foreground), resolve(background))
+        assert actual >= 7, (
+            f"{foreground} on {background} is {actual:.2f}:1, under the package's 7:1 body floor")
+    # The two accents that do not clear it are not body roles, and each says so where it is defined.
+    source = read(LAYER / "EntryMapPalette.swift")
+    for accent in ("freshness", "informationInk"):
+        assert wcag_ratio(resolve(accent), resolve("card")) < 7, (
+            f"{accent} now clears the floor; its documentation calls it a non-body colour")
+        assert accent not in [role for role, _ in body], f"{accent} is being used as body copy"
+        block = source.split(f"static let {accent} = ")[0].rsplit("\n\n", 1)[-1]
+        assert "body floor" in block, (
+            f"{accent} is under the 7:1 floor and its documentation does not say so")
+
+
+def test_the_pin_paths_lavender_is_a_role_of_its_own_and_never_paints_a_surface():
+    """The web build spent one lavender family on the pin path and on its surfaces, and every
+    screen came out with a purple cast and white slots cut into it. The separation is the fix."""
+    colours, roles = palette_colours(), palette_roles()
+    assert "lavenderPath" in colours, "the token file no longer carries the pin path's lavender"
+    assert colours["lavenderPath"] not in (colours["lavender100"], colours["lavender200"]), (
+        "the pin path and the UI lavenders are one value again")
+    assert roles.get("pathLine") == "lavenderPath", "no named role spends the pin path's lavender"
+    for surface in ("ground", "card", "darkGround", "edge"):
+        assert resolve(surface) != colours["lavenderPath"], (
+            f"the {surface} role paints the pin path's lavender; that is the purple cast, rebuilt")
+    painting, calls = [], []
+    for swift in layer_sources():
+        if swift.name == "EntryMapPalette.swift":
+            continue
+        body = "\n".join(re.sub(r"//.*", "", line) for line in read(swift).splitlines())
+        found = re.findall(r"\.(?:background|fill|strokeBorder|foregroundStyle)\([^\n]*", body)
+        calls += found
+        painting += [f"{swift.name}: {call.strip()}" for call in found
+                     if "pathLine" in call or "lavenderPath" in call]
+        if "lavenderPath" in body:
+            painting.append(f"{swift.name} reaches past the role to the raw token")
+    assert len(calls) >= 10, "no paint calls parsed out of the layer; this guard is scanning nothing"
+    assert painting == [], f"the pin path's lavender is being painted onto a surface: {painting}"
+
+
+def test_the_deeper_steps_are_named_roles_rather_than_token_names_at_the_call_site():
+    """The second indigo, the second violet, the deeper sky and the muted amber.
+
+    `indigo800` is the exception and is meant to be: the library declares it and then draws nothing
+    with it -- it is in no piece of artwork, no control state and no row of the contrast report --
+    so the palette names no role for it rather than inventing a use.
+    """
+    palette = read(LAYER / "EntryMapPalette.swift")
+    steps = ("indigo800", "violet800", "sky700", "amber700")
+    for step in steps:
+        assert f"static let {step} = Color(entryMapHex:" in palette, f"{step} is not declared"
+    spent = palette_roles().values()
+    for step in ("violet800", "sky700", "amber700"):
+        assert step in spent, f"no role in the palette spends {step}"
+    sources = layer_sources()
+    assert len(sources) >= 10, "the layer did not glob; this guard is scanning nothing"
+    offenders = {}
+    for swift in sources:
+        if swift.name == "EntryMapPalette.swift":
+            continue
+        body = "\n".join(re.sub(r"//.*", "", line) for line in read(swift).splitlines())
+        found = [step for step in steps if step in body]
+        if found:
+            offenders[swift.name] = found
+    assert offenders == {}, (
+        f"a deeper step is spelled at the call site instead of through a role: {offenders}")
+
+
+def test_no_retired_palette_value_survives_in_the_layer_or_the_copied_library():
+    """`docs/design/entrymap/README.md` records the retired values on purpose -- it is the note
+    saying what this copy replaced. Everywhere else they are colours nobody approves any more."""
+    scanned = layer_sources() + [
+        path for path in sorted(TOKENS.rglob("*"))
+        if path.is_file() and path.name != "README.md"
+    ]
+    assert len(scanned) > 40, f"only {len(scanned)} files scanned; this guard is pinning nothing"
+    haystack = {path: read(path).upper() for path in scanned}
+    current = palette_colours()
+    for name, retired in RETIRED_COLOURS.items():
+        assert current[name] != retired, f"{name} is still the retired #{retired}"
+        strays = sorted({path.name for path, text in haystack.items() if retired in text})
+        assert strays == [], f"the retired {name} #{retired} is still spelled in {strays}"
+    # If the search could not find a colour that is definitely there, the loop above proves nothing.
+    for name, value in current.items():
+        assert any(value in text for text in haystack.values()), (
+            f"the canonical {name} #{value} is in none of the files this guard searches")
+
+
+def test_the_copied_library_says_which_version_it_is_and_what_it_replaced():
+    """This directory is replaced wholesale when the library issues a version. A copy that does not
+    say which version it is cannot be checked against anything."""
+    readme = read(TOKENS / "README.md")
+    assert re.search(r"version `\d{4}-\d{2}-\d{2}`", readme), (
+        "the copy does not record which library version it is")
+    current = palette_colours()
+    for name, retired in RETIRED_COLOURS.items():
+        assert f"`#{retired}`" in readme, f"the copy does not say {name} replaced #{retired}"
+        assert f"`#{current[name]}`" in readme, f"the copy does not say what {name} is now"
+    assert f"`#{current['lavenderPath']}`" in readme, (
+        "the copy does not name the role the library added")
 
 
 # --------------------------------------------------------------------------- type

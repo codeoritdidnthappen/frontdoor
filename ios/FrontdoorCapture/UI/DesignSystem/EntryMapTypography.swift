@@ -3,9 +3,13 @@ import UIKit
 
 /// The EntryMap type system: two bundled families, a named scale, and Dynamic Type throughout.
 ///
-/// Source of truth: `docs/design/entrymap/design-tokens.json` names the two families and the three
-/// weights. The sizes below are not in the token file — the library ships no numeric type scale —
-/// so they are derived, and each derivation is stated against the artwork it came from.
+/// Source of truth: `docs/design/entrymap/design-tokens.json` names the UI family and the three
+/// weights. It no longer names a wordmark family: the library's position is now that the wordmark
+/// is approved artwork and is never set as live text, so ``Face/wordmark`` and ``wordmark`` stay
+/// only as the fallback for a context that cannot draw the artwork, and ``EntryMapBrandMark`` is
+/// still the way to show the lockup. The sizes below are not in the token file either — the library
+/// ships no numeric type scale — so they are derived, and each derivation is stated against the
+/// artwork it came from.
 ///
 /// **Two things here are not decoration.**
 ///

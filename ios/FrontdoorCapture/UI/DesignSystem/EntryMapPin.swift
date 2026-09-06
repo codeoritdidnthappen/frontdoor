@@ -185,7 +185,7 @@ struct EntryMapPin: View {
             tierSymbol
             confidenceRing
             if needsRecheck {
-                EntryMapIconView(icon: .freshness, size: size * 0.34, tint: EntryMapPalette.amber700)
+                EntryMapIconView(icon: .freshness, size: size * 0.34, tint: EntryMapPalette.freshness)
                     .background(Circle().fill(EntryMapPalette.card).padding(-1))
                     .offset(x: box.width * scale * 0.30, y: size * 0.24)
             }
@@ -232,7 +232,7 @@ struct EntryMapPin: View {
             // baseline are the master's, converted from its 39-unit type at a y of 56.
             Text(verbatim: "i")
                 .font(.custom("Georgia", fixedSize: 39 * scale).weight(.bold).italic())
-                .foregroundStyle(EntryMapPalette.sky700)
+                .foregroundStyle(EntryMapPalette.informationInk)
                 .offset(y: (42 - EntryMapTrustTier.viewBoxHeight / 2) * scale)
         case .scannedOnSite:
             stroked(
@@ -250,9 +250,9 @@ struct EntryMapPin: View {
             EntryMapVectorShape(glyph: .circle(x: 88, y: 28, radius: 14), viewBox: box)
                 .fill(EntryMapPalette.card)
             EntryMapVectorShape(glyph: .circle(x: 88, y: 28, radius: 14), viewBox: box)
-                .stroke(EntryMapPalette.violet800, lineWidth: 3 * scale)
+                .stroke(EntryMapPalette.deepAccent, lineWidth: 3 * scale)
             stroked(
-                [.path("m81 28 5 5 9-11")], colour: EntryMapPalette.violet800, width: 3)
+                [.path("m81 28 5 5 9-11")], colour: EntryMapPalette.deepAccent, width: 3)
         }
     }
 
@@ -272,7 +272,7 @@ struct EntryMapPin: View {
 
     private var ringColour: Color {
         switch tier {
-        case .estimated: return EntryMapPalette.sky700
+        case .estimated: return EntryMapPalette.informationInk
         case .scannedOnSite: return EntryMapPalette.marigold400
         case .ownerConfirmed: return EntryMapPalette.violet600
         }
@@ -330,7 +330,7 @@ struct EntryMapMatchHalo: View {
                 style: StrokeStyle(lineWidth: 5 * scale, dash: [15 * scale, 9 * scale]))
         case .unknown:
             shape.stroke(
-                EntryMapPalette.sky700,
+                EntryMapPalette.informationInk,
                 style: StrokeStyle(
                     lineWidth: 5 * scale, lineCap: .round, dash: [1 * scale, 11 * scale]))
         }

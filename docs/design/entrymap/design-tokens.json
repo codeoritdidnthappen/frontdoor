@@ -1,20 +1,20 @@
 {
   "color": {
-    "indigo900": "#17103D",
-    "indigo800": "#211054",
-    "violet600": "#5B35F5",
-    "violet800": "#4020B5",
-    "sky400": "#69B7FF",
-    "sky700": "#1266A6",
-    "marigold400": "#FFBF24",
-    "amber700": "#9A5700",
-    "lavender100": "#F2EEFF",
-    "lavender200": "#E2DAFF",
+    "indigo900": "#1E1142",
+    "indigo800": "#28165A",
+    "violet600": "#4F34DB",
+    "violet800": "#38239B",
+    "sky400": "#76BCFD",
+    "sky700": "#1B6599",
+    "marigold400": "#FDB327",
+    "amber700": "#8C5400",
+    "lavenderPath": "#CFBCEE",
+    "lavender100": "#F5F2FC",
+    "lavender200": "#E8E1F7",
     "white": "#FFFFFF"
   },
   "type": {
     "familyUI": "Atkinson Hyperlegible, Aptos, Arial, sans-serif",
-    "familyWordmark": "Nunito Sans, Aptos, Arial, sans-serif",
     "weightRegular": 400,
     "weightMedium": 600,
     "weightBold": 750
