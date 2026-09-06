@@ -21,6 +21,7 @@ from frontdoor.external_data import (
     find_disagreements,
     load_demo_bbox,
     load_osm_records,
+    load_side_file,
     match_records,
     parse_overpass_payload,
     provenance_for_place,
@@ -336,3 +337,51 @@ def test_map_data_unchanged_without_external_file(client, tmp_path, monkeypatch)
     assert pin["state"] == STATE_NEUTRAL
     assert payload["osm_error"] is not None
     assert "not found" in payload["osm_error"]
+
+
+def test_a_records_array_with_no_usable_record_is_not_a_clean_read(tmp_path, caplog):
+    """The double-encoded refresh: a records ARRAY full of non-records.
+
+    It takes every provenance and attribution line off the map exactly as
+    thoroughly as a missing file, and #353 returned ([], None) for it -- the
+    same silence one level in.
+    """
+    path = tmp_path / "double-encoded.json"
+    path.write_text(json.dumps({"records": ["junk", 7]}), encoding="utf-8")
+    with caplog.at_level("WARNING", logger="frontdoor.external_data"):
+        records, error = load_side_file(path, "osm")
+    assert records == []
+    assert error is not None
+    assert caplog.records
+
+
+def test_a_partial_drop_is_reported_rather_than_thinning_attribution(tmp_path):
+    """Good records and bad ones together is not a clean read either: the
+    attribution the ODbL requires just gets quietly thinner."""
+    path = tmp_path / "partial.json"
+    path.write_text(
+        json.dumps({"records": [{"source": "openstreetmap"}, "junk"]}),
+        encoding="utf-8",
+    )
+    records, error = load_side_file(path, "osm")
+    assert len(records) == 1
+    assert error is not None
+
+
+def test_a_non_list_records_field_does_not_escape_as_an_exception(tmp_path):
+    """`{"records": 5}` reached the comprehension and raised TypeError out of
+    a function documented as total, which /map/data serves as a 500."""
+    path = tmp_path / "weird.json"
+    path.write_text(json.dumps({"records": 5}), encoding="utf-8")
+    records, error = load_side_file(path, "osm")
+    assert records == []
+    assert error is not None
+
+
+def test_an_empty_records_array_is_a_real_answer_not_a_failure(tmp_path):
+    """"The sources matched nothing" has to stay distinguishable from "the
+    file is gone", or the banner cries wolf on every clean deployment whose
+    Overpass refresh happened to match nothing."""
+    path = tmp_path / "empty.json"
+    path.write_text(json.dumps({"records": []}), encoding="utf-8")
+    assert load_side_file(path, "osm") == ([], None)

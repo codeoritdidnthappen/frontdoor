@@ -448,26 +448,66 @@ def image_store():
 
 
 def image_bucket_is_reachable():
-    """True when the images bucket answers a metadata probe.
+    """True when the images bucket answers, on the operation the app performs.
 
-    Environment variables being set is not the same as the bucket existing
-    and the credential working. HeadObject on a missing key: 404 means the
-    credential can talk to the bucket (the images token is object-scoped and
-    may not be allowed to HeadBucket). Auth failure or a missing bucket is
-    False. Nothing is written. Failures log a generic line so /ready can
-    stay a boolean and never echo a value.
+    Environment variables being set is not the same as the bucket existing and
+    the credential working, and a revoked key or a deleted bucket looks
+    identical to the missing-credential incident this endpoint was written for.
+    Nothing is written. Failures log for the operator so /ready can stay a
+    boolean that never echoes a value.
+
+    ONE GetObject on a key that need not exist, and it MUST be a GET (#370). A
+    HEAD response carries no body (RFC 9110), so botocore has no code to parse
+    and synthesizes `{"Code": "404"}` for a missing key and a missing bucket
+    alike; two probes were built on HEAD and both passed a deleted bucket. A GET
+    error does carry a body, so the provider's own code survives, and NoSuchKey
+    -- healthy, the probe key is simply absent -- is the ONE code that passes.
+    NoSuchBucket, AccessDenied and an expired token are failures, and so is a
+    bare `404` with no code: S3, R2 and MinIO all send `<Error><Code>` on a GET,
+    so a 404 without one came from something that stripped it and restores the
+    very ambiguity this call was chosen to remove.
+
+    It is also the operation the app actually performs, which a bucket-level
+    call is not: this project's images token is scoped per bucket at the object
+    level (D-020, D-026, D-033).
+
+    One known false negative, in the safe direction: AWS S3 answers an identity
+    without `s3:ListBucket` with 403 AccessDenied rather than 404 NoSuchKey for
+    a key that is not there, so such a deployment reads as degraded. That costs
+    a warning on the deploy summary, not photographs, and it is not this
+    deployment -- the R2 images token is Object Read & Write.
+
+    docs/server-deploy.md carries the rest of the account, once.
     """
     try:
         creds = load_image_creds()
-        _client(creds, timeout=2).head_object(
-            Bucket=creds.bucket, Key=PROBE_KEY
-        )
-        return True
+        client = _client(creds, timeout=2)
     except Exception as exc:
-        if _is_not_found(exc):
-            return True
-        logger.warning("image bucket probe failed")
+        logger.warning("image bucket probe could not start: %s: %s",
+                       type(exc).__name__, exc)
         return False
+
+    try:
+        response = client.get_object(Bucket=creds.bucket, Key=PROBE_KEY)
+    except Exception as exc:
+        code = str((getattr(exc, "response", None) or {})
+                   .get("Error", {}).get("Code", ""))
+        # The one error that means "the bucket answered, and this key is not in
+        # it". NoSuchBucket, AccessDenied and an expired token are all failures.
+        if code == "NoSuchKey":
+            return True
+        # The code, not the message: messages from some providers quote the
+        # endpoint, and this line is the operator's only account of why.
+        logger.warning("image bucket probe failed (%s)",
+                       code or type(exc).__name__)
+        return False
+    # PROBE_KEY is normally absent, but `frontdoor.storage_probe` writes one,
+    # and botocore hands back a stream it has not read. Close it rather than
+    # holding a connection open on every /ready.
+    body = response.get("Body")
+    if body is not None:
+        body.close()
+    return True
 
 
 def main(argv=None):

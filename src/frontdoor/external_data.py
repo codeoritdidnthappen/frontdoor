@@ -219,8 +219,24 @@ def load_side_file(path, kind):
         error = f"{kind} unreadable: {exc}"
         logger.warning(error)
         return [], error
+    # A records array that holds no usable RECORD takes every provenance and
+    # attribution line off the map exactly as thoroughly as a missing file --
+    # the classic double-encoded refresh is a list of strings -- so returning
+    # ([], None) for it would be the same silence one level in (#370). A
+    # non-list `records` also used to reach the comprehension and raise
+    # TypeError out of a function documented as total.
     records = document.get("records") if isinstance(document, dict) else None
-    return [r for r in records or [] if isinstance(r, dict)], None
+    if not isinstance(records, list):
+        error = f"{kind} has no records array: {path}"
+        logger.warning(error)
+        return [], error
+    usable = [r for r in records if isinstance(r, dict)]
+    dropped = len(records) - len(usable)
+    if dropped:
+        error = f"{kind}: {dropped} of {len(records)} entries are not records"
+        logger.warning("%s (%s)", error, path)
+        return usable, error
+    return usable, None
 
 
 def load_osm_records(path):

@@ -615,3 +615,277 @@ def test_exists_answers_for_a_sealed_key_without_returning_bytes(monkeypatch):
     # ...and reading it still is not allowed.
     with pytest.raises(SealedObjectDenied):
         store.get(sealed)
+
+
+# --- the /ready reachability probe (#370) ------------------------------------
+#
+# THIRD attempt at one defect: /ready reported photo_storage true for a bucket
+# that did not exist. The first two were tested under moto and shipped anyway,
+# so most of what is below is deliberately NOT moto -- moto answers a HEAD with
+# an XML error body that S3, R2 and MinIO do not send, and that is precisely
+# what hid the first bug: a guard reading the parsed error code looked correct
+# under moto while being inert against every real provider. Where a case cannot
+# be staged faithfully, the ClientError response is built by hand in the shape a
+# real provider produces -- measured against botocore 1.43.86, whose parser
+# yields {"Code": "404"} from a bodyless HEAD and the provider's own
+# NoSuchKey / NoSuchBucket / AccessDenied from a GET's XML body.
+#
+# moto's GET is faithful -- NoSuchKey and NoSuchBucket, 404, in a body, the same
+# as the three real providers -- so the two @mock_aws cases at the end drive the
+# defect and the healthy path end to end through a real client and botocore's
+# real parser. It is the HEAD that moto gets wrong, and this probe asks a GET.
+
+
+def _get_error(status, code, message):
+    """A ClientError as botocore builds one from a real provider's GET response.
+
+    Separate from `_client_error` above, which sets Message to the code: these
+    tests need the two to differ, because the message is the part that quotes
+    the deployment back and must not reach the log.
+
+    `code` is what survives parsing. For a GET that is the provider's own code,
+    because the error body is there to parse; for a HEAD it is the status as a
+    string, because there is no body at all (RFC 9110) and botocore synthesizes
+    one. Passing a HEAD-shaped code here is how a test below states which wire
+    shape it is standing in for.
+    """
+    return ClientError(
+        {
+            "Error": {"Code": code, "Message": message},
+            "ResponseMetadata": {"HTTPStatusCode": status},
+        },
+        "GetObject",
+    )
+
+
+def _head_error(status):
+    """A HEAD error as botocore builds one: no body, so the CODE is the status.
+
+    Measured, not assumed -- botocore 1.43.86's RestXMLParser on a bodyless 404
+    yields exactly `{"Code": "404", "Message": "Not Found"}`. This is the shape
+    moto does not produce, and the reason two probes read as correct in the
+    suite while passing a deleted bucket in production.
+    """
+    return ClientError(
+        {
+            "Error": {"Code": str(status),
+                      "Message": "Not Found" if status == 404 else "Forbidden"},
+            "ResponseMetadata": {"HTTPStatusCode": status},
+        },
+        "HeadObject",
+    )
+
+
+class _FakeS3:
+    """One deployment state, answering EVERY call the way that state answers it.
+
+    Faithful on the calls the probe does not make as well as the one it does:
+    a fake that refused HEAD would let this table pass against a HEAD-based
+    probe for the wrong reason, and "these tests fail against the old code" is
+    the only claim that distinguishes this attempt from the last two.
+    """
+
+    def __init__(self, head_bucket, head_object, get_object):
+        self._outcomes = {
+            "head_bucket": head_bucket,
+            "head_object": head_object,
+            "get_object": get_object,
+        }
+        self.calls = []
+
+    def _answer(self, name, kwargs):
+        self.calls.append((name, kwargs.get("Bucket"), kwargs.get("Key")))
+        outcome = self._outcomes[name]
+        if isinstance(outcome, Exception):
+            raise outcome
+        return outcome or {}
+
+    def head_bucket(self, **kwargs):
+        return self._answer("head_bucket", kwargs)
+
+    def head_object(self, **kwargs):
+        return self._answer("head_object", kwargs)
+
+    def get_object(self, **kwargs):
+        return self._answer("get_object", kwargs)
+
+
+def _one_answer(outcome):
+    """A state that answers everything the same way, for the rows where only
+    the GET matters."""
+    return _FakeS3(head_bucket=outcome, head_object=outcome, get_object=outcome)
+
+
+# The four states a deployment can actually be in. Each row says what every
+# call answers in that state, so the table also records WHY the two HEAD-based
+# probes could not work: to a HEAD, "healthy" and "bucket deleted" are the same
+# two answers, and `test_the_two_states_no_head_can_separate` asserts that
+# rather than leaving it as a comment.
+#
+# HeadBucket is 403 in three rows on purpose: this project's images token is
+# scoped per bucket at the object level (D-020, D-026, D-033), and an
+# object-scoped identity is refused bucket-level calls whatever became of the
+# bucket -- so HeadBucket's 404 branch is dead here.
+STATES = {
+    "bucket healthy, objects readable": (
+        _FakeS3(
+            head_bucket=_head_error(403),
+            head_object=_head_error(404),
+            get_object=_get_error(404, "NoSuchKey",
+                                  "The specified key does not exist."),
+        ),
+        True,
+    ),
+    "bucket healthy, objects NOT readable": (
+        _FakeS3(
+            head_bucket=None,  # 200: this credential can SEE the bucket
+            head_object=_head_error(403),
+            get_object=_get_error(403, "AccessDenied", "Access Denied"),
+        ),
+        False,
+    ),
+    "bucket deleted, object-scoped token": (
+        _FakeS3(
+            head_bucket=_head_error(403),
+            head_object=_head_error(404),
+            get_object=_get_error(404, "NoSuchBucket",
+                                  "The specified bucket does not exist."),
+        ),
+        False,
+    ),
+    "credential expired or revoked": (
+        _FakeS3(
+            head_bucket=_head_error(403),
+            head_object=_head_error(403),
+            get_object=_get_error(400, "ExpiredToken",
+                                  "The provided token has expired."),
+        ),
+        False,
+    ),
+}
+
+
+def _probe_against(monkeypatch, fake):
+    _image_env(monkeypatch)
+    fake.calls.clear()
+    monkeypatch.setattr(storage, "_client", lambda creds, timeout=None: fake)
+    return fake
+
+
+@pytest.mark.parametrize("state", list(STATES))
+def test_the_probe_answers_each_deployment_state(monkeypatch, state):
+    """Why a GET and not a HEAD, in one table.
+
+    Verified against both earlier probes: the HeadObject one passed the deleted
+    bucket, and the HeadBucket-first one passed the deleted bucket AND the
+    credential that can see the bucket while reading nothing in it -- a green
+    light over photographs that never persist. A GET error carries an XML body,
+    so NoSuchKey and NoSuchBucket arrive as themselves and one call separates
+    every row.
+    """
+    fake, expected = STATES[state]
+    _probe_against(monkeypatch, fake)
+    assert storage.image_bucket_is_reachable() is expected, state
+
+
+def test_the_probe_costs_one_call_on_the_key_it_names(monkeypatch):
+    """/ready is unauthenticated, so the probe stays one bounded round trip.
+
+    Also the regression guard for the two calls it must NOT make: a HEAD here
+    cannot answer the question, so asking one is the bug coming back.
+    """
+    fake, _ = STATES["bucket healthy, objects readable"]
+    _probe_against(monkeypatch, fake)
+    assert storage.image_bucket_is_reachable() is True
+    assert fake.calls == [("get_object", IMAGES, PROBE_KEY)]
+
+
+def test_a_404_that_carries_no_code_is_not_read_as_healthy(monkeypatch):
+    """The ambiguity this change exists to remove, refused rather than guessed.
+
+    S3, R2 and MinIO all answer a GET error with <Error><Code>; a 404 with no
+    code came from something that stripped it, and cannot say whether the key
+    or the bucket is missing. Accepting it would restore the first attempt's
+    bug verbatim. The probe fails closed instead, which costs a warning on the
+    deploy summary rather than photographs.
+    """
+    _probe_against(monkeypatch, _one_answer(_get_error(404, "404", "Not Found")))
+    assert storage.image_bucket_is_reachable() is False
+
+
+def test_a_provider_that_never_answers_is_not_read_as_healthy(monkeypatch):
+    """No response attribute at all -- DNS, TLS, or the connect timeout."""
+    _probe_against(
+        monkeypatch,
+        _one_answer(EndpointConnectionError(endpoint_url="https://example.invalid")),
+    )
+    assert storage.image_bucket_is_reachable() is False
+
+
+def test_the_probe_says_which_code_it_saw_without_echoing_the_message(
+        monkeypatch, caplog):
+    """/ready is a boolean by design, so the log is the operator's only account.
+
+    The provider's MESSAGE is not logged: several quote the configured endpoint
+    back (TICK-263), and this line is written on every unauthenticated probe.
+    """
+    _probe_against(
+        monkeypatch,
+        _one_answer(_get_error(404, "NoSuchBucket", "no bucket named frontdoor-image")),
+    )
+    with caplog.at_level("WARNING", logger="frontdoor.storage"):
+        assert storage.image_bucket_is_reachable() is False
+    assert "NoSuchBucket" in caplog.text
+    assert "frontdoor-image" not in caplog.text
+
+
+def test_a_probe_that_cannot_be_configured_is_not_read_as_healthy(monkeypatch):
+    """No credentials is the incident this endpoint was written for."""
+    _image_env(monkeypatch)
+    monkeypatch.delenv("FRONTDOOR_IMAGES_BUCKET", raising=False)
+    monkeypatch.setattr(storage, "_load_dotenv_once", lambda: None)
+    assert storage.image_bucket_is_reachable() is False
+
+
+@mock_aws
+def test_the_probe_reads_a_live_bucket_without_writing_to_it(monkeypatch):
+    """The one thing moto is still good for: a real client, end to end.
+
+    It proves the call is wired up and that a probe leaves no object behind.
+    What it cannot settle is anything about a HEAD: moto answers one with a
+    code no real HEAD carries, which is why the state table above is built by
+    hand instead.
+    """
+    _image_env(monkeypatch)
+    client = _create_buckets()
+    assert storage.image_bucket_is_reachable() is True
+    assert "Contents" not in client.list_objects_v2(Bucket=IMAGES)
+
+
+@mock_aws
+def test_the_probe_refuses_a_bucket_that_is_not_there(monkeypatch):
+    """The defect itself, end to end through botocore's real XML parser.
+
+    moto is the wrong instrument for a HEAD -- it answers one with an error
+    body no real provider sends -- but this probe asks a GET, and moto's GET on
+    a missing bucket returns exactly what S3, R2 and MinIO return:
+    NoSuchBucket, 404, in a body. So the one case that shipped twice is worth
+    driving through a real client and a real parser, not only through a
+    ClientError this file built itself.
+    """
+    _image_env(monkeypatch)
+    # deliberately no _create_buckets()
+    assert storage.image_bucket_is_reachable() is False
+
+
+@mock_aws
+def test_the_probe_passes_when_the_probe_key_happens_to_exist(monkeypatch):
+    """`frontdoor.storage_probe` writes this key, and can leave it behind.
+
+    The bytes are not read: botocore hands back an unread stream, and the probe
+    closes it rather than downloading an object on every /ready.
+    """
+    _image_env(monkeypatch)
+    _create_buckets()
+    image_store().put(PROBE_KEY, b"left over from storage_probe")
+    assert storage.image_bucket_is_reachable() is True

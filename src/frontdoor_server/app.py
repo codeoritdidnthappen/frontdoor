@@ -7,6 +7,7 @@ unchanged against it.
 """
 
 import json
+import logging
 import os
 from importlib import resources
 from pathlib import Path
@@ -15,8 +16,13 @@ from flask import Flask, Response, jsonify, request
 from jsonschema import Draft202012Validator, ValidationError
 from werkzeug.exceptions import HTTPException
 
+from frontdoor.map_states import prepare_map_payload
 from frontdoor.metrology import ARM_NAMES
-from frontdoor.scan_records import DEFAULT_SCANS_PATH, SCANS_ENV
+from frontdoor.scan_records import (
+    DEFAULT_SCANS_PATH,
+    SCANS_ENV,
+    load_scan_store,
+)
 from frontdoor.sidecar import validate_sidecar
 from frontdoor.storage import StorageError, load_image_creds, image_bucket_is_reachable
 from frontdoor_server.claim_view import claim_page
@@ -25,6 +31,8 @@ from frontdoor_server.label_view import register_labels
 from frontdoor_server.scan_view import scan_page
 from frontdoor_server.screen_view import screen_page
 from frontdoor_server.upload_view import register_upload
+
+logger = logging.getLogger(__name__)
 
 RESPONSE_SCHEMA = json.loads(
     resources.files("frontdoor_server")
@@ -82,15 +90,112 @@ def _error(message, detail, field=None, status=400):
     return body, status
 
 
+#: Last (stamp, answer) per path for the two on-disk /ready checks (#370).
+#: Process-local and never persisted: a restart re-reads everything.
+_READY_CACHE = {}
+
+
+def _stamp(path):
+    """What identifies this file on disk, or None when it is not there.
+
+    Four fields, because the answer can change while any three hold still:
+
+    * `st_mtime_ns` and `st_size` -- the file was written.
+    * `st_ctime_ns` -- on Linux this is the inode-change time, so it moves on a
+      `chmod` or `chown`. Permission-denied is one of the five states these
+      checks exist to separate: without this field an operator who fixes a
+      mount's ownership is told the deployment is still broken until the
+      process restarts, and -- worse -- a file whose read access was just
+      revoked goes on reporting healthy. (Windows spells st_ctime as the
+      creation time, so the local suite cannot prove that half; the deploy
+      target is Linux.)
+    * `st_ino` -- the file was REPLACED. An atomic `os.replace` is how a dataset
+      is normally deployed and can preserve both mtime and length.
+
+    The PARENT is stamped too, and that is not belt-and-braces: the scan store
+    is a file that legitimately does not exist yet, so "absent" alone cannot
+    tell an empty store on a mounted volume from a volume that went away.
+    """
+    def one(target):
+        try:
+            stat = target.stat()
+            return (stat.st_mtime_ns, stat.st_size, stat.st_ctime_ns, stat.st_ino)
+        except OSError:
+            return None
+
+    return (one(path), one(path.parent))
+
+
+def _answer_if_changed(path, compute):
+    """`compute(path)`, reusing the last answer while the file has not changed.
+
+    /ready is unauthenticated and both of its on-disk checks parse a whole file
+    -- a 200 KB pre-catalogue and every scan ever published. Re-reading both on
+    every request makes a health probe into a lever anyone can pull (#370), and
+    the answer cannot change while nothing `_stamp` watches does.
+
+    What would still be missed: two writes of the same length, to the same
+    inode, inside one filesystem timestamp tick. Nothing here does that --
+    scans are appended, and a dataset arrives with a deploy, which restarts the
+    process anyway.
+    """
+    stamp = _stamp(path)
+    cached = _READY_CACHE.get(str(path))
+    if cached is not None and cached[0] == stamp:
+        return cached[1]
+    answer = compute(path)
+    _READY_CACHE[str(path)] = (stamp, answer)
+    return answer
+
+
 def _map_dataset_ready(path):
-    """True only when the map dataset is a non-empty JSON object on disk."""
+    """True only when the map dataset holds at least one row /map/data can render.
+
+    The boolean says WHICH subsystem; the log says why (#370). Absent,
+    unreadable, permission-denied, not-JSON, and parses-to-no-usable-rows all
+    arrive here as one bit and need five different fixes, while
+    docs/server-deploy.md sends the operator to the log for the reason.
+
+    "Non-empty" is not the floor, and neither is "holds a dict". The only
+    definition of a usable row that matches what /map/data serves is the one
+    /map/data uses: prepare_map_payload drops any row without a numeric,
+    in-range location, so a refresh that renames or nulls the coordinate keys
+    yields a dict full of dicts, zero pins, a null dataset_error -- and, on any
+    weaker floor, a green map_dataset.
+    """
     if not path.is_file():
+        logger.error("map dataset %s is not a file; /map/data has no pins to "
+                     "serve", path)
         return False
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError, UnicodeError):
+    except (OSError, json.JSONDecodeError, UnicodeError) as exc:
+        logger.error("map dataset %s is not usable: %s: %s",
+                     path, type(exc).__name__, exc)
         return False
-    return isinstance(data, dict) and bool(data)
+    if prepare_map_payload(data)["pins"]:
+        return True
+    logger.error("map dataset %s parsed but yields no pins; /map/data is "
+                 "serving an empty map", path)
+    return False
+
+
+def _scan_store_ready(path):
+    """True when the store is reachable AND every record in it could be read.
+
+    The parent directory is the volume, and checking only that catches the
+    unmounted-volume incident and stops there (#370). A line that will not
+    parse is a contributor's scan that is off the map for good while reads
+    keep succeeding, so nothing else notices -- which is the case #353 item 1
+    is about. load_scan_store already counts and logs those; this asks it.
+
+    Deliberately not a write probe: proving the volume is writable means
+    writing to it, and a health endpoint that mutates the only state this app
+    keeps is a worse trade than missing a read-only mount. append_scan's
+    refusal to create its own parent is what catches the mount itself.
+    """
+    store = load_scan_store(path)
+    return store.error is None and store.skipped == 0
 
 # Fixed placeholder values. The repdigit rises are deliberately synthetic so nobody reads stub
 # output as a measurement. TICK-062 serves A and A' live on the free-tier image; B and C need
@@ -279,15 +384,20 @@ def create_app():
 
         # The map dataset, which is what /map/data serves. Existence alone
         # is not enough: an empty or unparseable file still yields zero pins.
-        subsystems["map_dataset"] = _map_dataset_ready(
-            Path(os.environ.get("FRONTDOOR_MAP_DATASET", "data/precatalogue.json"))
+        # Both disk checks answer from the last read while the bytes on disk
+        # are unchanged, so an unauthenticated probe does not re-parse them.
+        subsystems["map_dataset"] = _answer_if_changed(
+            Path(os.environ.get("FRONTDOOR_MAP_DATASET", "data/precatalogue.json")),
+            _map_dataset_ready,
         )
 
         # The scan store's parent directory is the volume. A missing file
         # inside a mounted volume is the empty store; a missing parent is
         # the unmounted-volume incident.
-        scans_path = Path(os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH))
-        subsystems["scan_store"] = scans_path.parent.is_dir()
+        subsystems["scan_store"] = _answer_if_changed(
+            Path(os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH)),
+            _scan_store_ready,
+        )
 
         ready_state = all(subsystems.values())
         return {
