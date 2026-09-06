@@ -340,17 +340,75 @@ unreadable one, changes nothing. If storage is down or misconfigured, publish de
 `assessed-but-not-published` response that still carries the verdicts — nothing is dropped
 silently, and no credential material ever appears in a response.
 
+### Community corrections (TICK-387)
+
+`POST /correct` is the endpoint behind the app's **"Suggest a correction"** sheet. Before it
+existed the sheet pushed the note into a JavaScript array in one browser: the sender saw it in
+their Contributions tab and reasonably believed somebody would read it, and it died when they
+closed the tab.
+
+It needs:
+
+- **`FRONTDOOR_CORRECTIONS`** — path of the append-only JSONL correction store, default
+  `data/corrections.jsonl`. Same caveat as `FRONTDOOR_SCANS`, and the `Dockerfile` points it at
+  the volume for the same reason.
+- **Object storage** — only when a correction carries a photo, and it is the same images-bucket
+  credential `/upload` and `/screen/publish` already use. No new credential. Correction photos
+  land under `open/corrections/<place>/<uuid>.jpg`.
+
+What it does **not** need: the model. `/correct` never calls the screening engine, so a
+correction is accepted while `ANTHROPIC_API_KEY` is absent or the model is down.
+
+An attached photo goes through the same privacy pass as every other public upload
+(`frontdoor.faceblur.process_upload`: faces blurred, EXIF/GPS stripped, re-encoded) **before**
+anything persists, and the path is fail-closed — a photo that cannot be decoded, or a detector
+that does not answer, fails the whole request and writes nothing at all, note included. There is
+no partial success: a note is never stored without the photo somebody attached to it.
+
+**A correction never changes a verdict.** The one thing a *corroborated* correction can do is
+lower freshness: two or more distinct contributors reporting that a doorway changed, more
+recently than the row's own evidence date, sets `needs_relook` on that pin, which is what
+surfaces the app's existing "Could you take another look?" nudge. It asks for a photograph. It
+does not touch a status, a source, a criterion or the Green-or-Gray state, and it cannot add a
+pin.
+
+#### Working the queue
+
+The queue is the store, newest first with disputes lifted to the top:
+
+```bash
+fly ssh console -a frontdoor-measure -C "python -m frontdoor.corrections /data/corrections.jsonl"
+```
+
+Each line is `DISPUTE`/`note`, the timestamp, the place, `[category/tier]` and the note. A
+**dispute** is a correction whose category is `entrance_features` against a place already at the
+*scanned* or *owner-confirmed* tier — somebody is saying a finding a human put there is wrong,
+which is the case that has no other public route (`/claim/<id>/dispute` needs an owner who has
+been through the claim flow).
+
+**Who works it, and how often:** the on-call engineer for the demo period, once a day, and
+before any demo or recording. Disputes first — a wrong finding about a named business on a
+public map is the highest-cost item this project has. Working an item means reading it, acting
+outside the system if the place needs re-scanning, and setting the record's `status` to
+`reviewed` (or `declined`) in the store. Nothing automates that on purpose: the sheet promises
+"corrections stay human; nothing changes without review", and #387 keeps that literally.
+
+Contributors read their own note's status back from `GET /correct/mine` with the contributor
+token their browser minted, which is what the Contributions tab shows. Nothing notifies them —
+out of scope on #387.
+
 ### What the running server writes, and where it survives
 
-Three stores, and the difference between them is the difference between a durable record and a
-silent loss. `Dockerfile` redirects the first two onto the volume `fly.toml` mounts at `/data`;
-a test pins that list against both files.
+Four stores, and the difference between them is the difference between a durable record and a
+silent loss. `Dockerfile` redirects the first three onto the volume `fly.toml` mounts at
+`/data`; a test pins that list against both files.
 
 | Store | Variable | In the image | Survives a deploy |
 |---|---|---|---|
 | Community scans | `FRONTDOOR_SCANS` | `/data/scans.jsonl` | yes |
 | Curated on-site publication | `FRONTDOOR_PUBLISHED_SCANS` | not set — `data/published_scans.jsonl`, copied into the image | yes — it is rebuilt from the repository on every deploy |
 | Owner claims | `FRONTDOOR_CLAIMS` | `/data/claims.jsonl` | yes |
+| Community corrections | `FRONTDOOR_CORRECTIONS` | `/data/corrections.jsonl` | yes |
 | Future-capture labels | `FRONTDOOR_LABELS_PATH` | not set — `data/labels.csv` in the container | **no**, by design (TICK-282) |
 
 **Claims lost is a credential lost, not a record lost.** The claim record holds the only bearer

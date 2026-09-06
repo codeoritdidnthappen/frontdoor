@@ -253,6 +253,120 @@ OPS: list[Op] = [
         replacement="function procLog(t0,label){}   /* the design source's beat timing; not for the served page */",
     ),
     Op(
+        name="corrections_from_server",
+        why=(
+            "the Contributions tab must show what the server holds, not a local echo: the "
+            "design seeds three worked examples and the send button pushed a fourth into "
+            "the same array, which is exactly what made an unsent note look received "
+            "(TICK-387). The list is read from GET /correct/mine instead"
+        ),
+        kind="replace_region",
+        anchor=(
+            "/* session-local, seeded with three worked examples so the Corrections tab "
+            "has history to show */\n"
+        ),
+        until=(
+            "cNote.addEventListener('input',()=>document.getElementById('correct-count')"
+            ".textContent=cNote.value.length);"
+        ),
+        fragment="corrections.js",
+    ),
+    Op(
+        name="correct_send",
+        why=(
+            "'Send suggestion' posts to POST /correct and a failure says so rather than "
+            "reaching the confirmation screen; the design's handler pushed the note into "
+            "a JavaScript array and always succeeded"
+        ),
+        kind="replace_region",
+        anchor="document.getElementById('btn-correct-send').addEventListener('click',()=>{",
+        until="document.getElementById('corr-done-back').addEventListener('click',()=>{",
+        fragment="correct-send.js",
+    ),
+    Op(
+        name="corr_done_promises_what_the_server_does",
+        why=(
+            "the confirmation screen promised the note becomes a dated source on the "
+            "receipt. It does not: a correction reaches a review queue and changes no "
+            "verdict. Same rule as the scan path -- a screen may only claim what the "
+            "server actually does"
+        ),
+        kind="replace",
+        anchor=(
+            '            <li><span class="nl-dot"><span class="ic" data-icon="clock" '
+            'data-size="12" aria-hidden="true"></span></span><span>Your note becomes a '
+            "<b>dated source</b> on this entrance's receipt &mdash; \"Neighbor "
+            'correction &middot; today.\"</span></li>\n'
+        ),
+        replacement=(
+            '            <li><span class="nl-dot"><span class="ic" data-icon="clock" '
+            'data-size="12" aria-hidden="true"></span></span><span>Your note joins a '
+            '<b>review queue</b> a person works through. Nothing on the map changes until '
+            "it has been read.</span></li>\n"
+        ),
+    ),
+    Op(
+        name="corr_done_no_notification_promise",
+        why=(
+            "nothing notifies a contributor yet (#387 puts it out of scope), so the "
+            "screen says where to look instead of promising a message that never comes"
+        ),
+        kind="replace",
+        anchor=(
+            '            <li><span class="nl-dot"><span class="ic" data-icon="bell" '
+            "data-size=\"12\" aria-hidden=\"true\"></span></span><span>You'll hear back only "
+            'if <b>"A correction of yours gets a response"</b> is on in Notifications.'
+            "</span></li>\n"
+        ),
+        replacement=(
+            '            <li><span class="nl-dot"><span class="ic" data-icon="bell" '
+            'data-size="12" aria-hidden="true"></span></span><span>Its status is under '
+            "<b>My corrections</b> &mdash; in review, then reviewed. We do not send a "
+            "message about it yet.</span></li>\n"
+        ),
+    ),
+    Op(
+        name="contrib_tab_reads_the_server",
+        why="opening My contributions asks the server for the real status of each note",
+        kind="replace",
+        anchor=(
+            "  if(id==='screen-profile'){ renderSaved(); renderCorrections(); renderYourScans(); }\n"
+            "  if(id==='screen-contrib') renderYourScans();\n"
+        ),
+        replacement=(
+            "  if(id==='screen-profile'){ renderSaved(); renderCorrections(); renderYourScans(); loadMyCorrections(); }\n"
+            "  if(id==='screen-contrib'){ renderYourScans(); loadMyCorrections(); }\n"
+        ),
+    ),
+    Op(
+        name="relook_nudge",
+        why=(
+            "the ONE thing a corroborated correction may change is freshness: /map/data "
+            "carries needs_relook, and the card's existing 'Could you take another look?' "
+            "nudge is where it surfaces. Never a verdict, never a negative -- the nudge "
+            "asks for a photograph and says nothing about the door"
+        ),
+        kind="replace",
+        anchor=(
+            "  /* re-check nudge: stale estimates ask gently -- age is context, not failure */\n"
+            "  let nudge='';\n"
+            "  if(p.tier==='est' && aged){\n"
+            '    nudge = `<div class="nudge">\n'
+            '      <div class="n-h">Could you take another look?</div>\n'
+            "      <span class=\"n-age\">${iconSVG('clock',13,'var(--amber-ink)')} Estimated ${ageLabel(p.date)}</span>\n"
+        ),
+        replacement=(
+            "  /* re-check nudge: stale estimates ask gently -- age is context, not failure.\n"
+            "     TICK-387: a corroborated correction can ask for one too. Freshness only --\n"
+            "     the pin, its tier and every check on it are exactly what they were. */\n"
+            "  let nudge='';\n"
+            "  if((p.tier==='est' && aged) || p.relook){\n"
+            '    nudge = `<div class="nudge">\n'
+            '      <div class="n-h">Could you take another look?</div>\n'
+            "      <span class=\"n-age\">${iconSVG('clock',13,'var(--amber-ink)')} ${p.relook?'Neighbors asked for a fresh look':'Estimated '+ageLabel(p.date)}</span>\n"
+        ),
+    ),
+    Op(
         name="map_data",
         why="GET /map/data merged into the embedded pins, so the map shows published scans",
         kind="insert_before",
@@ -309,6 +423,15 @@ WIRING_REQUIRED: list[str] = [
     "r.status===503 && assessed",
     "function loadLiveMap(){",
     "PHOTO_API+b.image_keys[0]",
+    "const CORRECT_API = '/correct';",
+    "fetch(CORRECT_API+'/mine'",
+    "fetch(CORRECT_API,{method:'POST'",
+    "function loadMyCorrections(){",
+    "Opened without a server \u2014 a correction cannot be sent from here",
+    "Couldn't send \u2014 ",
+    "Your note joins a <b>review queue</b> a person works through",
+    "if((p.tier==='est' && aged) || p.relook){",
+    "p.relook = pin.needs_relook===true",
 ]
 
 # ...and none of these. The design source is worked on against a deployed host and a
@@ -317,6 +440,11 @@ WIRING_FORBIDDEN: list[str] = [
     "fly.dev",
     "raw.githubusercontent.com",
     "phone prototype",
+    # The design seeded "My corrections" with worked examples, and the send button
+    # appended to the same array. Either one puts a note in front of a person that
+    # the server has never heard of, which is TICK-387 in a single line.
+    "corrections.unshift(",
+    "seeded with three worked examples",
 ]
 
 

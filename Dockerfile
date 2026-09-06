@@ -31,9 +31,9 @@ COPY data/published_scans.jsonl /app/data/published_scans.jsonl
 RUN pip install --no-cache-dir ".[server]"
 
 ENV PORT=8080
-# Three things this app writes at run time, and the container filesystem is replaced on every
-# deploy. The two below are pointed at the volume declared in fly.toml, so what a phone
-# published outlives the next deploy. The third is knowingly ephemeral -- see below.
+# Four things this app writes at run time, and the container filesystem is replaced on every
+# deploy. The three below are pointed at the volume declared in fly.toml, so what a phone
+# published outlives the next deploy. The fourth is knowingly ephemeral -- see below.
 #
 # This comment used to say scans were the only state written here. They were not, and the claim
 # was load-bearing: it is what made an ephemeral claims path look like nothing was missing.
@@ -44,6 +44,12 @@ ENV FRONTDOOR_SCANS=/data/scans.jsonl
 # The map goes on showing Owner-confirmed pins backed by claims that no longer exist, and
 # `load_claims` answers a missing file with an empty list, so nothing anywhere reports it.
 ENV FRONTDOOR_CLAIMS=/data/claims.jsonl
+# Community corrections (TICK-387). A person photographs a door that has changed, writes what
+# they saw and presses Send. Before this line existed there was no endpoint at all and the note
+# died in the browser; an ephemeral path here would be the quieter version of the same defect --
+# the note is received, the sender is told so truthfully, and the next deploy erases it with
+# nothing anywhere reporting that a queue of unread reports went away.
+ENV FRONTDOOR_CORRECTIONS=/data/corrections.jsonl
 # NOT redirected: `POST /labels` appends to data/labels.csv inside the container and those rows
 # are lost on the next deploy. That is a known and documented limitation of the first phone-label
 # version (TICK-282, docs/server-deploy.md), not an oversight of this line -- download them before

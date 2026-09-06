@@ -2632,10 +2632,10 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
         <div class="whatsnext">
           <div class="wn-h">What happens next</div>
           <ul class="next-list">
-            <li><span class="nl-dot"><span class="ic" data-icon="clock" data-size="12" aria-hidden="true"></span></span><span>Your note becomes a <b>dated source</b> on this entrance's receipt &mdash; "Neighbor correction &middot; today."</span></li>
+            <li><span class="nl-dot"><span class="ic" data-icon="clock" data-size="12" aria-hidden="true"></span></span><span>Your note joins a <b>review queue</b> a person works through. Nothing on the map changes until it has been read.</span></li>
             <li><span class="nl-dot"><span class="ic" data-icon="filter" data-size="12" aria-hidden="true"></span></span><span><b>Earlier evidence stays.</b> Nothing is erased; the receipt shows every source with its date.</span></li>
             <li><span class="nl-dot"><span class="ic" data-icon="check" data-size="12" aria-hidden="true"></span></span><span>If sources disagree, the card says <b>information differs</b> and invites a new scan. No blame, no red.</span></li>
-            <li><span class="nl-dot"><span class="ic" data-icon="bell" data-size="12" aria-hidden="true"></span></span><span>You'll hear back only if <b>"A correction of yours gets a response"</b> is on in Notifications.</span></li>
+            <li><span class="nl-dot"><span class="ic" data-icon="bell" data-size="12" aria-hidden="true"></span></span><span>Its status is under <b>My corrections</b> &mdash; in review, then reviewed. We do not send a message about it yet.</span></li>
           </ul>
         </div>
         <div class="scan-actions">
@@ -4751,12 +4751,14 @@ function cardHTML(p){
     </div>`;
   }
 
-  /* re-check nudge: stale estimates ask gently -- age is context, not failure */
+  /* re-check nudge: stale estimates ask gently -- age is context, not failure.
+     TICK-387: a corroborated correction can ask for one too. Freshness only --
+     the pin, its tier and every check on it are exactly what they were. */
   let nudge='';
-  if(p.tier==='est' && aged){
+  if((p.tier==='est' && aged) || p.relook){
     nudge = `<div class="nudge">
       <div class="n-h">Could you take another look?</div>
-      <span class="n-age">${iconSVG('clock',13,'var(--amber-ink)')} Estimated ${ageLabel(p.date)}</span>
+      <span class="n-age">${iconSVG('clock',13,'var(--amber-ink)')} ${p.relook?'Neighbors asked for a fresh look':'Estimated '+ageLabel(p.date)}</span>
       <div class="n-p">A fresh photo helps everyone plan with confidence.</div>
       <div class="card-actions">
         <button class="btn marigold" data-act="recheck" style="min-height:var(--tap)">Re-check entrance</button>
@@ -5772,15 +5774,69 @@ document.getElementById('trust-ladder').innerHTML = `
 const cNote=document.getElementById('correct-note');
 let correctTarget=null, corrDoneTarget=null;
 const clockSVG=(c)=>iconSVG('clock',12,c||'currentColor');
-/* session-local, seeded with three worked examples so the Corrections tab has history to show */
-const corrections=[
-  {name:'DeSano Pizzeria Napoletana', what:'Entrance details', note:'The door now has a lever handle, not a knob.',
-   when:'Sep 4', status:'review', statusLabel:'In review', sub:'Reviewed with the community'},
-  {name:'Royal Blue Grocery', what:'Auto door button', note:'There is a push-plate opener on the left post.',
-   when:'Aug 21', status:'added', statusLabel:'Added as a source', sub:'On the receipt as \u201cNeighbor correction \u00b7 Aug 21\u201d'},
-  {name:'Jo\u2019s Coffee (Downtown)', what:'Which entrance', note:'A side ramp on the W 2nd St side leads to the door.',
-   when:'Aug 12', status:'photo', statusLabel:'Needs a photo', sub:'Add a photo so neighbors can see it'}
-];
+/* ===================== corrections: the server's state, not a local echo =====================
+   The design source seeded this list with three worked examples and the send button pushed a
+   fourth into it. Nothing left the browser: the note appeared under "My corrections", which is
+   what made it look received, and it died when the tab closed. That is TICK-387.
+
+   So the list is not seeded and is not written by the send button. It is READ from the server:
+     POST /correct           the suggestion itself (correct-send.js)
+     GET  /correct/mine      this contributor's own corrections and their real status,
+                             identified by the same X-Frontdoor-Contributor token the scan
+                             path uses. 200 {corrections:[{correction_id, place_name,
+                             category, scope, note, created_at, status, has_photo}]}
+   Statuses are the server's: received (in the queue), reviewed, declined. A correction never
+   changes a verdict, so none of these is one — they say where the note is, not what is true
+   about the door.
+
+   With no server (a file:// open) the list stays empty and says so, because there is nothing
+   to read it from; a failed request says the list may be out of date rather than showing an
+   empty tab as though nothing had ever been sent. */
+const CORRECT_API = '/correct';
+const corrections=[];
+let correctionsFetch=null;
+const CORRECTION_STATE={
+  received:{cls:'review', label:'In review', sub:'In the review queue — a person reads every note'},
+  reviewed:{cls:'added',  label:'Reviewed',  sub:'A reviewer has read this note'},
+  declined:{cls:'photo',  label:'Closed',    sub:'Reviewed and closed — nothing on the map changed'}
+};
+const CORRECTION_CATEGORY={
+  entrance_features:'Entrance features',
+  business_identity:'Business name or location',
+  photo_issue:'Photo issue',
+  other:'Something else'
+};
+const CORRECTION_SCOPE={this_entrance:'this entrance', other_entrance:'a different entrance of this business'};
+function correctionWhen(iso){
+  const d=new Date(String(iso||''));
+  if(isNaN(d)) return '';
+  const days=Math.floor((Date.now()-d.getTime())/86400000);
+  if(days<=0) return 'Today';
+  if(days===1) return 'Yesterday';
+  return d.toLocaleDateString(undefined,{month:'short',day:'numeric'});
+}
+/* one server record -> the row shape renderCorrections draws */
+function correctionRow(c){
+  const st=CORRECTION_STATE[c.status]||CORRECTION_STATE.received;
+  const what=(CORRECTION_CATEGORY[c.category]||c.category||'Correction')
+    +' · '+(CORRECTION_SCOPE[c.scope]||'this entrance')
+    +(c.has_photo?' · photo attached':'');
+  return {name:c.place_name||'Entrance', what, note:c.note||'', when:correctionWhen(c.created_at),
+          status:st.cls, statusLabel:st.label, sub:st.sub};
+}
+function loadMyCorrections(){
+  if(!HAS_SERVER || correctionsFetch) return;
+  correctionsFetch = fetch(CORRECT_API+'/mine',{headers:{'X-Frontdoor-Contributor':contributorToken()}})
+    .then(r=>r.ok?r.json():Promise.reject(r.status))
+    .then(j=>{
+      if(!j||!Array.isArray(j.corrections)) return;
+      corrections.length=0;
+      j.corrections.forEach(c=>corrections.push(correctionRow(c)));
+      renderCorrections();
+    })
+    .catch(()=>{ toast("Couldn't reach the server — this list may be out of date"); })
+    .then(()=>{ correctionsFetch=null; });
+}
 cNote.addEventListener('input',()=>document.getElementById('correct-count').textContent=cNote.value.length);
 function renderCorrections(){
   const inReview=corrections.filter(c=>c.status==='review').length;
@@ -5817,32 +5873,85 @@ function setCorrectError(on){
   else { cNote.removeAttribute('aria-describedby'); cNote.removeAttribute('aria-invalid'); }
 }
 cNote.addEventListener('input',()=>{ if(cNote.value.trim()) setCorrectError(false); });
-document.getElementById('btn-correct-send').addEventListener('click',()=>{
+/* "Send suggestion" posts to POST /correct, and a failure says so.
+
+   The design source's handler pushed the note into a local array and went straight to the
+   "Correction submitted" screen — a success screen for something that had not been sent.
+   This is the same honesty rule the scan path got when it used to show fabricated verdicts:
+   the confirmation screen is only ever reached by a request the server answered 201, and
+   every other outcome stays on the sheet, says what happened, and lets the person retry.
+
+   multipart/form-data: place_id (or lat + lng + name), category, scope, note, and an
+   optional single photo — privacy-processed on the server before anything persists.
+   No entrance_id: map places are place ids, not frontdoor entrance ids (the server refuses
+   a sealed one either way). The contributor token is the same header the scan path sends. */
+function correctionCategory(){
+  return ['entrance_features','business_identity','photo_issue','other'][document.getElementById('correct-what').selectedIndex] || 'other';
+}
+function correctionScope(){
+  return document.getElementById('correct-which').selectedIndex===1 ? 'other_entrance' : 'this_entrance';
+}
+async function postCorrection(note, file){
+  const fd=new FormData();
+  const p=correctTarget;
+  if(p && p.id) fd.append('place_id', String(p.id));
+  if(p && p.name) fd.append('name', p.name);
+  if(p && typeof p.lat==='number'){ fd.append('lat', String(p.lat)); fd.append('lng', String(p.lng)); }
+  fd.append('category', correctionCategory());
+  fd.append('scope', correctionScope());
+  fd.append('note', note);
+  if(file) fd.append('photo', file, file.name||'correction.jpg');
+  const ctl=('AbortController' in window) ? new AbortController() : null;
+  const timer=setTimeout(()=>{if(ctl)ctl.abort();},45000);
+  let r, j;
+  try{
+    r=await fetch(CORRECT_API,{method:'POST',body:fd,
+      headers:{'X-Frontdoor-Contributor':contributorToken()},
+      signal:ctl?ctl.signal:undefined});
+    j=await r.json().catch(()=>({}));
+  }catch(e){ clearTimeout(timer); return {ok:false, detail:'this phone could not reach the server'}; }
+  clearTimeout(timer);
+  if(r.ok && j && j.received) return {ok:true, body:j};
+  return {ok:false, detail:errorText(j, r.status)};
+}
+document.getElementById('btn-correct-send').addEventListener('click',async ()=>{
+  const btn=document.getElementById('btn-correct-send');
   const note=cNote.value.trim();
   const cpf=document.getElementById('correct-photo');
-  const hasPhoto=!!(cpf && cpf.files && cpf.files.length);
-  if(!note && !hasPhoto){
+  const file=(cpf && cpf.files && cpf.files[0]) || null;
+  if(!note && !file){
     setCorrectError(true);
     cNote.focus();
     announceUI('Correction not sent. Tell us what you noticed, or add a photo.');
     return;
   }
   setCorrectError(false);
-  corrections.unshift({
-    name: correctTarget ? correctTarget.name : 'Entrance',
-    what: document.getElementById('correct-what').value + ' \u00b7 ' + document.getElementById('correct-which').value.toLowerCase(),
-    note, when:'Just now', status:'review', statusLabel:'In review', sub:'Reviewed with the community'
-  });
-  renderCorrections();
+  if(!HAS_SERVER){
+    /* opened from a file:// URL: no relative POST can go anywhere. Saying "sent" here is
+       exactly the defect this ticket is about, so it says the opposite. */
+    toast('Opened without a server — a correction cannot be sent from here');
+    announceUI('Correction not sent. This page was opened without a server.');
+    return;
+  }
+  btn.disabled=true; btn.textContent='Sending…';
+  let out;
+  try{ out=await postCorrection(note, file); }
+  finally{ btn.disabled=false; btn.textContent='Send suggestion'; }
+  if(!out.ok){
+    toast("Couldn't send — "+out.detail);
+    announceUI('Correction not sent. '+out.detail+'. Your note is still here — try again.');
+    return;   /* the sheet stays open with the note and photo intact, so nothing is lost */
+  }
   corrDoneTarget = correctTarget;
   document.getElementById('corr-done-biz').innerHTML =
     `<span class="cr-icon">${iconSVG('store',20,'var(--purple-ink)')}</span>
      <div><div class="cr-name">${esc(correctTarget?correctTarget.name:'This entrance')}</div>
      <span class="cr-sub">${esc(correctTarget?(correctTarget.addr||entranceSub(correctTarget)):'')}</span>
-     ${note?`<span class="cr-sub" style="color:var(--ink);font-style:italic;margin-top:var(--sp-2)">\u201c${esc(note)}\u201d</span>`:''}</div>`;
+     ${note?`<span class="cr-sub" style="color:var(--ink);font-style:italic;margin-top:var(--sp-2)">“${esc(note)}”</span>`:''}</div>`;
   cNote.value=''; setCorrectError(false); document.getElementById('correct-count').textContent='0';
-  const cp=document.getElementById('correct-photo'); if(cp) cp.value='';
+  if(cpf) cpf.value='';
   const cpl=document.getElementById('correct-photo-label'); if(cpl) cpl.textContent='Choose a photo';
+  loadMyCorrections();      /* the tab shows what the server holds, including this one */
   closeSheets();
   goScreen('screen-corr-done');
 });
@@ -6071,8 +6180,8 @@ function showScreen(id){
   document.getElementById('phone').setAttribute('data-chrome',
     (id==='screen-map'||id==='ob-welcome'||id==='ob-splash'||id==='scan-capture'||hasDarkHead) ? 'dark' : 'light');
   currentScreen=id;
-  if(id==='screen-profile'){ renderSaved(); renderCorrections(); renderYourScans(); }
-  if(id==='screen-contrib') renderYourScans();
+  if(id==='screen-profile'){ renderSaved(); renderCorrections(); renderYourScans(); loadMyCorrections(); }
+  if(id==='screen-contrib'){ renderYourScans(); loadMyCorrections(); }
   if(id==='screen-saved') renderSaved();
   if(id==='screen-notif') renderNotifs();
   if(id==='ow-overview') renderOwnerOverview();
@@ -7490,7 +7599,8 @@ function toast(msg){
    marks verified (its Scanned tier) takes the server's verdicts, count and date, and a pin this
    page does not know is added. A place the server still lists as not-yet-checked keeps the
    embedded detail, which is the same estimate with its evidence text. No server, or a
-   dataset_error, leaves the embedded pins exactly as they are. */
+   dataset_error, leaves the embedded pins exactly as they are.
+   needs_relook rides along on a pin: freshness only, never a state and never a verdict. */
 const OBS_TO_V = {visible:'present', not_visible:'not_visible'};
 const inBBox = loc => loc.lat>=BBOX.lat0-0.001 && loc.lat<=BBOX.lat1+0.001 && loc.lng>=BBOX.lng0-0.001 && loc.lng<=BBOX.lng1+0.001;
 function critFromChecklist(checklist, keymap){
@@ -7506,6 +7616,12 @@ function mergeServerPin(pin, base){
   const scanned = pin.state==='verified_accessible';
   const p = base || {id:String(pin.place_id), name:pin.name||'Entrance', lat:pin.location.lat, lng:pin.location.lng, crit:{}, tier:'est', date:pin.imagery_date||null};
   if(!base) places.push(p);
+  /* TICK-387: corroborated corrections say the world may have moved. It is a FRESHNESS
+     flag and nothing else -- the tier, the state and every check below are read from the
+     same pin exactly as before -- and the card turns it into the existing
+     "Could you take another look?" nudge, which asks for a photo and claims nothing. */
+  p.relook = pin.needs_relook===true;
+  p.relookSince = pin.relook_since||null;
   if(scanned){
     if(p.tier==='est') p.tier='scan';
     p.live=true;

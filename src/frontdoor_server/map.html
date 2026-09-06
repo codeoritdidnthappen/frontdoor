@@ -851,6 +851,10 @@ async function init() {
   }
   if (payload.osm_error) problems.push("accessibility provenance is missing");
   if (payload.commons_error) problems.push("photo attribution is missing");
+  // Corrections only ever ask for a re-look, so an unreadable store never makes
+  // this map say something wrong — it makes it quietly stop asking. Reported for
+  // the same reason as the rest: the loss is otherwise visible to nobody.
+  if (payload.corrections_error) problems.push("re-look requests could not be loaded");
   var incomplete = problems.length
     ? "This map is incomplete — " + problems.join("; ") + "."
     : "";
