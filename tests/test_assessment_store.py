@@ -22,6 +22,8 @@ writing. `docs/server-deploy.md` and the pull request both say so, and
 import hashlib
 import io
 import json
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -45,6 +47,7 @@ from frontdoor.screening import (
     CRITERIA_KEYS,
     FAILURE_REJECTED,
     FAILURE_REFUSED,
+    FAILURE_TRUNCATED,
     PROMPT_RESOURCE,
     ImageAssessment,
     ScreeningConfig,
@@ -272,8 +275,10 @@ def test_a_stored_answer_is_distinguishable_from_a_fresh_one(store_path):
     assert "served_from_store" not in second.reference()
 
 
-def test_first_write_wins_so_the_answer_never_changes_after_it_is_given(store_path):
-    """Two concurrent misses can both append. The answer given first stands."""
+def test_a_key_with_two_lines_still_answers_with_the_first(store_path):
+    """Not the concurrency case -- that is the two-thread test below. This is
+    the reader: if a key ever has two lines, every read picks the same one, so
+    an answer cannot change after it has been stored."""
     engine = SamplingEngine()
     first = recall_or_assess(engine, [b"photo"], path=store_path)
     duplicate = new_assessment_record(
@@ -292,32 +297,198 @@ def test_first_write_wins_so_the_answer_never_changes_after_it_is_given(store_pa
     assert served.assessment.criteria["ramp_or_bevel"]["verdict"] == "present"
 
 
+def test_two_requests_racing_on_one_photograph_get_the_same_answer(store_path):
+    """The window the store could not close by reading alone.
+
+    Two requests for one photograph arriving TOGETHER both miss, and without a
+    lock both call the model and both return their OWN sample. First-wins on
+    the read does not save them: the two answers have already been handed out,
+    and if one was a publish, its scan record durably carries verdicts the
+    store will never serve again. The deployed server is one worker with two
+    threads and the app posts /screen then /screen/publish with the same
+    frames, so this is reachable rather than theoretical.
+
+    The engine here BLOCKS inside the call until both threads have entered
+    recall_or_assess, so the race is forced rather than hoped for.
+    """
+    entered = threading.Barrier(2, timeout=10)
+
+    class RacingEngine(SamplingEngine):
+        def assess_images_integrated(self, images, *, media_types=None):
+            # Only the thread that wins the lock reaches here; hold it long
+            # enough that the loser is definitely waiting.
+            time.sleep(0.2)
+            return super().assess_images_integrated(images, media_types=media_types)
+
+    engine = RacingEngine()
+    results = []
+    lock = threading.Lock()
+
+    def submit():
+        entered.wait()
+        recall = recall_or_assess(engine, [b"photo"], path=store_path)
+        with lock:
+            results.append(recall)
+
+    threads = [threading.Thread(target=submit) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+
+    assert len(results) == 2
+    assert engine.call_count == 1, "the same photograph was assessed twice"
+    assert results[0].assessment.criteria == results[1].assessment.criteria
+    assert results[0].assessed_at == results[1].assessed_at
+    assert sorted(recall.served_from_store for recall in results) == [False, True]
+    assert len(load_assessment_store(store_path).records) == 1
+
+
+def test_the_key_lock_table_does_not_grow_with_every_photograph(store_path):
+    """A lock per key, dropped when the last waiter leaves. A dict that kept
+    one entry per image ever seen would be a slow leak in a long-lived worker."""
+    engine = SamplingEngine()
+    for index in range(5):
+        recall_or_assess(engine, [f"photo-{index}".encode()], path=store_path)
+    assert assessment_store._key_locks == {}
+
+
+def test_two_different_photographs_do_not_wait_on_each_other(store_path):
+    """The lock is per key, so a slow assessment of one door cannot serialize
+    the queue behind an unrelated one."""
+    engine = SamplingEngine()
+    with assessment_store._assessing("some-other-key"):
+        recall = recall_or_assess(engine, [b"photo"], path=store_path)
+    assert recall.served_from_store is False
+    assert engine.call_count == 1
+
+
+def test_a_record_that_cannot_say_when_it_was_assessed_is_not_served(store_path):
+    """A stored answer with a null timestamp is the defect wearing the fix's
+    clothes: `served_from_store: true` with nothing saying when, and that null
+    written into a durable scan record."""
+    engine = SamplingEngine()
+    assessment_store._append_jsonl(store_path, new_assessment_record(
+        image_sha256=content_digest([b"photo"])[0],
+        image_digests=[image_digest(b"photo")],
+        engine_version=engine_version(engine.config.model),
+        model=engine.config.model,
+        prompt_sha256=prompt_digest(),
+        assessed_at=None,
+        assessment=assessment_with("absent"),
+    ))
+    recall = recall_or_assess(engine, [b"photo"], path=store_path)
+    assert recall.served_from_store is False
+    assert recall.assessed_at is not None
+    # And the good line written behind it is what every later request gets.
+    later = recall_or_assess(engine, [b"photo"], path=store_path)
+    assert later.served_from_store is True
+    assert later.assessed_at == recall.assessed_at
+
+
 # --- what is never frozen ----------------------------------------------------
 
 
-@pytest.mark.parametrize("assessment, why", [
+#: Assessments that produce NO public verdict: both endpoints answer 502 on
+#: each of these, so nothing public came of the call.
+NOTHING_PUBLIC = [
     (ImageAssessment(criteria=None, latency_s=0.5, error="boom",
                      failure=FAILURE_REFUSED), "a refusal"),
-    (assessment_with("present", failure=FAILURE_REJECTED, error="rejected"),
-     "a rejected reply"),
-    (assessment_with("present", face_check="unknown"),
-     "a privacy audit that never answered"),
+    (ImageAssessment(criteria=None, latency_s=0.5, error="truncated",
+                     failure=FAILURE_TRUNCATED), "a truncation"),
     (ImageAssessment(criteria={key: {"verdict": None} for key in CRITERIA_KEYS},
                      latency_s=0.5, ada_checks=ok_ada_checks()),
-     "no verdict at all"),
+     "a criteria dict whose every field was refused"),
     (ImageAssessment(criteria={"ramp_or_bevel": {"verdict": "present"}},
                      latency_s=0.5, ada_checks=None),
-     "refused ADA checks"),
-])
-def test_a_failed_call_is_never_stored(assessment, why, store_path):
-    """A failure of the CALL frozen into the store is a transient fault made
-    permanent -- and a photograph quarantined forever on one missing key."""
+     "ADA checks the validator threw away"),
+]
+
+#: Assessments both endpoints DO publish. Each of these is a verdict a
+#: contributor is shown, so each must be keyed.
+PUBLISHED_ANYWAY = [
+    (assessment_with("present"), "a clean answer"),
+    (assessment_with("present", failure=FAILURE_REJECTED, error="rejected",
+                     rejected_attempts=1),
+     "a rejected reply whose other criteria were recovered (TICK-399)"),
+    (assessment_with("not_visible", face_check="unknown"),
+     "a quarantined request, whose verdicts /screen still returns"),
+]
+
+
+@pytest.mark.parametrize("assessment, why", NOTHING_PUBLIC,
+                         ids=lambda value: str(value)[:40])
+def test_a_call_that_produced_no_public_verdict_is_never_stored(
+        assessment, why, store_path):
+    """Storing one would serve a permanent 502 for that photograph, and
+    re-asking costs nothing public because nothing public came of it."""
     assert not is_storable(assessment), why
     engine = SamplingEngine(assessments=[assessment, assessment_with("absent")])
     recall_or_assess(engine, [b"photo"], path=store_path)
     assert load_assessment_store(store_path).records == []
     assert recall_or_assess(engine, [b"photo"], path=store_path).served_from_store is False
     assert engine.call_count == 2, "a failure was served back instead of re-asked"
+
+
+@pytest.mark.parametrize("assessment, why", PUBLISHED_ANYWAY,
+                         ids=lambda value: str(value)[:40])
+def test_anything_the_endpoints_publish_is_keyed(assessment, why, store_path):
+    """The defect the first draft of this store had.
+
+    `is_storable` required `failure is None`, while /screen/publish's gate is
+    only "criteria and at least one verdict". A reply whose `handrails` verdict
+    came back in the ADA vocabulary is field-recovered and carries
+    FAILURE_REJECTED WITH criteria -- a normal TICK-399 outcome. Both endpoints
+    publish it; the store refused to keep it; so the same photograph was
+    re-sampled on every submission and could give two different PUBLIC
+    verdicts. Anything good enough to show a contributor is good enough to key.
+    """
+    assert is_storable(assessment), why
+    engine = SamplingEngine(assessments=[assessment, assessment_with("absent")])
+    first = recall_or_assess(engine, [b"photo"], path=store_path)
+    second = recall_or_assess(engine, [b"photo"], path=store_path)
+    assert second.served_from_store is True
+    assert engine.call_count == 1
+    assert second.assessment.criteria == first.assessment.criteria
+
+
+def test_a_recalled_rejected_reply_still_says_it_was_rejected(store_path):
+    """Keying it must not launder it. TICK-399's distinction survives the
+    round trip: a criterion thrown away by validation is still reported as
+    thrown away, never as the model having looked and abstained."""
+    rejected = assessment_with("present", failure=FAILURE_REJECTED,
+                               error="ResponseRejected: handrails",
+                               rejected_attempts=1)
+    engine = SamplingEngine(assessments=[rejected])
+    recall_or_assess(engine, [b"photo"], path=store_path)
+    served = recall_or_assess(engine, [b"photo"], path=store_path).assessment
+    assert served.failure == FAILURE_REJECTED
+    assert served.rejected_attempts == 1
+    assert served.error == "ResponseRejected: handrails"
+
+
+def test_a_not_visible_verdict_survives_the_round_trip(store_path):
+    """not_visible is never absent (the honesty rule), including through the
+    store: a recalled abstention must come back as one."""
+    engine = SamplingEngine(assessments=[assessment_with("not_visible")])
+    recall_or_assess(engine, [b"photo"], path=store_path)
+    served = recall_or_assess(engine, [b"photo"], path=store_path).assessment
+    assert {entry["verdict"] for entry in served.criteria.values()} == {"not_visible"}
+
+
+def test_the_store_keeps_exactly_what_the_endpoint_publishes(store_path):
+    """The invariant behind both parametrized tests above, stated once.
+
+    `is_storable` and the endpoints' success gate must agree case by case. If
+    the store is ever made stricter than the gate, the assessments in the gap
+    are published and re-sampled -- which is the defect. If it is ever made
+    looser, a 502 becomes permanent for that photograph.
+    """
+    for assessment, why in NOTHING_PUBLIC + PUBLISHED_ANYWAY:
+        engine = SamplingEngine(assessments=[assessment])
+        client = make_client(engine, store=FakeStore())
+        answered = post_screen(client, real_jpeg()).status_code == 200
+        assert answered is is_storable(assessment), why
 
 
 def test_a_hand_corrupted_record_is_a_miss_not_a_crash(store_path):

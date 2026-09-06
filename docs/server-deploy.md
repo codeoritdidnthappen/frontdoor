@@ -327,9 +327,25 @@ A stored answer is visibly a stored answer. Both endpoints report, inside `asses
 and `served_from_store`. A published scan record carries the same three durable fields under
 `assessment_ref`, so a publication made today from an answer produced last week says so.
 
-Not stored: an assessment that failed. A refusal, a truncation, a transport error, a rejected
-reply, or a privacy audit that never answered is a failure of the **call**, and freezing one into
-the store would make a transient fault permanent. Those re-ask on the next submission.
+**What is stored is exactly what the endpoints make public**, no more and no less. An answer good
+enough to show a contributor has to be keyed, or that photograph is re-sampled on every submission
+and can give two different public verdicts — which is the defect the store exists to end, surviving
+inside it. That deliberately includes an assessment carrying `FAILURE_REJECTED` alongside recovered
+criteria: a reply whose `handrails` verdict came back in the eight-check ADA vocabulary keeps its
+other three criteria and is published with `verdict_failures` beside them (TICK-399), so it is
+keyed too. `failure` and `rejected_attempts` round-trip through the record, so a recalled answer
+still reports honestly that a field was thrown away.
+
+Not stored: a call that produced **no public verdict** — no criteria, a criteria dict whose every
+field was refused, or ADA checks the validator threw away. Each makes both endpoints answer 502, so
+nothing public came of it and re-asking costs nothing public, while storing it would serve a
+permanent 502 for that photograph.
+
+Two requests for the same photograph arriving **at the same moment** are held apart by a per-key
+lock: the second waits for the first, then reads its answer, so one photograph is assessed once
+even in the window before anything is written — and for one assessment's spend rather than two.
+The lock is in-process. It closes the window on the machine we deploy (`--workers 1 --threads 2`);
+**raising the worker count would reopen it**, and the fix then is an atomic create, not a lock.
 
 A re-scan with a **new** photograph is a miss, and that is correct — it is new evidence about the
 same door and it gets assessed. This store makes one photograph give one answer; it does not make
