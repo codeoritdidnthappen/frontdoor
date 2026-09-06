@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 112 104" role="img" aria-labelledby="title desc">
+  <title id="title">Owner-confirmed entrance pin</title><desc id="desc">EntryMap Owner-confirmed entrance pin asset.</desc>
+  
+  <circle cx="35" cy="15" r="4.5" fill="#5B35F5" stroke="#5B35F5" stroke-width="2"/><circle cx="48" cy="15" r="4.5" fill="#5B35F5" stroke="#5B35F5" stroke-width="2"/><circle cx="61" cy="15" r="4.5" fill="#5B35F5" stroke="#5B35F5" stroke-width="2"/><path d="M48 6c-21 0-36 15.7-36 35.3 0 25.1 24.3 45.8 33.5 52.8a4 4 0 0 0 5 0C59.7 87.1 84 66.4 84 41.3 84 21.7 69 6 48 6Z" fill="#5B35F5" stroke="#FFFFFF" stroke-width="4" /><g fill="none" stroke="#FFFFFF" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"><path d="M28 38h40l-4-12H32Z"/><path d="M30 38v30h36V38M42 68V51h13v17"/><path d="M28 38c0 5 6 7 10 3 4 4 9 4 13 0 4 4 9 4 13 0 4 4 10 2 10-3"/></g><circle cx="88" cy="28" r="14" fill="#FFFFFF" stroke="#4020B5" stroke-width="3"/><g fill="none" stroke="#4020B5" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="m81 28 5 5 9-11"/></g>
+</svg>

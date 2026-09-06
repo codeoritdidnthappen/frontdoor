@@ -1,0 +1,87 @@
+{
+  "color": {
+    "indigo900": "#17103D",
+    "indigo800": "#211054",
+    "violet600": "#5B35F5",
+    "violet800": "#4020B5",
+    "sky400": "#69B7FF",
+    "sky700": "#1266A6",
+    "marigold400": "#FFBF24",
+    "amber700": "#9A5700",
+    "lavender100": "#F2EEFF",
+    "lavender200": "#E2DAFF",
+    "white": "#FFFFFF"
+  },
+  "type": {
+    "familyUI": "Atkinson Hyperlegible, Aptos, Arial, sans-serif",
+    "familyWordmark": "Nunito Sans, Aptos, Arial, sans-serif",
+    "weightRegular": 400,
+    "weightMedium": 600,
+    "weightBold": 750
+  },
+  "radius": {
+    "small": 8,
+    "medium": 14,
+    "large": 22,
+    "pill": 999
+  },
+  "spacing": {
+    "1": 4,
+    "2": 8,
+    "3": 12,
+    "4": 16,
+    "5": 24,
+    "6": 32,
+    "7": 48
+  },
+  "motion": {
+    "scanDurationMs": 7000,
+    "pinDropDurationMs": 620,
+    "pinDropEasing": "cubic-bezier(.2,.9,.25,1.2)",
+    "reducedMotion": "instant end state"
+  },
+  "pinHierarchy": {
+    "overviewPx": {
+      "estimated": 32,
+      "scannedOnSite": 36,
+      "ownerConfirmed": 40
+    },
+    "streetPx": {
+      "estimated": 40,
+      "scannedOnSite": 44,
+      "ownerConfirmed": 48
+    },
+    "selectedPx": {
+      "estimated": 52,
+      "scannedOnSite": 56,
+      "ownerConfirmed": 60
+    },
+    "receiptPx": {
+      "estimated": 24,
+      "scannedOnSite": 28,
+      "ownerConfirmed": 32
+    },
+    "liveScanDropPx": 64,
+    "clusterPx": 48,
+    "zIndex": {
+      "cluster": 10,
+      "estimated": 20,
+      "scannedOnSite": 30,
+      "ownerConfirmed": 40,
+      "matched": 50,
+      "selected": 60,
+      "liveScanDrop": 70
+    }
+  },
+  "interaction": {
+    "touchTargetMinPx": 48,
+    "focusRingPx": 3,
+    "focusRingOffsetPx": 3,
+    "pressedScale": 0.97,
+    "sheetStopsPercent": [
+      18,
+      54,
+      92
+    ]
+  }
+}

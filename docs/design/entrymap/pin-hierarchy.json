@@ -1,0 +1,53 @@
+{
+  "principle": "Trust tier and contextual prominence are independent. Context may scale a pin but never changes its tier encoding.",
+  "sizes": {
+    "overviewPx": {
+      "estimated": 32,
+      "scannedOnSite": 36,
+      "ownerConfirmed": 40
+    },
+    "streetPx": {
+      "estimated": 40,
+      "scannedOnSite": 44,
+      "ownerConfirmed": 48
+    },
+    "selectedPx": {
+      "estimated": 52,
+      "scannedOnSite": 56,
+      "ownerConfirmed": 60
+    },
+    "receiptPx": {
+      "estimated": 24,
+      "scannedOnSite": 28,
+      "ownerConfirmed": 32
+    },
+    "liveScanDropPx": 64,
+    "clusterPx": 48,
+    "zIndex": {
+      "cluster": 10,
+      "estimated": 20,
+      "scannedOnSite": 30,
+      "ownerConfirmed": 40,
+      "matched": 50,
+      "selected": 60,
+      "liveScanDrop": 70
+    }
+  },
+  "overlays": {
+    "selected": "white keyline + indigo outer line + 12% lift; preserve tier color and icon",
+    "goodMatch": "solid halo",
+    "partialMatch": "dashed halo",
+    "unknownMatch": "dotted halo",
+    "freshness": "small amber clock; never recolor the pin",
+    "texasRecord": "receipt provenance only; never placed on the pin face"
+  },
+  "overlapOrder": [
+    "live scan drop",
+    "selected",
+    "needs match",
+    "owner-confirmed",
+    "scanned on-site",
+    "estimated",
+    "clusters"
+  ]
+}
