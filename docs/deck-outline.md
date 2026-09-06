@@ -63,8 +63,10 @@ this project no longer asks.
 **Content:**
 - Current question, one sentence: **can photos from James's iPhone 17 Pro screen an entrance for visible
   accessibility features — ramp/bevel, handrails, accessible door hardware, signage — reliably
-  enough to power a map disabled people can trust?** Measured against human-labeled ground
-  truth.
+  enough to power a map disabled people can trust?** Measured against a reference reading of the
+  same photographs — see the integrity slide (Section 4), which says who made that reference and
+  what it therefore can and cannot establish. **Do not say "human-labeled ground truth" here.** It
+  was said, it was wrong, and #437 records why.
 - Who it's for, one line: **~70M US adults (28.7%) have a functional disability; only ~3-6M use
   wheelchairs** (CDC BRFSS 2022, persona research in the #73 thread). The generic wheelchair
   icon is the wrong abstraction, numerically — so the product filters by what *you* need.
@@ -146,9 +148,26 @@ per-criterion verdicts) and answer "how do we know you didn't peek?" on the same
   {{seal_audit: SEAL_AUDIT.log git history — commit hash, timestamp, and operator of the one unsealing run, exists only after the freeze-day run}}
   {{split_seed_and_proportions: src/frontdoor/split_seed.json + split.py, sealed/calib/dev share actually realized over the captured entrance IDs}}
 
-**Speaker-note stub:** This slide carries the project's single integrity claim. Point at
-SEAL_AUDIT.log's commit hash on screen — don't just assert the split held, show the artifact
-that proves it, live if the deck software allows a linked screenshot.
+- **What our reference is, said before anyone asks.** The answer key the accuracy figures are
+  scored against was produced by **a model reading the same photographs the engine reads**, not by
+  a person. So those figures measure **agreement between two readings of the same evidence**, and
+  the two share their blind spots: whatever a vision model systematically misreads in a photograph
+  — a push plate as a pull bar, a same-tone platform as flat — it misreads the same way when it
+  writes the key. An agreement figure is real and worth showing. It is not accuracy, and this deck
+  does not call it that. Source: #437.
+  {{human_sample_accuracy: the stratified operator-labelled sample in #302 — N, the estimate, and its interval; the number this deck should lead with once it exists}}
+- **What the seal buys us that this does not.** The sealed entrances were labelled **before the
+  engine ever ran on them** — the split has never been assessed. So for that subset the answer key
+  was written before the exam, which removes one contamination route entirely. It does not remove
+  the shared-blind-spot problem, and the slide should say both halves rather than the flattering
+  one.
+
+**Speaker-note stub:** This slide carries the project's integrity claims, and there are now two of
+them, not one. Point at SEAL_AUDIT.log's commit hash on screen — don't just assert the split held,
+show the artifact that proves it, live if the deck software allows a linked screenshot. Then say
+the reference limitation **in your own words, unprompted**. A weakness the presenter raises first
+is a credential; the same weakness surfaced by a question in Q&A is a wound. This one is
+findable by anyone who reads the repository, so it will be found.
 
 ---
 
