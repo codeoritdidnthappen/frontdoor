@@ -2,11 +2,12 @@ import SwiftUI
 
 /// The EntryMap lockup, from the approved artwork.
 ///
-/// **Not the asset library's own `svg/brand/mark-primary.svg`.** That file is a degraded
-/// reproduction of the logo and it is worth naming why, because it looks plausible in a folder
-/// listing. It draws the doorway straight onto the violet pin with no white disc behind it, and it
-/// strokes the middle of the three arcs in `#5B35F5` — the pin's own violet — so the mark shows one
-/// arc where the logo has three. The approved artwork has a white disc and three distinct arcs:
+/// **Not a reconstruction of the mark.** An earlier library shipped `svg/brand/mark-primary.svg`,
+/// a degraded reproduction of the logo, and it is worth naming why, because it looked plausible in
+/// a folder listing. It drew the doorway straight onto the violet pin with no white disc behind it,
+/// and it stroked the middle of the three arcs in the pin's own violet, so the mark showed one
+/// arc where the logo has three. The current library ships no vector or recoloured brand variant at
+/// all, for exactly that reason. The approved artwork has a white disc and three distinct arcs:
 /// sky on the left, white across the top, marigold on the right. A copy of it is committed at
 /// `docs/brand/entrymap-approved-logo.png` and it is what this view renders.
 ///

@@ -35,8 +35,10 @@ struct EntryMapBadge: View {
             }
         }
 
-        /// Approved pairings only: 15.66:1 on lavender, 17.83:1 on white, 10.81:1 on marigold,
-        /// 6.42:1 white on violet — which is why the badge label is set semibold.
+        /// Approved pairings only: 17.30:1 `ink` on `card`, 15.64:1 `ink` on `lavender100`,
+        /// 9.60:1 `ink` on `marigold400`, 7.38:1 `onViolet` on `violet600` — which now clears the
+        /// report's 7:1 body floor, so the semibold label is legibility rather than the thing
+        /// holding that last pairing up.
         var label: Color {
             switch self {
             case .ownerConfirmed: return EntryMapPalette.onViolet
@@ -56,10 +58,10 @@ struct EntryMapBadge: View {
 
         var iconTint: Color {
             switch self {
-            case .estimated: return EntryMapPalette.sky700
+            case .estimated: return EntryMapPalette.informationInk
             case .scannedOnSite, .freshnessRecheck: return EntryMapPalette.indigo900
             case .ownerConfirmed: return EntryMapPalette.card
-            case .freshnessCurrent: return EntryMapPalette.violet800
+            case .freshnessCurrent: return EntryMapPalette.deepAccent
             }
         }
     }
@@ -95,7 +97,7 @@ struct EntryMapConfidenceDots: View {
             ForEach(0..<3, id: \.self) { index in
                 Circle()
                     .fill(index < filled ? EntryMapPalette.violet600 : EntryMapPalette.card)
-                    .overlay(Circle().strokeBorder(EntryMapPalette.violet800, lineWidth: 2))
+                    .overlay(Circle().strokeBorder(EntryMapPalette.deepAccent, lineWidth: 2))
                     .frame(width: 12, height: 12)
             }
         }

@@ -1,17 +1,17 @@
 :root {
-  --entrymap-indigo900: #17103D;
-  --entrymap-indigo800: #211054;
-  --entrymap-violet600: #5B35F5;
-  --entrymap-violet800: #4020B5;
-  --entrymap-sky400: #69B7FF;
-  --entrymap-sky700: #1266A6;
-  --entrymap-marigold400: #FFBF24;
-  --entrymap-amber700: #9A5700;
-  --entrymap-lavender100: #F2EEFF;
-  --entrymap-lavender200: #E2DAFF;
+  --entrymap-indigo900: #1E1142;
+  --entrymap-indigo800: #28165A;
+  --entrymap-violet600: #4F34DB;
+  --entrymap-violet800: #38239B;
+  --entrymap-sky400: #76BCFD;
+  --entrymap-sky700: #1B6599;
+  --entrymap-marigold400: #FDB327;
+  --entrymap-amber700: #8C5400;
+  --entrymap-lavender-path: #CFBCEE;
+  --entrymap-lavender100: #F5F2FC;
+  --entrymap-lavender200: #E8E1F7;
   --entrymap-white: #FFFFFF;
   --entrymap-font-ui: Atkinson Hyperlegible, Aptos, Arial, sans-serif;
-  --entrymap-font-wordmark: Nunito Sans, Aptos, Arial, sans-serif;
 }
 
 @media (prefers-reduced-motion: reduce) {

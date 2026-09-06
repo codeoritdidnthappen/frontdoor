@@ -65,11 +65,12 @@ enum EntryMapIcon: String, CaseIterable {
 
     /// The colour the master draws the icon in.
     ///
-    /// Every icon but one is `#4020B5`, which is ``EntryMapPalette/subduedInk``. "Not yet seen" is
-    /// `#1266A6` — sky700 — because it is an informational state rather than a claim, and the
-    /// library never lets a state be told by colour alone: it is also the only dashed icon.
+    /// Every icon but one is `#38239B`, which is ``EntryMapPalette/subduedInk``. "Not yet seen" is
+    /// `#1B6599` — ``EntryMapPalette/informationInk`` — because it is an informational state rather
+    /// than a claim, and the library never lets a state be told by colour alone: it is also the
+    /// only dashed icon.
     var defaultTint: Color {
-        self == .featureUnknown ? EntryMapPalette.sky700 : EntryMapPalette.subduedInk
+        self == .featureUnknown ? EntryMapPalette.informationInk : EntryMapPalette.subduedInk
     }
 
     var glyphs: [EntryMapGlyph] {

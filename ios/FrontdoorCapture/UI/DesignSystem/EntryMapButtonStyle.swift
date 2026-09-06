@@ -23,7 +23,7 @@ struct EntryMapButtonStyle: ButtonStyle {
         /// No chrome at all. "Suggest a correction" and its kind.
         ///
         /// Light grounds only. This is the one role that paints no fill, so its `subduedInk`
-        /// label lands on whatever is behind it -- 1.78:1 on `darkGround`, which is unreadable.
+        /// label lands on whatever is behind it -- 1.55:1 `subduedInk` on `darkGround`, which is unreadable.
         /// A control over live video or a photograph takes `primary`, `secondary` or `scan`,
         /// each of which brings a ground with it.
         case quiet
@@ -140,13 +140,14 @@ struct EntryMapButtonStyle: ButtonStyle {
         }
 
         private var fillColour: Color {
-            // The library's `primary-unavailable` draws #E2DAFF. The prose calls it "pale
-            // lavender"; the artwork picks the deeper of the two pale lavenders, which is what
-            // keeps a 17.83:1 indigo label from floating.
+            // The library's `primary-unavailable` draws #E8E1F7. The prose calls it "pale
+            // lavender"; the artwork picks the deeper of the two UI lavenders — not the pin path's
+            // lavender, which is not a surface — and that is what keeps the indigo label from
+            // floating at 13.63:1 `ink` on `lavender200`.
             if isUnavailable { return EntryMapPalette.lavender200 }
             switch role {
             case .primary:
-                return pressed ? EntryMapPalette.violet800 : EntryMapPalette.violet600
+                return pressed ? EntryMapPalette.deepAccent : EntryMapPalette.violet600
             case .secondary:
                 return pressed ? EntryMapPalette.lavender100 : EntryMapPalette.card
             case .scan:
@@ -161,9 +162,9 @@ struct EntryMapButtonStyle: ButtonStyle {
             if isUnavailable { return EntryMapPalette.lavender200 }
             switch role {
             case .primary:
-                return pressed ? EntryMapPalette.violet800 : EntryMapPalette.violet600
+                return pressed ? EntryMapPalette.deepAccent : EntryMapPalette.violet600
             case .secondary:
-                return pressed ? EntryMapPalette.violet800 : EntryMapPalette.violet600
+                return pressed ? EntryMapPalette.deepAccent : EntryMapPalette.violet600
             case .scan:
                 return pressed ? EntryMapPalette.indigo900 : EntryMapPalette.marigold400
             case .quiet:

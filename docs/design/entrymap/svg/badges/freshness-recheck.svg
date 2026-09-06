@@ -2,5 +2,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 280 48" role="img" aria-labelledby="title desc">
   <title id="title">Re-check freshness badge</title><desc id="desc">EntryMap Re-check freshness badge asset.</desc>
   
-  <rect x="2" y="2" width="276" height="44" rx="22" fill="#FFBF24" stroke="#17103D" stroke-width="2"/><g fill="none" stroke="#17103D" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="25" cy="24" r="10"/><path d="M25 18v7l4 2"/></g><text x="46" y="30" font-family="Atkinson Hyperlegible, Aptos, Arial, sans-serif" font-size="15" font-weight="650" fill="#17103D">Scanned 14 months ago — re-check</text>
+  <rect x="2" y="2" width="276" height="44" rx="22" fill="#FDB327" stroke="#1E1142" stroke-width="2"/><g fill="none" stroke="#1E1142" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="25" cy="24" r="10"/><path d="M25 18v7l4 2"/></g><text x="46" y="30" font-family="Atkinson Hyperlegible, Aptos, Arial, sans-serif" font-size="15" font-weight="650" fill="#1E1142">Scanned 14 months ago — re-check</text>
 </svg>
