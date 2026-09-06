@@ -8465,6 +8465,15 @@ function loadLiveMap(){
     .then(j=>{
       if(!j||!Array.isArray(j.pins)) return;
       if(j.dataset_error) console.info('EntryMap: /map/data carries no dataset ('+j.dataset_error+') — embedded pins plus any published scans');
+      /* TICK-370: this page is where a contributor looks after publish. scans_error
+         means the store their scan went into is unreachable, so the pin they expect
+         is simply not there. Toast the subsystem; the server's string quotes a path
+         and this page is public. dataset_error stays console.info — embedded pins
+         still draw. */
+      if(j.scans_error) toast('Published scans could not be loaded');
+      else if(j.scans_skipped) toast(j.scans_skipped===1
+        ? '1 published scan could not be read'
+        : j.scans_skipped+' published scans could not be read');
       const byId=new Map(places.map(p=>[p.id,p]));
       let merged=0;
       j.pins.forEach(pin=>{
