@@ -18,13 +18,27 @@ struct ScreeningResponse: Decodable, Equatable {
         /// either and keeps the text.
         let confidence: String?
         let evidence: String?
+        /// Why this criterion has no verdict, when the server REFUSED the model's answer for it
+        /// (TICK-399). Nil on every criterion the model answered in vocabulary, and on one it was
+        /// never asked about. A nil verdict with this set is an answer that was thrown away, which
+        /// is a different fact from a feature nobody could see -- and the phone must be able to
+        /// say which, for the same reason `not_visible` is never shown as `absent`.
+        let rejected: String?
+        /// The out-of-vocabulary word the server refused, shown verbatim and never mapped onto a
+        /// verdict. `not_applicable` is not `absent` and is not `not_visible`.
+        let rejectedValue: String?
 
-        private enum CodingKeys: String, CodingKey { case verdict, confidence, evidence }
+        private enum CodingKeys: String, CodingKey {
+            case verdict, confidence, evidence, rejected
+            case rejectedValue = "rejected_value"
+        }
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: CodingKeys.self)
             verdict = try container.decodeIfPresent(String.self, forKey: .verdict)
             evidence = try container.decodeIfPresent(String.self, forKey: .evidence)
+            rejected = try container.decodeIfPresent(String.self, forKey: .rejected)
+            rejectedValue = try container.decodeIfPresent(String.self, forKey: .rejectedValue)
             if let number = try? container.decode(Int.self, forKey: .confidence) {
                 confidence = String(number)
             } else {
@@ -33,10 +47,13 @@ struct ScreeningResponse: Decodable, Equatable {
             }
         }
 
-        init(verdict: String?, confidence: String?, evidence: String?) {
+        init(verdict: String?, confidence: String?, evidence: String?,
+             rejected: String? = nil, rejectedValue: String? = nil) {
             self.verdict = verdict
             self.confidence = confidence
             self.evidence = evidence
+            self.rejected = rejected
+            self.rejectedValue = rejectedValue
         }
     }
 

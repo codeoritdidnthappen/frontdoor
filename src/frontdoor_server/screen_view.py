@@ -45,7 +45,13 @@ from importlib import resources
 from flask import Blueprint, Response, current_app, request
 
 from frontdoor.faceblur import FaceDetectorError, InvalidImageError, process_upload
-from frontdoor.screening import ScreeningError, ScreeningEngine, compute_ada_screening, integrated_summary
+from frontdoor.screening import (
+    ScreeningError,
+    ScreeningEngine,
+    any_verdict,
+    compute_ada_screening,
+    integrated_summary,
+)
 from frontdoor.split import InvalidEntranceId, assign_split, canonical_entrance_id
 
 ALLOWED_IMAGE_TYPES = ("image/jpeg", "image/png", "image/webp")
@@ -232,7 +238,12 @@ def screen():
         )
     latency_ms = round((time.perf_counter() - t0) * 1000)
 
-    if assessment.criteria is None:
+    # `criteria is not None` is no longer the same question as "did the engine
+    # produce anything" (TICK-399): recovery can return a dict whose every
+    # field was refused. Publishing that writes a record with four null
+    # verdicts, and a scan record takes a pin to the verified tier whatever it
+    # says -- a green pin from an assessment that never happened.
+    if assessment.criteria is None or not any_verdict(assessment):
         return _error(
             "screening engine failure",
             f"the integrated assessment failed: {assessment.error or 'unknown error'}",

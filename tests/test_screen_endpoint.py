@@ -728,3 +728,30 @@ def test_tick_399_a_clean_reply_reports_no_failure_and_one_attempt():
     assert body["assessment"]["failure"] is None
     assert body["assessment"]["attempts"] == 1
     assert body["assessment"]["rejected_attempts"] == 0
+
+
+def test_tick_399_a_reply_whose_every_criterion_was_refused_is_a_failure():
+    """Recovery that recovered nothing answers like the refusal it was.
+
+    `criteria is not None` stopped being the same question as "did the engine
+    produce anything": a dict whose every field was refused carries exactly as
+    much as a wholly refused reply. Answering 200 with four null verdicts would
+    hand a caller an assessment that never happened.
+    """
+    criteria = {
+        key: {"verdict": None, "confidence": None, "evidence": None,
+              "rejected": "ada_check_value", "rejected_value": "not_applicable"}
+        for key in CRITERIA_KEYS
+    }
+    engine = FakeEngine(ImageAssessment(
+        criteria=criteria, latency_s=0.5,
+        error="ResponseRejected: criterion handrails has invalid verdict",
+        failure=FAILURE_REJECTED, attempts=2, rejected_attempts=2,
+        face_check="clear", ada_checks=ok_ada_checks(),
+    ))
+    response = post_screen(make_client(engine), [image_part()])
+    assert response.status_code == 502
+    body = response.get_json()
+    assert "ResponseRejected" in body["detail"]
+    # No verdict of any kind reaches the caller.
+    assert "present" not in json.dumps(body)

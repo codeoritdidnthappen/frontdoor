@@ -617,6 +617,38 @@ def criterion_verdict(assessment, key):
     return verdict, None
 
 
+def any_verdict(assessment):
+    """True when at least one criterion of this assessment carries a verdict.
+
+    The question every publishing path has to ask since recovery arrived
+    (TICK-399). `criteria is not None` used to mean "the engine produced
+    verdicts", because a refused reply carried nothing at all. It can now be a
+    dict whose every field was refused separately, which produces exactly as
+    much as a refused reply did: nothing. A path that keeps using the old
+    check publishes a scan with four null verdicts and no way to tell that
+    from a door nobody could see.
+    """
+    return any(
+        criterion_verdict(assessment, key)[0] is not None
+        for key in CRITERIA_KEYS
+    )
+
+
+def rejected_criteria(assessment):
+    """Criterion -> why its answer was refused, for the criteria that were.
+
+    Empty for a clean assessment. What a published record carries so a null
+    verdict in it can say whether the engine could not see the feature or its
+    answer was thrown away.
+    """
+    criteria = assessment.criteria or {}
+    return {
+        key: entry["rejected"]
+        for key, entry in criteria.items()
+        if isinstance(entry, dict) and entry.get("rejected")
+    }
+
+
 def aggregate_assessments(assessments):
     """Majority verdict per criterion across views, with the flip-rate shown.
 

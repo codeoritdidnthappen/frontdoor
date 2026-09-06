@@ -732,3 +732,60 @@ def test_the_map_publishes_no_negative_state_or_wording(map_payload):
     for phrase in ("cannot get", "may not be able", "not accessible",
                    "unlikely", "inaccessible"):
         assert phrase not in served
+
+
+class RecoveredScreening:
+    """All four verdicts, out of a reply that was still refused somewhere.
+
+    What the engine hands back when it recovered every criterion but the ADA
+    half of the same reply was refused: usable verdicts, and an error beside
+    them.
+    """
+
+    mode = "integrated"
+    summary = {key: FakeSummary() for key in CRITERIA_KEYS}
+
+    class _Assessment:
+        criteria = {key: {"confidence": 60} for key in CRITERIA_KEYS}
+        face_check = "clear"
+        error = "ResponseRejected: model must not supply aggregate fields"
+        failure = FAILURE_REJECTED
+        attempts = 2
+        rejected_attempts = 2
+
+    assessments = (_Assessment(),)
+
+
+class RecoveredThenCleanEngine:
+    """First call recovers everything but is still rejected; second is clean."""
+
+    def __init__(self):
+        self.calls = 0
+
+    def screen_entrance_integrated(self, entrance_id, images):
+        self.calls += 1
+        return RecoveredScreening() if self.calls == 1 else FakeScreening()
+
+
+def test_tick_399_a_clean_attempt_beats_a_recovered_one_with_the_same_verdicts(
+        no_image_work, tmp_path):
+    """Verdict count alone is not enough to pick the attempt to publish.
+
+    A first attempt that recovered all four criteria out of a rejected reply
+    carries the same four verdicts as a clean second attempt -- and an error.
+    Keeping it publishes a record that says the assessment failed when a clean
+    answer was in hand, and blocks the cache write, so the next run pays for
+    the whole entrance again.
+    """
+    engine = RecoveredThenCleanEngine()
+    results = assess_publishable(
+        {"E-001": ["E-001-1"]},
+        get_capture=lambda capture_id: FakeCapture(capture_id),
+        engine=engine,
+        cache_dir=tmp_path,
+    )
+    assert engine.calls == 2
+    result = results["E-001"]
+    assert result["error"] is None
+    assert result["failure"] is None
+    assert (tmp_path / "E-001.json").is_file()  # cached, so a resume is free

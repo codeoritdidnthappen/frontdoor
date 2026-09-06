@@ -137,12 +137,34 @@ struct ScreeningChecksView: View {
                     .entryMapText(EntryMapTypography.callout)
                     .foregroundStyle(EntryMapPalette.subduedInk)
             }
+        } else if let criterion, let rejected = criterion.rejected {
+            // The server answered and its answer for THIS criterion was refused (TICK-399). Not
+            // the same as a criterion nobody could see, and certainly not the same as absent: the
+            // word the model used is shown verbatim, never mapped onto a verdict.
+            HStack(spacing: EntryMapLayout.space2) {
+                EntryMapIconView(icon: .info, size: 22, tint: EntryMapPalette.freshness)
+                Text("answer rejected")
+                    .entryMapText(EntryMapTypography.subheading)
+                    .foregroundStyle(EntryMapPalette.ink)
+            }
+            Text(Self.rejectionNote(value: criterion.rejectedValue, reason: rejected))
+                .entryMapText(EntryMapTypography.callout)
+                .foregroundStyle(EntryMapPalette.subduedInk)
         } else {
             // The server answered, and said nothing about this criterion. Not the same as absent.
             Text("no verdict")
                 .entryMapText(EntryMapTypography.subheading)
                 .foregroundStyle(EntryMapPalette.subduedInk)
         }
+    }
+
+    /// What a refused criterion says under the heading. The model's own word is repeated
+    /// verbatim and framed as not being a verdict, so nothing here can be read as one.
+    private static func rejectionNote(value: String?, reason: String) -> String {
+        if let value, !value.isEmpty {
+            return "the model answered \(value), which is not a verdict"
+        }
+        return "the model's answer for this criterion was not usable (\(reason))"
     }
 
     /// The verdict is carried by an icon and the word, never by a colour.

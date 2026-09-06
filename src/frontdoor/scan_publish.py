@@ -77,6 +77,7 @@ from frontdoor.screening import (
     ScreeningConfig,
     ScreeningEngine,
     SpendCapError,
+    rejected_criteria,
 )
 from frontdoor.split import InvalidEntranceId, assign_split, canonical_entrance_id
 
@@ -239,6 +240,9 @@ def _assessment_result(entrance_id, screening, captures, faces_blurred):
         "failure": assessment.failure,
         "attempts": assessment.attempts,
         "rejected_attempts": assessment.rejected_attempts,
+        # Which criteria carry NOT_ASSESSED because their answer was refused,
+        # as opposed to never having been seen. Published on the record.
+        "verdict_failures": rejected_criteria(assessment),
     }
 
 
@@ -249,6 +253,20 @@ def verdict_count(result):
         1 for key in CRITERIA_KEYS
         if verdicts.get(key) not in (None, NOT_ASSESSED)
     )
+
+
+def _result_rank(result):
+    """How good an attempt is; bigger is better, compared as a tuple.
+
+    Verdicts first, then a clean reply over a refused one. The second term is
+    not a tie-break nicety: an attempt that recovered all four criteria out of
+    a reply whose ADA half was refused still carries an error, and a result
+    carrying an error is never cached -- so preferring it over a later clean
+    attempt with the same four verdicts costs the next run the whole entrance
+    again, and publishes a record that says it failed when a clean answer was
+    in hand.
+    """
+    return (verdict_count(result), 0 if result.get("error") else 1)
 
 
 def _fit_for_the_model(image_bytes):
@@ -360,7 +378,7 @@ def assess_publishable(entrances, *, get_capture, engine, cache_dir=None,
             # engine recovers the criteria a rejected reply did validate, a
             # later attempt can carry FEWER verdicts than an earlier one, and
             # publishing the last would throw away ground the first held.
-            if best is None or verdict_count(result) > verdict_count(best):
+            if best is None or _result_rank(result) > _result_rank(best):
                 best = result
             # A run over 46 entrances takes tens of minutes; without this the
             # only sign of a failing assessment is a cache entry that never
@@ -619,6 +637,7 @@ def build_records(assessments, matches):
             image_keys=[],
             contributor=SCAN_CONTRIBUTOR,
             entrance_id=entrance_id,
+            verdict_failures=result.get("verdict_failures"),
         ))
     return records
 
