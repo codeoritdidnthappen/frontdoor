@@ -326,6 +326,20 @@ OPS: list[Op] = [
         ),
     ),
     Op(
+        name="corr_row_says_what_happens",
+        why=(
+            "tapping a correction said it stays on the receipt as its own dated source. It "
+            "does not: it reaches a review queue and changes nothing until a person reads "
+            "it. Same rule as the confirmation screen above"
+        ),
+        kind="replace",
+        anchor="toast('Each correction stays on the receipt as its own dated source')",
+        replacement=(
+            "toast('Corrections stay human \u2014 a person reads every note before "
+            "anything changes')"
+        ),
+    ),
+    Op(
         name="contrib_tab_reads_the_server",
         why="opening My contributions asks the server for the real status of each note",
         kind="replace",
@@ -431,6 +445,7 @@ WIRING_REQUIRED: list[str] = [
     "Couldn't send \u2014 ",
     "Your note joins a <b>review queue</b> a person works through",
     "if((p.tier==='est' && aged) || p.relook){",
+    "Corrections stay human \u2014 a person reads every note before anything changes",
     "p.relook = pin.needs_relook===true",
 ]
 
@@ -445,6 +460,7 @@ WIRING_FORBIDDEN: list[str] = [
     # the server has never heard of, which is TICK-387 in a single line.
     "corrections.unshift(",
     "seeded with three worked examples",
+    "stays on the receipt as its own dated source",
 ]
 
 

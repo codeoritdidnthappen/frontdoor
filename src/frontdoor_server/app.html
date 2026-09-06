@@ -5857,7 +5857,7 @@ function renderCorrections(){
     </button></li>`;
   }).join('') : `<li><p class="sheet-p">Nothing yet \u2014 every card has <b>Suggest a correction</b>.</p></li>`;
   el.querySelectorAll('[data-corr-note]').forEach(b=>b.addEventListener('click',
-    ()=>toast('Each correction stays on the receipt as its own dated source')));
+    ()=>toast('Corrections stay human — a person reads every note before anything changes')));
 }
 /* ROUND 6: an empty correction used to submit and land in My corrections as a
    dated source with nothing in it. Both selects carry a default, so "send" with

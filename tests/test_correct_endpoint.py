@@ -171,6 +171,9 @@ def test_ac1_the_confirmation_screen_only_promises_what_the_server_does():
     # contributor is out of scope on #387.
     assert "Your note becomes a <b>dated source</b>" not in page
     assert "You'll hear back only if" not in page
+    # ...and neither does the row you tap in My corrections.
+    assert "stays on the receipt as its own dated source" not in page
+    assert "Corrections stay human — a person reads every note before anything changes" in page
 
 
 def test_a_correction_with_neither_a_note_nor_a_photo_is_refused(client, store_paths):
