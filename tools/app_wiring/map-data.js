@@ -26,7 +26,6 @@ function mergeServerPin(pin, base){
      same pin exactly as before -- and the card turns it into the existing
      "Could you take another look?" nudge, which asks for a photo and claims nothing. */
   p.relook = pin.needs_relook===true;
-  p.relookSince = pin.relook_since||null;
   if(scanned){
     if(p.tier==='est') p.tier='scan';
     p.live=true;

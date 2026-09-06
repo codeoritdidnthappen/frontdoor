@@ -48,9 +48,8 @@ function correctionRow(c){
   return {name:c.place_name||'Entrance', what, note:c.note||'', when:correctionWhen(c.created_at),
           status:st.cls, statusLabel:st.label, sub:st.sub};
 }
-function loadMyCorrections(){
-  if(!HAS_SERVER || correctionsFetch) return;
-  correctionsFetch = fetch(CORRECT_API+'/mine',{headers:{'X-Frontdoor-Contributor':contributorToken()}})
+function fetchMyCorrections(){
+  return fetch(CORRECT_API+'/mine',{headers:{'X-Frontdoor-Contributor':contributorToken()}})
     .then(r=>r.ok?r.json():Promise.reject(r.status))
     .then(j=>{
       if(!j||!Array.isArray(j.corrections)) return;
@@ -58,6 +57,15 @@ function loadMyCorrections(){
       j.corrections.forEach(c=>corrections.push(correctionRow(c)));
       renderCorrections();
     })
-    .catch(()=>{ toast("Couldn't reach the server — this list may be out of date"); })
-    .then(()=>{ correctionsFetch=null; });
+    .catch(()=>{ toast("Couldn't reach the server — this list may be out of date"); });
+}
+/* Queued, not dropped: the refresh fired right after a successful send would
+   otherwise be swallowed by a still-running one and the new note would not
+   appear until the tab was reopened. */
+function loadMyCorrections(){
+  if(!HAS_SERVER) return;
+  correctionsFetch = correctionsFetch
+    ? correctionsFetch.then(fetchMyCorrections, fetchMyCorrections)
+    : fetchMyCorrections();
+  correctionsFetch.then(()=>{ correctionsFetch=null; });
 }

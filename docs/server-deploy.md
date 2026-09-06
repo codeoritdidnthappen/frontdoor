@@ -366,11 +366,18 @@ that does not answer, fails the whole request and writes nothing at all, note in
 no partial success: a note is never stored without the photo somebody attached to it.
 
 **A correction never changes a verdict.** The one thing a *corroborated* correction can do is
-lower freshness: two or more distinct contributors reporting that a doorway changed, more
-recently than the row's own evidence date, sets `needs_relook` on that pin, which is what
-surfaces the app's existing "Could you take another look?" nudge. It asks for a photograph. It
-does not touch a status, a source, a criterion or the Green-or-Gray state, and it cannot add a
-pin.
+lower freshness: two or more distinct contributors, reporting *this* entrance, in a category
+that says the doorway changed (`entrance_features`, `business_identity`), more recently than the
+row's own evidence date, sets `needs_relook` on that pin — which is what surfaces the app's
+existing "Could you take another look?" nudge. It asks for a photograph. It does not touch a
+status, a source, a criterion or the Green-or-Gray state, and it cannot add a pin. A note about
+a *different* entrance of the same business, a photo complaint, an anonymous note, or a single
+reporter is a queue item and nothing more.
+
+**Nothing rate-limits `POST /correct`.** It is unauthenticated and the contributor token is
+minted in the browser, which is the same posture `POST /screen/publish` already has, and the
+same one it should be given if either is ever abused. `MAX_PER_CONTRIBUTOR` bounds the
+`/correct/mine` response, not the store.
 
 #### Working the queue
 

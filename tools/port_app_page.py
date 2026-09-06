@@ -447,6 +447,7 @@ WIRING_REQUIRED: list[str] = [
     "if((p.tier==='est' && aged) || p.relook){",
     "Corrections stay human \u2014 a person reads every note before anything changes",
     "p.relook = pin.needs_relook===true",
+    "function fetchMyCorrections(){",
 ]
 
 # ...and none of these. The design source is worked on against a deployed host and a

@@ -1592,10 +1592,11 @@ the before/after key diff against that list, so wiring a verdict up later fails 
 than shipping.
 
 What a correction MAY do is say the world moved. Two or more distinct contributors reporting a
-world-may-have-moved category (`entrance_features`, `business_identity`) against the same place,
-more recently than that row's own evidence date, marks it as needing a re-look — which surfaces
-the app's existing "Could you take another look?" nudge and asks for a photograph. One report
-cannot: a single anonymous note is exactly what one motivated person can produce for a
+world-may-have-moved category (`entrance_features`, `business_identity`) against *this* entrance
+of the same place, more recently than that row's own evidence date, marks it as needing a
+re-look — which surfaces the app's existing "Could you take another look?" nudge and asks for a
+photograph. A note about a different entrance of the same business does not: the nudge asks
+somebody to re-photograph THIS door. One report cannot either: a single anonymous note is exactly what one motivated person can produce for a
 competitor's door, and anonymous notes never corroborate each other because they are all one
 unidentified reporter. Contributor tokens are self-minted in the browser, so this raises the
 cost of manufacturing corroboration rather than preventing it; that is the right trade precisely

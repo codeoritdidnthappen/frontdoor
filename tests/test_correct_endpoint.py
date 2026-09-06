@@ -820,3 +820,92 @@ def test_two_reports_of_an_uncatalogued_doorway_share_a_key(store_paths, client)
     keys = {r["place_key"] for r in load_corrections(store_paths["corrections"])}
     assert len(keys) == 1
     assert keys.pop().startswith("correction:")
+
+
+# --- the review pass: failures this feature must not report as emptiness ------
+
+
+def test_an_unreadable_store_is_not_reported_as_no_corrections(
+    client, store_paths, monkeypatch
+):
+    """#387 inverted, and the worst way to fail it.
+
+    A note the server DID receive, drawn in the Contributions tab as one that
+    was never sent, is exactly the belief this endpoint exists to stop being
+    false. The read must say the list could not be read.
+    """
+    post_correct(client, form={"note": "mine"})
+    monkeypatch.setenv(
+        "FRONTDOOR_CORRECTIONS",
+        str(store_paths["tmp"] / "not-mounted" / "corrections.jsonl"),
+    )
+    response = client.get(
+        "/correct/mine", headers={"X-Frontdoor-Contributor": CONTRIBUTOR}
+    )
+    assert response.status_code == 503
+    assert response.get_json()["error"] == "correction not received"
+
+
+def test_the_store_errors_name_the_correction_store_not_the_scan_store(
+    client, store_paths, monkeypatch
+):
+    """The reader is the scan store's; its noun would send an operator to the
+    wrong file on the volume."""
+    monkeypatch.setenv(
+        "FRONTDOOR_CORRECTIONS",
+        str(store_paths["tmp"] / "not-mounted" / "corrections.jsonl"),
+    )
+    error = client.get("/map/data").get_json()["corrections_error"]
+    assert error and "corrections" in error and "scans" not in error
+
+
+def test_a_nameless_report_is_never_filed_against_a_nearby_named_business(
+    client, store_paths
+):
+    """A written complaint must not land on a business the reporter never named.
+
+    The scan merge matches by distance when a reference carries no name --
+    for a photograph that is the nearest plausible pin, for a correction it is
+    somebody's complaint attributed to a business they never mentioned, with
+    the dispute flag and, once corroborated, a public re-look line on that
+    business's pin.
+    """
+    response = client.post(
+        "/correct",
+        data={"place_id": "not-in-the-dataset", "lat": "40.0", "lng": "-75.0",
+              "category": "entrance_features", "note": "the ramp is gone"},
+        content_type="multipart/form-data",
+        headers={"X-Frontdoor-Contributor": CONTRIBUTOR},
+    )
+    assert response.status_code == 201
+    record = load_corrections(store_paths["corrections"])[0]
+    assert record["place_key"] != "ChIJexample"
+    assert _map_payload(client)["ChIJexample"].get("needs_relook") is not True
+
+
+def test_a_note_about_a_different_entrance_does_not_age_this_one(
+    client, store_paths
+):
+    for who in (CONTRIBUTOR, OTHER_CONTRIBUTOR):
+        assert post_correct(
+            client,
+            form={"scope": "other_entrance", "note": "the side door changed"},
+            contributor=who,
+        ).status_code == 201
+    assert _map_payload(client)["ChIJexample"].get("needs_relook") is not True
+    # ...but it is still in the queue for a person to read.
+    assert len(review_queue(load_corrections(store_paths["corrections"]))) == 2
+
+
+def test_the_sheets_own_wording_is_accepted_as_a_scope(client, store_paths):
+    post_correct(
+        client, form={"scope": "A different entrance of this business"}
+    )
+    assert load_corrections(store_paths["corrections"])[0]["scope"] == "other_entrance"
+
+
+def test_a_refresh_of_the_tab_is_queued_rather_than_dropped():
+    """A send followed immediately by a refresh must not lose the new note."""
+    page = create_app().test_client().get("/app").get_data(as_text=True)
+    assert "function fetchMyCorrections(){" in page
+    assert "correctionsFetch.then(fetchMyCorrections, fetchMyCorrections)" in page

@@ -19,13 +19,18 @@ The contract, stated precisely because the failure modes are the point:
     included. Fail-closed, and the person is told, because a correction whose
     photo silently vanished is the same lie in a smaller font.
   * Storage or record-store failure is a 503 that says the correction was NOT
-    received. There is no partial success: a note is never written without the
-    photo the person attached to it.
+    received. A note is never written without the photo the person attached to
+    it. The one asymmetry, the same one /screen/publish accepts: if the record
+    append fails after the object was stored, the processed bytes are left in
+    the bucket unreferenced. Unreferenced privacy-processed bytes are a tidying
+    problem; a note in a queue whose photo was never kept would be a lie to the
+    person who attached it.
   * Nothing here writes a verdict. The record is queue material; the only
     thing a correction can ever change on the map is freshness, and that
     happens in ``frontdoor.corrections.apply_relook`` under a corroboration
     rule, computed at read time by /map/data.
-  * Sealed entrances are refused (403) before any byte is read, exactly as
+  * Sealed entrances are refused (403) before the photo is read or
+    privacy-processed, and before anything is stored, exactly as
     /screen/publish refuses them.
 
 ``GET /correct/mine`` answers with the caller's OWN corrections and their real
@@ -58,7 +63,7 @@ from frontdoor.corrections import (
     CorrectionError,
     append_correction,
     corrections_for_contributor,
-    load_corrections,
+    load_correction_store,
     new_correction_record,
     new_image_key,
     now_iso,
@@ -258,8 +263,9 @@ def correct():
         except InvalidEntranceId as exc:
             return _error("invalid entrance_id", str(exc))
         if assign_split(entrance_id) == "sealed":
-            # Refused before a byte of the photo is read, for the same reason
-            # the publish path refuses it: the sealed split is evaluated once,
+            # Refused before the photo is read or processed, for the same
+            # reason the publish path refuses it: the sealed split is evaluated
+            # once,
             # at results freeze, and a correction against it is a channel for
             # information about a sealed doorway to reach the project early.
             return _error(
@@ -387,6 +393,19 @@ def my_corrections():
             f"GET /correct/mine needs the {CONTRIBUTOR_HEADER} header that the "
             "correction was sent with.",
         )
-    load = load_corrections(_corrections_path())
-    mine = corrections_for_contributor(load, contributor, MAX_PER_CONTRIBUTOR)
+    store = load_correction_store(_corrections_path())
+    if store.error is not None:
+        # An unreadable store answered as an empty list is #387 inverted: a
+        # note the server DID receive is drawn in the tab as one that was
+        # never sent, which is the exact belief this endpoint exists to stop
+        # being false. Say the list could not be read instead.
+        return _error(
+            "correction not received",
+            f"the correction store could not be read ({store.error}); this "
+            "list is not what the server holds. Retry.",
+            status=503,
+        )
+    mine = corrections_for_contributor(
+        store.records, contributor, MAX_PER_CONTRIBUTOR
+    )
     return {"corrections": [public_correction_view(r) for r in mine]}, 200

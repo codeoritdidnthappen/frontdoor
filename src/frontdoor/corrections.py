@@ -38,6 +38,10 @@ so this raises the cost of manufacturing corroboration rather than preventing
 it; that is acceptable precisely because the entire consequence is a freshness
 nudge that asks somebody to go and take a photograph.
 
+A report about "a different entrance of this business" does not count either:
+the nudge asks somebody to re-photograph THIS door, and a note about another
+one is a queue item rather than evidence about this entrance's age.
+
 A correction is also spent once the place is re-photographed: only corrections
 NEWER than the row's own evidence date count, so a re-look request is answered
 by a scan rather than sticking to the pin for good.
@@ -71,6 +75,7 @@ from __future__ import annotations
 
 import re
 import uuid
+from dataclasses import replace
 from datetime import datetime, timezone
 
 from frontdoor.map_states import STATE_VERIFIED, state_for_row
@@ -150,8 +155,13 @@ _CORRECTION_IMAGE_KEY_RE = re.compile(
 )
 _PHYSICAL_PREFIX = "open/"
 
-#: Bounded so one contributor cannot make the queue unreadable, and so the
-#: "my corrections" read is a bounded response.
+#: How many of a contributor's own corrections GET /correct/mine answers with.
+#: A bound on the RESPONSE, and deliberately not a claim about the store: the
+#: write path is unauthenticated, the contributor token is self-minted, and a
+#: per-token write cap would be defeated by minting a second token. What bounds
+#: the store is the same thing that bounds /screen/publish -- nothing yet. Said
+#: plainly here because a comment that implies a cap is how a missing one stays
+#: missing.
 MAX_PER_CONTRIBUTOR = 50
 
 
@@ -233,12 +243,27 @@ def place_key_for_ref(dataset, place_ref):
     against a place nobody can find, and the re-look would attach to a pin
     that is not the one the reporter was looking at.
 
+    One deliberate narrowing. _place_key's name guard only rejects a distance
+    match when BOTH names are non-empty, so a reference carrying coordinates
+    and no name matches whatever row happens to be within 40 m. For a scan
+    that is a photograph landing on its nearest plausible pin; for a
+    correction it is somebody's written complaint being filed against a
+    business they never named -- with the dispute flag, and the tier, and
+    (once corroborated) a public "Re-look requested" line on that business's
+    pin. So a nameless reference does not get to match by distance at all: it
+    resolves to its place_id, or to a stable key of its own.
+
     A reference that matches nothing on the map still gets a STABLE key, so
     the queue groups those reports together. It reaches no pin either way --
     apply_relook only ever writes onto a row that already exists.
     """
+    ref = dict(place_ref) if isinstance(place_ref, dict) else {}
+    name = ref.get("name")
+    if not (isinstance(name, str) and name.strip()):
+        ref.pop("lat", None)
+        ref.pop("lng", None)
     key = _place_key(dataset if isinstance(dataset, dict) else {},
-                     {"place_ref": place_ref, "scan_id": _UNMATCHED})
+                     {"place_ref": ref, "scan_id": _UNMATCHED})
     if key == f"scan:{_UNMATCHED}":
         return "correction:" + _slug(place_ref)
     return key
@@ -290,8 +315,17 @@ def append_correction(path, record):
 
 
 def load_correction_store(path):
-    """A ScanStoreLoad over the corrections file: records, error, skipped."""
-    return _load_jsonl(path)
+    """A ScanStoreLoad over the corrections file: records, error, skipped.
+
+    The reader is the scan store's, so its message says "scans unreadable".
+    That is the one word an operator acts on -- it would send them to
+    /data/scans.jsonl while /data/corrections.jsonl is the file in trouble --
+    so the noun is corrected here rather than left to mislead.
+    """
+    load = _load_jsonl(path)
+    if load.error:
+        return replace(load, error=load.error.replace("scans", "corrections", 1))
+    return load
 
 
 def load_corrections(path):
@@ -414,6 +448,11 @@ def relook_requests(dataset, corrections):
         if not isinstance(record, dict):
             continue
         if record.get("category") not in RELOOK_CATEGORIES:
+            continue
+        # "a different entrance of this business" is a report about a door
+        # this pin is not. The nudge asks somebody to re-photograph THIS one,
+        # so it is a queue item and not evidence about this entrance's age.
+        if record.get("scope") not in (None, SCOPE_THIS_ENTRANCE):
             continue
         when = _date(record.get("created_at"))
         if when is None:
