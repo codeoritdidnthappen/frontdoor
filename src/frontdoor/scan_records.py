@@ -170,12 +170,19 @@ def new_scan_record(*, place_ref, created_at, verdicts, confidences,
                     faces_blurred, quarantined_count, image_keys,
                     contributor=None, entrance_id=None,
                     capture_kind=None, attested=False, blur_regions=None,
-                    verdict_failures=None):
+                    verdict_failures=None, assessment_ref=None):
     """One scan record, with a fresh scan_id.
 
     blur_regions, when given, is one list per uploaded frame (upload order)
     of the {"x", "y", "w", "h"} rectangles the privacy pass pixelated in that
     frame (#350). Additive: records written before it carry no key.
+
+    assessment_ref, when given, names the assessment these verdicts came
+    from (TICK-435): the sha256 of the privacy-processed photograph, the
+    engine version that answered, and the timestamp of that answer. Since one
+    photograph has exactly one assessment, a publish can carry a verdict
+    produced earlier, and without this the record could not say so. Additive:
+    records written before it carry no key.
 
     verdict_failures maps a criterion to why the engine's answer for it was
     refused (TICK-399). A null verdict beside an entry here is an answer that
@@ -203,6 +210,8 @@ def new_scan_record(*, place_ref, created_at, verdicts, confidences,
         record["blur_regions"] = [list(regions) for regions in blur_regions]
     if verdict_failures:
         record["verdict_failures"] = dict(verdict_failures)
+    if assessment_ref:
+        record["assessment_ref"] = dict(assessment_ref)
     return record
 
 

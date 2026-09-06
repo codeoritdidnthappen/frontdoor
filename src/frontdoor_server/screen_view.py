@@ -36,6 +36,19 @@ guarantee: this endpoint holds image bytes in request-scoped locals only.
 Nothing here writes them to disk, object storage, or any other store (pinned
 by test_screen_endpoint), so a quarantined image needs no deletion step - its
 bytes die with the request.
+
+That guarantee is about BYTES, and TICK-435 leaves it exactly where it was.
+The assessment store this endpoint now consults keeps one line per photograph
+holding a sha256 and a verdict - no image data of either kind, pinned by
+test_assessment_store - so a quarantined image still needs no deletion step:
+what survives the request is a hash of bytes that were privacy-processed
+before they were hashed. What it buys is that the same photograph gets the
+same verdict. The model is sampled and cannot be told not to be (#394), so
+without a store a contributor could re-submit one photograph and be shown a
+different answer; the store makes the verdict a function of the photograph by
+construction. A hit makes no model call and books no spend, and says so in the
+response (`served_from_store`, with the ORIGINAL `assessed_at`) rather than
+letting a stored answer pass for a fresh one.
 """
 
 import os
@@ -44,6 +57,7 @@ from importlib import resources
 
 from flask import Blueprint, Response, current_app, request
 
+from frontdoor.assessment_store import recall_or_assess
 from frontdoor.faceblur import FaceDetectorError, InvalidImageError, process_upload
 from frontdoor.screening import (
     ScreeningError,
@@ -240,10 +254,20 @@ def screen():
         # about. `assess_images_integrated` records refusals and parse failures in the
         # returned assessment itself; anything that still escapes (spend cap, an injected
         # engine blowing up) is an upstream engine failure, named, not a bare 500.
-        assessment = engine.assess_images_integrated(
+        #
+        # Through the assessment store (TICK-435), so the verdict is a function
+        # of the photograph rather than of which sample the model drew. A hit
+        # returns the answer this exact set of processed frames already got
+        # from this exact engine, with its ORIGINAL timestamp, and makes no
+        # model call at all. Note the privacy pass above has already run: what
+        # is hashed is what the model saw, and no unprocessed byte is ever
+        # keyed on.
+        recall = recall_or_assess(
+            engine,
             [image for image, _ in payloads],
             media_types=[media_type for _, media_type in payloads],
         )
+        assessment = recall.assessment
     except Exception as exc:
         latency_ms = round((time.perf_counter() - t0) * 1000)
         return _error(
@@ -309,6 +333,13 @@ def screen():
             "failure": assessment.failure,
             "attempts": assessment.attempts,
             "rejected_attempts": assessment.rejected_attempts,
+            # TICK-435. Which photograph this is (sha256 of the PROCESSED
+            # bytes), which engine answered, when the answer was first
+            # produced, and whether it came from the store. A stored answer
+            # must be visibly a stored answer: reporting a recalled result as
+            # a fresh one is the same defect class as scoring a rejected
+            # response as an abstention.
+            **recall.provenance(),
         },
         "latency_ms": latency_ms,
         "faces_blurred": faces_blurred,

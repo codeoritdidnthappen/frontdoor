@@ -50,6 +50,7 @@ from datetime import datetime, timezone
 
 from flask import Blueprint, Response, current_app, request
 
+from frontdoor.assessment_store import recall_or_assess
 from frontdoor.claims import (
     CLAIMS_ENV,
     DEFAULT_CLAIMS_PATH,
@@ -335,9 +336,16 @@ def publish():
 
     t0 = time.perf_counter()
     try:
-        assessment = engine.assess_images_integrated(
-            payloads, media_types=["image/jpeg"] * len(payloads)
+        # Through the same assessment store /screen reads (TICK-435), and for
+        # the reason the two endpoints must share one: a published scan and a
+        # live re-check of the same photograph would otherwise be two samples
+        # of a sampled model and could disagree in public. One store, one
+        # answer. The privacy pass above has already run, so the key is a
+        # digest of what the model saw.
+        recall = recall_or_assess(
+            engine, payloads, media_types=["image/jpeg"] * len(payloads)
         )
+        assessment = recall.assessment
     except Exception as exc:
         latency_ms = round((time.perf_counter() - t0) * 1000)
         return _error(
@@ -396,6 +404,10 @@ def publish():
             "failure": assessment.failure,
             "attempts": assessment.attempts,
             "rejected_attempts": assessment.rejected_attempts,
+            # TICK-435: which photograph, which engine, when it was FIRST
+            # assessed, and whether this body carries a stored answer. A
+            # publish of a photograph assessed last week says so.
+            **recall.provenance(),
         },
         "latency_ms": latency_ms,
         "faces_blurred": faces_blurred,
@@ -487,6 +499,11 @@ def publish():
         capture_kind=capture_kind,
         attested=attested,
         blur_regions=blur_regions,
+        # The assessment this publication carries, named (TICK-435). Without
+        # it the record cannot say that it was published today from an answer
+        # produced earlier, and nothing durable ties the published verdicts to
+        # the photograph and engine that produced them.
+        assessment_ref=recall.reference(),
     )
     try:
         append_scan(os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH), record)

@@ -15,8 +15,9 @@ primary_region = "sjc"          # near WNAM, where the R2 buckets live (D-026)
 
 # A deploy replaces the container filesystem. Without this mount, what a phone published
 # survives until the next deploy and then vanishes, with nothing anywhere reporting that it
-# happened. The Dockerfile lists exactly what is pointed here -- community scans, owner claims
-# and community corrections -- and what is knowingly left ephemeral. One machine holds this
+# happened. The Dockerfile lists exactly what is pointed here -- community scans, owner claims,
+# community corrections and the one-assessment-per-photograph store -- and what is knowingly
+# left ephemeral. One machine holds this
 # volume, which matches the single-machine demo posture.
 [mounts]
   source = "frontdoor_data"
