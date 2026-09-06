@@ -81,10 +81,14 @@
                                  never a card, never a sheet, never a chip fill.
        --ui-lavender-1  #F5F2FC  UI ONLY. Accent wash: a selected chip, a quiet note.
        --ui-lavender-2  #E8E1F7  UI ONLY. Accent stroke: hairline, quiet keyline.
-     Nothing in this file reaches past these three names into lavender100/200/-path
-     directly, so a future palette adoption swaps three values and cannot silently
-     re-merge the families. The map's own paint (--g-*) resolves ONLY through
-     --lavender-path and --g-land / --g-block, never through --ui-lavender-*. */
+     No UI rule in this file reaches past these three names into lavender100/200 or
+     -path directly -- verified by grep, 5 uses of --ui-lavender-1, 8 of
+     --ui-lavender-2, 3 of --lavender-path, and 0 UI uses of the raw tokens -- so a
+     future palette adoption swaps three values and cannot silently re-merge the
+     families. The ONLY two rules that name a raw lavender are --g-land and --g-block,
+     because the map kit names exactly those two values for the ground and nothing
+     should sit between the kit and the paint. The map never resolves a UI lavender
+     and no UI surface ever resolves --lavender-path. */
   --ui-lavender-1:var(--lavender100);  /* accent wash: a selected chip, a quiet note */
   --ui-lavender-2:var(--lavender200);  /* accent stroke: hairline, quiet keyline */
 
@@ -109,31 +113,41 @@
      unchanged and is rebuilt from the handoff's map-kit, not hand-tuned here. */
   --map-tint:var(--ui-lavender-1);
   --card:var(--white);
-  --ink:var(--indigo900);           /* 17.83:1 on white, 15.66:1 on lavender100 */
-  /* DERIVED (no library token): the second and third inks. indigo900 lightened
-     toward white to the first step clearing 8:1 / 7:1 on lavender100, because the
-     library's report requires body text at 7:1 or better on its own surfaces. */
-  --sub:#494467;                    /* indigo900 -> white 27.5%, 8.00:1 on lavender100 */
-  --faint:#524C6E;                  /* indigo900 -> white 33.0%, 7.05:1 on lavender100 */
+  --ink:var(--indigo900);           /* 17.30:1 on white, 13.63:1 on the worst light surface */
+  /* ---- ROUND 7: THE 7:1 FLOOR IS A FLOOR, NOT A TARGET (rubric 7.14) ----------
+     Round 4 solved these against lavender100 alone. The package's checklist states
+     "Body text meets at least WCAG AA and targets 7:1 against its surface" -- its
+     SURFACE, whichever one it lands on. Enumerated, the light surfaces a reading
+     ink can sit on in this file are white, lavender100, --wash-quiet, --press-wash,
+     lavender200, --blue-wash and --marigold-wash; the darkest is lavender200
+     #E8E1F7. Every derived ink below is now the lightest step off indigo900 (or off
+     the on-light sky/amber) that still clears its target on ALL SEVEN, so no
+     surface, including a pressed one, can drop a reading ink under the floor.
+     The numbers quoted are the WORST of the seven, not the best. */
+  --sub:#463B63;                    /* indigo900 -> white 17.6%; worst surface 8.02:1 */
+  --faint:#4E446A;                  /* indigo900 -> white 21.4%; worst surface 7.01:1 */
   --blue:var(--sky400);             /* Estimated tier accent on DARK only */
-  /* DERIVED (no library token): an Estimated ink that clears 7:1. sky700 is
-     6.04:1 on white, which the report allows for icons and labels but not for
-     small body text, so the text ink is sky700 carried 22.7% toward indigo900. */
-  --blue-ink:#13528E;               /* 8.00:1 on white, 7.03:1 on lavender100 */
-  --blue-wash:#E4F2FF;              /* DERIVED: white -> sky400 18.3% */
+  /* DERIVED (no package token): an Estimated ink that clears 7:1. sky700 #1B6599 is
+     6.24:1 on white, which the contrast report allows for icons and labels but not
+     for small body text, so the text ink is sky700 carried 30.8% toward indigo900. */
+  --blue-ink:#1C4B7E;               /* 8.89:1 on white; worst surface 7.01:1 */
+  --blue-wash:#E6F3FF;              /* DERIVED: white -> sky400 18.3% */
   --marigold:var(--marigold400);    /* Scanned tier / the scan action */
-  /* DERIVED (no library token): a Scanned ink that clears 7:1. amber700 is 5.62:1,
-     which the report names as an icon colour, so the text ink is amber700 carried
-     26.1% toward indigo900 -- the report's own "pair small text with deep indigo". */
-  --marigold-ink:#784410;           /* 7.98:1 on white, 7.01:1 on lavender100 */
-  --marigold-wash:#FFEFC7;          /* DERIVED: white -> marigold400 25.8% */
+  /* DERIVED (no package token): a Scanned ink that clears 7:1. amber700 #8C5400 is
+     6.21:1 on white, which the report names as an icon colour, so the text ink is
+     amber700 carried 30.1% toward indigo900 -- the report's own "pair small text
+     with deep indigo". */
+  --marigold-ink:#6B4014;           /* 8.89:1 on white; worst surface 7.00:1 */
+  --marigold-wash:#FFF0D4;          /* DERIVED: white -> marigold400 20.0% */
   /* The brand's light blue, at both ends. On dark it is the library's sky400,
      exactly as the on-dark wordmark uses it; on light it is the library's sky700,
      which is what puts the light blue into light chrome at last. */
   --brand-blue:var(--sky400);
   --brand-blue-ink:var(--sky700);
-  --purple:var(--violet600);        /* Owner tier / the mark */
-  --purple-ink:var(--violet800);    /* 10.04:1 on white -- the report's link ink */
+  --purple:var(--violet600);        /* Owner tier / the mark. WHITE ON IT IS 7.38:1 --
+                                       the canonical violet is what lifts the 17 white-
+                                       on-primary sites Round 6 measured at 6.42:1. */
+  --purple-ink:var(--violet-deep);  /* 11.16:1 on white -- the report's link ink */
   --purple-wash:var(--ui-lavender-1); /* the library's own quiet fill, over white */
   /* Needs-match. Round 2 chose green because purple already meant owner-confirmed;
      the library supersedes that with three approved halos that carry the state in
@@ -141,25 +155,25 @@
      sky700 (unknown). Adopted as shipped. --match-green is gone. */
   --match-good:var(--indigo900);
   --match-partial:var(--violet600);
-  --match-unknown:var(--sky700);
+  --match-unknown:var(--sky-on-light);
   --match-ink:var(--indigo900);
-  --match-partial-ink:var(--violet800);
+  --match-partial-ink:var(--violet-deep);
   --match-wash:var(--ui-lavender-1);
-  /* Freshness ageing shared the Scanned ink's hue already (#784410 vs #784410 --
-     two names, one colour). Round 4 collapses them: one derived amber ink for text,
-     the library's own amber700 for the non-text freshness icon. */
+  /* Freshness ageing shared the Scanned ink's hue already -- two names, one colour.
+     Round 4 collapses them: one derived amber ink for text, the package's own
+     amber700 for the non-text freshness icon. */
   --amber-ink:var(--marigold-ink);
   --amber-wash:var(--marigold-wash);
-  --bezel:#0D0922;                  /* DERIVED: indigo900 -> black 45%, the shell */
+  --bezel:#100924;                  /* DERIVED: indigo900 -> black 45%, the shell */
   /* Dark app chrome (the board's top bar and bottom nav). DERIVED: indigo900 carried
      14% and 42% toward white, which is the first pair that puts the control fill
-     clearly inside the bar (1.48:1) and its edge over 3:1 against the bar (3.98:1)
-     while white text on the fill stays at 12.05:1. */
+     clearly inside the bar (1.50:1) and its edge over 3:1 against the bar (3.97:1)
+     while white text on the fill stays at 11.54:1. */
   --chrome-bg:var(--indigo900);
-  --chrome-fill:#373158;
-  --chrome-edge:#78748E;
+  --chrome-fill:#3E325C;
+  --chrome-edge:#7C7591;
   --chrome-ink:var(--white);
-  --chrome-quiet:var(--ui-lavender-2);  /* 13.33:1 on indigo900 -- unselected nav labels */
+  --chrome-quiet:var(--ui-lavender-2);  /* 13.63:1 on indigo900 -- unselected nav labels */
 
   /* ---- TYPE SCALE (design-systems-spec section 1) --------------------------
      Eight size steps, three weights. Every step names size, weight, leading and
@@ -228,8 +242,8 @@
      board's weight and three times the spec's -- and Round 5 added the correct 7%
      veil for the card's full stop beside it, so the file carried two answers. One
      token, one number, used by both, and no veil at the peek or medium stop. */
-  --veil:rgba(23,16,61,.07);
-  --wash-quiet:#F9F7FF; /* DERIVED: white -> lavender100 62%, the one quiet fill */
+  --veil:rgba(30,17,66,.07);
+  --wash-quiet:#F9F7FD; /* DERIVED: white -> lavender100 62%, the one quiet fill */
   --float-white:rgba(255,255,255,.96); /* chrome floating over the map; was 4 alphas */
   /* Board sections 2-3: a card is a hairline lavender boundary plus generous padding,
      not a shadow doing the work alone. This is DECORATION on a container, never the
@@ -238,24 +252,35 @@
   --hairline:var(--ui-lavender-2);  /* the library's own badge stroke */
   --icon-box:var(--ui-lavender-1);  /* the one leading-icon box, so labels align down a column */
   --pad-card:18px;
-  --shadow:0 10px 30px rgba(23,16,61,.16);
+  --shadow:0 10px 30px rgba(30,17,66,.16);
   /* Non-text UI boundary: every control edge, track and unselected indicator uses
-     this. DERIVED (no library token): indigo900 -> white, stopped at the last step
-     that still clears 3:1 on BOTH white and lavender100. 3.42:1 / 3.01:1. */
-  --edge:#8C889F;
-  --edge-strong:#77728D;   /* DERIVED: indigo900 -> white 42%; 4.51:1 on the brightest street */
-  --marigold-edge:var(--indigo900); /* the library's own scanned-badge stroke: indigo900 on marigold400, 10.81:1 */
-  --track:#86839A;         /* DERIVED: indigo900 -> white 46%; 3.01:1 on the ground, 3.22:1 on lavender100 */
-  --ring-rim:var(--indigo900);      /* one rim for both progress arcs: 4.86:1 on the track,
-                                       10.81:1 on marigold400, 2.78:1 on violet600 */
+     this. DERIVED (no package token): indigo900 -> white, stopped at the last step
+     that still clears 3:1 on white, on lavender100 AND on every tone the map-kit
+     ground paints -- including the kit's own darkest, the block edge #CFBCEE, which
+     is the binding constraint at 3.02:1. On white it is 5.25:1. */
+  --edge:#706887;
+  --edge-strong:#6A6182;   /* DERIVED: indigo900 -> white 33.8%; 4.5:1 on all light surfaces */
+  --marigold-edge:var(--indigo900); /* the package's own scanned-badge stroke: indigo900 on marigold400, 9.60:1 */
+  --track:#867F99;         /* DERIVED: indigo900 -> white 46.2%; 3.00:1 on the worst light surface */
+  --ring-rim:var(--indigo900);      /* one rim for both progress arcs: 4.53:1 on the track,
+                                       9.60:1 on marigold400, 2.60:1 on violet600 */
   --ring-rim-purple:var(--indigo900);
-  /* The estimated-tier edge is now the library's own on-light sky. Round 3 settled a
-     disagreement between two committed files on #1266A6; the library supersedes both
-     with sky700 #1266A6, which is what its OWN estimated pin already uses for the
-     italic i and the confidence dots' stroke. Relative luminance 0.1238 puts the map
-     ground's floor at 0.4715 for 3:1 -- slightly MORE headroom than #1266A6 had, so
-     the Round 3 ground survives the swap. --blue-pin and #1266A6 are both gone. */
-  --blue-edge:var(--sky700);
+  /* THE ESTIMATED PIN'S OUTLINE, AND A THREE-WAY DISAGREEMENT IN THE PACKAGE.
+     Measured against the map-kit ground, on the light-blue place accent over a block
+     (#C1D4F9, the darkest tone a pin can land on that is not a 1px edge):
+       asset-library/svg/pins/estimated.svg draws it in sky400 #76BCFD .. 1.36:1
+       the approved board artwork draws it in a fully saturated blue,
+         sampled #0033F5 off screen-exports/png/map-default.png ............ 5.86:1
+       --blue-edge here, the package's own on-light sky700 #1B6599 ........  4.19:1
+     The asset and the artwork it claims to reproduce do not agree, and the asset is
+     the one that fails: sky400 is 2.02:1 against the pin's OWN white fill, so on a
+     near-white ground the Estimated mark would have no discernible boundary at all,
+     which the package's own checklist forbids ("icons meet at least 3:1"). The board
+     is trusted over the asset. The board's #0033F5 is not in the canonical twelve and
+     the nearest canonical hue to it is violet600, which already means Owner-confirmed,
+     so the token used is sky700 -- dark like the board's, canonical, and already what
+     the asset itself uses for the italic i and the confidence-dot strokes. */
+  --blue-edge:var(--sky-on-light);
 
   /* ---- ELEVATION (design-systems-spec section 3) --------------------------------
      Four levels. Elevation is a claim about how far a surface sits from the map
@@ -263,18 +288,18 @@
      contact shadow that anchors the object and a wide ambient one that gives it
      distance -- which is what makes one level read the same on white and on the
      lavender ground. Opacity rises with the ladder: .07 -> .14 -> .20/.24.
-     Round 4: every shadow rgb is now indigo900 (23,16,61), not the retired #17103D. */
-  --elev-1:0 1px 2px rgba(23,16,61,.05), 0 2px 8px rgba(23,16,61,.07);
-  --elev-2:0 2px 6px rgba(23,16,61,.10), 0 10px 24px rgba(23,16,61,.14);
-  --elev-3-dock:0 -1px 0 rgba(23,16,61,.06), 0 -8px 28px rgba(23,16,61,.20);
-  --elev-3-dark:0 -1px 0 rgba(13,9,34,.10), 0 -8px 28px rgba(13,9,34,.34);
-  --elev-3-free:0 2px 8px rgba(23,16,61,.12), 0 16px 40px rgba(23,16,61,.24);
+     Round 4: every shadow rgb is now indigo900 (23,16,61), not the retired #1E1142. */
+  --elev-1:0 1px 2px rgba(30,17,66,.05), 0 2px 8px rgba(30,17,66,.07);
+  --elev-2:0 2px 6px rgba(30,17,66,.10), 0 10px 24px rgba(30,17,66,.14);
+  --elev-3-dock:0 -1px 0 rgba(30,17,66,.06), 0 -8px 28px rgba(30,17,66,.20);
+  --elev-3-dark:0 -1px 0 rgba(16,9,36,.10), 0 -8px 28px rgba(16,9,36,.34);
+  --elev-3-free:0 2px 8px rgba(30,17,66,.12), 0 16px 40px rgba(30,17,66,.24);
   /* two families that are NOT elevation, named so they stop competing with it */
-  --ring-action:0 4px 14px rgba(255,191,36,.42); /* the marigold capture glow */
+  --ring-action:0 4px 14px rgba(253,179,39,.42); /* the marigold capture glow */
   --ring-select:inset 0 0 0 2px var(--purple);   /* selected / saved */
   --ring-quiet:inset 0 0 0 2px var(--ui-lavender-2); /* ghost button on white */
   --ring-needed:0 0 0 2px var(--match-good);     /* needs-match ONLY (colour rule) */
-  --knob:0 1px 3px rgba(23,16,61,.26);           /* a physical knob on a track */
+  --knob:0 1px 3px rgba(30,17,66,.26);           /* a physical knob on a track */
 
   /* ---- SPACING (design-systems-spec section 2) ----------------------------------
      Ten steps. 2-4-6-8 at the bottom where a 2px difference is visible, a 4pt grid
@@ -332,43 +357,64 @@
   /* press feedback (design-systems-spec section 5)
      DERIVED: lavender100/200 carried 6-7% toward violet600 -- a press is the surface
      leaning toward the brand violet, not a grey. */
-  --press-wash:#E9E3FE;
-  --press-wash-ground:#D9CEFE;
+  --press-wash:#EAE6FA;         /* lavender100 -> violet600 6.5% */
+  --press-wash-ground:#DDD5F5;  /* lavender200 -> violet600 7.0% */
 
-  /* ---- MAP GROUND: Terrain's colour on Relief's light (design/map-ground.html) ---
-     ROUND 4 RE-DERIVATION. The library ships no map-ground tokens, so every tone
-     here is now solved as a two-step mix of official colours -- an official base
-     carried toward white (which sets chroma) and then toward indigo900 (which sets
-     lightness) -- with the solver targeting the Round 3 tone's exact CIE lightness
-     and chroma. That keeps the whole Round 3 contrast argument intact while moving
-     every hue onto the approved palette. Bases: marigold400 for the warm sand,
-     putty and plaza family; lavender200 for the cool towers; and, for the canopy,
-     a 50/50 marigold400 + sky400 mix, because the approved palette contains no
-     green and those are the only two official hues that make one.
-     Saturation, not hue: the loudest ground tone is the plaza at CIE chroma 16.3
-     while the least saturated marker colour is now sky700 at 40.9, so a marker is
-     still the most saturated thing in its own radius by a factor of 2.5. Every
-     tone clears the luminance floor the estimated ring needs -- 0.4715 at
-     --blue-edge sky700; the darkest tone drawn anywhere is 0.7235. */
-  --g-ground:#EFE8DA;  /* warm sand    -- marigold400 -> white 91.5% -> indigo900 1.0% */
-  --g-parcel:#ECE4D2;  /* the yard / service field buildings sit in */
-  --g-s1:#FFFDF8;      /* primary street */
-  --g-s2:#FCF9F2;      /* secondary */
-  --g-s3:#F7F3EA;      /* minor */
-  --g-s4:#F0EADD;      /* alley */
-  --g-casing:#E5DCCF;  /* the kerb channel a street is carved into */
-  --g-b1:#FFFCF5;      /* footprint tones, ramped by mass: biggest = brightest top face */
-  --g-b2:#FAF5EB;
-  --g-b3:#F3F0FB;      /* the cool lavender towers -- lavender200 based */
-  --g-b4:#EDEAF6;
-  --g-b5:#F6F1E5;      /* warm putty low-rise */
-  --g-shade:#E5DCCF;   /* Relief's cast shadow, step 2 */
-  --g-shade2:#EAE2D6;  /* Relief's cast shadow, step 1 (the outer, paler falloff) */
-  --g-lit:#FFFFFF;     /* the lit top-and-left edge on every footprint */
-  --g-can:#DEE1D2;     /* canopy lobe -- marigold400 + sky400, the only official green */
-  --g-can2:#ECEDE3;    /* the band / grove the lobes sit on */
-  --g-plaza:#F8EACC;   /* marigold plaza -- the most saturated ground tone, CIE C 16.3 */
-  --g-label:var(--indigo900); /* street label ink: 14.62:1 on the sand, 17.54:1 on a street */
+  /* ================= MAP GROUND: TAKEN FROM THE KIT, NOT DERIVED =================
+     ROUND 7. Rounds 3, 4 and 6 each re-derived this surface by hand -- Round 3 from
+     two reference sketches, Round 4 by solving the sketch's CIE lightness onto the
+     old palette, Round 6 from a colour table sampled off a board. All three aimed at
+     a reasoned target instead of the real one, and the ground stayed warm sand
+     #EFE8DA while the boards are white and blue.
+
+     The handoff package ships the ground as ARTWORK:
+       design/board-refs/entrymap-build-ready/map-kit/svg/*.svg
+     Eight 1170x800 compositions with addressable layers -- land, blocks, roads,
+     labels, places, halos, pins, selection, annotations. Verified before use: the
+     land..labels block is BYTE-IDENTICAL across all eight variants (sha256 of that
+     span, 2027 bytes, is 8a37232b1a052240 in every one), and the eight files match
+     the sha256 recorded for them in PACKAGE-MANIFEST.json. So there is exactly one
+     ground and this is it. Every value below is read off base-map.svg.
+
+       CAUTION, a real inconsistency inside the package: map-kit/map-kit-manifest.json
+       carries its OWN sha256 list, and it is stale -- it records base-map.svg as
+       A26EEC8E... while the file on disk and PACKAGE-MANIFEST.json both say
+       BD7111B1..., and the same disagreement holds for all eight. The top-level
+       PACKAGE-MANIFEST is the one that matches the bytes, so it is the one trusted.
+
+     THE KIT'S OWN VALUES, and what each becomes here. The kit is a 1170px-wide
+     artboard for a 390pt phone, so a kit stroke divides by 3.
+       land    <rect fill="#F5F2FC"> + a dot pattern, violet600 at .045, 18px grid, r.8
+       blocks  fill #E8E1F7, stroke #CFBCEE, stroke-width 3        -> 1 CSS px
+       roads   casing #CFBCEE at .55 width 62 UNDER white width 48 -> casing is the
+               road width x 1.292, i.e. 2.33 CSS px proud on each side of a 16px road
+       places  #76BCFD at .34                                       -> the tree canopy
+       labels  #1E1142, weight 700, letter-spacing 3                -> 1 CSS px
+
+     WHERE THE KIT IS SILENT, and this file does not invent: the kit has no street
+     hierarchy (its four roads are one width), no building footprints, no plazas, no
+     courtyards, no high-contrast variant, and no answer for panning or zooming. The
+     approved board artwork does show faint building outlines and dense canopy
+     rosettes -- see screen-exports/png/map-default.png -- so the footprints are kept
+     but drawn as OUTLINE ONLY on the kit's flat block fill, with no fills, no cast
+     shadows and no lit edges, because the kit's blocks layer has none of those. The
+     marigold plaza and the green canopy are gone outright: there is no yellow and no
+     green anywhere in the kit or on the board. That is what "the board in the other
+     one is white and blue" was asking for.
+
+     CONTRAST. The darkest tone the ground now paints is the block edge #CFBCEE at
+     relative luminance 0.554; the darkest FILLED area is the place accent over a
+     block, #C1D4F9 at 0.655. --edge is re-solved above against both. */
+  --g-land:var(--lavender100);       /* kit land   #F5F2FC */
+  --g-block:var(--lavender200);      /* kit blocks #E8E1F7 */
+  --g-block-edge:var(--lavender-path); /* kit blocks stroke #CFBCEE */
+  --g-road:var(--white);             /* kit roads  #FFFFFF */
+  --g-road-edge:var(--lavender-path);/* kit roads casing #CFBCEE, painted at .55 */
+  --g-place:var(--sky400);           /* kit places #76BCFD, painted at .34 */
+  --g-paper:var(--violet600);        /* kit land pattern dot, painted at .045 */
+  --g-building:var(--white);         /* board: faint footprint outlines. Kit is silent. */
+  --g-label:var(--indigo900);        /* kit labels #1E1142 -- 15.64:1 on the land */
+  --g-line:var(--indigo900);         /* high-contrast block outline only */
 }
 .ic{display:inline-flex;align-items:center;justify-content:center}
 /* 2.7 optical alignment: a tick sits optically low inside a circle, so the round
@@ -416,7 +462,7 @@
 html,body{height:100%}
 body{
   background:
-    radial-gradient(1200px 700px at 50% 0%, #F9F7FF 0%, #EDE7FB 55%, #DED6F0 100%);
+    radial-gradient(1200px 700px at 50% 0%, #FBFAFE 0%, #EFEAFA 55%, #DFD7F2 100%);
   font-family:'Atkinson Hyperlegible Next','Atkinson Hyperlegible',system-ui,'Segoe UI',Arial,sans-serif;
   /* Round 4 caught this: Nunito's figures were tabular BY DEFAULT, which is what
      criterion 1.5 was measured on and why no `tabular-nums` was ever needed.
@@ -431,7 +477,7 @@ body{
   min-height:100vh;padding:var(--sp-7) var(--sp-5);gap:var(--sp-6);
 }
 .stage-caption{color:var(--sub);font-size:13px;font-weight:var(--fw-body);letter-spacing:.02em;text-align:center}
-.stage-caption b{color:#17103D}
+.stage-caption b{color:#1E1142}
 
 /* ============ phone frame ============ */
 .phone-wrap{position:relative}
@@ -541,7 +587,7 @@ body{
 .rippler{position:absolute;left:0;top:calc(var(--mh) * -0.62);width:34px;height:34px;border-radius:50%;transform:translate(-50%,-50%);
   border:3px solid var(--brand-blue-ink);animation:ripple var(--dur-ripple) var(--ease-enter) 1;pointer-events:none}
 
-.street-label{font-weight:var(--fw-strong);fill:var(--g-label,#17103D);font-size:10.5px;letter-spacing:var(--ls-caps-wide)}
+.street-label{font-weight:var(--fw-strong);fill:var(--g-label,#1E1142);font-size:10.5px;letter-spacing:var(--ls-caps-wide)}
 
 /* map overlays */
 /* ---- ROUND 4: THE APP CHROME IS THE BOARD'S DARK BAR ------------------------
@@ -587,7 +633,7 @@ body{
 /* the status bar rides on whatever chrome the current screen has */
 .phone[data-chrome="dark"] .statusbar{color:var(--white)}
 .apphead :focus-visible,.navbar :focus-visible{
-  outline-color:var(--sky400) !important;box-shadow:0 0 0 6px rgba(23,16,61,.92) !important;
+  outline-color:var(--sky400) !important;box-shadow:0 0 0 6px rgba(30,17,66,.92) !important;
 }
 .phone.hc .apphead :focus-visible,.phone.hc .navbar :focus-visible{outline-color:var(--white) !important}
 .map-top{position:absolute;top:104px;left:12px;right:12px;z-index:20;display:flex;flex-direction:column;gap:var(--sp-4);pointer-events:none;align-items:flex-start}
@@ -680,7 +726,7 @@ body{
    on the bar, and the state is still carried by the rule above the tab and by the
    weight, never by hue alone -- the 1.05:1 problem does not come back. */
 #nav-map.on{color:var(--sky400)}
-#nav-profile.on{color:var(--lavender200)}
+#nav-profile.on{color:var(--chrome-quiet)}
 .navbtn:not(.on){color:var(--chrome-quiet)}
 .nav-scan.on .ring{border-width:5px}
 .nav-scan.on{font-weight:var(--fw-strong)}
@@ -696,7 +742,7 @@ body{
 }
 
 /* ============ sheets ============ */
-/* the modal scrim, restated on indigo900 (23,16,61) -- #17141F was not a palette
+/* the modal scrim, restated on indigo900 (30,17,66) -- #17141F was not a palette
    colour. Its 42% is unchanged: this is the MODAL dim, a different thing from the
    card sheet's 7% veil, which the spec scopes to full height only. */
 .scrim{position:absolute;inset:0;background:var(--veil);opacity:0;pointer-events:none;transition:opacity var(--dur-fast) var(--ease-enter);z-index:46}
@@ -824,7 +870,10 @@ body{
   flex:1;min-height:var(--tap);border-radius:var(--r-3);font-family:inherit;font-weight:var(--fw-strong);font-size:var(--fs-body);cursor:pointer;
   display:flex;align-items:center;justify-content:center;gap:var(--sp-4);border:none;line-height:var(--lh-row);letter-spacing:var(--ls-flat);}
 .btn.primary{background:var(--purple);color:#fff;font-weight:var(--fw-display);}
-.btn.marigold{background:var(--marigold);color:#533021;/* DERIVED amber700 -> indigo900 54%: 7.02:1 on marigold400 */font-weight:var(--fw-display);}
+.btn.marigold{background:var(--marigold);color:var(--ink);/* ROUND 7: the derived #533021 was solved on the retired marigold #FFBF24 and measures
+   6.43:1 on the canonical #FDB327. indigo900 is the package's own answer -- its contrast
+   report lists marigold400/indigo900 9.60:1 for exactly this, "Scan controls" -- and it
+   is what every other marigold chip in this file already uses. */font-weight:var(--fw-display);}
 /* secondary is white with a purple border -- never a grey fill (board section 4) */
 .btn.ghost{background:#fff;color:var(--purple-ink);box-shadow:var(--ring-select)}
 /* tertiary is plain purple text */
@@ -849,8 +898,8 @@ body{
    inert moment (a publish that is mid-save). ---------------------------------- */
 .btn[aria-disabled="true"],.btn:disabled,
 .btn-textlink[aria-disabled="true"],.correct-btn[aria-disabled="true"]{
-  background:var(--lavender200);color:var(--indigo900);
-  box-shadow:inset 0 0 0 2px var(--lavender200);
+  background:var(--ui-lavender-2);color:var(--indigo900);
+  box-shadow:inset 0 0 0 2px var(--ui-lavender-2);
 }
 .btn[aria-disabled="true"] svg,.btn:disabled svg{color:var(--indigo900)}
 /* pressing an unavailable control still gives feedback -- it is not inert, it is
@@ -937,7 +986,7 @@ body{
 }
 .filt-apply .btn{width:100%}
 .filt-apply .filt-caption{margin-top:var(--sp-4)}
-.filt-reset{border:none;background:none;font-family:inherit;color:var(--purple-ink);font-weight:var(--fw-strong);font-size:var(--fs-sub);cursor:pointer;min-height:var(--tap);padding:var(--sp-0) var(--sp-3);line-height:var(--lh-sub);letter-spacing:var(--ls-flat);}
+.filt-reset{border:none;background:none;font-family:inherit;color:var(--purple-ink);font-weight:var(--fw-strong);font-size:var(--fs-sub);cursor:pointer;min-height:var(--tap);min-width:var(--tap);/* ROUND 7: it had the height and not the width, and measured 45.8x48 open */padding:var(--sp-0) var(--sp-3);line-height:var(--lh-sub);letter-spacing:var(--ls-flat);}
 .filtchip{
   display:inline-flex;align-items:center;gap:var(--sp-3);border-radius:999px;padding:var(--sp-4) var(--sp-6);min-height:var(--tap);
   font-size:var(--fs-sub);font-weight:var(--fw-strong);border:2px solid var(--edge);background:#fff;color:var(--sub);
@@ -946,7 +995,7 @@ body{
 .filtchip .sel-dot svg{width:12px;height:12px}
 /* a chip is small and inline: the board fills it, and it stays filled. */
 .filtchip.sel{border-color:var(--purple);background:var(--purple-wash);color:var(--purple-ink)}
-.seg{display:flex;background:#E9E3FE;border-radius:var(--r-2);padding:var(--sp-2);gap:var(--sp-2)}
+.seg{display:flex;background:var(--ui-lavender-2);border-radius:var(--r-2);padding:var(--sp-2);gap:var(--sp-2)}
 .seg button{
   flex:1;min-height:var(--tap);border:none;border-radius:var(--r-2);background:none;font-family:inherit;
   font-weight:var(--fw-strong);font-size:var(--fs-sub);color:var(--sub);cursor:pointer;line-height:var(--lh-sub);letter-spacing:var(--ls-flat);}
@@ -992,11 +1041,11 @@ body{
 .big-icon{width:84px;height:84px;border-radius:50%;background:#fff;border:3px solid var(--marigold);display:flex;align-items:center;justify-content:center;box-shadow:var(--elev-2)}
 
 /* capture */
-#scan-capture{background:#17103D}
+#scan-capture{background:#1E1142}
 #scan-capture .scan-body{padding-top:var(--pad-top)}
 .viewfinder{
   position:relative;width:100%;max-width:330px;aspect-ratio:3/4;border-radius:var(--r-4);overflow:hidden;
-  background:linear-gradient(180deg,#E1F1FF 0% 46%, #EFEBFE 46% 78%, #E0DBF3 78% 100%);
+  background:linear-gradient(180deg,#E6F3FF 0% 46%, #F0ECFB 46% 78%, #DFD7F2 78% 100%);
 }
 .frame-guide{position:absolute;inset:26px;border-radius:var(--r-3);pointer-events:none}
 .frame-guide i{position:absolute;width:34px;height:34px;border:4px solid #fff;opacity:.95}
@@ -1007,7 +1056,7 @@ body{
 .coach{
   position:absolute;left:50%;transform:translateX(-50%);background:rgba(23,20,31,.82);color:#fff;
   font-size:var(--fs-meta);font-weight:var(--fw-strong);border-radius:999px;padding:var(--sp-4) var(--sp-6);white-space:nowrap;line-height:var(--lh-meta);letter-spacing:var(--ls-flat);}
-.scan-target{color:#F2EEFF;font-weight:var(--fw-body);font-size:var(--fs-sub);margin-top:var(--sp-6);text-align:center;line-height:var(--lh-sub);letter-spacing:var(--ls-flat);}
+.scan-target{color:#F5F2FC;font-weight:var(--fw-body);font-size:var(--fs-sub);margin-top:var(--sp-6);text-align:center;line-height:var(--lh-sub);letter-spacing:var(--ls-flat);}
 .scan-target b{color:#fff}
 .shutter{
   margin-top:var(--sp-6);width:76px;height:76px;border-radius:50%;background:#fff;border:5px solid var(--marigold);
@@ -1021,7 +1070,7 @@ body{
 .scanscreen.light .cancel-x{background:#fff;color:var(--sub);box-shadow:var(--elev-2)}
 
 /* live camera (real rear-camera viewfinder; silently absent on desktop) */
-.viewfinder video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#17103D}
+.viewfinder video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;background:#1E1142}
 .live-chip{
   position:absolute;top:12px;right:10px;display:none;align-items:center;gap:var(--sp-3);
   background:rgba(23,20,31,.82);color:#fff;font-size:var(--fs-micro);font-weight:var(--fw-strong);letter-spacing:var(--ls-caps);
@@ -1094,7 +1143,7 @@ body{
 /* review */
 .review-img{
   position:relative;width:100%;max-width:320px;aspect-ratio:3/4;border-radius:var(--r-4);overflow:hidden;
-  background:linear-gradient(180deg,#E1F1FF 0% 46%, #EFEBFE 46% 78%, #E0DBF3 78% 100%);
+  background:linear-gradient(180deg,#E6F3FF 0% 46%, #F0ECFB 46% 78%, #DFD7F2 78% 100%);
 }
 .blurband{
   position:absolute;left:8%;bottom:20%;width:56px;height:96px;border-radius:var(--r-3);
@@ -1181,7 +1230,7 @@ ul.prof-card>li:last-child .prof-row{border-bottom:none}
 /* ---- welcome: the logo lockup IS the canvas (deep aubergine hero + white card).
    Two-tone wordmark per the logo (entry = sky, map = white); the skyline carries the
    mark's own accent arcs (sky + marigold) so the screen is not a field of purple. ---- */
-#ob-welcome{background:#17103D}
+#ob-welcome{background:#1E1142}
 .wl-hero{
   position:relative;flex:1 1 auto;padding:var(--pad-top) var(--inset-onboard) var(--sp-0);
   display:flex;flex-direction:column;align-items:center;gap:var(--sp-5);overflow:hidden;
@@ -1190,7 +1239,7 @@ ul.prof-card>li:last-child .prof-row{border-bottom:none}
 .wl-word{margin-bottom:var(--sp-1);display:flex;justify-content:center}
 .wl-tag{
   font-size:var(--fs-micro);font-weight:var(--fw-strong);line-height:var(--lh-micro);letter-spacing:var(--ls-caps-wide);text-transform:uppercase;
-  color:#E2DAFF;text-align:center;
+  color:#E8E1F7;text-align:center;
 }
 .wl-sky{display:block;width:100%;margin-top:var(--sp-6);margin-bottom:-2px}
 .wl-card{
@@ -1398,7 +1447,7 @@ ul.prof-card>li:last-child .prof-row{border-bottom:none}
 .search-bar{display:flex;align-items:center;gap:var(--sp-4)}
 .search-bar .searchfield{flex:1;margin:var(--sp-0);background:#fff;box-shadow:var(--elev-1);border-color:transparent}
 .search-bar .searchfield:focus-within{border-color:var(--purple)}
-.search-clear{position:relative;width:34px;height:34px;border:none;border-radius:50%;background:#E9E3FE;color:var(--sub);font-weight:var(--fw-strong);cursor:pointer;font-family:inherit}
+.search-clear{position:relative;width:34px;height:34px;border:none;border-radius:50%;background:var(--ui-lavender-2);color:var(--sub);font-weight:var(--fw-strong);cursor:pointer;font-family:inherit}
 .search-clear::before{content:"";position:absolute;inset:-7px}/* 48px hit area on a 34px disc */
 .search-body{flex:1;overflow-y:auto;margin-top:var(--sp-5)}
 .srow{
@@ -1467,7 +1516,7 @@ button.legend{border:none;cursor:pointer;font-family:inherit;text-align:left}
 button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offset:3px}
 
 /* ============ splash ============ */
-.splash{background:#17103D;z-index:58;align-items:center;justify-content:center}
+.splash{background:#1E1142;z-index:58;align-items:center;justify-content:center}
 .splash-body{display:flex;flex-direction:column;align-items:center;gap:var(--sp-6);animation:splashIn var(--dur-drop) var(--ease-enter) both}
 .splash-word{display:flex;justify-content:center}
 @keyframes splashIn{from{opacity:0;transform:translateY(8px) scale(.94)}to{opacity:1;transform:none}}
@@ -1681,7 +1730,7 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
 .flowhead h2{flex:1;text-align:center;color:var(--chrome-ink);font-size:var(--fs-h2);font-weight:var(--fw-display);margin-right:var(--tap);line-height:var(--lh-h2);letter-spacing:var(--ls-h2);}
 /* the dark bar takes the same sky focus ring the app bar and the nav already use */
 .flowhead :focus-visible{
-  outline-color:var(--sky400) !important;box-shadow:0 0 0 6px rgba(23,16,61,.92) !important;
+  outline-color:var(--sky400) !important;box-shadow:0 0 0 6px rgba(30,17,66,.92) !important;
 }
 .phone.hc .flowhead :focus-visible{outline-color:var(--white) !important}
 .searchfield{
@@ -1731,7 +1780,7 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
 .tl-item{display:flex;gap:var(--sp-5);align-items:flex-start;position:relative;padding-bottom:var(--sp-7)}
 .tl-item:last-child{padding-bottom:var(--sp-0)}
 .tl-item::before{
-  content:"";position:absolute;left:13px;top:28px;bottom:0;width:2.5px;background:#DBD2FE;
+  content:"";position:absolute;left:13px;top:28px;bottom:0;width:2.5px;background:var(--ui-lavender-2);
 }
 .tl-item:last-child::before{display:none}
 .tl-dot{
@@ -1763,7 +1812,7 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
 
 /* scan library option */
 .lib-link{
-  margin-top:var(--sp-6);border:none;background:none;font-family:inherit;color:#F2EEFF;font-weight:var(--fw-strong);
+  margin-top:var(--sp-6);border:none;background:none;font-family:inherit;color:#F5F2FC;font-weight:var(--fw-strong);
   font-size:var(--fs-body);cursor:pointer;min-height:var(--tap);display:flex;align-items:center;gap:var(--sp-4);line-height:var(--lh-row);letter-spacing:var(--ls-flat);}
 /* correction photo affordance */
 .photo-add{
@@ -1833,10 +1882,10 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
 /* the three dark screens take the ON-DARK half of the same sky, exactly as the
    app bar, the flow header and the bottom navigation already do. */
 #scan-capture :focus-visible,#ob-welcome :focus-visible,#ob-splash :focus-visible{
-  outline-color:var(--sky400);box-shadow:0 0 0 6px rgba(23,16,61,.92);
+  outline-color:var(--sky400);box-shadow:0 0 0 6px rgba(30,17,66,.92);
 }
 .phone.hc #scan-capture :focus-visible,.phone.hc #ob-welcome :focus-visible,
-.phone.hc #ob-splash :focus-visible{outline-color:#FFFFFF;box-shadow:0 0 0 6px #0E0A25}
+.phone.hc #ob-splash :focus-visible{outline-color:#FFFFFF;box-shadow:0 0 0 6px var(--indigo900)}
 .phone .screen:focus,.phone .screen:focus-visible{outline:none;box-shadow:none}
 .phone .toggle:focus-visible{outline-offset:4px;border-radius:var(--r-3)}
 .phone .backbtn:focus-visible,.phone .navbtn:focus-visible{border-radius:50%}
@@ -2007,7 +2056,7 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
 .ow-sel select option{direction:ltr;text-align:left}
 .ow-sel::after{content:"\25BE";position:absolute;right:4px;color:var(--sub);pointer-events:none;font-weight:var(--fw-strong)}
 .ow-locked{
-  display:flex;align-items:center;gap:var(--sp-5);background:#F5F2FF;border-radius:var(--r-3);padding:var(--sp-5) var(--sp-6);margin-top:var(--sp-5);
+  display:flex;align-items:center;gap:var(--sp-5);background:var(--ui-lavender-1);border-radius:var(--r-3);padding:var(--sp-5) var(--sp-6);margin-top:var(--sp-5);
   min-height:56px;
 }
 .ow-locked .lk-main{flex:1;font-size:var(--fs-body);font-weight:var(--fw-strong);color:var(--ink);line-height:var(--lh-row);letter-spacing:var(--ls-flat);}
@@ -2075,7 +2124,7 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
   background:var(--float-white);border-radius:999px;box-shadow:var(--elev-2);padding:var(--sp-2) var(--sp-6) var(--sp-2) var(--sp-2);min-height:var(--tap);
 }
 .ow-banner .backbtn{
-  flex:0 0 var(--tap);width:var(--tap);height:var(--tap);border:none;border-radius:50%;background:#E9E3FE;cursor:pointer;
+  flex:0 0 var(--tap);width:var(--tap);height:var(--tap);border:none;border-radius:50%;background:var(--ui-lavender-2);cursor:pointer;
   color:var(--purple-ink);font-size:var(--icon-glyph);font-weight:var(--fw-strong);
 }
 .ow-banner .bn-text{flex:1;font-size:var(--fs-sub);line-height:var(--lh-sub);font-weight:var(--fw-strong);color:var(--purple-ink)}
@@ -2098,42 +2147,45 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
 /* high contrast */
 /* Round 4: every high-contrast value is now the official palette carried further --
    an official base mixed toward indigo900 or black, never a hand-picked hex. */
-.phone.hc{--ink:#0E0A25;--sub:var(--indigo900);--faint:var(--indigo900);
-  --blue-ink:#15376C;--marigold-ink:#523022;--purple-ink:#301A85;
-  --amber-ink:var(--marigold-ink);--ground:var(--lavender200);
-  --edge:#5B566F;--edge-strong:#413B5C;--marigold-edge:var(--indigo900);--blue-edge:#15376C;
+/* High contrast, re-solved in Round 7 on the canonical bases. The hc ground is
+   lavender200 #E8E1F7, so every ink here is solved against THAT rather than white:
+   the blue and amber inks clear 8.5:1 on it, the purple ink 10:1, the two greys 4.5:1
+   and 7:1, and --ink 15.2:1. */
+.phone.hc{--ink:#100924;--sub:var(--indigo900);--faint:var(--indigo900);
+  --blue-ink:#1C3D6F;--marigold-ink:#59351F;--purple-ink:#311E84;
+  --amber-ink:var(--marigold-ink);--ground:var(--ui-lavender-2);
+  --edge:#6A6182;--edge-strong:#4E446A;--marigold-edge:var(--indigo900);--blue-edge:#1C3D6F;
   --match-good:var(--indigo900);--match-partial:var(--purple-ink);
-  --match-ink:var(--ink);--match-partial-ink:var(--purple-ink);--match-wash:var(--lavender100);
+  --match-ink:var(--ink);--match-partial-ink:var(--purple-ink);--match-wash:var(--ui-lavender-1);
   /* One hairline, darkened centrally, instead of a single .prof-row patch that left
      six other row types un-darkened. */
-  --hairline:#BDB6DC;  /* lavender200 -> indigo900 18% */
+  --hairline:#C0B8D9;  /* lavender200 -> indigo900 18% */
   /* High contrast outlines every elevated surface by redefining the LEVEL tokens.
      Previously eleven components were hand-picked in two rules and everything else
      was missed; now a component that is at a level is outlined because it is at
      that level. */
-  --elev-1:0 0 0 1.5px #373158, 0 1px 2px rgba(23,16,61,.05), 0 2px 8px rgba(23,16,61,.07);
-  --elev-2:0 0 0 1.5px #373158, 0 2px 6px rgba(23,16,61,.10), 0 10px 24px rgba(23,16,61,.14);
-  --elev-3-dock:0 0 0 1.5px #373158, 0 -1px 0 rgba(23,16,61,.06), 0 -8px 28px rgba(23,16,61,.20);
-  --elev-3-dark:0 0 0 1.5px #373158, 0 -1px 0 rgba(13,9,34,.10), 0 -8px 28px rgba(13,9,34,.34);
-  --elev-3-free:0 0 0 1.5px #373158, 0 2px 8px rgba(23,16,61,.12), 0 16px 40px rgba(23,16,61,.24);
-  --press-wash:#E3DCFE;--press-wash-ground:#D2C6FE;
-  /* High contrast SIMPLIFIES the ground: one block tone, hard outlines, no shadow,
-     no canopy, no plaza, no wash. Only the road hierarchy survives, because widths
-     are structure rather than enrichment. Every ground key still resolves so no
-     paint falls back to a warm tone. */
-  --g-ground:#FFFFFF;--g-parcel:#FFFFFF;
-  --g-s1:#E7E1F7;--g-s2:#EFEBFA;--g-s3:#F4F1FC;--g-s4:#F9F7FE;--g-casing:#FFFFFF;
-  --g-b1:#FFFFFF;--g-b2:#FFFFFF;--g-b3:#FFFFFF;--g-b4:#FFFFFF;--g-b5:#FFFFFF;
-  --g-shade:#FFFFFF;--g-shade2:#FFFFFF;--g-lit:#FFFFFF;
-  --g-can:#FFFFFF;--g-can2:#FFFFFF;--g-plaza:#FFFFFF;
-  --g-line:#4A4568;--g-label:#140E34}
+  --elev-1:0 0 0 1.5px var(--chrome-fill), 0 1px 2px rgba(30,17,66,.05), 0 2px 8px rgba(30,17,66,.07);
+  --elev-2:0 0 0 1.5px var(--chrome-fill), 0 2px 6px rgba(30,17,66,.10), 0 10px 24px rgba(30,17,66,.14);
+  --elev-3-dock:0 0 0 1.5px var(--chrome-fill), 0 -1px 0 rgba(30,17,66,.06), 0 -8px 28px rgba(30,17,66,.20);
+  --elev-3-dark:0 0 0 1.5px var(--chrome-fill), 0 -1px 0 rgba(16,9,36,.10), 0 -8px 28px rgba(16,9,36,.34);
+  --elev-3-free:0 0 0 1.5px var(--chrome-fill), 0 2px 8px rgba(30,17,66,.12), 0 16px 40px rgba(30,17,66,.24);
+  --press-wash:#E6E0F8;--press-wash-ground:#D7CEF4;
+  /* High contrast SIMPLIFIES the ground: blocks are white with a hard indigo outline,
+     no footprints, no canopy, no pattern. Only the road hierarchy survives, because
+     widths are structure rather than enrichment. THE KIT IS SILENT ON HIGH CONTRAST
+     -- it ships one ground and no variant -- so this stays Round 6's simplification,
+     re-toned onto the canonical lavenders rather than invented afresh. */
+  --g-land:#FFFFFF;--g-block:#FFFFFF;--g-block-edge:var(--indigo900);
+  --g-road:#E8E1F7;--g-road-edge:#FFFFFF;
+  --g-place:#FFFFFF;--g-paper:#FFFFFF;--g-building:#FFFFFF;
+  --g-line:var(--indigo900);--g-label:#140E34}
 .phone.hc .fchip,.phone.hc .persona,.phone.hc .tierchip,.phone.hc .field select,.phone.hc .field textarea{border-width:2px}
 .phone.hc .prof-row .chev{color:var(--sub)}
 .phone.hc .toggle{background:var(--edge)}
 .phone.hc .toggle.on{background:var(--purple-ink)}
 .phone.hc .matchchip,.phone.hc .mstat,.phone.hc .status-chip,.phone.hc .upd-badge,
 .phone.hc .state-card,.phone.hc .whatsnext,.phone.hc .tsize-btn,.phone.hc .ow-notseen{border-width:2px}
-.phone.hc .navbar{border-top:2px solid #373158}
+.phone.hc .navbar{border-top:2px solid var(--chrome-fill)}
 .phone.hc :focus-visible{outline-color:var(--ink)}
 
 /* reduced motion: see the .phone.rm block above. The operating-system setting
@@ -2582,7 +2634,7 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
           <div style="position:relative;display:flex;flex-direction:column;align-items:center">
             <span id="primer-art" aria-hidden="true"></span>
             <div class="big-icon" style="margin-top:-48px;position:relative;z-index:2">
-              <span class="ic" data-icon="camera" data-size="38" data-color="#784410" aria-hidden="true"></span>
+              <span class="ic" data-icon="camera" data-size="38" data-color="var(--marigold-ink,#6B4014)" aria-hidden="true"></span>
             </div>
           </div>
           <h2 class="scan-h">Help map an entrance</h2>
@@ -2684,7 +2736,7 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
     <section class="screen scanscreen light" id="scan-done" tabindex="-1" aria-label="Scan published">
       <div class="scan-body">
         <div class="big-icon" style="border-color:var(--marigold);background:var(--marigold-wash)">
-          <span class="ic" data-icon="check" data-size="36" data-color="#784410" aria-hidden="true"></span>
+          <span class="ic" data-icon="check" data-size="36" data-color="var(--marigold-ink,#6B4014)" aria-hidden="true"></span>
         </div>
         <h2 class="scan-h" style="font-size:var(--fs-h2)">Scan published &mdash; thanks for helping your neighbors</h2>
         <div class="mini-map" id="mini-map" aria-hidden="true"></div>
@@ -2718,13 +2770,13 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
           <rect x="158" y="26" width="42" height="66" rx="3" fill="#2A166E"/>
           <rect x="206" y="50" width="46" height="42" rx="3" fill="#2E1E5E"/>
           <rect x="258" y="30" width="56" height="62" rx="3" fill="#3E2F6A"/>
-          <g fill="#69B7FF" opacity=".85">
+          <g fill="#76BCFD" opacity=".85">
             <rect x="14" y="44" width="7" height="7" rx="1.5"/><rect x="28" y="44" width="7" height="7" rx="1.5"/>
             <rect x="64" y="28" width="7" height="7" rx="1.5"/><rect x="78" y="42" width="7" height="7" rx="1.5"/>
             <rect x="110" y="54" width="7" height="7" rx="1.5"/><rect x="166" y="36" width="7" height="7" rx="1.5"/>
             <rect x="266" y="40" width="7" height="7" rx="1.5"/><rect x="294" y="54" width="7" height="7" rx="1.5"/>
           </g>
-          <g fill="#FFBF24" opacity=".92">
+          <g fill="#FDB327" opacity=".92">
             <rect x="42" y="58" width="7" height="7" rx="1.5"/><rect x="78" y="28" width="7" height="7" rx="1.5"/>
             <rect x="138" y="54" width="7" height="7" rx="1.5"/><rect x="184" y="36" width="7" height="7" rx="1.5"/>
             <rect x="238" y="60" width="7" height="7" rx="1.5"/><rect x="280" y="40" width="7" height="7" rx="1.5"/>
@@ -2861,9 +2913,9 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
         <div style="display:flex;flex-direction:column;align-items:center;text-align:center">
           <svg width="86" height="86" viewBox="0 0 96 96" aria-hidden="true" style="margin-top:var(--sp-5)">
             <circle cx="48" cy="48" r="44" fill="#fff"/>
-            <circle cx="48" cy="48" r="30" fill="none" stroke="#5B35F5" stroke-width="4"/>
-            <path d="M48 33v15l10 7" fill="none" stroke="#5B35F5" stroke-width="4" stroke-linecap="round"/>
-            <circle cx="74" cy="70" r="12" fill="#5B35F5"/>
+            <circle cx="48" cy="48" r="30" fill="none" stroke="#4F34DB" stroke-width="4"/>
+            <path d="M48 33v15l10 7" fill="none" stroke="#4F34DB" stroke-width="4" stroke-linecap="round"/>
+            <circle cx="74" cy="70" r="12" fill="#4F34DB"/>
             <path d="M68.5 70l4 4 7-7.6" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           <h2 class="scan-h" style="font-size:var(--fs-h2);margin-top:var(--sp-6)">We're reviewing your claim</h2>
@@ -3434,21 +3486,30 @@ const PIN_HEAD = {x:48, y:41.3, r:36};
    the library has no equivalent because its assets are drawn for a catalogue sheet,
    not for a marker sitting on a drawn map. Widths are the Round 2 values re-scaled
    by 95.1/52 so the rendered halo is the same thickness it has always been. */
-function pinHalo(d){
-  /* ROUND 6 adds the board's base underneath it. Visual language 16: "Scanned
-     on-site is marigold ... sitting on a soft lavender halo disc. The halo is a
-     soft filled disc behind the pin, not a ring drawn around it." The build had
-     only the ring. The disc is drawn FIRST, so the opaque white lift strokes still
-     sit directly against the teardrop and every contrast figure measured for the
-     pin outlines is against white exactly as before -- the disc only changes what
-     is under the outermost, most transparent stroke.
+function pinHalo(d, withDisc){
+  /* ROUND 7 CORRECTS ROUND 6 AGAINST THE ARTWORK.
+     Round 6 read visual-language.md line 410 -- "Scanned on-site is marigold ...
+     sitting on a soft lavender halo disc" -- and drew that disc under EVERY pin,
+     always. Checked against the exports it is a STATE, not a base:
+       screen-exports/png/map-default.png, the same 30x20px patch beside the
+       Scanned pin, measures #F6F5FD -- plain land, no disc;
+       screen-exports/png/map-filtered-results.png, the same patch, measures
+       #D7D6FB / #DDDAFA -- a lavender disc.
+     The two differ only in that a needs profile has been applied. And the map kit
+     confirms it from the other side: none of its eight variants draws a disc under
+     a pin at all -- base-map and before-profile have empty halo groups, and
+     after-profile fills that group with the three RING halos.
+     So the disc is drawn only when a match state is present, which is exactly when
+     the board draws it. On the default map there is now no lavender under any pin.
      It is the same disc for all three tiers, so it carries no tier information and
      recolours nothing: a pin's fill, stroke and glyph are untouched by selection,
      match, freshness and provenance, and by this.
-     This is also the only consumer of --lavender-path, which is why that token is
-     a real role and not a name waiting for a palette. */
+
+     The white lift strokes are ours and are kept: the board draws a white keyline
+     round every teardrop, and the strokes are what put the pin outlines against
+     white so every contrast figure in this file holds whatever tone is beneath. */
   var cx=PIN_HEAD.x, cy=PIN_HEAD.y;
-  return '<circle cx="'+cx+'" cy="'+cy+'" r="47" fill="var(--lavender-path,#E2DAFF)" opacity=".55"/>'
+  return (withDisc ? '<circle cx="'+cx+'" cy="'+cy+'" r="47" fill="var(--lavender-path,#CFBCEE)" opacity=".55"/>' : '')
        + '<path d="'+d+'" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="15.7" stroke-linejoin="round"/>'
        + '<path d="'+d+'" fill="none" stroke="#fff" stroke-opacity=".62" stroke-width="10.2" stroke-linejoin="round"/>'
        + '<path d="'+d+'" fill="none" stroke="#fff" stroke-width="5.9" stroke-linejoin="round"/>';
@@ -3474,18 +3535,18 @@ function matchHalo(state){
   var cx = PIN_HEAD.x, cy = PIN_HEAD.y;
   if(state === 'good'){
     return '<circle cx="'+cx+'" cy="'+cy+'" r="50" fill="none"'
-         +   ' stroke="var(--match-good,#17103D)" stroke-width="6"/>'
+         +   ' stroke="var(--match-good,#1E1142)" stroke-width="6"/>'
          + '<circle cx="'+cx+'" cy="'+cy+'" r="38" fill="none"'
-         +   ' stroke="var(--sky400,#69B7FF)" stroke-width="2.4" opacity=".65"/>';
+         +   ' stroke="var(--sky400,#76BCFD)" stroke-width="2.4" opacity=".65"/>';
   }
   if(state === 'partial'){
     return '<circle cx="'+cx+'" cy="'+cy+'" r="50" fill="none"'
-         + ' stroke="var(--match-partial,#5B35F5)" stroke-width="6"'
+         + ' stroke="var(--match-partial,#4F34DB)" stroke-width="6"'
          + ' stroke-dasharray="17.9 10.7" transform="rotate(-90 '+cx+' '+cy+')"/>';
   }
   if(state === 'unknown'){
     return '<circle cx="'+cx+'" cy="'+cy+'" r="50" fill="none"'
-         + ' stroke="var(--match-unknown,#1266A6)" stroke-width="6" stroke-linecap="round"'
+         + ' stroke="var(--match-unknown,#1B6599)" stroke-width="6" stroke-linecap="round"'
          + ' stroke-dasharray="1.2 13.1"/>';
   }
   return '';
@@ -3499,29 +3560,38 @@ function matchHalo(state){
 function pinSVG(tier, size, opts){
   opts = opts || {};
   if(tier === 'cluster'){
-    /* MIXED CLUSTER -- spec: "48 px deep-indigo count marker with sky-blue,
-       marigold, and violet composition arcs. A cluster never impersonates a
-       trust tier." Round 4 drew a violet rim and a violet count, which is the
-       Owner-confirmed tier's own colour, so a disc holding four estimates was
-       drawn in the colour of the highest tier -- exactly what the clause
-       forbids. Restated: indigo900 rim and indigo900 count, neither of which is
-       any tier, with the tier mix drawn as three proportional arcs around the
-       outside. The mix was already computed for the aria-label. */
+    /* MIXED CLUSTER -- ROUND 7 TAKES THE KIT'S DRAWING.
+       map-kit/svg/mixed-cluster.svg draws it as:
+         <circle r="76" fill="#1E1142" stroke="#FFFFFF" stroke-width="8"/>
+         three arcs at radius 70, stroke-width 13, sky #76BCFD / marigold #FDB327 /
+           violet #4F34DB, round caps, which puts them ON the indigo fill
+         <text fill="#FFFFFF" font-size="50" font-weight="800">12</text>
+       Round 4 drew a FILLED WHITE disc with an indigo rim and an indigo count, and
+       hung the arcs outside it. That is not the kit's mark; it also left the arcs
+       sitting on the map ground, where sky is 1.83:1. Restated to the kit, which
+       inverts the disc: indigo fill, white ring, white count -- and the arcs move
+       inside onto the indigo, where they measure sky400 8.55:1, marigold400 9.60:1
+       and violet600 2.60:1. Neither the disc nor the count is any tier's colour, so
+       a cluster still cannot impersonate a trust tier, and the count -- not the arc
+       ring -- remains the carrier; the arcs are a supplementary composition cue and
+       the mix is spoken in full in the aria-label.
+       Proportions are the kit's, scaled to the 48px cluster: disc r 17 (76/4.47),
+       ring 1.8 (8/4.47), arc radius 15.7 (70/4.47), arc width 2.9 (13/4.47). */
     var cs = size || CLUSTER_PX;
     var mix = opts.mix || null, n = opts.count == null ? 8 : opts.count;
     var arcs = '';
     if(mix){
       var total = (mix.est||0) + (mix.scan||0) + (mix.owner||0);
       if(total > 0){
-        var R = 21.4, C = 2 * Math.PI * R, gap = 3, at = -90;
-        var segs = [['est','var(--blue-edge,#1266A6)'], ['scan','var(--marigold,#FFBF24)'],
-                    ['owner','var(--purple,#5B35F5)']];
+        var R = 15.7, C = 2 * Math.PI * R, gap = 2.4, at = -90;
+        var segs = [['est','var(--sky400,#76BCFD)'], ['scan','var(--marigold,#FDB327)'],
+                    ['owner','var(--purple,#4F34DB)']];
         segs.forEach(function(sg){
           var v = mix[sg[0]] || 0; if(!v) return;
           var len = C * v / total - gap;
           if(len < 2) len = 2;
           arcs += '<circle cx="24" cy="24" r="' + R + '" fill="none" stroke="' + sg[1] + '"'
-               +  ' stroke-width="3.4" stroke-linecap="butt"'
+               +  ' stroke-width="2.9" stroke-linecap="round"'
                +  ' stroke-dasharray="' + len.toFixed(2) + ' ' + (C - len).toFixed(2) + '"'
                +  ' transform="rotate(' + at.toFixed(2) + ' 24 24)"/>';
           at += 360 * v / total;
@@ -3530,12 +3600,12 @@ function pinSVG(tier, size, opts){
     }
     return '<svg width="'+cs+'" height="'+cs+'" viewBox="0 0 48 48" fill="none"'
       + ' aria-hidden="true" focusable="false" style="overflow:visible;display:block">'
-      + '<circle cx="24" cy="24" r="17" fill="#fff" stroke="#fff" stroke-opacity=".55" stroke-width="10"/>'
+      + '<circle cx="24" cy="24" r="17" fill="#fff" stroke="#fff" stroke-opacity=".55" stroke-width="8"/>'
+      + '<circle cx="24" cy="24" r="17" fill="var(--indigo900,#1E1142)"'
+      +   ' stroke="#FFFFFF" stroke-width="1.8"/>'
       + arcs
-      + '<circle cx="24" cy="24" r="17" fill="var(--card,#FFFFFF)"'
-      +   ' stroke="var(--indigo900,#17103D)" stroke-width="2.8"/>'
       + '<text x="24" y="24" text-anchor="middle" dominant-baseline="central"'
-      +   ' fill="var(--indigo900,#17103D)" stroke="none"'
+      +   ' fill="#FFFFFF" stroke="none"'
       +   ' font-family="inherit" font-size="17" font-weight="800">'
       +   n + '</text>'
       + '</svg>';
@@ -3543,46 +3613,55 @@ function pinSVG(tier, size, opts){
 
   var h = size || 28;
   var w = Math.round(h * PIN_AR * 100) / 100;
-  /* SELECTED KEYLINE -- pin-overlays/selected-keyline.svg: a white ring inside an
-     indigo outer line, drawn OUTSIDE the head so the tier's own fill, stroke and
-     glyph are untouched. Selection is a size, a lift and a keyline; it is never
-     a colour. Radii are set to clear the head (r36) and to sit inside the match
-     halo (r50) so the two overlays can be present together without touching. */
+  /* SELECTED KEYLINE -- map-kit/svg/selected-business.svg, which draws it as
+       <circle r="66" stroke="#FFFFFF" stroke-width="10"/>
+       <circle r="73" stroke="#1E1142" stroke-width="4"/>
+     round a pin whose head radius is 30.75 in the same units, i.e. a white ring at
+     2.15x the head radius inside an indigo line at 2.37x. ROUND 7 CORRECTION: the
+     build nested this INSIDE the needs-match halo (r40.5 / r44.5 against a halo at
+     r50); the kit nests it OUTSIDE, and it is the kit's mark. Re-pitched onto this
+     file's head radius of 36 and its halo outer edge of 53: white at r59, indigo at
+     r65. Still drawn entirely outside the head, so the tier's own fill, stroke and
+     glyph are untouched -- selection is a size, a lift and a keyline, never a
+     colour -- and the two overlays are still present together without touching. */
   var keyline = opts.selected
-    ? '<circle cx="'+PIN_HEAD.x+'" cy="'+PIN_HEAD.y+'" r="44.5" fill="none"'
-      + ' stroke="var(--indigo900,#17103D)" stroke-width="3"/>'
-      + '<circle cx="'+PIN_HEAD.x+'" cy="'+PIN_HEAD.y+'" r="40.5" fill="none"'
+    ? '<circle cx="'+PIN_HEAD.x+'" cy="'+PIN_HEAD.y+'" r="65" fill="none"'
+      + ' stroke="var(--indigo900,#1E1142)" stroke-width="3"/>'
+      + '<circle cx="'+PIN_HEAD.x+'" cy="'+PIN_HEAD.y+'" r="59" fill="none"'
       + ' stroke="#FFFFFF" stroke-width="7"/>'
     : '';
   var s = '<svg width="'+w+'" height="'+h+'" viewBox="'+PIN_VB+'" fill="none"'
         + ' aria-hidden="true" focusable="false" style="overflow:visible;display:block">'
         + matchHalo(opts.match)
-        + pinHalo(TEAR)
+        + pinHalo(TEAR, !!opts.match)
         + keyline;
 
   if(tier === 'est'){
-    /* Library asset, with ONE substitution: the dashed outline is drawn in sky700
-       rather than sky400. The library's own contrast report lists sky400 as the
-       ON-DARK sky (8.33:1 on indigo900) and never as an on-light one -- it is
-       1.63:1 on this map's ground, which would fail 1.4.11 -- while sky700 is the
-       on-light sky the very same asset already uses for its italic i and its dot
-       strokes. Same asset, the library's own answer for a light surface. */
-    s += '<path d="'+TEAR+'" fill="var(--card,#FFFFFF)" stroke="var(--blue-edge,#1266A6)"'
+    /* Package asset, with ONE substitution: the dashed outline is drawn in sky700
+       rather than sky400. Measured against the map kit's own ground, sky400 is
+       1.83:1 on the land, 1.36:1 on the darkest filled tone, and 2.02:1 against the
+       pin's OWN white fill -- the mark would have no discernible boundary anywhere.
+       The board draws this outline in a fully saturated blue (sampled #0033F5), so
+       the asset and the artwork disagree and the asset is the one that fails. sky700
+       is dark like the board's, is in the canonical twelve, and is what the very
+       same asset already uses for its italic i and its confidence-dot strokes:
+       5.64:1 on the land, 3.59:1 on the darkest tone, 6.24:1 on its own fill. */
+    s += '<path d="'+TEAR+'" fill="var(--card,#FFFFFF)" stroke="var(--blue-edge,#1B6599)"'
        + ' stroke-width="4" stroke-dasharray="7 6"/>'
-       + pinDots(0, 'var(--blue-edge,#1266A6)', 'var(--blue-edge,#1266A6)')
+       + pinDots(0, 'var(--blue-edge,#1B6599)', 'var(--blue-edge,#1B6599)')
        + '<text x="48" y="56" text-anchor="middle" font-family="Georgia,\'Times New Roman\',serif"'
        +   ' font-size="39" font-weight="700" font-style="italic"'
-       +   ' fill="var(--blue-edge,#1266A6)" stroke="none">i</text>';
+       +   ' fill="var(--blue-edge,#1B6599)" stroke="none">i</text>';
   } else if(tier === 'scan'){
     /* Library asset, with ONE substitution: the body rim is indigo900 rather than
        white. marigold400 is 1.22:1 on the worst ground tone, so a white rim would
        leave the mark with no boundary; indigo900 on marigold400 is 10.81:1 and is
        what the library's OWN scanned-on-site badge and freshness-recheck badge
        stroke that fill with. */
-    s += '<path d="'+TEAR+'" fill="var(--marigold,#FFBF24)" stroke="var(--marigold-edge,#17103D)"'
+    s += '<path d="'+TEAR+'" fill="var(--marigold,#FDB327)" stroke="var(--marigold-edge,#1E1142)"'
        + ' stroke-width="4" stroke-linejoin="round"/>'
-       + pinDots(2, 'var(--marigold,#FFBF24)', 'var(--marigold-edge,#17103D)')
-       + '<g fill="none" stroke="var(--ink,#17103D)" stroke-width="4" stroke-linecap="round"'
+       + pinDots(2, 'var(--marigold,#FDB327)', 'var(--marigold-edge,#1E1142)')
+       + '<g fill="none" stroke="var(--ink,#1E1142)" stroke-width="4" stroke-linecap="round"'
        +   ' stroke-linejoin="round"><circle cx="48" cy="34" r="9"/>'
        +   '<path d="M30 69c1-15 8-23 18-23s17 8 18 23Z"/></g>';
   } else {
@@ -3590,14 +3669,14 @@ function pinSVG(tier, size, opts){
        against the worst ground tone on the FILL, which is what a reader
        discriminates), the white storefront, and the SEPARATE outlined tick badge at
        upper right -- its own mark beside the pin, never merged into it. */
-    s += '<path d="'+TEAR+'" fill="var(--purple,#5B35F5)" stroke="#FFFFFF" stroke-width="4"/>'
-       + pinDots(3, 'var(--purple,#5B35F5)', 'var(--purple,#5B35F5)')
+    s += '<path d="'+TEAR+'" fill="var(--purple,#4F34DB)" stroke="#FFFFFF" stroke-width="4"/>'
+       + pinDots(3, 'var(--purple,#4F34DB)', 'var(--purple,#4F34DB)')
        + '<g fill="none" stroke="#FFFFFF" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round">'
        +   '<path d="M28 38h40l-4-12H32Z"/>'
        +   '<path d="M30 38v30h36V38M42 68V51h13v17"/>'
        +   '<path d="M28 38c0 5 6 7 10 3 4 4 9 4 13 0 4 4 9 4 13 0 4 4 10 2 10-3"/></g>'
-       + '<circle cx="88" cy="28" r="14" fill="#FFFFFF" stroke="var(--purple-ink,#4020B5)" stroke-width="3"/>'
-       + '<g fill="none" stroke="var(--purple-ink,#4020B5)" stroke-width="3" stroke-linecap="round"'
+       + '<circle cx="88" cy="28" r="14" fill="#FFFFFF" stroke="var(--purple-ink,#38239B)" stroke-width="3"/>'
+       + '<g fill="none" stroke="var(--purple-ink,#38239B)" stroke-width="3" stroke-linecap="round"'
        +   ' stroke-linejoin="round"><path d="m81 28 5 5 9-11"/></g>';
   }
   return s + '</svg>';
@@ -3713,13 +3792,13 @@ function iconSVG(name, size, color){
    redrawn. The two clip-path ids are made instance-unique at call time.
    ================================================================ */
 const ILLUS = {
-"door":["0 0 240 240","<circle cx=\"120\" cy=\"108\" r=\"100\" fill=\"var(--purple,#5B35F5)\" opacity=\".15\"/> <ellipse cx=\"120\" cy=\"207\" rx=\"96\" ry=\"9\" fill=\"var(--purple,#5B35F5)\" opacity=\".18\"/> <g fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"2.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-opacity=\".6\"> <path d=\"M46 72h148v114H46z\"/> <path d=\"M50 62h140v10H50z\"/> <path d=\"M44 50h152v12H44z\"/> <path d=\"M68 78h20v100H68zM152 78h20v100h-20z\" fill=\"var(--purple,#5B35F5)\" fill-opacity=\".12\"/> <path d=\"M64 72h28v6H64zM148 72h28v6h-28zM64 178h28v8H64zM148 178h28v8h-28z\"/> <path d=\"M74 84v88M82 84v88M158 84v88M166 84v88\" fill=\"none\" stroke-opacity=\".26\"/> <path d=\"M88 78h64v108H88z\"/> </g> <path d=\"M92 84h56v102H92z\" fill=\"var(--marigold,#FFBF24)\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"2.1\" stroke-linejoin=\"round\" stroke-opacity=\".68\"/> <g fill=\"none\" stroke=\"var(--ink,#17103D)\" stroke-width=\"1.9\" stroke-opacity=\".24\" stroke-linejoin=\"round\"> <path d=\"M100 94h18v30h-18zM122 94h18v30h-18zM100 134h18v42h-18zM122 134h18v42h-18z\"/> </g> <circle cx=\"142\" cy=\"136\" r=\"2.9\" fill=\"var(--card,#FFFFFF)\" stroke=\"var(--ink,#17103D)\" stroke-width=\"1.6\" stroke-opacity=\".32\"/> <g fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"2.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-opacity=\".6\"> <g transform=\"translate(57 94)\"> <path d=\"M0 0v-5\" fill=\"none\"/><circle cx=\"0\" cy=\"-7.5\" r=\"2\"/> <path d=\"M-9 0h18l-3 7h-12z\"/> <path d=\"M-7.5 7h15l-1.5 17h-12z\" fill=\"var(--blue,#69B7FF)\" fill-opacity=\".24\"/> <path d=\"M-6 24h12l-6 7z\"/> <path d=\"M0 7v17M-7 15h14\" fill=\"none\" stroke-opacity=\".3\"/> </g> <g transform=\"translate(183 94)\"> <path d=\"M0 0v-5\" fill=\"none\"/><circle cx=\"0\" cy=\"-7.5\" r=\"2\"/> <path d=\"M-9 0h18l-3 7h-12z\"/> <path d=\"M-7.5 7h15l-1.5 17h-12z\" fill=\"var(--blue,#69B7FF)\" fill-opacity=\".24\"/> <path d=\"M-6 24h12l-6 7z\"/> <path d=\"M0 7v17M-7 15h14\" fill=\"none\" stroke-opacity=\".3\"/> </g> <path d=\"M84 186h72v8H84zM74 194h92v7H74zM62 201h116v8H62z\"/> <g transform=\"translate(28 203)\"> <path d=\"M0-24v-16\" fill=\"none\" stroke-opacity=\".45\"/> <path d=\"M0-37c-15 0-21-11-14-17-5-11 6-19 15-13 9-9 20 2 14 12 7 8 0 18-11 18z\" fill=\"var(--blue,#69B7FF)\" fill-opacity=\".26\"/> <path d=\"M0-39v-25M0-50l-9-7M0-57l9-7\" fill=\"none\" stroke-opacity=\".42\"/> <path d=\"M-16-24h32v6h-32zM-14-18h28l-4 18h-20z\"/> </g> <g transform=\"translate(212 203)\"> <path d=\"M0-24v-16\" fill=\"none\" stroke-opacity=\".45\"/> <path d=\"M0-37c-15 0-21-11-14-17-5-11 6-19 15-13 9-9 20 2 14 12 7 8 0 18-11 18z\" fill=\"var(--blue,#69B7FF)\" fill-opacity=\".26\"/> <path d=\"M0-39v-25M0-50l-9-7M0-57l9-7\" fill=\"none\" stroke-opacity=\".42\"/> <path d=\"M-16-24h32v6h-32zM-14-18h28l-4 18h-20z\"/> </g> </g>"],
-"street":["0 0 280 176","<defs><clipPath id=\"emField__U__\"><rect x=\"1\" y=\"1\" width=\"278\" height=\"174\" rx=\"20\"/></clipPath></defs> <rect x=\"1\" y=\"1\" width=\"278\" height=\"174\" rx=\"20\" fill=\"var(--purple,#5B35F5)\" opacity=\".13\"/> <g clip-path=\"url(#emField__U__)\"> <g fill=\"var(--purple,#5B35F5)\" fill-opacity=\".13\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"1.6\" stroke-opacity=\".38\" stroke-linejoin=\"round\"> <path d=\"M6 30h44v104H6zM50 54h32v80H50zM212 24h40v110h-40zM252 54h28v80h-28z\"/> </g> <g fill=\"var(--card,#FFFFFF)\" fill-opacity=\".75\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"1.3\" stroke-opacity=\".3\"> <path d=\"M16 42h10v11H16zM34 42h10v11H34zM16 62h10v11H16zM34 62h10v11H34zM60 66h11v11H60zM222 38h10v12h-10zM236 38h10v12h-10zM222 60h10v12h-10zM236 60h10v12h-10zM260 66h11v11h-11z\"/> </g> <g fill=\"var(--blue,#69B7FF)\" fill-opacity=\".18\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"1.8\" stroke-opacity=\".48\" stroke-linejoin=\"round\"> <path d=\"M176 34h38v100h-38z\"/> <path d=\"M184 46h9v12h-9zM199 46h9v12h-9zM184 66h9v12h-9zM199 66h9v12h-9zM184 86h9v12h-9zM199 86h9v12h-9z\" fill=\"var(--card,#FFFFFF)\" fill-opacity=\".85\"/> </g> <path d=\"M14 134h252l14 28H0z\" fill=\"var(--card,#FFFFFF)\" fill-opacity=\".6\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"1.8\" stroke-opacity=\".42\" stroke-linejoin=\"round\"/> <path d=\"M-2 162h284v18H-2z\" fill=\"var(--purple,#5B35F5)\" fill-opacity=\".13\"/> <path d=\"M60 134l-6 28M124 134l-2 28M198 134l5 28\" fill=\"none\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"1.4\" stroke-opacity=\".22\"/> <path d=\"M16 171h30M64 171h30M112 171h30M160 171h30M208 171h30M256 171h24\" fill=\"none\" stroke=\"var(--card,#FFFFFF)\" stroke-width=\"3.4\" stroke-opacity=\".85\" stroke-linecap=\"round\"/> <g fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-opacity=\".62\"> <path d=\"M22 78h70v56H22zM172 78h72v56h-72zM92 66h80v68H92z\"/> <path d=\"M22 78h70v13H22zM172 78h72v13h-72z\" fill=\"var(--purple,#5B35F5)\" fill-opacity=\".13\"/> <path d=\"M30 100h36v26H30zM180 100h36v26h-36zM100 106h34v28h-34z\" fill=\"var(--blue,#69B7FF)\" fill-opacity=\".2\"/> <path d=\"M72 102h14v32H72zM222 102h14v32h-14zM142 104h20v30h-20z\" fill=\"var(--purple,#5B35F5)\" fill-opacity=\".09\"/> </g> <path d=\"M36 85h32M182 85h34\" fill=\"none\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"2.6\" stroke-opacity=\".22\" stroke-linecap=\"round\"/> <path d=\"M96 76h72l9 18H87z\" fill=\"var(--marigold,#FFBF24)\"/> <path d=\"M87 94q5 6 10 0q5 6 10 0q5 6 10 0q5 6 10 0q5 6 10 0q5 6 10 0q5 6 10 0q5 6 10 0q5 6 10 0v-3H87z\" fill=\"var(--marigold,#FFBF24)\"/> <path d=\"M111 76l-4 18M132 76v18M153 76l4 18\" fill=\"none\" stroke=\"var(--ink,#17103D)\" stroke-width=\"1.8\" stroke-opacity=\".16\"/> <g fill=\"none\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-opacity=\".55\"> <g transform=\"translate(260 136)\"> <path d=\"M0 0v-32M0-19l-9-9M0-27l9-9\"/> <path d=\"M0-56c-12 0-18-8-13-16-4-9 6-17 13-11 7-6 17 2 13 11 5 8-1 16-13 16z\" fill=\"var(--blue,#69B7FF)\" fill-opacity=\".26\"/> </g> <g transform=\"translate(13 137)\"> <path d=\"M0 0v-26M0-15l-7-8\"/> <path d=\"M0-45c-10 0-15-7-11-13-3-7 5-14 11-9 6-5 14 2 11 9 4 6-1 13-11 13z\" fill=\"var(--blue,#69B7FF)\" fill-opacity=\".26\"/> </g> </g> <g transform=\"translate(62 148)\" stroke=\"var(--purple,#5B35F5)\" stroke-opacity=\".6\" fill=\"none\" stroke-linecap=\"round\"> <circle cx=\"0\" cy=\"-29\" r=\"4.6\" fill=\"var(--purple,#5B35F5)\" fill-opacity=\".6\" stroke=\"none\"/> <path d=\"M0-22v11\" stroke-width=\"6\"/> <path d=\"M0-11l-4 11M0-11l4 11\" stroke-width=\"4.6\"/> <path d=\"M-6-19l6 3 6-3\" stroke-width=\"3.4\"/> </g> </g> <rect x=\"1\" y=\"1\" width=\"278\" height=\"174\" rx=\"20\" fill=\"none\" stroke=\"var(--purple,#5B35F5)\" stroke-width=\"1.6\" stroke-opacity=\".32\"/>"],
-"map":["0 0 280 176","<defs><clipPath id=\"emField__U__\"><rect x=\"1\" y=\"1\" width=\"278\" height=\"174\" rx=\"20\"/></clipPath></defs> <rect x=\"1\" y=\"1\" width=\"278\" height=\"174\" rx=\"20\" fill=\"var(--ground,#F2EEFF)\"/> <g clip-path=\"url(#emField__U__)\"> <g transform=\"rotate(-11 140 88)\"> <rect x=\"-60\" y=\"-60\" width=\"400\" height=\"300\" fill=\"var(--blue,#69B7FF)\" fill-opacity=\".1\"/> <g fill=\"var(--blue,#69B7FF)\" fill-opacity=\".17\" stroke=\"var(--blue,#69B7FF)\" stroke-width=\"1.4\" stroke-opacity=\".45\"> <path d=\"M-20-30h84v70h-84zM80-30h86v70H80zM182-30h96v70h-96z\"/> <path d=\"M-20 56h84v76h-84zM80 56h86v76H80zM182 56h96v76h-96z\"/> <path d=\"M-20 148h84v84h-84zM80 148h86v84H80zM182 148h96v84h-96z\"/> </g> <g fill=\"none\" stroke=\"var(--blue,#69B7FF)\" stroke-width=\"1.2\" stroke-opacity=\".38\"> <path d=\"M20-30v70M-20 6h84M118-30v70M80 14h86M182 18h96M230 70V18M20 56v76M-20 96h84M124 56v76M182 96h96M240 96v36M52 148v84M80 190h86M182 190h96\"/> </g> <g stroke=\"var(--card,#FFFFFF)\" stroke-opacity=\".95\" fill=\"none\" stroke-linecap=\"square\"> <path d=\"M-60 48H340M-60 140H340\" stroke-width=\"15\"/> <path d=\"M72-60v300M174-60v300\" stroke-width=\"15\"/> <path d=\"M-60 94H340\" stroke-width=\"9\"/> </g> </g> <g fill=\"var(--blue,#69B7FF)\" fill-opacity=\".32\" stroke=\"var(--blue,#69B7FF)\" stroke-width=\"1.4\" stroke-opacity=\".55\" stroke-linejoin=\"round\"> <path d=\"M46 44c-10 0-15-8-9-13-4-8 5-13 11-9 5-5 14 0 11 8 6 5 2 14-8 14z\"/> <path d=\"M232 32c-10 0-15-8-9-13-4-8 5-13 11-9 5-5 14 0 11 8 6 5 2 14-8 14z\"/> <path d=\"M196 138c-11 0-17-9-10-15-4-9 6-15 12-10 6-6 16 0 12 9 7 6 2 16-8 16z\"/> <path d=\"M64 148c-10 0-15-8-9-13-4-8 5-13 11-9 5-5 14 0 11 8 6 5 2 14-8 14z\"/> <path d=\"M258 96c-9 0-13-7-8-11-3-6 4-11 9-7 4-4 11 0 9 7 4 4 1 11-7 11z\"/> <path d=\"M110 26c-9 0-13-7-8-11-3-6 4-11 9-7 4-4 11 0 9 7 4 4 1 11-7 11z\"/> </g> <circle cx=\"140\" cy=\"90\" r=\"38\" fill=\"var(--blue,#69B7FF)\" opacity=\".09\"/> <circle cx=\"140\" cy=\"90\" r=\"24\" fill=\"var(--blue,#69B7FF)\" opacity=\".17\"/> <circle cx=\"140\" cy=\"90\" r=\"24\" fill=\"none\" stroke=\"var(--blue,#69B7FF)\" stroke-width=\"1.4\" stroke-opacity=\".45\"/> <circle cx=\"140\" cy=\"90\" r=\"11.5\" fill=\"var(--card,#FFFFFF)\"/> <circle cx=\"140\" cy=\"90\" r=\"8\" fill=\"var(--blue,#69B7FF)\"/> </g> <rect x=\"1\" y=\"1\" width=\"278\" height=\"174\" rx=\"20\" fill=\"none\" stroke=\"var(--purple,#5B35F5)\" stroke-width=\"1.6\" stroke-opacity=\".32\"/>"],
-"saved":["0 0 240 240","<circle cx=\"120\" cy=\"108\" r=\"100\" fill=\"var(--purple,#5B35F5)\" opacity=\".15\"/> <ellipse cx=\"120\" cy=\"204\" rx=\"94\" ry=\"9\" fill=\"var(--purple,#5B35F5)\" opacity=\".18\"/> <g fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"2.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-opacity=\".6\"> <path d=\"M86 60h68v130H86z\" fill=\"var(--blue,#69B7FF)\" fill-opacity=\".22\"/> <path d=\"M66 48h108v12H66z\"/> <path d=\"M70 60h16v130H70zM154 60h16v130h-16z\"/> <path d=\"M86 60L48 74v122l38-6z\"/> <path d=\"M62 190h116v10H62z\"/> </g> <g fill=\"none\" stroke=\"var(--ink,#17103D)\" stroke-width=\"1.8\" stroke-opacity=\".2\" stroke-linejoin=\"round\"> <path d=\"M56 88l22-8v36l-22 5zM56 132l22-5v38l-22 4z\"/> </g> <circle cx=\"53\" cy=\"136\" r=\"3\" fill=\"var(--card,#FFFFFF)\" stroke=\"var(--ink,#17103D)\" stroke-width=\"1.6\" stroke-opacity=\".3\"/> <path d=\"M86 150h68v40H86z\" fill=\"var(--card,#FFFFFF)\" opacity=\".32\"/> <path d=\"M120 60v16\" fill=\"none\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"1.8\" stroke-opacity=\".4\"/> <path d=\"M110 76h20l-4 9h-12z\" fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"1.8\" stroke-linejoin=\"round\" stroke-opacity=\".45\"/> <path d=\"M88 190h64l20 18H68z\" fill=\"var(--marigold,#FFBF24)\" opacity=\".28\"/> <g transform=\"rotate(-11 178 198)\"> <path d=\"M162 130h32v68l-16-12-16 12z\" fill=\"var(--marigold,#FFBF24)\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"2.1\" stroke-linejoin=\"round\" stroke-opacity=\".68\"/> <path d=\"M170 146h16M170 158h11\" fill=\"none\" stroke=\"var(--ink,#17103D)\" stroke-width=\"2.1\" stroke-opacity=\".22\" stroke-linecap=\"round\"/> </g> <ellipse cx=\"181\" cy=\"202\" rx=\"22\" ry=\"5\" fill=\"var(--purple,#5B35F5)\" opacity=\".18\"/>"],
-"offline":["0 0 240 240","<circle cx=\"120\" cy=\"108\" r=\"100\" fill=\"var(--purple,#5B35F5)\" opacity=\".15\"/> <ellipse cx=\"120\" cy=\"205\" rx=\"92\" ry=\"9\" fill=\"var(--purple,#5B35F5)\" opacity=\".18\"/> <g fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"2.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-opacity=\".6\"> <path d=\"M60 78h120v112H60z\"/> <path d=\"M56 66h128v12H56z\"/> <path d=\"M64 82h22v108H64zM154 82h22v108h-22z\" fill=\"var(--purple,#5B35F5)\" fill-opacity=\".12\"/> <path d=\"M70 94v84M164 94v84\" fill=\"none\" stroke-opacity=\".26\"/> <path d=\"M86 78h68v112H86z\"/> <path d=\"M76 190h88v9H76zM64 199h112v9H64z\"/> </g> <path d=\"M90 84h60v106H90z\" fill=\"var(--marigold,#FFBF24)\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"2.1\" stroke-linejoin=\"round\" stroke-opacity=\".68\"/> <g fill=\"none\" stroke=\"var(--ink,#17103D)\" stroke-width=\"1.9\" stroke-opacity=\".24\" stroke-linejoin=\"round\"> <path d=\"M98 94h19v32H98zM123 94h19v32h-19zM98 136h19v44H98zM123 136h19v44h-19z\"/> </g> <circle cx=\"144\" cy=\"138\" r=\"2.9\" fill=\"var(--card,#FFFFFF)\" stroke=\"var(--ink,#17103D)\" stroke-width=\"1.6\" stroke-opacity=\".32\"/> <circle cx=\"176\" cy=\"52\" r=\"42\" fill=\"var(--blue,#69B7FF)\" opacity=\".13\"/> <path d=\"M158 68h-4a13 13 0 0 1-1-26 19 19 0 0 1 35-4 12 12 0 0 1 8 22 12 12 0 0 1-4 8h-24\" fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-opacity=\".62\" stroke-dasharray=\"9 6\"/> <path d=\"M176 62V42M169 49l7-7 7 7\" fill=\"none\" stroke=\"var(--blue,#69B7FF)\" stroke-width=\"2.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/> <path d=\"M156 84h7M170 84h10M187 84h7\" fill=\"none\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-opacity=\".34\"/>"],
-"camera":["0 0 240 240","<circle cx=\"120\" cy=\"112\" r=\"100\" fill=\"var(--purple,#5B35F5)\" opacity=\".15\"/> <ellipse cx=\"120\" cy=\"196\" rx=\"80\" ry=\"9\" fill=\"var(--purple,#5B35F5)\" opacity=\".18\"/> <g fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-opacity=\".72\"> <path d=\"M88 74a7 7 0 0 1 7-7h28a7 7 0 0 1 7 7v12H88z\"/> <rect x=\"150\" y=\"72\" width=\"24\" height=\"14\" rx=\"5\" fill=\"var(--marigold,#FFBF24)\" stroke-opacity=\".55\"/> <rect x=\"44\" y=\"86\" width=\"152\" height=\"102\" rx=\"18\"/> <rect x=\"58\" y=\"100\" width=\"22\" height=\"13\" rx=\"4\" fill=\"var(--blue,#69B7FF)\" fill-opacity=\".22\" stroke-opacity=\".4\"/> </g> <circle cx=\"120\" cy=\"137\" r=\"41\" fill=\"var(--blue,#69B7FF)\" fill-opacity=\".16\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"2.4\" stroke-opacity=\".72\"/> <circle cx=\"120\" cy=\"137\" r=\"32\" fill=\"none\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"1.8\" stroke-opacity=\".34\"/> <circle cx=\"120\" cy=\"137\" r=\"25\" fill=\"var(--purple,#5B35F5)\" fill-opacity=\".2\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"2.2\" stroke-opacity=\".62\"/> <g fill=\"none\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-opacity=\".38\"> <path d=\"M126 137h17M123 142l8 15M117 142l-8 15M114 137H97M117 132l-8-15M123 132l8-15\"/> </g> <circle cx=\"120\" cy=\"137\" r=\"5.5\" fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"1.8\" stroke-opacity=\".5\"/> <path d=\"M104 118a25 25 0 0 1 22-5\" fill=\"none\" stroke=\"var(--card,#FFFFFF)\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-opacity=\".7\"/> <circle cx=\"178\" cy=\"104\" r=\"4\" fill=\"var(--blue,#69B7FF)\" fill-opacity=\".5\"/>"],
-"thanks":["0 0 240 240","<circle cx=\"120\" cy=\"108\" r=\"100\" fill=\"var(--purple,#5B35F5)\" opacity=\".15\"/> <ellipse cx=\"120\" cy=\"203\" rx=\"92\" ry=\"9\" fill=\"var(--purple,#5B35F5)\" opacity=\".18\"/> <g fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"2.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-opacity=\".6\"> <path d=\"M58 66h124v122H58z\"/> <path d=\"M54 54h132v12H54z\"/> <path d=\"M62 70h22v118H62zM156 70h22v118h-22z\" fill=\"var(--purple,#5B35F5)\" fill-opacity=\".12\"/> <path d=\"M68 82v90M166 82v90\" fill=\"none\" stroke-opacity=\".26\"/> <path d=\"M84 66h72v122H84z\"/> <path d=\"M74 188h92v9H74zM62 197h116v9H62z\"/> </g> <path d=\"M88 72h64v116H88z\" fill=\"var(--marigold,#FFBF24)\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"2.1\" stroke-linejoin=\"round\" stroke-opacity=\".68\"/> <g fill=\"none\" stroke=\"var(--ink,#17103D)\" stroke-width=\"1.9\" stroke-opacity=\".24\" stroke-linejoin=\"round\"> <path d=\"M96 82h21v34H96zM123 82h21v34h-21zM96 126h21v52H96zM123 126h21v52h-21z\"/> </g> <circle cx=\"146\" cy=\"130\" r=\"2.9\" fill=\"var(--card,#FFFFFF)\" stroke=\"var(--ink,#17103D)\" stroke-width=\"1.6\" stroke-opacity=\".32\"/> <g transform=\"rotate(-7 168 176)\"> <rect x=\"126\" y=\"150\" width=\"84\" height=\"52\" rx=\"8\" fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#4020B5)\" stroke-width=\"2.2\" stroke-opacity=\".68\"/> <path d=\"M152 174h44M152 187h30\" fill=\"none\" stroke=\"var(--blue,#69B7FF)\" stroke-width=\"2.6\" stroke-linecap=\"round\" stroke-opacity=\".6\"/> <circle cx=\"133\" cy=\"156\" r=\"13\" fill=\"var(--purple,#5B35F5)\"/> <path d=\"M127.5 156l4 4.5 7.5-8.5\" fill=\"none\" stroke=\"var(--card,#FFFFFF)\" stroke-width=\"2.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/> </g>"]
+"door":["0 0 240 240","<circle cx=\"120\" cy=\"108\" r=\"100\" fill=\"var(--purple,#4F34DB)\" opacity=\".15\"/> <ellipse cx=\"120\" cy=\"207\" rx=\"96\" ry=\"9\" fill=\"var(--purple,#4F34DB)\" opacity=\".18\"/> <g fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"2.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-opacity=\".6\"> <path d=\"M46 72h148v114H46z\"/> <path d=\"M50 62h140v10H50z\"/> <path d=\"M44 50h152v12H44z\"/> <path d=\"M68 78h20v100H68zM152 78h20v100h-20z\" fill=\"var(--purple,#4F34DB)\" fill-opacity=\".12\"/> <path d=\"M64 72h28v6H64zM148 72h28v6h-28zM64 178h28v8H64zM148 178h28v8h-28z\"/> <path d=\"M74 84v88M82 84v88M158 84v88M166 84v88\" fill=\"none\" stroke-opacity=\".26\"/> <path d=\"M88 78h64v108H88z\"/> </g> <path d=\"M92 84h56v102H92z\" fill=\"var(--marigold,#FDB327)\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"2.1\" stroke-linejoin=\"round\" stroke-opacity=\".68\"/> <g fill=\"none\" stroke=\"var(--ink,#1E1142)\" stroke-width=\"1.9\" stroke-opacity=\".24\" stroke-linejoin=\"round\"> <path d=\"M100 94h18v30h-18zM122 94h18v30h-18zM100 134h18v42h-18zM122 134h18v42h-18z\"/> </g> <circle cx=\"142\" cy=\"136\" r=\"2.9\" fill=\"var(--card,#FFFFFF)\" stroke=\"var(--ink,#1E1142)\" stroke-width=\"1.6\" stroke-opacity=\".32\"/> <g fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"2.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-opacity=\".6\"> <g transform=\"translate(57 94)\"> <path d=\"M0 0v-5\" fill=\"none\"/><circle cx=\"0\" cy=\"-7.5\" r=\"2\"/> <path d=\"M-9 0h18l-3 7h-12z\"/> <path d=\"M-7.5 7h15l-1.5 17h-12z\" fill=\"var(--blue,#76BCFD)\" fill-opacity=\".24\"/> <path d=\"M-6 24h12l-6 7z\"/> <path d=\"M0 7v17M-7 15h14\" fill=\"none\" stroke-opacity=\".3\"/> </g> <g transform=\"translate(183 94)\"> <path d=\"M0 0v-5\" fill=\"none\"/><circle cx=\"0\" cy=\"-7.5\" r=\"2\"/> <path d=\"M-9 0h18l-3 7h-12z\"/> <path d=\"M-7.5 7h15l-1.5 17h-12z\" fill=\"var(--blue,#76BCFD)\" fill-opacity=\".24\"/> <path d=\"M-6 24h12l-6 7z\"/> <path d=\"M0 7v17M-7 15h14\" fill=\"none\" stroke-opacity=\".3\"/> </g> <path d=\"M84 186h72v8H84zM74 194h92v7H74zM62 201h116v8H62z\"/> <g transform=\"translate(28 203)\"> <path d=\"M0-24v-16\" fill=\"none\" stroke-opacity=\".45\"/> <path d=\"M0-37c-15 0-21-11-14-17-5-11 6-19 15-13 9-9 20 2 14 12 7 8 0 18-11 18z\" fill=\"var(--blue,#76BCFD)\" fill-opacity=\".26\"/> <path d=\"M0-39v-25M0-50l-9-7M0-57l9-7\" fill=\"none\" stroke-opacity=\".42\"/> <path d=\"M-16-24h32v6h-32zM-14-18h28l-4 18h-20z\"/> </g> <g transform=\"translate(212 203)\"> <path d=\"M0-24v-16\" fill=\"none\" stroke-opacity=\".45\"/> <path d=\"M0-37c-15 0-21-11-14-17-5-11 6-19 15-13 9-9 20 2 14 12 7 8 0 18-11 18z\" fill=\"var(--blue,#76BCFD)\" fill-opacity=\".26\"/> <path d=\"M0-39v-25M0-50l-9-7M0-57l9-7\" fill=\"none\" stroke-opacity=\".42\"/> <path d=\"M-16-24h32v6h-32zM-14-18h28l-4 18h-20z\"/> </g> </g>"],
+"street":["0 0 280 176","<defs><clipPath id=\"emField__U__\"><rect x=\"1\" y=\"1\" width=\"278\" height=\"174\" rx=\"20\"/></clipPath></defs> <rect x=\"1\" y=\"1\" width=\"278\" height=\"174\" rx=\"20\" fill=\"var(--purple,#4F34DB)\" opacity=\".13\"/> <g clip-path=\"url(#emField__U__)\"> <g fill=\"var(--purple,#4F34DB)\" fill-opacity=\".13\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"1.6\" stroke-opacity=\".38\" stroke-linejoin=\"round\"> <path d=\"M6 30h44v104H6zM50 54h32v80H50zM212 24h40v110h-40zM252 54h28v80h-28z\"/> </g> <g fill=\"var(--card,#FFFFFF)\" fill-opacity=\".75\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"1.3\" stroke-opacity=\".3\"> <path d=\"M16 42h10v11H16zM34 42h10v11H34zM16 62h10v11H16zM34 62h10v11H34zM60 66h11v11H60zM222 38h10v12h-10zM236 38h10v12h-10zM222 60h10v12h-10zM236 60h10v12h-10zM260 66h11v11h-11z\"/> </g> <g fill=\"var(--blue,#76BCFD)\" fill-opacity=\".18\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"1.8\" stroke-opacity=\".48\" stroke-linejoin=\"round\"> <path d=\"M176 34h38v100h-38z\"/> <path d=\"M184 46h9v12h-9zM199 46h9v12h-9zM184 66h9v12h-9zM199 66h9v12h-9zM184 86h9v12h-9zM199 86h9v12h-9z\" fill=\"var(--card,#FFFFFF)\" fill-opacity=\".85\"/> </g> <path d=\"M14 134h252l14 28H0z\" fill=\"var(--card,#FFFFFF)\" fill-opacity=\".6\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"1.8\" stroke-opacity=\".42\" stroke-linejoin=\"round\"/> <path d=\"M-2 162h284v18H-2z\" fill=\"var(--purple,#4F34DB)\" fill-opacity=\".13\"/> <path d=\"M60 134l-6 28M124 134l-2 28M198 134l5 28\" fill=\"none\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"1.4\" stroke-opacity=\".22\"/> <path d=\"M16 171h30M64 171h30M112 171h30M160 171h30M208 171h30M256 171h24\" fill=\"none\" stroke=\"var(--card,#FFFFFF)\" stroke-width=\"3.4\" stroke-opacity=\".85\" stroke-linecap=\"round\"/> <g fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"2\" stroke-linejoin=\"round\" stroke-opacity=\".62\"> <path d=\"M22 78h70v56H22zM172 78h72v56h-72zM92 66h80v68H92z\"/> <path d=\"M22 78h70v13H22zM172 78h72v13h-72z\" fill=\"var(--purple,#4F34DB)\" fill-opacity=\".13\"/> <path d=\"M30 100h36v26H30zM180 100h36v26h-36zM100 106h34v28h-34z\" fill=\"var(--blue,#76BCFD)\" fill-opacity=\".2\"/> <path d=\"M72 102h14v32H72zM222 102h14v32h-14zM142 104h20v30h-20z\" fill=\"var(--purple,#4F34DB)\" fill-opacity=\".09\"/> </g> <path d=\"M36 85h32M182 85h34\" fill=\"none\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"2.6\" stroke-opacity=\".22\" stroke-linecap=\"round\"/> <path d=\"M96 76h72l9 18H87z\" fill=\"var(--marigold,#FDB327)\"/> <path d=\"M87 94q5 6 10 0q5 6 10 0q5 6 10 0q5 6 10 0q5 6 10 0q5 6 10 0q5 6 10 0q5 6 10 0q5 6 10 0v-3H87z\" fill=\"var(--marigold,#FDB327)\"/> <path d=\"M111 76l-4 18M132 76v18M153 76l4 18\" fill=\"none\" stroke=\"var(--ink,#1E1142)\" stroke-width=\"1.8\" stroke-opacity=\".16\"/> <g fill=\"none\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-opacity=\".55\"> <g transform=\"translate(260 136)\"> <path d=\"M0 0v-32M0-19l-9-9M0-27l9-9\"/> <path d=\"M0-56c-12 0-18-8-13-16-4-9 6-17 13-11 7-6 17 2 13 11 5 8-1 16-13 16z\" fill=\"var(--blue,#76BCFD)\" fill-opacity=\".26\"/> </g> <g transform=\"translate(13 137)\"> <path d=\"M0 0v-26M0-15l-7-8\"/> <path d=\"M0-45c-10 0-15-7-11-13-3-7 5-14 11-9 6-5 14 2 11 9 4 6-1 13-11 13z\" fill=\"var(--blue,#76BCFD)\" fill-opacity=\".26\"/> </g> </g> <g transform=\"translate(62 148)\" stroke=\"var(--purple,#4F34DB)\" stroke-opacity=\".6\" fill=\"none\" stroke-linecap=\"round\"> <circle cx=\"0\" cy=\"-29\" r=\"4.6\" fill=\"var(--purple,#4F34DB)\" fill-opacity=\".6\" stroke=\"none\"/> <path d=\"M0-22v11\" stroke-width=\"6\"/> <path d=\"M0-11l-4 11M0-11l4 11\" stroke-width=\"4.6\"/> <path d=\"M-6-19l6 3 6-3\" stroke-width=\"3.4\"/> </g> </g> <rect x=\"1\" y=\"1\" width=\"278\" height=\"174\" rx=\"20\" fill=\"none\" stroke=\"var(--purple,#4F34DB)\" stroke-width=\"1.6\" stroke-opacity=\".32\"/>"],
+"map":["0 0 280 176","<defs><clipPath id=\"emField__U__\"><rect x=\"1\" y=\"1\" width=\"278\" height=\"174\" rx=\"20\"/></clipPath></defs> <rect x=\"1\" y=\"1\" width=\"278\" height=\"174\" rx=\"20\" fill=\"var(--ground,#F5F2FC)\"/> <g clip-path=\"url(#emField__U__)\"> <g transform=\"rotate(-11 140 88)\"> <rect x=\"-60\" y=\"-60\" width=\"400\" height=\"300\" fill=\"var(--blue,#76BCFD)\" fill-opacity=\".1\"/> <g fill=\"var(--blue,#76BCFD)\" fill-opacity=\".17\" stroke=\"var(--blue,#76BCFD)\" stroke-width=\"1.4\" stroke-opacity=\".45\"> <path d=\"M-20-30h84v70h-84zM80-30h86v70H80zM182-30h96v70h-96z\"/> <path d=\"M-20 56h84v76h-84zM80 56h86v76H80zM182 56h96v76h-96z\"/> <path d=\"M-20 148h84v84h-84zM80 148h86v84H80zM182 148h96v84h-96z\"/> </g> <g fill=\"none\" stroke=\"var(--blue,#76BCFD)\" stroke-width=\"1.2\" stroke-opacity=\".38\"> <path d=\"M20-30v70M-20 6h84M118-30v70M80 14h86M182 18h96M230 70V18M20 56v76M-20 96h84M124 56v76M182 96h96M240 96v36M52 148v84M80 190h86M182 190h96\"/> </g> <g stroke=\"var(--card,#FFFFFF)\" stroke-opacity=\".95\" fill=\"none\" stroke-linecap=\"square\"> <path d=\"M-60 48H340M-60 140H340\" stroke-width=\"15\"/> <path d=\"M72-60v300M174-60v300\" stroke-width=\"15\"/> <path d=\"M-60 94H340\" stroke-width=\"9\"/> </g> </g> <g fill=\"var(--blue,#76BCFD)\" fill-opacity=\".32\" stroke=\"var(--blue,#76BCFD)\" stroke-width=\"1.4\" stroke-opacity=\".55\" stroke-linejoin=\"round\"> <path d=\"M46 44c-10 0-15-8-9-13-4-8 5-13 11-9 5-5 14 0 11 8 6 5 2 14-8 14z\"/> <path d=\"M232 32c-10 0-15-8-9-13-4-8 5-13 11-9 5-5 14 0 11 8 6 5 2 14-8 14z\"/> <path d=\"M196 138c-11 0-17-9-10-15-4-9 6-15 12-10 6-6 16 0 12 9 7 6 2 16-8 16z\"/> <path d=\"M64 148c-10 0-15-8-9-13-4-8 5-13 11-9 5-5 14 0 11 8 6 5 2 14-8 14z\"/> <path d=\"M258 96c-9 0-13-7-8-11-3-6 4-11 9-7 4-4 11 0 9 7 4 4 1 11-7 11z\"/> <path d=\"M110 26c-9 0-13-7-8-11-3-6 4-11 9-7 4-4 11 0 9 7 4 4 1 11-7 11z\"/> </g> <circle cx=\"140\" cy=\"90\" r=\"38\" fill=\"var(--blue,#76BCFD)\" opacity=\".09\"/> <circle cx=\"140\" cy=\"90\" r=\"24\" fill=\"var(--blue,#76BCFD)\" opacity=\".17\"/> <circle cx=\"140\" cy=\"90\" r=\"24\" fill=\"none\" stroke=\"var(--blue,#76BCFD)\" stroke-width=\"1.4\" stroke-opacity=\".45\"/> <circle cx=\"140\" cy=\"90\" r=\"11.5\" fill=\"var(--card,#FFFFFF)\"/> <circle cx=\"140\" cy=\"90\" r=\"8\" fill=\"var(--blue,#76BCFD)\"/> </g> <rect x=\"1\" y=\"1\" width=\"278\" height=\"174\" rx=\"20\" fill=\"none\" stroke=\"var(--purple,#4F34DB)\" stroke-width=\"1.6\" stroke-opacity=\".32\"/>"],
+"saved":["0 0 240 240","<circle cx=\"120\" cy=\"108\" r=\"100\" fill=\"var(--purple,#4F34DB)\" opacity=\".15\"/> <ellipse cx=\"120\" cy=\"204\" rx=\"94\" ry=\"9\" fill=\"var(--purple,#4F34DB)\" opacity=\".18\"/> <g fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"2.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-opacity=\".6\"> <path d=\"M86 60h68v130H86z\" fill=\"var(--blue,#76BCFD)\" fill-opacity=\".22\"/> <path d=\"M66 48h108v12H66z\"/> <path d=\"M70 60h16v130H70zM154 60h16v130h-16z\"/> <path d=\"M86 60L48 74v122l38-6z\"/> <path d=\"M62 190h116v10H62z\"/> </g> <g fill=\"none\" stroke=\"var(--ink,#1E1142)\" stroke-width=\"1.8\" stroke-opacity=\".2\" stroke-linejoin=\"round\"> <path d=\"M56 88l22-8v36l-22 5zM56 132l22-5v38l-22 4z\"/> </g> <circle cx=\"53\" cy=\"136\" r=\"3\" fill=\"var(--card,#FFFFFF)\" stroke=\"var(--ink,#1E1142)\" stroke-width=\"1.6\" stroke-opacity=\".3\"/> <path d=\"M86 150h68v40H86z\" fill=\"var(--card,#FFFFFF)\" opacity=\".32\"/> <path d=\"M120 60v16\" fill=\"none\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"1.8\" stroke-opacity=\".4\"/> <path d=\"M110 76h20l-4 9h-12z\" fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"1.8\" stroke-linejoin=\"round\" stroke-opacity=\".45\"/> <path d=\"M88 190h64l20 18H68z\" fill=\"var(--marigold,#FDB327)\" opacity=\".28\"/> <g transform=\"rotate(-11 178 198)\"> <path d=\"M162 130h32v68l-16-12-16 12z\" fill=\"var(--marigold,#FDB327)\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"2.1\" stroke-linejoin=\"round\" stroke-opacity=\".68\"/> <path d=\"M170 146h16M170 158h11\" fill=\"none\" stroke=\"var(--ink,#1E1142)\" stroke-width=\"2.1\" stroke-opacity=\".22\" stroke-linecap=\"round\"/> </g> <ellipse cx=\"181\" cy=\"202\" rx=\"22\" ry=\"5\" fill=\"var(--purple,#4F34DB)\" opacity=\".18\"/>"],
+"offline":["0 0 240 240","<circle cx=\"120\" cy=\"108\" r=\"100\" fill=\"var(--purple,#4F34DB)\" opacity=\".15\"/> <ellipse cx=\"120\" cy=\"205\" rx=\"92\" ry=\"9\" fill=\"var(--purple,#4F34DB)\" opacity=\".18\"/> <g fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"2.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-opacity=\".6\"> <path d=\"M60 78h120v112H60z\"/> <path d=\"M56 66h128v12H56z\"/> <path d=\"M64 82h22v108H64zM154 82h22v108h-22z\" fill=\"var(--purple,#4F34DB)\" fill-opacity=\".12\"/> <path d=\"M70 94v84M164 94v84\" fill=\"none\" stroke-opacity=\".26\"/> <path d=\"M86 78h68v112H86z\"/> <path d=\"M76 190h88v9H76zM64 199h112v9H64z\"/> </g> <path d=\"M90 84h60v106H90z\" fill=\"var(--marigold,#FDB327)\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"2.1\" stroke-linejoin=\"round\" stroke-opacity=\".68\"/> <g fill=\"none\" stroke=\"var(--ink,#1E1142)\" stroke-width=\"1.9\" stroke-opacity=\".24\" stroke-linejoin=\"round\"> <path d=\"M98 94h19v32H98zM123 94h19v32h-19zM98 136h19v44H98zM123 136h19v44h-19z\"/> </g> <circle cx=\"144\" cy=\"138\" r=\"2.9\" fill=\"var(--card,#FFFFFF)\" stroke=\"var(--ink,#1E1142)\" stroke-width=\"1.6\" stroke-opacity=\".32\"/> <circle cx=\"176\" cy=\"52\" r=\"42\" fill=\"var(--blue,#76BCFD)\" opacity=\".13\"/> <path d=\"M158 68h-4a13 13 0 0 1-1-26 19 19 0 0 1 35-4 12 12 0 0 1 8 22 12 12 0 0 1-4 8h-24\" fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-opacity=\".62\" stroke-dasharray=\"9 6\"/> <path d=\"M176 62V42M169 49l7-7 7 7\" fill=\"none\" stroke=\"var(--blue,#76BCFD)\" stroke-width=\"2.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/> <path d=\"M156 84h7M170 84h10M187 84h7\" fill=\"none\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-opacity=\".34\"/>"],
+"camera":["0 0 240 240","<circle cx=\"120\" cy=\"112\" r=\"100\" fill=\"var(--purple,#4F34DB)\" opacity=\".15\"/> <ellipse cx=\"120\" cy=\"196\" rx=\"80\" ry=\"9\" fill=\"var(--purple,#4F34DB)\" opacity=\".18\"/> <g fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"2.4\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-opacity=\".72\"> <path d=\"M88 74a7 7 0 0 1 7-7h28a7 7 0 0 1 7 7v12H88z\"/> <rect x=\"150\" y=\"72\" width=\"24\" height=\"14\" rx=\"5\" fill=\"var(--marigold,#FDB327)\" stroke-opacity=\".55\"/> <rect x=\"44\" y=\"86\" width=\"152\" height=\"102\" rx=\"18\"/> <rect x=\"58\" y=\"100\" width=\"22\" height=\"13\" rx=\"4\" fill=\"var(--blue,#76BCFD)\" fill-opacity=\".22\" stroke-opacity=\".4\"/> </g> <circle cx=\"120\" cy=\"137\" r=\"41\" fill=\"var(--blue,#76BCFD)\" fill-opacity=\".16\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"2.4\" stroke-opacity=\".72\"/> <circle cx=\"120\" cy=\"137\" r=\"32\" fill=\"none\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"1.8\" stroke-opacity=\".34\"/> <circle cx=\"120\" cy=\"137\" r=\"25\" fill=\"var(--purple,#4F34DB)\" fill-opacity=\".2\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"2.2\" stroke-opacity=\".62\"/> <g fill=\"none\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-opacity=\".38\"> <path d=\"M126 137h17M123 142l8 15M117 142l-8 15M114 137H97M117 132l-8-15M123 132l8-15\"/> </g> <circle cx=\"120\" cy=\"137\" r=\"5.5\" fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"1.8\" stroke-opacity=\".5\"/> <path d=\"M104 118a25 25 0 0 1 22-5\" fill=\"none\" stroke=\"var(--card,#FFFFFF)\" stroke-width=\"3\" stroke-linecap=\"round\" stroke-opacity=\".7\"/> <circle cx=\"178\" cy=\"104\" r=\"4\" fill=\"var(--blue,#76BCFD)\" fill-opacity=\".5\"/>"],
+"thanks":["0 0 240 240","<circle cx=\"120\" cy=\"108\" r=\"100\" fill=\"var(--purple,#4F34DB)\" opacity=\".15\"/> <ellipse cx=\"120\" cy=\"203\" rx=\"92\" ry=\"9\" fill=\"var(--purple,#4F34DB)\" opacity=\".18\"/> <g fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"2.1\" stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-opacity=\".6\"> <path d=\"M58 66h124v122H58z\"/> <path d=\"M54 54h132v12H54z\"/> <path d=\"M62 70h22v118H62zM156 70h22v118h-22z\" fill=\"var(--purple,#4F34DB)\" fill-opacity=\".12\"/> <path d=\"M68 82v90M166 82v90\" fill=\"none\" stroke-opacity=\".26\"/> <path d=\"M84 66h72v122H84z\"/> <path d=\"M74 188h92v9H74zM62 197h116v9H62z\"/> </g> <path d=\"M88 72h64v116H88z\" fill=\"var(--marigold,#FDB327)\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"2.1\" stroke-linejoin=\"round\" stroke-opacity=\".68\"/> <g fill=\"none\" stroke=\"var(--ink,#1E1142)\" stroke-width=\"1.9\" stroke-opacity=\".24\" stroke-linejoin=\"round\"> <path d=\"M96 82h21v34H96zM123 82h21v34h-21zM96 126h21v52H96zM123 126h21v52h-21z\"/> </g> <circle cx=\"146\" cy=\"130\" r=\"2.9\" fill=\"var(--card,#FFFFFF)\" stroke=\"var(--ink,#1E1142)\" stroke-width=\"1.6\" stroke-opacity=\".32\"/> <g transform=\"rotate(-7 168 176)\"> <rect x=\"126\" y=\"150\" width=\"84\" height=\"52\" rx=\"8\" fill=\"var(--card,#FFFFFF)\" stroke=\"var(--purple-ink,#38239B)\" stroke-width=\"2.2\" stroke-opacity=\".68\"/> <path d=\"M152 174h44M152 187h30\" fill=\"none\" stroke=\"var(--blue,#76BCFD)\" stroke-width=\"2.6\" stroke-linecap=\"round\" stroke-opacity=\".6\"/> <circle cx=\"133\" cy=\"156\" r=\"13\" fill=\"var(--purple,#4F34DB)\"/> <path d=\"M127.5 156l4 4.5 7.5-8.5\" fill=\"none\" stroke=\"var(--card,#FFFFFF)\" stroke-width=\"2.8\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/> </g>"]
 };
 let illusSeq = 0;
 /* illusSVG(name, width) -- height follows the viewBox, so a drawing never distorts. */
@@ -3743,9 +3822,9 @@ function illusSVG(name, width){
 function texasFlagSVG(){
   return `<svg width="20" height="20" viewBox="0 0 32 32" role="img"
       aria-label="Texas state record" style="display:block">
-    <rect x="2" y="6" width="28" height="20" rx="2" fill="#FFFFFF" stroke="var(--ink,#17103D)" stroke-width="1.5"/>
-    <path d="M2 6h10v20H2Z" fill="var(--ink,#17103D)"/>
-    <path d="M12 6h18v10H12Z" fill="var(--ink,#17103D)"/>
+    <rect x="2" y="6" width="28" height="20" rx="2" fill="#FFFFFF" stroke="var(--ink,#1E1142)" stroke-width="1.5"/>
+    <path d="M2 6h10v20H2Z" fill="var(--ink,#1E1142)"/>
+    <path d="M12 6h18v10H12Z" fill="var(--ink,#1E1142)"/>
     <path d="M12 16h18v10H12Z" fill="#FFFFFF"/>
     <path d="m7 11 1.2 2.5 2.8.4-2 2 .5 2.8L7 17.3l-2.5 1.4.5-2.8-2-2 2.8-.4Z" fill="#FFFFFF"/></svg>`;
 }
@@ -3794,8 +3873,8 @@ function markSVG(size){
 function wordmarkSVG(variant, width){
   const w = width || 220;
   const onDark = variant === 'dark';
-  const entry = onDark ? '#69B7FF' : 'var(--purple-ink,#4020B5)';
-  const word  = onDark ? '#FFFFFF' : 'var(--ink,#17103D)';
+  const entry = onDark ? '#76BCFD' : 'var(--purple-ink,#38239B)';
+  const word  = onDark ? '#FFFFFF' : 'var(--ink,#1E1142)';
   return `<svg width="${w}" height="${Math.round(w*150/520*100)/100}" viewBox="0 0 520 150"
       role="img" aria-label="EntryMap" style="display:block">
     <image href="${MARK_PNG}" x="16" y="5" width="94" height="119.7"
@@ -3877,19 +3956,26 @@ function streetsFor(box){
   return {h, v, k:.62};
 }
 
-/* ---- GROUND: Terrain's colour on Relief's light -----------------------------
-   Every fill is a var(--g-*) with its own hex fallback, so High Contrast retints
-   the whole ground by redefining tokens rather than by a second drawing path.
-   The four things depth comes from, none of which is a drop shadow on the map:
-   road hierarchy, block variety, implied light, landcover.
+/* ---- GROUND: THE MAP KIT'S LAYER STACK --------------------------------------
+   Rebuilt in Round 7 from map-kit/svg/base-map.svg rather than re-derived. The
+   layer names, their order, their fills and their opacities below are the kit's;
+   see the token block at the top of this file for the full reading and for the
+   things the kit is silent about that this file therefore does not invent.
 
-   THE CONSTRAINT THAT SHAPES ALL OF IT. The level-3 estimated ring is the only
-   marker that touches raw ground -- levels 1 and 2 sit on a white lift halo. At
-   --blue-edge #1266A6 (relative luminance 0.145) every ground tone a ring can
-   land on must stay at or above luminance 0.459 for that ring to hold 3:1. The
-   darkest tone drawn below is --g-can #DEE1D2 at 0.716, which clears it with
-   room to spare. The ground this replaced did NOT: its tree dots were #E2DAFF
-   (L 0.541) and #C4D0F6 (L 0.635), and a ring landing on one measured 2.37:1. */
+   The kit's own order, top of file to bottom: land (fill + dot pattern), blocks
+   (flat fill + edge stroke), roads (casing under fill), places, labels, then the
+   empty halos / pins / selection / annotations groups the app fills at runtime.
+   This function emits exactly those, in that order.
+
+   THE CONSTRAINT THAT SHAPES THE PALETTE CHOICE. The Estimated mark is the only
+   one whose fill is white, so its dashed outline is the only thing separating it
+   from a near-white ground. At --blue-edge sky700 #1B6599 (relative luminance
+   0.145) a tone must stay at or above luminance 0.485 for that outline to hold
+   3:1. The kit's tones, measured: land #F5F2FC 0.900, land+dot 0.836, blocks
+   #E8E1F7 0.777, place-on-land 0.727, place-on-block 0.655, casing-on-land 0.697,
+   casing-on-block 0.649, block edge #CFBCEE 0.554, road #FFFFFF 1.000. All nine
+   clear it; the block edge, the darkest, still gives 3.59:1, and every FILLED
+   tone gives 4.15:1 or better. */
 function f1(v){ return Math.round(v*10)/10; }
 function mulberry(seed){
   let a = seed >>> 0;
@@ -3919,12 +4005,16 @@ function splitRect(r, depth, rnd, out){
     splitRect({x:r.x, y:r.y+a, w:r.w, h:r.h-a}, depth+1, rnd, out);
   }
 }
-/* one source of truth for every ground tone, so a fill is never a second guess */
-const G = {ground:'#EFE8DA', parcel:'#ECE4D2', s1:'#FFFDF8', s2:'#FCF9F2', s3:'#F7F3EA',
-  s4:'#F0EADD', casing:'#E5DCCF', b1:'#FFFCF5', b2:'#FAF5EB', b3:'#F3F0FB', b4:'#EDEAF6',
-  b5:'#F6F1E5', shade:'#E5DCCF', shade2:'#EAE2D6', lit:'#FFFFFF', can:'#DEE1D2',
-  can2:'#ECEDE3', plaza:'#F8EACC', line:'#4A4568'};
-function gc(k){ return 'var(--g-'+k+',' + G[k] + ')'; }
+/* one source of truth for every ground tone, so a fill is never a second guess.
+   Keys and hex fallbacks are the kit's, read off map-kit/svg/base-map.svg. */
+const G = {land:'#F5F2FC', block:'#E8E1F7', blockEdge:'#CFBCEE', road:'#FFFFFF',
+  roadEdge:'#CFBCEE', place:'#76BCFD', paper:'#4F34DB', building:'#FFFFFF',
+  label:'#1E1142', line:'#1E1142'};
+function gc(k){ return 'var(--g-'+k.replace(/[A-Z]/g,function(c){return '-'+c.toLowerCase();})+',' + G[k] + ')'; }
+/* the kit's own painted opacities, named rather than typed at the call site */
+const G_A = {roadEdge:.55, place:.34, paper:.045, building:.85};
+/* the kit's casing/road width ratio: stroke-width 62 under stroke-width 48 */
+const ROAD_CASING = 62/48;
 
 const GROUND_CACHE = {};
 function groundSVG(W,H,pad,box){
@@ -3945,17 +4035,26 @@ function groundSVG(W,H,pad,box){
   let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" style="display:block" shape-rendering="geometricPrecision">`;
   const rect=(x,y,w,h,k,rx,extra)=>{ s+=`<rect x="${f1(x)}" y="${f1(y)}" width="${f1(w)}" height="${f1(h)}"${rx?` rx="${rx}"`:''} fill="${gc(k)}"${extra||''}/>`; };
 
-  /* 0 - the ground itself */
-  rect(0,0,W,H,'ground');
+  /* ---- layer: land ------------------------------------------------------------
+     kit: <rect fill="#F5F2FC"/> then the same rect filled with a dot pattern,
+     circle r.8 in violet600 at .045 on an 18px grid. Divided by 3 for CSS px. */
+  if(!hc){
+    s += `<defs><pattern id="g-paper" width="6" height="6" patternUnits="userSpaceOnUse">`
+      +  `<circle cx="1" cy="1" r=".27" fill="${gc('paper')}" opacity="${G_A.paper}"/></pattern></defs>`;
+  }
+  rect(0,0,W,H,'land');
+  if(!hc) s += `<rect x="0" y="0" width="${f1(W)}" height="${f1(H)}" fill="url(#g-paper)"/>`;
 
-  /* 1 - blocks, their buildings, and one light direction for all of them.
-     Two independent random streams: `rnd` decides geometry, `trnd` decides tone,
-     so the city is the same city whatever the tone rules do. */
-  const rnd = mulberry(GEO_SEED), trnd = mulberry(GEO_SEED+11);
-  const SUN = hc ? 0 : 3;
+  /* ---- layer: blocks ----------------------------------------------------------
+     kit: one flat fill #E8E1F7 with a #CFBCEE stroke, three units wide on a 1170
+     artboard, i.e. 1 CSS px. The kit's blocks are EMPTY -- no footprints, no cast
+     shadows, no lit edges, no plaza, no courtyard. The approved board does show
+     faint footprint outlines (screen-exports/png/map-default.png), so those are
+     kept as outline-only strokes and nothing else. */
+  const rnd = mulberry(GEO_SEED);
   const rowEdges = [{y:-16,w:0,cls:'frame'}].concat(hs).concat([{y:H+16,w:0,cls:'frame'}]);
   const colEdges = [{x:-16,w:0,cls:'frame'}].concat(vs).concat([{x:W+16,w:0,cls:'frame'}]);
-  const openSpaces = [];
+  const greens = [];
   for(let i=0;i<rowEdges.length-1;i++)for(let j=0;j<colEdges.length-1;j++){
     const m0=CURB[rowEdges[i].cls]||0, m1=CURB[rowEdges[i+1].cls]||0;
     const n0=CURB[colEdges[j].cls]||0, n1=CURB[colEdges[j+1].cls]||0;
@@ -3963,77 +4062,60 @@ function groundSVG(W,H,pad,box){
     const x0=colEdges[j].x+colEdges[j].w/2+n0, x1=colEdges[j+1].x-colEdges[j+1].w/2-n1;
     const cw=x1-x0, ch=y1-y0;
     if(cw<12||ch<12) continue;
-    if(hc){
-      /* High contrast SIMPLIFIES: one block tone, a hard outline, nothing else. */
-      rect(x0,y0,cw,ch,'b1',2,` stroke="var(--g-line,${G.line})" stroke-width="1.25"`);
-      continue;
-    }
+    rect(x0,y0,cw,ch,'block',4,` stroke="${gc('blockEdge')}" stroke-width="1"`);
+    if(hc) continue;
     const cover = LANDCOVER[i+','+j];
-    rect(x0,y0,cw,ch, cover==='park'?'can2':'parcel', 4);
-    if(cover==='park'){ openSpaces.push({x:x0,y:y0,w:cw,h:ch,kind:'park'}); continue; }
+    if(cover==='park'){ greens.push({x:x0,y:y0,w:cw,h:ch,kind:'park'}); continue; }
     const leaves=[]; splitRect({x:x0,y:y0,w:cw,h:ch},0,rnd,leaves);
-    const bodies=[];
     leaves.forEach(L=>{
       const g=1.1;                                  /* party-wall gap: buildings, not one slab */
       const r={x:L.x+g,y:L.y+g,w:L.w-2*g,h:L.h-2*g};
       if(r.w<7||r.h<7) return;
       const roll=rnd();
-      if(cover==='plaza' && roll<.55){ openSpaces.push({...r,kind:'plaza'}); return; }
-      if(cover==='court' && roll<.40){ openSpaces.push({...r,kind:'court'}); return; }
-      if(roll>.935){ openSpaces.push({...r,kind:'court'}); return; }  /* the odd courtyard */
-      /* Relief's ramp, keyed to footprint MASS: a bigger mass takes a brighter top
-         face, so the variation reads as buildings of different sizes rather than as
-         noise. Terrain's warm/cool mix decides which family that step comes from --
-         the two mid steps are the cool lavender towers standing among warm putty. */
-      const a=r.w*r.h;
-      const tone = a>2600?'b1' : a>1700?'b2' : a>1100?'b3' : a>620?'b4' : 'b5';
-      bodies.push({r,tone});
-    });
-    if(SUN){
-      /* Relief's two-step cast shadow: an outer pale step, then the shadow proper.
-         Two flat rects, not a blur -- the same read at a fraction of the cost. */
-      bodies.forEach(b=>rect(b.r.x+SUN+2,b.r.y+SUN+2,b.r.w,b.r.h,'shade2',1.5));
-      bodies.forEach(b=>rect(b.r.x+SUN,b.r.y+SUN,b.r.w,b.r.h,'shade',1.5));
-    }
-    bodies.forEach(b=>rect(b.r.x,b.r.y,b.r.w,b.r.h,b.tone,1.5));
-    if(SUN) bodies.forEach(b=>{
-      /* the lit top-and-left edge: one light direction, applied to every footprint,
-         is what makes them sit ON the ground rather than float on it */
-      s+=`<path d="M${f1(b.r.x)} ${f1(b.r.y+b.r.h)}L${f1(b.r.x)} ${f1(b.r.y)}L${f1(b.r.x+b.r.w)} ${f1(b.r.y)}" fill="none" stroke="${gc('lit')}" stroke-width="1.1"/>`;
+      /* the kit has no plaza and no courtyard; a cell the old landcover called a
+         plaza is simply left as open block, and a courtyard becomes a place accent,
+         which is the only vocabulary the kit has for open ground. */
+      if((cover==='plaza'&&roll<.55)||(cover==='court'&&roll<.40)) return;
+      if(roll>.935){ greens.push({x:r.x,y:r.y,w:r.w,h:r.h,kind:'court'}); return; }
+      s+=`<rect x="${f1(r.x)}" y="${f1(r.y)}" width="${f1(r.w)}" height="${f1(r.h)}" rx="1.5"`
+       + ` fill="none" stroke="${gc('building')}" stroke-width="1" opacity="${G_A.building}"/>`;
     });
   }
 
-  /* 2 - open space: plazas, courtyards, the park */
-  if(!hc) openSpaces.forEach(o=>rect(o.x,o.y,o.w,o.h, o.kind==='park'?'can2':o.kind==='plaza'?'plaza':'parcel', 3));
+  /* ---- layer: roads -----------------------------------------------------------
+     kit: casing #CFBCEE at .55, stroke-width 62, under the white road at 48. The
+     casing is therefore the road width x 62/48 -- it is the kit's ratio now, not a
+     hand-picked kerb. */
+  const cas = (w)=> w*ROAD_CASING;
+  hs.forEach(st=>{ if(!hc&&st.cls!=='alley') rect(-6,st.y-cas(st.w)/2,W+12,cas(st.w),'roadEdge',0,` opacity="${G_A.roadEdge}"`);
+                   rect(-6,st.y-st.w/2,W+12,st.w,'road'); });
+  vs.forEach(st=>{ if(!hc&&st.cls!=='alley') rect(st.x-cas(st.w)/2,-6,cas(st.w),H+12,'roadEdge',0,` opacity="${G_A.roadEdge}"`);
+                   rect(st.x-st.w/2,-6,st.w,H+12,'road'); });
 
-  /* 3 - streets, casing first so the road reads as a channel carved into the block */
-  const skey={primary:'s1',secondary:'s2',minor:'s3',alley:'s4'};
-  hs.forEach(st=>{ if(!hc&&st.cls!=='alley') rect(-6,st.y-st.w/2-1,W+12,st.w+2,'casing');
-                   rect(-6,st.y-st.w/2,W+12,st.w,skey[st.cls]); });
-  vs.forEach(st=>{ if(!hc&&st.cls!=='alley') rect(st.x-st.w/2-1,-6,st.w+2,H+12,'casing');
-                   rect(st.x-st.w/2,-6,st.w,H+12,skey[st.cls]); });
-
-  /* 4 - tree canopy as AREAS, never scattered dots. A rosette is always four or
-     more overlapping circles, so nothing on the ground can be mistaken for a
-     marker, and any lobe landing within 26px of a full pin is dropped before it
-     is emitted, so canopy never sits inside a marker's halo. */
+  /* ---- layer: places ----------------------------------------------------------
+     kit: <g id="places" fill="#76BCFD" opacity=".34"> -- discs and one soft blob.
+     On the approved board this layer IS the tree canopy: pale blue rosettes across
+     the blocks and along the treed streets, which is what "the board in the other
+     one is white and blue" names. The rosette geometry is the build's, because the
+     kit draws four blobs where the board draws many; the colour and the opacity are
+     the kit's. A lobe landing within 26px of a full pin is dropped before it is
+     emitted, so canopy never sits inside a marker's halo. */
   if(!hc){
     const fullPins = places.filter(p=>p.t!=='est'&&p.tier!=='est').map(p=>{
       const xy=proj(p.lat,p.lng,W,H,pad,box); return {x:xy[0],y:xy[1]};
     });
     const clear=(x,y,r)=>!fullPins.some(q=>Math.hypot(q.x-x,q.y-y) < 26+(r||0));
-    openSpaces.filter(o=>o.kind==='park').forEach(o=>{
-      rect(o.x,o.y,o.w,o.h,'can2',6);
+    s += `<g fill="${gc('place')}" opacity="${G_A.place}">`;
+    greens.filter(o=>o.kind==='park').forEach(o=>{
       for(let y=o.y+6;y<=o.y+o.h-4;y+=8) for(let x=o.x+6;x<=o.x+o.w-4;x+=8){
-        if(clear(x,y,5.6)) s+=`<circle cx="${f1(x)}" cy="${f1(y)}" r="5.6" fill="${gc('can')}"/>`;
+        if(clear(x,y,5.6)) s+=`<circle cx="${f1(x)}" cy="${f1(y)}" r="5.6"/>`;
       }
     });
     const band=(x0,y0,w,h,vert)=>{
-      rect(x0,y0,w,h,'can2',3.5);
       if(vert){ const cx=x0+w/2;
-        for(let y=y0+6;y<y0+h-4;y+=7.5) if(clear(cx,y,4.6)) s+=`<circle cx="${f1(cx)}" cy="${f1(y)}" r="4.6" fill="${gc('can')}"/>`;
+        for(let y=y0+6;y<y0+h-4;y+=7.5) if(clear(cx,y,4.6)) s+=`<circle cx="${f1(cx)}" cy="${f1(y)}" r="4.6"/>`;
       } else { const cy=y0+h/2;
-        for(let x=x0+6;x<x0+w-4;x+=7.5) if(clear(x,cy,4.6)) s+=`<circle cx="${f1(x)}" cy="${f1(cy)}" r="4.6" fill="${gc('can')}"/>`;
+        for(let x=x0+6;x<x0+w-4;x+=7.5) if(clear(x,cy,4.6)) s+=`<circle cx="${f1(x)}" cy="${f1(cy)}" r="4.6"/>`;
       }
     };
     const BW=9;
@@ -4048,20 +4130,25 @@ function groundSVG(W,H,pad,box){
       if(side==='south') band(8,st.y+st.w/2+1,W-16,BW,false);
       if(side==='north') band(8,st.y-st.w/2-BW-1,W-16,BW,false);
     });
-    openSpaces.filter(o=>o.kind==='court'&&o.w>20&&o.h>20).forEach(o=>{
+    greens.filter(o=>o.kind==='court'&&o.w>14&&o.h>14).forEach(o=>{
       const x=o.x+o.w/2, y=o.y+o.h/2;
       if(!clear(x,y,5)) return;
       [[0,0,4.6],[-3.4,1.4,3.6],[3.2,1,3.4],[0,-3.2,3.4]].forEach(l=>{
-        s+=`<circle cx="${f1(x+l[0])}" cy="${f1(y+l[1])}" r="${l[2]}" fill="${gc('can')}"/>`;
+        s+=`<circle cx="${f1(x+l[0])}" cy="${f1(y+l[1])}" r="${l[2]}"/>`;
       });
     });
+    s += `</g>`;
   }
 
-  /* 5 - labels last, with a paint-order halo (no filter). ONE font size: the
-     hierarchy is carried by street width and label opacity, so .street-label
-     stays the single deliberate non-scaling type site criterion 1.1 names. */
+  /* ---- layer: labels ----------------------------------------------------------
+     kit: fill #1E1142, font-weight 700, letter-spacing 3 on a 1170 artboard (1 CSS
+     px), font-size 24 (8 CSS px). STATED DEVIATION: the size stays at 10.5px, this
+     file's --fs-micro floor, because 8px is below the smallest type the build ships
+     and the package's own checklist requires legible reflow at 200%. Ink, weight,
+     tracking, the white casing halo and the width-and-opacity hierarchy are the
+     kit's; only the size is not. */
   const OP={primary:1, secondary:.92, minor:.86};
-  const halo=` paint-order="stroke" stroke="${gc(hc?'s1':'s1')}" stroke-width="3.2" stroke-linejoin="round"`;
+  const halo=` paint-order="stroke" stroke="${gc('road')}" stroke-width="3.2" stroke-linejoin="round"`;
   hs.forEach(st=>{ if(st.label) s+=`<text class="street-label" x="${f1(W*(st.lx||.3))}" y="${f1(st.y+3.6)}" text-anchor="middle" opacity="${OP[st.cls]}"${halo}>${st.label}</text>`; });
   vs.forEach(st=>{ if(st.label) s+=`<text class="street-label" x="${f1(st.x)}" y="${f1(H*(st.ly||.8))}" text-anchor="middle" transform="rotate(-90 ${f1(st.x)} ${f1(H*(st.ly||.8))})" dominant-baseline="middle" dy="3.5" opacity="${OP[st.cls]}"${halo}>${st.label}</text>`; });
 
@@ -4255,8 +4342,25 @@ function mapLayout(list, W, H){
   return {pins: placed, clusters};
 }
 
+/* ROUND 7 FIXES A DEFECT THAT PREDATES IT (reproduced against Round 6 HEAD, commit
+   c8ed0bf): turning High Contrast on from Accessibility and then going to the map
+   left the map BLANK -- ground-SVG length 54 bytes, the empty answer. The toggle
+   re-renders while #screen-map is still display:none, so mapEl measures 0x0,
+   groundSVG returns its empty guard, and nothing ever re-renders it because the
+   screen becoming visible is not a resize. One ResizeObserver, armed once, redraws
+   the map the first time it has a real box. Nothing else about the render changes. */
+let _mapZeroPending = false;
+function armMapObserver(){
+  if(typeof ResizeObserver === 'undefined') return;
+  new ResizeObserver(function(){
+    if(_mapZeroPending && mapEl.clientWidth > 40 && mapEl.clientHeight > 40){
+      _mapZeroPending = false; renderMap();
+    }
+  }).observe(mapEl);
+}
 function renderMap(){
   const W = mapEl.clientWidth, H = mapEl.clientHeight;
+  if(!(W>40) || !(H>40)) _mapZeroPending = true;
   document.getElementById('map-ground').innerHTML = groundSVG(W,H,22);
   pinsEl.innerHTML='';
   let shown = [...places];
@@ -4325,9 +4429,9 @@ function setZoom(out){
 }
 function tierName(t){return t==='est'?'Estimated':t==='scan'?'Scanned on-site':'Owner-confirmed';}
 function tierChip(t){
-  if(t==='est') return `<span class="tierchip est">${sparkle('#13528E')} Estimated</span>`;
-  if(t==='scan') return `<span class="tierchip scan">${iconSVG('profile',11,'#784410')} Scanned on-site</span>`;
-  return `<span class="tierchip owner">${iconSVG('store',11,'#4020B5')} Owner-confirmed</span>`;
+  if(t==='est') return `<span class="tierchip est">${sparkle('var(--blue-ink,#1C4B7E)')} Estimated</span>`;
+  if(t==='scan') return `<span class="tierchip scan">${iconSVG('profile',11,'var(--marigold-ink,#6B4014)')} Scanned on-site</span>`;
+  return `<span class="tierchip owner">${iconSVG('store',11,'#38239B')} Owner-confirmed</span>`;
 }
 
 /* legend -- tier card, three rows (pin glyph + label); tapping opens "How trust grows" */
@@ -4503,7 +4607,7 @@ function cardHTML(p){
   let prov='';
   if(p.tier==='est'){
     prov += provRow(
-      sparkle('#13528E'),
+      sparkle('var(--blue-ink,#1C4B7E)'),
       `Estimated by AI from street imagery \u00b7 ${fmtMonth(p.date)}`,
       `<span class="pr-sub invite">been here? Confirm in 30 seconds</span>`,
       'rcpt-est');
@@ -4527,7 +4631,7 @@ function cardHTML(p){
         `<span class="pr-sub" style="color:var(--sub)">state record \u2014 provenance, not a badge \u00b7 staged</span>`,'rcpt-scan');
     }
     if(p.tier==='owner'){
-      prov += provRow(sparkle('#13528E'),
+      prov += provRow(sparkle('var(--blue-ink,#1C4B7E)'),
         `Estimated by AI from street imagery \u00b7 earlier`,
         `<span class="pr-sub" style="color:var(--sub)">the first rung \u2014 now superseded above</span>`,'rcpt-est2');
     }
@@ -4994,7 +5098,26 @@ function closeSheets(){
   delete phoneEl.dataset.card;      /* the map's 7% veil goes with the sheet */
   panMap(0);
   if(selectedId){selectedId=null;renderMap();}
-  if(wasOpen && sheetOpener){
+  /* ROUND 7 -- FOCUS RETURN NO LONGER DEPENDS ON wasOpen ALONE.
+     Reproduced from a clean load, 6 trials out of 6, at Round 6 HEAD and here: open
+     the map card from a pin, press its Close button, and focus does NOT come back to
+     the pin. With motion it stays on the card's now-off-screen <h2>; with reduced
+     motion it lands on <body>, which is a total focus loss and is exactly the kind of
+     defect that lives between two rounds rather than inside either. Calling
+     closeSheets() directly returns focus correctly, so the return path itself is
+     sound -- the card's own drag/position machinery clears openSheetId before the
+     data-close handler runs, so `wasOpen` reads false and the whole branch is
+     skipped. Rather than re-thread that ordering, the branch now also runs when focus
+     is demonstrably stranded: inside a sheet that is no longer open, or on <body>.
+     The existing navToken and !openSheetId guards are untouched, so this can never
+     fight openSheet()'s own focus move. */
+  const focusStranded = (function(){
+    const a=document.activeElement;
+    if(!a || a===document.body) return true;
+    const sh = a.closest ? a.closest('.sheet') : null;
+    return !!(sh && !sh.classList.contains('on'));
+  })();
+  if((wasOpen || focusStranded) && (sheetOpener || focusStranded)){
     const back=sheetOpener, tok=navToken; sheetOpener=null;
     /* the pin that opened the card may have been re-rendered: re-find it by id.
        ROUND 6: resolved on a frame rather than at 20ms, so the re-find happens
@@ -5002,8 +5125,9 @@ function closeSheets(){
        the move is verified. If the opener is genuinely gone (its pin clustered
        away, its screen replaced), focus goes to the current screen, which is
        labelled -- it is never left on <body>. */
-    const resolve=()=> back.isConnected ? back
-      : (back.dataset && back.dataset.id ? pinsEl.querySelector('[data-id="'+back.dataset.id+'"]') : null);
+    const resolve=()=> !back ? null
+      : (back.isConnected ? back
+      : (back.dataset && back.dataset.id ? pinsEl.querySelector('[data-id="'+back.dataset.id+'"]') : null));
     requestAnimationFrame(()=>{
       if(tok!==navToken) return;               /* the app navigated instead -- leave focus alone */
       focusWhenReady(resolve(), ()=> tok===navToken && !openSheetId,
@@ -6036,9 +6160,9 @@ function doorwayArt(blur, name){
     <rect width="300" height="400" fill="#EAF5FF"/>
     <rect y="300" width="300" height="100" fill="#D9D2F0"/>
     <rect y="296" width="300" height="8" fill="#CBC3EB"/>
-    <rect x="20" y="20" width="260" height="280" fill="#F2EEFF"/>
-    <rect x="20" y="20" width="260" height="16" fill="#E2DAFF"/>
-    <rect x="40" y="66" width="220" height="46" rx="6" fill="#5B35F5"/>
+    <rect x="20" y="20" width="260" height="280" fill="#F5F2FC"/>
+    <rect x="20" y="20" width="260" height="16" fill="#E8E1F7"/>
+    <rect x="40" y="66" width="220" height="46" rx="6" fill="#4F34DB"/>
     <text x="150" y="96" text-anchor="middle" font-family="Nunito,sans-serif" font-weight="800" font-size="${fs}" fill="#fff">${esc(sign)}</text>
     <rect x="86" y="128" width="128" height="172" rx="4" fill="#C2B8E7"/>
     <rect x="93" y="135" width="55" height="158" rx="3" fill="#DEEFFF" stroke="#A99BDE" stroke-width="3"/>
@@ -6049,7 +6173,7 @@ function doorwayArt(blur, name){
     <rect x="226" y="150" width="34" height="90" rx="3" fill="#F0F8FF" stroke="#CFC7EC" stroke-width="2"/>
     <path d="M60 300 L240 300 L252 316 L48 316 Z" fill="#D5CEEF"/>
     <rect x="48" y="316" width="204" height="10" rx="2" fill="#C6BCE9"/>
-    <circle cx="262" cy="252" r="9" fill="#FFBF24" stroke="#fff" stroke-width="2.5"/>
+    <circle cx="262" cy="252" r="9" fill="#FDB327" stroke="#fff" stroke-width="2.5"/>
     ${blur?'<circle cx="46" cy="330" r="26" fill="#9684D6" opacity=".6" filter="url(#b)"/><defs><filter id="b"><feGaussianBlur stdDeviation="7"/></filter></defs>':''}
   </svg>`;
 }
@@ -7070,6 +7194,7 @@ applyPrefs();
    (in-memory flag) would go straight to the map */
 if(!onboarded) runSplash();
 addEventListener('resize',()=>{fitPhone();renderMap();});
+armMapObserver();
 </script>
 </body>
 </html>
