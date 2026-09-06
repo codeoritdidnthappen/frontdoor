@@ -1,5 +1,5 @@
 {
-  "_comment": "TICK-341 (#341). Which business each captured entrance belongs to, so #333 can key a scan record to a place. E-001..E-012 come from the on-foot door survey. E-013..E-064 were identified by reading the storefront signage in the privacy-processed captures with a vision model, then matching the read name against data/precatalogue_census.json and constraining it with the capture order along the route. No accessibility judgement was made or consulted, and the 18 sealed entrances were excluded before any model call. confidence 'high' means the name was read unambiguously or surveyed on foot; 'low' means it was read from a single partly redacted source or assembled from corroborating text. Anything that could not be pinned to one business is 'unidentified' with a reason: an unmatched entrance is a smaller failure than a scan record attached to the wrong storefront.",
+  "_comment": "TICK-341 (#341). Which business each captured entrance belongs to, so #333 can key a scan record to a place. E-001..E-012 come from the on-foot door survey. E-013..E-064 were identified by reading the storefront signage in the privacy-processed captures with a vision model, then matching the read name against data/precatalogue_census.json and constraining it with the capture order along the route. No accessibility judgement was made or consulted, and the 18 sealed entrances were excluded before any model call. confidence 'high' means the name was read unambiguously or surveyed on foot; 'low' means it was read from a single partly redacted source or assembled from corroborating text. Anything that could not be pinned to one business is 'unidentified' with a reason: an unmatched entrance is a smaller failure than a scan record attached to the wrong storefront. TICK-346 filled place_id where the extended pre-catalogue could place a door under the map's own gate, and recorded a reason where it could not. Identifications are unchanged.",
   "capture_dates": [
     "2026-08-31",
     "2026-09-04"
@@ -34,7 +34,8 @@
       ],
       "evidence": "Door surveyed on foot for #333; business and address recorded at the time. Yelp + whichwich.com + OSM/Nominatim geocode (POI 'Which Wich?' at 247 W 3rd). No census catalogue entry for this business.",
       "reason": null,
-      "views_read": []
+      "views_read": [],
+      "place_reason": "No catalogue entry inside the match gate. Geocoded, but the extended pre-catalogue holds no place within 40 m whose name matches. Refused rather than widening the gate (TICK-346 AC-4)."
     },
     "E-004": {
       "status": "identified",
@@ -60,7 +61,8 @@
       ],
       "evidence": "Door surveyed on foot for #333; business and address recorded at the time. Yelp + redfarmnyc.com + OSM/Nominatim geocode (POI 'Red Farm' at 201 W 3rd, corner of W 3rd & Colorado); Yelp lists it as CLOSED as of Sept 2026 but signage/location confirmed. No census catalogue entry for this business.",
       "reason": null,
-      "views_read": []
+      "views_read": [],
+      "place_reason": "No catalogue entry inside the match gate. Geocoded, but the extended pre-catalogue holds no place within 40 m whose name matches. Refused rather than widening the gate (TICK-346 AC-4)."
     },
     "E-008": {
       "status": "identified",
@@ -86,7 +88,8 @@
       ],
       "evidence": "Door surveyed on foot for #333; business and address recorded at the time. SAM registration via opengovus.com + atptx.org + OSM/Nominatim geocode; '203' door number is on Colorado St between W 2nd and W 3rd. No census catalogue entry for this business.",
       "reason": null,
-      "views_read": []
+      "views_read": [],
+      "place_reason": "No catalogue entry inside the match gate. Geocoded, but the extended pre-catalogue holds no place within 40 m whose name matches. Refused rather than widening the gate (TICK-346 AC-4)."
     },
     "E-010": {
       "status": "identified",
@@ -112,7 +115,8 @@
       ],
       "evidence": "Door surveyed on foot for #333; business and address recorded at the time. Apartments.com/Zillow/Yelp + OSM/Nominatim geocode (address point 101 Colorado St); lobby is a block south of the W 3rd cluster, between W 2nd St and Cesar Chavez. Catalogue candidate 'Ashton Austin' sits 70 m from the surveyed door, outside the map's 40 m match gate, so no place_id is claimed.",
       "reason": null,
-      "views_read": []
+      "views_read": [],
+      "place_reason": "No catalogue entry inside the match gate. Geocoded, but the extended pre-catalogue holds no place within 40 m whose name matches. Refused rather than widening the gate (TICK-346 AC-4)."
     },
     "E-013": {
       "status": "identified",
@@ -165,7 +169,8 @@
         "IMG_3363",
         "IMG_3364",
         "IMG_3365"
-      ]
+      ],
+      "place_reason": "No catalogue entry inside the match gate. The address did not geocode inside downtown Austin, so no distance could be evaluated."
     },
     "E-019": {
       "status": "identified",
@@ -184,13 +189,14 @@
         "IMG_3367",
         "IMG_3368",
         "IMG_3369"
-      ]
+      ],
+      "place_reason": "No catalogue entry inside the match gate. Geocoded, but the extended pre-catalogue holds no place within 40 m whose name matches. Refused rather than widening the gate (TICK-346 AC-4)."
     },
     "E-020": {
       "status": "identified",
       "name": "Swift's Attic",
       "address": "315 Congress Ave",
-      "place_id": null,
+      "place_id": "ChIJOZxxaAi1RIYRe3j7KpIprWo",
       "confidence": "high",
       "basis": [
         "read_sign",
@@ -204,7 +210,13 @@
         "IMG_3372",
         "IMG_3373",
         "IMG_3374"
-      ]
+      ],
+      "place_match": {
+        "matched_name": "Swift's Attic",
+        "distance_m": 11.9,
+        "method": "address geocoded with Nominatim, then matched against the extended pre-catalogue under the map's own gate: <=40 m (DEFAULT_MATCH_DISTANCE_M) AND a name match (NAME_MATCH_RATIO 0.6). Never a name alone.",
+        "ticket": "TICK-346"
+      }
     },
     "E-022": {
       "status": "identified",
@@ -224,7 +236,8 @@
         "IMG_3382",
         "IMG_3383",
         "IMG_3384"
-      ]
+      ],
+      "place_reason": "No catalogue entry inside the match gate. The address did not geocode inside downtown Austin, so no distance could be evaluated."
     },
     "E-023": {
       "status": "identified",
@@ -242,7 +255,8 @@
         "IMG_3385",
         "IMG_3386",
         "IMG_3387"
-      ]
+      ],
+      "place_reason": "No catalogue entry inside the match gate. The address did not geocode inside downtown Austin, so no distance could be evaluated."
     },
     "E-024": {
       "status": "unidentified",
@@ -280,13 +294,14 @@
         "IMG_3396",
         "IMG_3397",
         "IMG_3398"
-      ]
+      ],
+      "place_reason": "No catalogue entry inside the match gate. Geocoded, but the extended pre-catalogue holds no place within 40 m whose name matches. Refused rather than widening the gate (TICK-346 AC-4)."
     },
     "E-026": {
       "status": "identified",
       "name": "Mexic-Arte Museum",
       "address": null,
-      "place_id": null,
+      "place_id": "ChIJQ62VNgi1RIYRb4PYimCG5vU",
       "confidence": "high",
       "basis": [
         "read_sign"
@@ -299,7 +314,13 @@
         "IMG_3401",
         "IMG_3402",
         "IMG_3403"
-      ]
+      ],
+      "place_match": {
+        "matched_name": "Mexic-Arte Museum",
+        "distance_m": 2.2,
+        "method": "address geocoded with Nominatim, then matched against the extended pre-catalogue under the map's own gate: <=40 m (DEFAULT_MATCH_DISTANCE_M) AND a name match (NAME_MATCH_RATIO 0.6). Never a name alone.",
+        "ticket": "TICK-346"
+      }
     },
     "E-027": {
       "status": "unidentified",
@@ -339,14 +360,14 @@
     },
     "E-031": {
       "status": "identified",
-      "name": "Capital One Café",
+      "name": "Capital One Caf\u00e9",
       "address": null,
-      "place_id": null,
+      "place_id": "ChIJmzg1xQm1RIYRxzAFpBcfK78",
       "confidence": "high",
       "basis": [
         "read_sign"
       ],
-      "evidence": "Door decals read 'Capital One Café' with 'café coffee banking', a Verve Coffee Roasters credit and a Member FDIC notice. The digits read as '100' were not carried as a street number: the walk puts this door between 515 and 609 Congress, so 100 Congress Ave is geographically impossible here.",
+      "evidence": "Door decals read 'Capital One Caf\u00e9' with 'caf\u00e9 coffee banking', a Verve Coffee Roasters credit and a Member FDIC notice. The digits read as '100' were not carried as a street number: the walk puts this door between 515 and 609 Congress, so 100 Congress Ave is geographically impossible here.",
       "reason": null,
       "views_read": [
         "IMG_3425",
@@ -354,7 +375,13 @@
         "IMG_3427",
         "IMG_3428",
         "IMG_3429"
-      ]
+      ],
+      "place_match": {
+        "matched_name": "Capital One Caf\u00e9",
+        "distance_m": 17.4,
+        "method": "address geocoded with Nominatim, then matched against the extended pre-catalogue under the map's own gate: <=40 m (DEFAULT_MATCH_DISTANCE_M) AND a name match (NAME_MATCH_RATIO 0.6). Never a name alone.",
+        "ticket": "TICK-346"
+      }
     },
     "E-033": {
       "status": "unidentified",
@@ -364,7 +391,7 @@
       "confidence": null,
       "basis": [],
       "evidence": null,
-      "reason": "The signage band over the doors is redacted in every view, so no business name is readable — only the door number 609 and Japanese-language window decals. The 7-Eleven notices visible on the adjoining frontage belong to E-034, not to this door.",
+      "reason": "The signage band over the doors is redacted in every view, so no business name is readable \u2014 only the door number 609 and Japanese-language window decals. The 7-Eleven notices visible on the adjoining frontage belong to E-034, not to this door.",
       "views_read": [
         "IMG_3436",
         "IMG_3437",
@@ -378,7 +405,7 @@
       "status": "identified",
       "name": "7-Eleven",
       "address": "613 Congress Ave",
-      "place_id": null,
+      "place_id": "ChIJE7BdYAi1RIYRU1hwvbVXfwU",
       "confidence": "low",
       "basis": [
         "read_branding",
@@ -394,7 +421,13 @@
         "IMG_3445",
         "IMG_3446",
         "IMG_3447"
-      ]
+      ],
+      "place_match": {
+        "matched_name": "7-Eleven",
+        "distance_m": 1.5,
+        "method": "address geocoded with Nominatim, then matched against the extended pre-catalogue under the map's own gate: <=40 m (DEFAULT_MATCH_DISTANCE_M) AND a name match (NAME_MATCH_RATIO 0.6). Never a name alone.",
+        "ticket": "TICK-346"
+      }
     },
     "E-035": {
       "status": "unidentified",
@@ -434,7 +467,7 @@
       "status": "identified",
       "name": "Kruger's",
       "address": null,
-      "place_id": null,
+      "place_id": "ChIJVWdU9wm1RIYRvzhbe2wSOo0",
       "confidence": "high",
       "basis": [
         "read_sign"
@@ -448,7 +481,13 @@
         "IMG_3467",
         "IMG_3468",
         "IMG_3469"
-      ]
+      ],
+      "place_match": {
+        "matched_name": "Kruger's Diamond Jewelers",
+        "distance_m": 3.2,
+        "method": "address geocoded with Nominatim, then matched against the extended pre-catalogue under the map's own gate: <=40 m (DEFAULT_MATCH_DISTANCE_M) AND a name match (NAME_MATCH_RATIO 0.6). Never a name alone.",
+        "ticket": "TICK-346"
+      }
     },
     "E-040": {
       "status": "unidentified",
@@ -556,7 +595,8 @@
         "IMG_3519",
         "IMG_3520",
         "IMG_3521"
-      ]
+      ],
+      "place_reason": "No catalogue entry inside the match gate. The address did not geocode inside downtown Austin, so no distance could be evaluated."
     },
     "E-048": {
       "status": "unidentified",
@@ -580,12 +620,12 @@
       "status": "identified",
       "name": "Ruth's Chris Steak House",
       "address": null,
-      "place_id": null,
+      "place_id": "ChIJWQDHxwm1RIYRJmu_M83GQlI",
       "confidence": "high",
       "basis": [
         "read_sign"
       ],
-      "evidence": "The fascia sign reads 'RUT… CHRIS STEAK HO…' around the Ruth's Chris roundel; only a few characters are lost to redaction, and 'U.S. PRIME' appears beside it. Confirmed by eye against view 3.",
+      "evidence": "The fascia sign reads 'RUT\u2026 CHRIS STEAK HO\u2026' around the Ruth's Chris roundel; only a few characters are lost to redaction, and 'U.S. PRIME' appears beside it. Confirmed by eye against view 3.",
       "reason": null,
       "views_read": [
         "IMG_3528",
@@ -595,7 +635,13 @@
         "IMG_3532",
         "IMG_3533",
         "IMG_3534"
-      ]
+      ],
+      "place_match": {
+        "matched_name": "Ruth's Chris Steak House",
+        "distance_m": 9.9,
+        "method": "address geocoded with Nominatim, then matched against the extended pre-catalogue under the map's own gate: <=40 m (DEFAULT_MATCH_DISTANCE_M) AND a name match (NAME_MATCH_RATIO 0.6). Never a name alone.",
+        "ticket": "TICK-346"
+      }
     },
     "E-050": {
       "status": "identified",
@@ -617,13 +663,14 @@
         "IMG_3538",
         "IMG_3539",
         "IMG_3540"
-      ]
+      ],
+      "place_reason": "No catalogue entry inside the match gate. Geocoded, but the extended pre-catalogue holds no place within 40 m whose name matches. Refused rather than widening the gate (TICK-346 AC-4)."
     },
     "E-051": {
       "status": "identified",
       "name": "Velvet Taco",
       "address": "522 Congress Ave",
-      "place_id": null,
+      "place_id": "ChIJIQ4kr4e1RIYRbQ_afrDF1p0",
       "confidence": "high",
       "basis": [
         "read_sign",
@@ -637,7 +684,13 @@
         "IMG_3543",
         "IMG_3544",
         "IMG_3545"
-      ]
+      ],
+      "place_match": {
+        "matched_name": "Velvet Taco",
+        "distance_m": 28.8,
+        "method": "address geocoded with Nominatim, then matched against the extended pre-catalogue under the map's own gate: <=40 m (DEFAULT_MATCH_DISTANCE_M) AND a name match (NAME_MATCH_RATIO 0.6). Never a name alone.",
+        "ticket": "TICK-346"
+      }
     },
     "E-053": {
       "status": "unidentified",
@@ -692,13 +745,14 @@
         "IMG_3565",
         "IMG_3566",
         "IMG_3567"
-      ]
+      ],
+      "place_reason": "No catalogue entry inside the match gate. Geocoded, but the extended pre-catalogue holds no place within 40 m whose name matches. Refused rather than widening the gate (TICK-346 AC-4)."
     },
     "E-056": {
       "status": "identified",
       "name": "CVS",
       "address": null,
-      "place_id": null,
+      "place_id": "ChIJ7b0Aswm1RIYRa336Rhpu2Tw",
       "confidence": "high",
       "basis": [
         "read_sign"
@@ -711,7 +765,13 @@
         "IMG_3570",
         "IMG_3571",
         "IMG_3572"
-      ]
+      ],
+      "place_match": {
+        "matched_name": "CVS Photo",
+        "distance_m": 11.6,
+        "method": "address geocoded with Nominatim, then matched against the extended pre-catalogue under the map's own gate: <=40 m (DEFAULT_MATCH_DISTANCE_M) AND a name match (NAME_MATCH_RATIO 0.6). Never a name alone.",
+        "ticket": "TICK-346"
+      }
     },
     "E-057": {
       "status": "unidentified",
@@ -787,7 +847,8 @@
         "IMG_3600",
         "IMG_3601",
         "IMG_3602"
-      ]
+      ],
+      "place_reason": "No catalogue entry inside the match gate. The address did not geocode inside downtown Austin, so no distance could be evaluated."
     },
     "E-062": {
       "status": "identified",
@@ -805,7 +866,8 @@
         "IMG_3604",
         "IMG_3605",
         "IMG_3606"
-      ]
+      ],
+      "place_reason": "Left unplaced deliberately: E-062 and E-063 all identify as this same business, and one place cannot be two front doors. The catalogue holds a single entry (ChIJ2VVCTgi1RIYRdZUyhqoZk_s); deciding which door is its entrance, or whether the place needs a second entry, is a field judgement and not one this match can make (TICK-346)."
     },
     "E-063": {
       "status": "identified",
@@ -824,7 +886,8 @@
         "IMG_3609",
         "IMG_3610",
         "IMG_3611"
-      ]
+      ],
+      "place_reason": "Left unplaced deliberately: E-062 and E-063 all identify as this same business, and one place cannot be two front doors. The catalogue holds a single entry (ChIJ2VVCTgi1RIYRdZUyhqoZk_s); deciding which door is its entrance, or whether the place needs a second entry, is a field judgement and not one this match can make (TICK-346)."
     }
   }
 }
