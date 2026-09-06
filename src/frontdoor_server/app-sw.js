@@ -13,9 +13,17 @@
  *     would be a wrong answer about a real doorway, which is worse than no
  *     answer. Those requests go to the network and fail honestly.
  *   - A new deploy changes CACHE, which drops the old entries on activate.
+ *     The name carries the deployed commit: the server rewrites the __COMMIT__
+ *     placeholder below when it serves this file. It used to be a fixed
+ *     "entrymap-v1", so the comment above described a behaviour the code did
+ *     not have -- after a deploy, a phone that had opened the app before was
+ *     served the previous release from its own cache, and only picked up the
+ *     new page on the launch after that. A design port shipped that way and
+ *     the old artwork was still on screen while the server was answering
+ *     correctly.
  */
 
-const CACHE = "entrymap-v1";
+const CACHE = "entrymap-__COMMIT__";
 const SHELL = ["/app", "/app-icon.png", "/app-manifest.json"];
 
 self.addEventListener("install", (event) => {
