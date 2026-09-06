@@ -469,3 +469,30 @@ def test_the_restyled_screen_names_no_style_of_its_own():
         assert reach not in body, f"the primer styles itself with {reach}"
     assert "EntryMapPalette." in body and "EntryMapTypography." in body
     assert "EntryMapLayout." in body and "EntryMapButtonStyle(" in body
+
+
+# --------------------------------------------------------------------------- the build itself
+
+
+def test_the_asset_catalog_does_not_silently_require_an_app_icon():
+    """A catalog with no AppIcon set fails the build, and CI never builds Swift.
+
+    The design-system port added Resources/Assets.xcassets. The moment a catalog exists, Xcode
+    looks for the icon set named by ASSETCATALOG_COMPILER_APPICON_NAME -- default "AppIcon" -- and
+    fails when it is absent. `main` could not build an iOS app for some hours because of it, and
+    nothing in the Python suite could see that.
+
+    So either the catalog carries an AppIcon set, or the project says there is no app icon. What
+    is not allowed is the state in between.
+    """
+    project = (ROOT / "ios" / "project.yml").read_text(encoding="utf-8")
+    catalog = ROOT / "ios" / "FrontdoorCapture" / "Resources" / "Assets.xcassets"
+    if not catalog.is_dir():
+        return
+    has_icon_set = any(child.name.endswith(".appiconset") for child in catalog.iterdir())
+    declares_none = 'ASSETCATALOG_COMPILER_APPICON_NAME: ""' in project
+    assert has_icon_set or declares_none, (
+        "Assets.xcassets exists with no AppIcon set and project.yml does not say the app has no "
+        "icon, so xcodebuild fails. Add an AppIcon.appiconset or set "
+        'ASSETCATALOG_COMPILER_APPICON_NAME: "".'
+    )

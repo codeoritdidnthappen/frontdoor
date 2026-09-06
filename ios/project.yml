@@ -52,6 +52,17 @@ targets:
         # Free provisioning (D-025, TICK-001). Set DEVELOPMENT_TEAM locally; it is
         # deliberately not committed, because it differs per team member's Apple ID.
         CODE_SIGN_STYLE: Automatic
+        # No app icon, stated rather than defaulted. The design-system port added
+        # Resources/Assets.xcassets, and the moment a catalog exists Xcode looks for an icon set
+        # named by ASSETCATALOG_COMPILER_APPICON_NAME -- which defaults to "AppIcon" -- and fails
+        # the build when it is missing. Before that commit there was no catalog and so no icon was
+        # expected; this restores that, explicitly.
+        #
+        # NOT solved by drawing one. The largest square artwork in the approved library is 384 px
+        # and an iOS icon wants 1024; upscaling it, or inventing a mark, is exactly the failure
+        # #367 warns about with svg/brand/mark-primary.svg. When the library ships a 1024 icon it
+        # lands here as AppIcon.appiconset and this line goes.
+        ASSETCATALOG_COMPILER_APPICON_NAME: ""
         # The public endpoint (ARCHITECTURE section 6). The key is deliberately empty here and
         # set locally; an empty key disables upload and the app says so rather than failing quietly.
         FRONTDOOR_SERVER_URL: https:/$()/frontdoor-measure.fly.dev
