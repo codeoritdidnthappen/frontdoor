@@ -29,6 +29,14 @@ target device an iPhone Pro with LiDAR, and the pre-registered MAE hypothesis is
 window** — not relaxed, not re-scored, untested. D-040 (2026-09-04) narrows current capture and demo
 hardware to James's iPhone 17 Pro (`iPhone18,1`) alone. Every slide that touches results says so.
 
+**Quote A-3 as written, then say what shipped.** The amendment names a LiDAR-capable target
+device, and that is the record. What was built does not use LiDAR at all: the capture app is
+*forbidden* from reaching ARKit by a build guard with its own tests, because motion-derived scale
+must be unavailable rather than merely unused, and the shipped web app runs on any phone with a
+camera. Do not silently correct the amendment on the slide — quote it, then show the app opening
+on a borrowed Android. The gap between what was planned and what works is the honest version and
+it is the better one.
+
 **Four criteria, and the deck says which four.** Every accuracy figure on every slide describes
 `ramp_or_bevel`, `handrails`, `accessible_door_hardware` and `accessibility_signage`. It does
 **not** describe step-free entry, which the interface names as a feature and the engine does not
