@@ -30,7 +30,7 @@ from frontdoor.map_states import pin_for_row
 from frontdoor.scan_records import (
     DEFAULT_SCANS_PATH,
     SCANS_ENV,
-    load_scan_records,
+    load_scan_store,
     merge_scans,
 )
 from frontdoor_server.map_view import DATASET_ENV, DEFAULT_DATASET_PATH
@@ -116,10 +116,10 @@ def _claimant_record(claim_id, token):
 
 def _public_pin(place_id):
     dataset = _catalogue()
-    scans = load_scan_records(os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH))
-    merged, _ = merge_scans(dataset, scans)
+    scans = load_scan_store(os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH))
+    merged, _ = merge_scans(dataset, scans.records)
     row = merged.get(place_id)
-    return pin_for_row(place_id, row)
+    return pin_for_row(place_id, row), scans
 
 
 @claim_page.get("/claim/places")
@@ -221,10 +221,12 @@ def claim_workspace(claim_id):
     record = _claimant_record(claim_id, _presented_token())
     if record is None or record.get("status") != "approved":
         return _error("workspace not found", "no approved workspace for that claim.", status=404)
-    pin = _public_pin(record["place_id"])
+    pin, scans = _public_pin(record["place_id"])
     return {
         "claim": public_claim_view(record),
         "pin": pin,
+        "scans_error": scans.error,
+        "scans_skipped": scans.skipped,
         "incentives": INCENTIVES_TEXT,
         "guided_capture": {
             "capture_kind": "in_app",

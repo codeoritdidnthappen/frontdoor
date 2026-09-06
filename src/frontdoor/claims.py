@@ -19,9 +19,12 @@ import re
 import secrets
 import threading
 import uuid
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
+
+from frontdoor.scan_records import load_scan_store as _load_jsonl
 
 CLAIMS_ENV = "FRONTDOOR_CLAIMS"
 DEFAULT_CLAIMS_PATH = "data/claims.jsonl"
@@ -47,23 +50,28 @@ def now_iso():
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def load_claim_store(path):
+    """Parseable claims plus the error/skip counts a silent [] used to hide.
+
+    The reader is the scan store's, so its message says "scans unreadable".
+    That would send an operator to the scan file while claims.jsonl is the
+    one in trouble, so the noun is corrected here. Missing file with a
+    present parent is nobody has claimed yet; a missing parent is a missing
+    volume (#369).
+    """
+    load = _load_jsonl(path)
+    if load.error:
+        return replace(load, error=load.error.replace("scans", "claims", 1))
+    return load
+
+
 def load_claims(path):
     """Every parseable claim dict; [] when the store is missing or unreadable."""
-    try:
-        text = Path(path).read_text(encoding="utf-8")
-    except (OSError, TypeError, ValueError):
-        return []
-    records = []
-    for line in text.splitlines():
-        if not line.strip():
-            continue
-        try:
-            record = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(record, dict) and isinstance(record.get("claim_id"), str):
-            records.append(record)
-    return records
+    return [
+        record
+        for record in load_claim_store(path).records
+        if isinstance(record.get("claim_id"), str)
+    ]
 
 
 def load_codes(path):

@@ -7,6 +7,7 @@ is a later attested in-app capture, and camera-roll cannot attest.
 
 import inspect
 import json
+import logging
 
 import pytest
 
@@ -14,6 +15,7 @@ from frontdoor.claims import (
     INCENTIVES_TEXT,
     ClaimError,
     has_approved_claim,
+    load_claim_store,
     load_claims,
     submit_claim,
 )
@@ -276,6 +278,48 @@ def test_workspace_is_404_until_approved_then_shows_the_public_pin(env):
         "attested": True,
         "camera_roll": False,
     }
+
+
+def test_workspace_names_an_unreachable_scan_store(env, monkeypatch):
+    """An approved owner looking at their own place must not see an un-scanned
+    estimate and conclude their scans never published (#369).
+
+    GET /claim/<id>/workspace is the one authenticated personal surface. The
+    list-only scan reader returned [] for an unmounted volume, merge_scans
+    added nothing, and the response carried no error field at all.
+    """
+    http = client()
+    created = submit(http).get_json()
+    approve(http, created["claim_id"])
+    monkeypatch.setenv(
+        "FRONTDOOR_SCANS", str(env["claims"].parent / "not-mounted" / "scans.jsonl")
+    )
+    body = http.get(
+        f"/claim/{created['claim_id']}/workspace",
+        query_string={"token": created["token"]},
+    ).get_json()
+    assert body["claim"]["status"] == "approved"
+    assert body["scans_error"] is not None
+    assert "unreadable" in body["scans_error"]
+
+
+def test_workspace_names_a_scan_record_that_could_not_be_read(env):
+    """A torn JSONL line is skipped; the rest of the store still loads.
+
+    scans_error is null in that case, so the skip count is the only place the
+    owner's missing scan would otherwise surface (#369).
+    """
+    env["scans"].write_text("{not json\n", encoding="utf-8")
+    http = client()
+    created = submit(http).get_json()
+    approve(http, created["claim_id"])
+    body = http.get(
+        f"/claim/{created['claim_id']}/workspace",
+        query_string={"token": created["token"]},
+    ).get_json()
+    assert body["claim"]["status"] == "approved"
+    assert body["scans_error"] is None
+    assert body["scans_skipped"] == 1
 
 
 def test_rejected_claim_has_no_workspace(env):
@@ -599,4 +643,51 @@ def test_app_page_has_no_hardcoded_listings_and_opens_claim_from_hash():
     assert 'id="claim-phone"' not in html
     assert "ask your accountant" in html
     assert "tax advice" not in html.lower()
+
+
+# --- the claims store reports what a silent [] used to hide (#369) -----------
+
+
+def test_load_claims_distinguishes_a_missing_file_from_a_missing_volume(tmp_path):
+    """Nobody has claimed yet is not the same as the volume not being mounted.
+
+    load_claims used to answer both with []. Losing claims is losing a
+    credential: an unreachable file 404s every workspace while
+    owner_confirmed pins those claims authorised stay on the map.
+    """
+    missing_file = load_claim_store(tmp_path / "nope.jsonl")
+    assert missing_file.records == []
+    assert missing_file.error is None
+    assert missing_file.skipped == 0
+    assert load_claims(tmp_path / "nope.jsonl") == []
+
+    missing_volume = load_claim_store(tmp_path / "not-mounted" / "claims.jsonl")
+    assert missing_volume.records == []
+    assert missing_volume.error is not None
+    assert "unreadable" in missing_volume.error
+    assert "claims" in missing_volume.error
+    assert load_claims(tmp_path / "not-mounted" / "claims.jsonl") == []
+
+
+def test_load_claims_reports_skipped_lines_and_logs_them(tmp_path, caplog):
+    good = {
+        "claim_id": "c1",
+        "place_id": PLACE,
+        "status": "pending",
+        "token": "tok",
+    }
+    path = tmp_path / "claims.jsonl"
+    path.write_text(
+        json.dumps(good) + "\n"
+        + "not json at all\n"
+        + json.dumps(good | {"claim_id": "c2"}) + "\n",
+        encoding="utf-8",
+    )
+    with caplog.at_level(logging.WARNING):
+        result = load_claim_store(path)
+    assert [r["claim_id"] for r in result.records] == ["c1", "c2"]
+    assert result.skipped == 1
+    assert result.error is None
+    assert "skipped" in caplog.text.lower()
+    assert load_claims(path) == result.records
 

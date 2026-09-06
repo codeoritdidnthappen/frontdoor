@@ -17,6 +17,11 @@ from flask import Flask, Response, jsonify, request
 from jsonschema import Draft202012Validator, ValidationError
 from werkzeug.exceptions import HTTPException
 
+from frontdoor.claims import (
+    CLAIMS_ENV,
+    DEFAULT_CLAIMS_PATH,
+    load_claim_store,
+)
 from frontdoor.map_states import prepare_map_payload
 from frontdoor.metrology import ARM_NAMES
 from frontdoor.scan_records import (
@@ -197,6 +202,17 @@ def _scan_store_ready(path):
     refusal to create its own parent is what catches the mount itself.
     """
     store = load_scan_store(path)
+    return store.error is None and store.skipped == 0
+
+
+def _claims_store_ready(path):
+    """True when the claims file is reachable AND every record in it could be read.
+
+    Same shape as _scan_store_ready: a missing parent is the unmounted volume,
+    and a line that will not parse is a credential that 404s every workspace
+    while owner_confirmed pins those claims authorised stay on the map (#369).
+    """
+    store = load_claim_store(path)
     return store.error is None and store.skipped == 0
 
 # Fixed placeholder values. The repdigit rises are deliberately synthetic so nobody reads stub
@@ -403,6 +419,11 @@ def create_app():
         subsystems["scan_store"] = _answer_if_changed(
             Path(os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH)),
             _scan_store_ready,
+        )
+
+        subsystems["claims_store"] = _answer_if_changed(
+            Path(os.environ.get(CLAIMS_ENV, DEFAULT_CLAIMS_PATH)),
+            _claims_store_ready,
         )
 
         ready_state = all(subsystems.values())
