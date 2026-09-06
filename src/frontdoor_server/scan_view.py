@@ -297,6 +297,7 @@ def publish():
     # path exactly as on the assess-only path.
     payloads = []
     faces_blurred = 0
+    blur_regions = []
     for part in files:
         raw = part.read()
         try:
@@ -317,6 +318,7 @@ def publish():
         else:
             payloads.append(processed.image_bytes)
             faces_blurred += processed.face_count
+            blur_regions.append(list(processed.blur_regions))
 
     t0 = time.perf_counter()
     try:
@@ -371,6 +373,9 @@ def publish():
         },
         "latency_ms": latency_ms,
         "faces_blurred": faces_blurred,
+        # Where each frame's blur landed (one list per frame, upload order),
+        # so a degraded verdict can be traced to a blur over evidence (#350).
+        "blur_regions": blur_regions,
         "face_check": assessment.face_check,
         "quarantined": quarantined,
         "quarantined_count": quarantined_count,
@@ -446,6 +451,7 @@ def publish():
         entrance_id=entrance_id,
         capture_kind=capture_kind,
         attested=attested,
+        blur_regions=blur_regions,
     )
     try:
         append_scan(os.environ.get(SCANS_ENV, DEFAULT_SCANS_PATH), record)

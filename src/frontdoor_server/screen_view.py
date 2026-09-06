@@ -173,6 +173,7 @@ def screen():
     # model boundary as an unblurred original (TICK-257 AC1/AC2, QA TICK-B01).
     payloads = []
     faces_blurred = 0
+    blur_regions = []
     for part in files:
         raw = part.read()
         try:
@@ -193,6 +194,7 @@ def screen():
         else:
             payloads.append((processed.image_bytes, "image/jpeg"))
             faces_blurred += processed.face_count
+            blur_regions.append(list(processed.blur_regions))
 
     t0 = time.perf_counter()
     try:
@@ -263,6 +265,9 @@ def screen():
         },
         "latency_ms": latency_ms,
         "faces_blurred": faces_blurred,
+        # Where each frame's blur landed (one list per frame, upload order),
+        # so a degraded verdict can be traced to a blur over evidence (#350).
+        "blur_regions": blur_regions,
         # The privacy audit's answer as validated: clear, face_visible, or
         # unknown - so a consumer can tell a checked-clear from a check that
         # never produced an answer (PR #243 review).

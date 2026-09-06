@@ -96,6 +96,20 @@ def test_append_writes_one_newline_terminated_json_line(tmp_path):
     assert json.loads(lines[0]) == record
 
 
+def test_blur_regions_are_recorded_when_given_and_absent_otherwise():
+    # Additive (#350): a record made without them carries no key, so nothing
+    # reading older records has to change.
+    kwargs = dict(
+        place_ref={"place_id": PLACE}, created_at="2026-09-04T10:00:00Z",
+        verdicts={"ramp_or_bevel": "present"}, confidences={"ramp_or_bevel": 80},
+        faces_blurred=1, quarantined_count=0,
+        image_keys=["scans/p/" + "a" * 32 + ".jpg"],
+    )
+    regions = [[{"x": 82, "y": 62, "w": 96, "h": 96}], []]
+    assert new_scan_record(**kwargs, blur_regions=regions)["blur_regions"] == regions
+    assert "blur_regions" not in new_scan_record(**kwargs)
+
+
 def test_append_does_not_create_the_parent_directory(tmp_path):
     # A missing volume must stay missing: mkdir would invent /data inside the
     # container, publish would 200, and every scan would die with the process.

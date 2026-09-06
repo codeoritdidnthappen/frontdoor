@@ -17,7 +17,14 @@ small through-glass and reflected faces the Haar cascades measurably missed.
 The Haar pass from the first cut is kept as a cheap supplementary net - both
 frontal and profile cascades, the profile cascade also on the mirrored image
 (it only knows one profile), everything again on a contrast-boosted (CLAHE)
-copy for ghosted reflections. All boxes from both detectors are unioned.
+copy for ghosted reflections. A cascade box is blurred only when YuNet
+agrees with it (#350): the cascades fire on high-contrast repeating pattern,
+and lettering on a signboard is exactly that. On the 2026-09-04 capture run
+nine entrances could not be identified because this pass had mosaicked their
+fascia; measured on those nine (50 photos), 722 of their 746 cascade boxes
+had no YuNet detection anywhere near them and 87 sat on lettering, while on
+the 17 face-bearing pilot photos every face the union covered was already
+covered by YuNet. See HAAR_CORROBORATION_IOU.
 
 EXIF policy - deliberate, read before "fixing":
     Re-encoding through OpenCV drops the entire EXIF block, GPS included -
@@ -88,6 +95,16 @@ YUNET_MAX_SIDE = 2048
 #: source and license. Committed so runtime needs no download.
 YUNET_MODEL = "models/face_detection_yunet_2023mar.onnx"
 
+#: A cascade box is blurred only when some YuNet box overlaps it at this IoU
+#: or better, both boxes taken with their blur margin (#350). 0.10 admits a
+#: cascade box up to ~3x the side of the YuNet box it agrees with -- the
+#: cascades box a found face loosely, and the wider blur is the point of
+#: keeping them -- and rejects anything YuNet did not see at all. Measured
+#: on the nine unidentifiable entrances of #350: 746 cascade boxes fall to
+#: 24, and the 87 on lettering fall to 8, every one of those beside a face
+#: YuNet itself asserted.
+HAAR_CORROBORATION_IOU = 0.10
+
 _cascades = None
 _yunet = None
 #: FaceDetectorYN is stateful (setInputSize before each detect), so the shared
@@ -110,11 +127,9 @@ def _get_cascades():
     cv2.CascadeClassifier does not raise on a missing or unreadable XML: it
     returns an EMPTY classifier, which then finds nothing and is
     indistinguishable from a clean image (#370). That is the same defect as
-    YuNet's discarded status, one detector over -- and the module docstring
-    above credits this net with the ghosted-reflection recall YuNet scores
-    under threshold. Checked before the tuple is cached, so a transient read
-    failure does not disable the supplementary pass for the life of the
-    process.
+    YuNet's discarded status, one detector over. Checked before the tuple is
+    cached, so a transient read failure does not disable the supplementary
+    pass for the life of the process.
     """
     global _cascades
     if _cascades is None:
@@ -319,8 +334,41 @@ def _apply_orientation(img, orientation):
     return img
 
 
+def _expanded(box):
+    """The blur footprint of a box: BOX_MARGIN added on every side, as
+    (x0, y0, x1, y1) floats, unclamped. _blur applies the same margin."""
+    x, y, w, h = box
+    mx, my = w * BOX_MARGIN, h * BOX_MARGIN
+    return (x - mx, y - my, x + w + mx, y + h + my)
+
+
+def _iou(a, b):
+    """Intersection over union of two (x0, y0, x1, y1) rectangles."""
+    iw = min(a[2], b[2]) - max(a[0], b[0])
+    ih = min(a[3], b[3]) - max(a[1], b[1])
+    if iw <= 0 or ih <= 0:
+        return 0.0
+    inter = iw * ih
+    union = (a[2] - a[0]) * (a[3] - a[1]) + (b[2] - b[0]) * (b[3] - b[1]) - inter
+    return inter / union if union > 0 else 0.0
+
+
+def _corroborated(box, yunet_boxes):
+    """True when some YuNet box overlaps this cascade box at
+    HAAR_CORROBORATION_IOU or better (both taken with their blur margin)."""
+    footprint = _expanded(box)
+    return any(
+        _iou(footprint, _expanded(other)) >= HAAR_CORROBORATION_IOU
+        for other in yunet_boxes
+    )
+
+
 def _detect(img):
-    """Detect faces in a BGR array; boxes as (x, y, w, h) in its coordinates."""
+    """Detect faces in a BGR array; boxes as (x, y, w, h) in its coordinates.
+
+    YuNet's boxes are returned as found. A cascade box is returned only when
+    YuNet agrees with it (_corroborated, HAAR_CORROBORATION_IOU).
+    """
     # Primary pass: YuNet at a low threshold, on its own larger copy
     # (YUNET_MAX_SIDE) so the small through-glass faces keep enough pixels
     # to score above threshold.
@@ -328,14 +376,15 @@ def _detect(img):
     ysmall = img if yscale == 1.0 else cv2.resize(
         img, None, fx=yscale, fy=yscale, interpolation=cv2.INTER_AREA
     )
-    boxes = [
+    yunet_boxes = [
         (round(x / yscale), round(y / yscale), round(w / yscale), round(h / yscale))
         for x, y, w, h in _detect_yunet(ysmall)
     ]
 
-    # Supplementary pass: the Haar union from the first cut. Cheap, and its
-    # CLAHE and mirrored variants still add recall on ghosted reflections
-    # that YuNet scores under even the low threshold.
+    # Supplementary pass: the Haar union from the first cut. Its boxes only
+    # widen the blur around a face YuNet already found; a cascade box with no
+    # YuNet box near it is not blurred (#350). The pass still has to RUN --
+    # an empty classifier is refused by _get_cascades, not waved through.
     frontal, profile = _get_cascades()
     scale = min(1.0, DETECT_MAX_SIDE / max(img.shape[:2]))
     small = img if scale == 1.0 else cv2.resize(
@@ -356,24 +405,36 @@ def _detect(img):
         for x, y, w, h in profile.detectMultiScale(mirrored, **kwargs):
             haar_boxes.append((width - x - w, y, w, h))
 
-    boxes.extend(
+    candidates = [
         (round(x / scale), round(y / scale), round(w / scale), round(h / scale))
         for x, y, w, h in haar_boxes
-    )
-    return boxes
+    ]
+    accepted = [box for box in candidates if _corroborated(box, yunet_boxes)]
+    if len(accepted) < len(candidates):
+        logger.debug(
+            "%d of %d cascade boxes had no YuNet detection near them and were "
+            "not blurred", len(candidates) - len(accepted), len(candidates),
+        )
+    return yunet_boxes + accepted
 
 
 def _blur(img, boxes):
     """Pixelate each box (expanded by BOX_MARGIN) in place; irreversible.
 
-    Returns (img, blurred count). The count is what was ACTUALLY pixelated,
-    not what was detected (#370): a box that clamps to nothing -- entirely
-    off-frame, or zero-area after rounding -- is skipped here, and reporting
-    it as blurred puts a number attesting that the privacy pass ran over a
-    region where it did not. That is the mirror of the non-answer defect.
+    Returns (img, regions): one {"x", "y", "w", "h"} rectangle in the frame's
+    pixel coordinates per region ACTUALLY pixelated -- margin included and
+    clamped to the frame, so it is the footprint a reader of the stored image
+    will find. The face count reported upstream is the length of this list,
+    not the number of boxes detected (#370): a box that clamps to nothing --
+    entirely off-frame, or zero-area after rounding -- is skipped here, and
+    reporting it as blurred puts a number attesting that the privacy pass ran
+    over a region where it did not. That is the mirror of the non-answer
+    defect. The geometry itself is recorded (#350) so the screening side can
+    tell, after the fact, whether a blur landed on the evidence a criterion
+    reads instead of guessing.
     """
     height, width = img.shape[:2]
-    blurred = 0
+    regions = []
     for x, y, w, h in boxes:
         mx, my = round(w * BOX_MARGIN), round(h * BOX_MARGIN)
         x0, y0 = max(0, x - mx), max(0, y - my)
@@ -390,8 +451,8 @@ def _blur(img, boxes):
         th = min(max(1, round(rh * tw / rw)), rh)
         down = cv2.resize(region, (tw, th), interpolation=cv2.INTER_AREA)
         img[y0:y1, x0:x1] = cv2.resize(down, (rw, rh), interpolation=cv2.INTER_NEAREST)
-        blurred += 1
-    return img, blurred
+        regions.append({"x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0})
+    return img, regions
 
 
 def _encode(img):
@@ -410,8 +471,8 @@ def blur_faces(image_bytes):
     """Blur every detected face; return (processed JPEG bytes, face count)."""
     img = _decode(image_bytes)
     boxes = _detect(img)
-    blurred_img, count = _blur(img, boxes)
-    return _encode(blurred_img), count
+    blurred_img, regions = _blur(img, boxes)
+    return _encode(blurred_img), len(regions)
 
 
 def strip_gps(image_bytes):
@@ -428,6 +489,11 @@ class ProcessedImage:
     image_bytes: bytes
     face_count: int
     gps_stripped: bool
+    #: What was actually pixelated: one {"x", "y", "w", "h"} rectangle per
+    #: counted face, in the pixel frame of image_bytes (orientation applied),
+    #: margin included, clamped to the frame. Additive (#350): an older record
+    #: without it simply does not know where its blur landed.
+    blur_regions: tuple = ()
 
 
 def process_upload(image_bytes):
@@ -440,12 +506,14 @@ def process_upload(image_bytes):
     non-answer, so no partially-assessed bytes can reach the model or storage.
 
     face_count is the number of regions actually blurred, so the response's
-    "faces_blurred" attests work that happened rather than work intended.
+    "faces_blurred" attests work that happened rather than work intended;
+    blur_regions is where those regions are.
     """
     img = _decode(image_bytes)
-    blurred_img, count = _blur(img, _detect(img))
+    blurred_img, regions = _blur(img, _detect(img))
     return ProcessedImage(
         image_bytes=_encode(blurred_img),
-        face_count=count,
+        face_count=len(regions),
         gps_stripped=True,
+        blur_regions=tuple(regions),
     )

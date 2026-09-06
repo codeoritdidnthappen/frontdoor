@@ -155,8 +155,13 @@ def physical_key(image_key):
 def new_scan_record(*, place_ref, created_at, verdicts, confidences,
                     faces_blurred, quarantined_count, image_keys,
                     contributor=None, entrance_id=None,
-                    capture_kind=None, attested=False):
-    """One scan record, with a fresh scan_id."""
+                    capture_kind=None, attested=False, blur_regions=None):
+    """One scan record, with a fresh scan_id.
+
+    blur_regions, when given, is one list per uploaded frame (upload order)
+    of the {"x", "y", "w", "h"} rectangles the privacy pass pixelated in that
+    frame (#350). Additive: records written before it carry no key.
+    """
     record = {
         "scan_id": uuid.uuid4().hex,
         "place_ref": place_ref,
@@ -173,6 +178,8 @@ def new_scan_record(*, place_ref, created_at, verdicts, confidences,
         record["capture_kind"] = capture_kind
     if attested:
         record["attested"] = True
+    if blur_regions is not None:
+        record["blur_regions"] = [list(regions) for regions in blur_regions]
     return record
 
 
