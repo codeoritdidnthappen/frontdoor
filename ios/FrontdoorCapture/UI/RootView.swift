@@ -56,7 +56,10 @@ struct RootView: View {
                 }
             }
         }
-        .animation(.default, value: isCapturing)
+        // Home to viewfinder and back is a screen transition, so it takes the design system's
+        // step rather than `.default` -- which would have gone on animating at full length for a
+        // reader who has asked for less motion.
+        .entryMapAnimation(.screenTransition, value: isCapturing)
         .sheet(isPresented: $settingUpEntrance) {
             EntranceSetupView(
                 store: entrances,

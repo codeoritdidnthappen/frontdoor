@@ -20,6 +20,16 @@ TOKENS = ROOT / "docs" / "design" / "entrymap"
 SVG = TOKENS / "svg"
 LAYER = ROOT / "ios" / "FrontdoorCapture" / "UI" / "DesignSystem"
 PRIMER = ROOT / "ios" / "FrontdoorCapture" / "UI" / "ScanPrimerView.swift"
+SCREENS_DIR = ROOT / "ios" / "FrontdoorCapture" / "UI"
+
+
+def screens():
+    """Every screen outside the design system layer.
+
+    A glob rather than a list, deliberately. A list is a thing you forget to add to, and the
+    twelfth screen is the one that would have quietly stayed on SwiftUI defaults (#367).
+    """
+    return sorted(SCREENS_DIR.glob("*.swift"))
 PROJECT = ROOT / "ios" / "project.yml"
 
 
@@ -56,7 +66,7 @@ def test_the_palette_is_the_eleven_official_colours_and_nothing_else():
 def test_no_hex_colour_is_spelled_outside_the_palette():
     """One place knows what the colours are. Anywhere else is a colour nobody approved."""
     offenders = {}
-    for swift in sorted(LAYER.glob("*.swift")) + [PRIMER]:
+    for swift in sorted(LAYER.glob("*.swift")) + screens():
         if swift.name == "EntryMapPalette.swift":
             continue
         body = "\n".join(re.sub(r"//.*", "", line) for line in read(swift).splitlines())
@@ -149,7 +159,7 @@ def test_the_numeric_steps_are_tabular_and_the_rest_are_not():
 
 
 def test_no_system_font_size_is_hardcoded_in_the_layer_or_the_restyled_screen():
-    for swift in sorted(LAYER.glob("*.swift")) + [PRIMER]:
+    for swift in sorted(LAYER.glob("*.swift")) + screens():
         body = "\n".join(re.sub(r"//.*", "", line) for line in read(swift).splitlines())
         assert "Font.system(" not in body and ".font(.system(" not in body, (
             f"{swift.name} reaches past the scale to a system font")
@@ -460,15 +470,66 @@ def test_the_libraries_degraded_mark_is_not_in_the_repository():
 # --------------------------------------------------------------------------- the worked example
 
 
-def test_the_restyled_screen_names_no_style_of_its_own():
-    """The point of the layer is that a screen cannot be styled by eye. This is the screen that
-    proves it, so it may not reach past the tokens for anything."""
-    body = "\n".join(re.sub(r"//.*", "", line) for line in read(PRIMER).splitlines())
-    for reach in (".font(", "Color(", ".foregroundStyle(.secondary)", ".buttonStyle(.bordered",
-                  "systemImage:", "Image(systemName:"):
-        assert reach not in body, f"the primer styles itself with {reach}"
-    assert "EntryMapPalette." in body and "EntryMapTypography." in body
-    assert "EntryMapLayout." in body and "EntryMapButtonStyle(" in body
+# A system menu is drawn by UIKit from a title and an SF Symbol, not from a SwiftUI view, so
+# `EntryMapIconView` cannot appear in one. The viewfinder's view-picker is the only menu in the
+# app and the only place a symbol name is allowed to survive.
+SYMBOL_EXEMPT = {"CaptureView.swift"}
+
+
+def test_no_screen_names_a_style_of_its_own():
+    """The point of the layer is that a screen cannot be styled by eye.
+
+    Before #367 exactly one screen went through the tokens and eleven were on SwiftUI defaults --
+    which meant the design system was a folder, not a rule. This is the rule.
+    """
+    offenders = {}
+    for swift in screens():
+        body = "\n".join(re.sub(r"//.*", "", line) for line in read(swift).splitlines())
+        reaches = [".font(", "Color(", ".foregroundStyle(.secondary)",
+                   ".foregroundStyle(.primary)", ".buttonStyle(.bordered",
+                   ".buttonStyle(.borderedProminent)", "monospacedDigit",
+                   ".thinMaterial", ".regularMaterial", ".quaternary"]
+        if swift.name not in SYMBOL_EXEMPT:
+            reaches += ["systemImage:", "Image(systemName:"]
+        found = [reach for reach in reaches if reach in body]
+        if found:
+            offenders[swift.name] = found
+    assert offenders == {}, f"screens styling themselves instead of using the tokens: {offenders}"
+
+
+def test_no_screen_spells_a_colour_swiftui_supplies():
+    """`.green` for present and `.red` for absent is the failure this catches.
+
+    The palette has no red and no green, and that is not an oversight -- the map's own rule is
+    that colour never carries a verdict about a business, and a screen that paints one is making
+    a claim the product refuses to make. It is also the pairing colour-blind readers cannot tell
+    apart, on the screen that delivers the finding.
+    """
+    named = re.compile(
+        r"(?:Color|foregroundStyle|background|tint|fill|stroke|strokeBorder)"
+        r"[(.]\s*\.?(?:black|white|red|green|blue|orange|yellow|gray|grey|purple|pink|brown"
+        r"|mint|teal|cyan|indigo|accentColor)\b")
+    offenders = {}
+    for swift in screens():
+        body = "\n".join(re.sub(r"//.*", "", line) for line in read(swift).splitlines())
+        found = named.findall(body)
+        if found:
+            offenders[swift.name] = found
+    assert offenders == {}, f"SwiftUI's own colours used instead of the palette: {offenders}"
+
+
+def test_every_screen_actually_reaches_the_tokens():
+    """The inverse of the guard above: a screen can pass it by being blank.
+
+    Every screen in the app draws something, so every screen names the palette and the scale.
+    """
+    offenders = [
+        swift.name for swift in screens()
+        if not ("EntryMapPalette." in read(swift) and "EntryMapTypography." in read(swift))
+    ]
+    # RootView draws no content of its own -- it is the router between the screens that do.
+    assert offenders == ["RootView.swift"], (
+        f"screens that never reach the design system: {offenders}")
 
 
 # --------------------------------------------------------------------------- the build itself

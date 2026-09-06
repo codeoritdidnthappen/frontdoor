@@ -28,7 +28,7 @@ struct ROIReviewView: View {
                     pixelWidth: pixelWidth, pixelHeight: pixelHeight,
                     orientation: image.imageOrientation, in: geo.size)
                 ZStack(alignment: .topLeading) {
-                    Color.black
+                    EntryMapPalette.darkGround
                     // Framed and positioned to `rect` explicitly rather than left to the stack's
                     // alignment: two assumptions about where the image sits disagreed once
                     // already, and taps were converted against a rect the image did not occupy.
@@ -74,20 +74,21 @@ struct ROIReviewView: View {
             }
             footer
         }
-        .background(.black)
+        .background(EntryMapPalette.darkGround)
     }
 
     private var header: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: EntryMapLayout.space1) {
             Text(next?.prompt ?? "All six points marked")
-                .font(.headline)
+                .entryMapText(EntryMapTypography.subheading)
+                .foregroundStyle(EntryMapPalette.white)
             Text("\(marks.count) of \(ROITarget.allCases.count)")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .entryMapText(EntryMapTypography.captionNumeric)
+                .foregroundStyle(EntryMapPalette.onDarkGround)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(.thinMaterial)
+        .padding(.vertical, EntryMapLayout.space3)
+        .background(Self.chrome)
     }
 
     @ViewBuilder
@@ -103,11 +104,12 @@ struct ROIReviewView: View {
                 let x = point.x
                 let y = point.y
                 ZStack {
-                    Circle().stroke(.yellow, lineWidth: 2).frame(width: 18, height: 18)
-                    Circle().fill(.yellow).frame(width: 3, height: 3)
+                    Circle().stroke(EntryMapPalette.marigold400, lineWidth: 2)
+                        .frame(width: 18, height: 18)
+                    Circle().fill(EntryMapPalette.marigold400).frame(width: 3, height: 3)
                     Text(target.shortLabel)
-                        .font(.system(size: 10, weight: .bold))
-                        .foregroundStyle(.yellow)
+                        .entryMapText(EntryMapTypography.overline)
+                        .foregroundStyle(EntryMapPalette.marigold400)
                         .offset(x: 20)
                 }
                 .position(x: x, y: y)
@@ -135,60 +137,78 @@ struct ROIReviewView: View {
     @ViewBuilder
     private var nudgePad: some View {
         if let target = ROITarget.allCases.last(where: { marks[$0] != nil }) {
-            HStack(spacing: 10) {
+            HStack(spacing: EntryMapLayout.space3) {
                 // The pixel coordinates, because AC4 asks for a measured standard deviation over
                 // ten placements of one edge and an operator cannot record a number the app never
                 // shows them. Monospaced so a column of ten readings is easy to compare.
                 VStack(alignment: .leading, spacing: 1) {
-                    Text(target.shortLabel).font(.caption.weight(.semibold))
+                    Text(target.shortLabel)
+                        .entryMapText(EntryMapTypography.caption)
+                        .foregroundStyle(EntryMapPalette.white)
                     Text("\(marks[target]!.x), \(marks[target]!.y)")
-                        .font(.caption.monospaced())
-                        .foregroundStyle(.secondary)
+                        .entryMapText(EntryMapTypography.captionNumeric)
+                        .foregroundStyle(EntryMapPalette.onDarkGround)
                 }
                 .frame(minWidth: 76, alignment: .leading)
                 .accessibilityLabel(
                     "\(target.shortLabel) at \(marks[target]!.x), \(marks[target]!.y)")
-                ForEach([("chevron.left", -1, 0), ("chevron.right", 1, 0),
-                         ("chevron.up", 0, -1), ("chevron.down", 0, 1)], id: \.0) { icon, dx, dy in
+                // One chevron turned four ways: the icon set has a single chevron, and four
+                // hand-picked SF Symbols alongside it would be four glyphs off the sheet.
+                ForEach([("left", -1, 0, 180.0), ("right", 1, 0, 0.0),
+                         ("up", 0, -1, -90.0), ("down", 0, 1, 90.0)], id: \.0) { name, dx, dy, turn in
                     Button {
                         marks[target] = ROIValidation.nudge(
                             marks[target]!, dx: dx, dy: dy,
                             orientation: image.imageOrientation,
                             pixelWidth: pixelWidth, pixelHeight: pixelHeight)
                     } label: {
-                        Image(systemName: icon).frame(width: 34, height: 30)
+                        EntryMapIconView(icon: .chevronRight, size: 16,
+                                         tint: EntryMapPalette.white)
+                            .rotationEffect(.degrees(turn))
+                            .frame(width: 40, height: 34)
+                            .background(Self.chrome,
+                                        in: RoundedRectangle(
+                                            cornerRadius: EntryMapLayout.radiusSmall))
                     }
-                    .buttonStyle(.bordered)
-                    .accessibilityLabel("Nudge \(target.shortLabel) \(icon)")
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Nudge \(target.shortLabel) \(name)")
                 }
             }
-            .padding(.vertical, 6)
+            .padding(.vertical, EntryMapLayout.space2)
         }
     }
 
     private var footer: some View {
-        VStack(spacing: 4) {
+        VStack(spacing: EntryMapLayout.space1) {
             nudgePad
             controls
         }
-        .padding()
-        .background(.thinMaterial)
+        .padding(EntryMapLayout.space4)
+        .background(Self.chrome)
     }
 
     private var controls: some View {
         HStack {
             Button("Discard", role: .destructive, action: onDiscard)
+                .buttonStyle(EntryMapButtonStyle(role: .quiet))
             Spacer()
             Button("Undo") { undo() }
+                .buttonStyle(EntryMapButtonStyle(role: .quiet))
                 .disabled(marks.isEmpty)
             Spacer()
             Button("Use frame") {
                 if case .success(let taps) = ROIValidation.taps(from: marks) { onConfirm(taps) }
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(EntryMapButtonStyle(role: .primary))
             .disabled(next != nil)
         }
     }
+
+    /// The chrome above and below the photograph. `darkGround` rather than a material, for the
+    /// same reason the viewfinder takes one: this sits over a picture and needs a ground of its
+    /// own, and the palette already supplies the deep indigo the design system pairs with light
+    /// type.
+    private static let chrome = EntryMapPalette.darkGround.opacity(0.82)
 
     private func place(_ point: CGPoint, in rect: CGRect) {
         guard let target = next else { return }
@@ -245,9 +265,10 @@ private struct Magnifier: View {
                 p.move(to: CGPoint(x: size / 2, y: 0)); p.addLine(to: CGPoint(x: size / 2, y: size))
                 p.move(to: CGPoint(x: 0, y: size / 2)); p.addLine(to: CGPoint(x: size, y: size / 2))
             }
-            .stroke(.yellow.opacity(0.9), lineWidth: 1)
+            .stroke(EntryMapPalette.marigold400.opacity(0.9), lineWidth: 1)
             .frame(width: size, height: size)
-            Circle().stroke(.white, lineWidth: 2).frame(width: size, height: size)
+            Circle().stroke(EntryMapPalette.white, lineWidth: 2)
+                .frame(width: size, height: size)
         }
         .frame(width: size, height: size)
         .clipShape(Circle())

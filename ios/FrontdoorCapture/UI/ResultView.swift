@@ -11,14 +11,15 @@ struct ResultView: View {
     let caliperInches: Double?
     let onDone: () -> Void
 
-    /// Large enough to read at 3 m on a 1080p projection (AC5).
-    private static let headlineSize: CGFloat = 64
-    private static let verdictSize: CGFloat = 48
+    // Read at 3 m on a 1080p projection (AC5). That used to be a hard-coded 64/48 pt; the
+    // design system's `display` step is the same requirement answered once -- its own comment is
+    // "the scan verdict and the measured rise: read from the back of a room" -- and unlike a
+    // fixed size it grows with Dynamic Type.
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
+                VStack(spacing: EntryMapLayout.space5) {
                     if response.stub {
                         stubBanner
                     }
@@ -28,8 +29,9 @@ struct ResultView: View {
                         if let arm = response.arms[name] { secondary(name, arm) }
                     }
                 }
-                .padding()
+                .padding(EntryMapLayout.space4)
             }
+            .background(EntryMapPalette.ground)
             .navigationTitle("Measurement")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -41,14 +43,17 @@ struct ResultView: View {
     /// The schema requires clients to surface this. A placeholder rendered like a measurement is
     /// the most damaging thing this screen could do, and on stage nobody would know.
     private var stubBanner: some View {
-        Label(
-            "These are placeholder values, not a measurement. The server has no metrology behind it yet.",
-            systemImage: "exclamationmark.triangle.fill")
-            .font(.headline)
-            .foregroundStyle(.black)
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.yellow, in: RoundedRectangle(cornerRadius: 12))
+        HStack(alignment: .top, spacing: EntryMapLayout.space3) {
+            EntryMapIconView(icon: .info, size: 22, tint: EntryMapPalette.onMarigold)
+            Text("These are placeholder values, not a measurement. The server has no metrology "
+                 + "behind it yet.")
+                .entryMapText(EntryMapTypography.subheading)
+        }
+        .foregroundStyle(EntryMapPalette.onMarigold)
+        .padding(EntryMapLayout.space4)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(EntryMapPalette.marigold400,
+                    in: RoundedRectangle(cornerRadius: EntryMapLayout.radiusMedium))
     }
 
     /// Arm A is the only arm with a bar drawn against it (D-022, Amendment A-2).
@@ -56,13 +61,17 @@ struct ResultView: View {
     private var primary: some View {
         switch response.arms[.a] {
         case .measured(let m)?:
-            VStack(spacing: 12) {
-                Text(ArmName.a.label).font(.headline).foregroundStyle(.secondary)
+            VStack(spacing: EntryMapLayout.space3) {
+                Text(ArmName.a.label)
+                    .entryMapText(EntryMapTypography.overline)
+                    .foregroundStyle(EntryMapPalette.subduedInk)
                 Text(inches(m.riseIn))
-                    .font(.system(size: Self.headlineSize, weight: .bold, design: .rounded))
+                    .entryMapText(EntryMapTypography.display)
+                    .foregroundStyle(EntryMapPalette.ink)
                     .minimumScaleFactor(0.6).lineLimit(1)
                 Text("interval \(inches(m.intervalIn.low)) – \(inches(m.intervalIn.high))")
-                    .font(.title3).foregroundStyle(.secondary)
+                    .entryMapText(EntryMapTypography.bodyNumeric)
+                    .foregroundStyle(EntryMapPalette.subduedInk)
                 decision(m.decisions.halfInch, line: "1/2\"")
                 caliperComparison(measured: m.riseIn)
             }
@@ -70,29 +79,35 @@ struct ResultView: View {
         case .absent(let a)?:
             absence(ArmName.a, a, prominent: true)
         case nil:
-            Text("The server returned no result for Arm A.").font(.headline)
+            Text("The server returned no result for Arm A.")
+                .entryMapText(EntryMapTypography.heading)
+                .foregroundStyle(EntryMapPalette.ink)
         }
     }
 
     /// The verdict, at stage size. Abstain is styled as an answer, not as a warning.
     private func decision(_ decision: Decision, line: String) -> some View {
-        VStack(spacing: 8) {
+        VStack(spacing: EntryMapLayout.space2) {
+            EntryMapIconView(icon: icon(decision.verdict), size: 34, tint: EntryMapPalette.ink)
             Text(verdictText(decision.verdict, line: line))
-                .font(.system(size: Self.verdictSize, weight: .heavy, design: .rounded))
+                .entryMapText(EntryMapTypography.display)
+                .foregroundStyle(EntryMapPalette.ink)
                 .minimumScaleFactor(0.5).lineLimit(2)
                 .multilineTextAlignment(.center)
-                .foregroundStyle(colour(decision.verdict))
             if let explanation = decision.explanation, !explanation.isEmpty {
                 Text(explanation)
-                    .font(.title3)
+                    .entryMapText(EntryMapTypography.body)
                     .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(EntryMapPalette.subduedInk)
             }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, EntryMapLayout.space4)
+        .padding(.horizontal, EntryMapLayout.space4)
         .frame(maxWidth: .infinity)
-        .background(colour(decision.verdict).opacity(0.12),
-                    in: RoundedRectangle(cornerRadius: 16))
+        .background(EntryMapPalette.card,
+                    in: RoundedRectangle(cornerRadius: EntryMapLayout.radiusLarge))
+        .overlay(RoundedRectangle(cornerRadius: EntryMapLayout.radiusLarge)
+            .stroke(EntryMapPalette.edge))
     }
 
     private func verdictText(_ verdict: Decision.Verdict, line: String) -> String {
@@ -103,13 +118,18 @@ struct ResultView: View {
         }
     }
 
-    private func colour(_ verdict: Decision.Verdict) -> Color {
+    /// The verdict is an icon and a sentence, never a colour.
+    ///
+    /// This used to be green / red / blue. The approved palette has none of the three, and that
+    /// is deliberate -- colour never delivers a judgement in this product (the map's Green-or-Gray
+    /// rule). It also fixes the accessibility hole in a green/red pass/fail shown on a projector.
+    /// The abstention keeps its old distinction for the same reason it always had it: it is not a
+    /// failure and not an error, it is the method declining to claim more than it knows.
+    private func icon(_ verdict: Decision.Verdict) -> EntryMapIcon {
         switch verdict {
-        case .pass: return .green
-        case .fail: return .red
-        // Deliberately not red or orange. An abstention is not a failure and not an error; it is
-        // the method declining to claim more than it knows.
-        case .abstain: return .blue
+        case .pass: return .checkOutline
+        case .fail: return .close
+        case .abstain: return .confidence
         }
     }
 
@@ -122,41 +142,57 @@ struct ResultView: View {
     @ViewBuilder
     private func caliperComparison(measured: Double) -> some View {
         if let caliperInches {
-            VStack(spacing: 4) {
-                Text("caliper \(inches(caliperInches))  ·  difference \(inches(abs(measured - caliperInches)))")
-                    .font(.title3.weight(.medium))
+            VStack(spacing: EntryMapLayout.space1) {
+                Text("caliper \(inches(caliperInches))  ·  "
+                     + "difference \(inches(abs(measured - caliperInches)))")
+                    .entryMapText(EntryMapTypography.bodyNumeric)
+                    .foregroundStyle(EntryMapPalette.ink)
             }
-            .padding(.top, 4)
+            .padding(.top, EntryMapLayout.space1)
         }
     }
 
     private func secondary(_ name: ArmName, _ arm: Arm) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(name.label).font(.headline)
+        VStack(alignment: .leading, spacing: EntryMapLayout.space2) {
+            Text(name.label)
+                .entryMapText(EntryMapTypography.heading)
+                .foregroundStyle(EntryMapPalette.ink)
             switch arm {
             case .measured(let m):
-                Text("\(inches(m.riseIn))   interval \(inches(m.intervalIn.low)) – \(inches(m.intervalIn.high))")
-                    .font(.title3)
+                Text("\(inches(m.riseIn))   interval \(inches(m.intervalIn.low)) – "
+                     + "\(inches(m.intervalIn.high))")
+                    .entryMapText(EntryMapTypography.bodyNumeric)
+                    .foregroundStyle(EntryMapPalette.ink)
                 // No verdict here: only Arm A carries a bar (D-022).
                 Text("reported without a pass/fail bar")
-                    .font(.footnote).foregroundStyle(.secondary)
+                    .entryMapText(EntryMapTypography.caption)
+                    .foregroundStyle(EntryMapPalette.subduedInk)
             case .absent(let a):
-                Text(a.absentReason.headline).font(.title3)
+                Text(a.absentReason.headline)
+                    .entryMapText(EntryMapTypography.subheading)
+                    .foregroundStyle(EntryMapPalette.ink)
                 Text(a.detail ?? a.absentReason.plain)
-                    .font(.footnote).foregroundStyle(.secondary)
+                    .entryMapText(EntryMapTypography.caption)
+                    .foregroundStyle(EntryMapPalette.subduedInk)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func absence(_ name: ArmName, _ absence: Arm.Absence, prominent: Bool) -> some View {
-        VStack(spacing: 10) {
-            Text(name.label).font(.headline).foregroundStyle(.secondary)
+        VStack(spacing: EntryMapLayout.space3) {
+            Text(name.label)
+                .entryMapText(EntryMapTypography.overline)
+                .foregroundStyle(EntryMapPalette.subduedInk)
             Text(absence.absentReason.headline)
-                .font(.system(size: prominent ? Self.verdictSize : 24, weight: .bold))
+                .entryMapText(prominent
+                              ? EntryMapTypography.display : EntryMapTypography.heading)
+                .foregroundStyle(EntryMapPalette.ink)
                 .multilineTextAlignment(.center)
             Text(absence.detail ?? absence.absentReason.plain)
-                .font(.title3).multilineTextAlignment(.center).foregroundStyle(.secondary)
+                .entryMapText(EntryMapTypography.body)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(EntryMapPalette.subduedInk)
         }
         .frame(maxWidth: .infinity)
     }
