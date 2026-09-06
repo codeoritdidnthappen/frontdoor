@@ -5,7 +5,12 @@ POSTs, so every call it makes is same-origin; these tests pin that wiring on the
 served bytes, not on a copy elsewhere.
 """
 
+import json
+import shutil
+import subprocess
 from importlib import resources
+
+import pytest
 
 from frontdoor_server.app import MAX_REQUEST_BYTES, create_app
 
@@ -273,6 +278,44 @@ def test_the_page_registers_the_worker_and_links_the_manifest():
     assert 'navigator.serviceWorker.register("/app-sw.js")' in html
 
 
+def _block(html, start, end="\n}"):
+    """One named block of the page's script, from `start` up to and including `end`."""
+    assert start in html, f"the page no longer contains {start!r}"
+    body = html.split(start, 1)[1]
+    assert end in body, f"{start!r} has no {end!r} terminator"
+    return start + body.split(end, 1)[0] + end
+
+
+def _run_review_chips(html, criteria):
+    """Run the page's own reviewChipsHTML over a /screen body, in node.
+
+    Source-text assertions pass a rewrite that reintroduces the defect, so the
+    real function is executed. It returns an HTML string and touches no DOM,
+    so only its own dependencies have to be lifted out of the page.
+    """
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is not on PATH")
+    prelude = "\n".join([
+        _block(html, "const FEATS = {", "\n};"),
+        _block(html, "const EST_KEYMAP = {", "};"),
+        _block(html, "const LIVE_CRITERIA = [", "];"),
+        _block(html, "function dotTriple(conf, cls){"),
+        _block(html, "function esc(s){", "}"),
+        "const liveSimulated = () => false;",
+        "const STAGED = [];",
+        "function liveFailure(){ return 'unused'; }",
+        "const liveResult = " + json.dumps(
+            {"assessment": {"criteria": criteria}}) + ";",
+        _block(html, "function reviewChipsHTML(chipsOnly){"),
+        "console.log(reviewChipsHTML(false));",
+    ])
+    result = subprocess.run(
+        [node, "-e", prelude], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    return result.stdout
+
+
 def test_tick_399_a_criterion_with_no_verdict_is_not_reported_as_not_seen():
     """A refused answer is never presented to the person at the door as an observation.
 
@@ -287,13 +330,33 @@ def test_tick_399_a_criterion_with_no_verdict_is_not_reported_as_not_seen():
     html = page().get_data(as_text=True)
     chips = html.split("function reviewChipsHTML(chipsOnly){", 1)[1].split(
         "\n}", 1)[0]
-    # The "not seen" bucket is entered only on a verdict the model actually gave.
-    assert "c.verdict==='absent' || c.verdict==='not_visible'" in chips
-    assert "notAssessed.push(" in chips
     assert "Not assessed this time:" in chips
-    # ...and it is not the same sentence as the one about a feature that was looked
-    # for and not found.
     assert "Not seen this time:" in chips
-    not_seen_line = chips.split("Not seen this time:", 1)[1].split("</span>", 1)[0]
-    assert "notSeen.join" in not_seen_line
-    assert "notAssessed" not in not_seen_line
+
+    rendered = _run_review_chips(html, {
+        "ramp_or_bevel": {"verdict": "present", "confidence": 80,
+                          "evidence": "ramp visible"},
+        "handrails": {
+            "verdict": None, "confidence": None, "evidence": None,
+            "rejected": "ada_check_value", "rejected_value": "not_applicable",
+        },
+        "accessible_door_hardware": {"verdict": "absent", "confidence": 70,
+                                     "evidence": "round knob"},
+        "accessibility_signage": {"verdict": "not_visible", "confidence": 40,
+                                  "evidence": "not in frame"},
+    })
+    assert "Not assessed this time:" in rendered, (
+        "the refused criterion produced no 'not assessed' line; it was bucketed "
+        "somewhere else, and the only other bucket says a feature was not seen"
+    )
+    not_seen = rendered.split("Not seen this time:", 1)[1].split("<", 1)[0]
+    not_assessed = rendered.split("Not assessed this time:", 1)[1].split("<", 1)[0]
+    # The refused criterion is in its own sentence, and in neither of the others.
+    assert "Handrails" in not_assessed
+    assert "Handrails" not in not_seen
+    # The two the model did answer are still reported as answers it gave.
+    assert "Easy-grip handle" in not_seen and "Access signage" in not_seen
+    # ...and the one it committed to is still a chip.
+    assert "Ramp or bevel" in rendered.split("Not seen this time:", 1)[0]
+    # Nothing anywhere turns the refused word into a verdict.
+    assert "not_applicable" not in rendered

@@ -35,6 +35,7 @@ from frontdoor.scan_publish import (
     match_entrances,
     publishable_entrances,
 )
+from frontdoor.map_states import _observation
 from frontdoor.scan_records import SCAN_SOURCE, load_scan_records
 from frontdoor.screening import (
     CRITERIA_KEYS,
@@ -789,3 +790,77 @@ def test_tick_399_a_clean_attempt_beats_a_recovered_one_with_the_same_verdicts(
     assert result["error"] is None
     assert result["failure"] is None
     assert (tmp_path / "E-001.json").is_file()  # cached, so a resume is free
+
+
+class PartiallyRecoveredScreening:
+    """Three criteria kept, one refused -- what recovery usually produces."""
+
+    mode = "integrated"
+    summary = {
+        key: (RejectedSummary() if key == "handrails" else FakeSummary())
+        for key in CRITERIA_KEYS
+    }
+
+    class _Assessment:
+        criteria = {
+            key: (
+                {"verdict": None, "confidence": None, "evidence": None,
+                 "rejected": "ada_check_value",
+                 "rejected_value": "not_applicable"}
+                if key == "handrails"
+                else {"verdict": "not_visible", "confidence": 60,
+                      "evidence": f"{key} seen"}
+            )
+            for key in CRITERIA_KEYS
+        }
+        face_check = "clear"
+        error = "ResponseRejected: criterion handrails has invalid verdict"
+        failure = FAILURE_REJECTED
+        attempts = 2
+        rejected_attempts = 2
+
+    assessments = (_Assessment(),)
+
+
+class PartiallyRecoveringEngine:
+    def screen_entrance_integrated(self, entrance_id, images):
+        return PartiallyRecoveredScreening()
+
+
+def test_tick_399_the_batch_record_says_which_verdicts_were_refused(
+        no_image_work):
+    """The published record distinguishes "could not see it" from "answer refused".
+
+    Both write NOT_ASSESSED into `verdicts`. Only `verdict_failures` says which
+    of the two happened, and a record that cannot say carries exactly the loss
+    this ticket exists to end.
+    """
+    results = assess_publishable(
+        {"E-001": ["E-001-1"]},
+        get_capture=lambda capture_id: FakeCapture(capture_id),
+        engine=PartiallyRecoveringEngine(),
+    )
+    result = results["E-001"]
+    assert result["verdicts"]["ramp_or_bevel"] == "not_visible"
+    assert result["verdicts"]["handrails"] == "not_assessed"
+    assert result["verdict_failures"] == {"handrails": "ada_check_value"}
+
+    (record,) = build_records(results, [])
+    assert record["verdicts"]["handrails"] == "not_assessed"
+    assert record["verdict_failures"] == {"handrails": "ada_check_value"}
+    # Both publishing paths write a criterion nobody assessed as something the
+    # map reads as not-assessed -- this one the word, /screen/publish a null --
+    # and neither ever writes the refused word as a verdict.
+    assert _observation({"verdict": record["verdicts"]["handrails"]}) == \
+        _observation({"verdict": None})
+    assert "not_applicable" not in json.dumps(record)
+
+
+def test_tick_399_a_clean_batch_record_carries_no_failure_key(no_image_work):
+    results = assess_publishable(
+        {"E-001": ["E-001-1"]},
+        get_capture=lambda capture_id: FakeCapture(capture_id),
+        engine=RecordingEngine(),
+    )
+    (record,) = build_records(results, [])
+    assert "verdict_failures" not in record

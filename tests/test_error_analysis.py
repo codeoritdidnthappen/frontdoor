@@ -20,16 +20,26 @@ def _criterion_metrics(index: int) -> dict[str, int | float]:
     correct = 7 + index
     wrong = 2
     abstained = 1
-    scored = correct + wrong + abstained
+    # TICK-399 made `failed` an outcome of its own, and the rates below are
+    # computed over a denominator that includes it. The fixture carries one so
+    # the figure is exercised against the shape screening_eval actually writes
+    # -- without it the sample size the figure prints could disagree with the
+    # bars beside it and every assertion here would still pass.
+    failed = 1
+    scored = correct + wrong + abstained + failed
     return {
         "correct": correct,
         "wrong": wrong,
         "abstained": abstained,
         "not_visible": 1,
+        "failed": failed,
+        "rejected": failed,
         "unlabeled": 0,
         "accuracy_of_committed": correct / (correct + wrong),
         "abstention_rate": abstained / scored,
         "not_visible_rate": 1 / scored,
+        "failure_rate": failed / scored,
+        "rejection_rate": failed / scored,
     }
 
 
@@ -150,7 +160,11 @@ def test_observed_figures_label_dev_as_exploratory_and_show_sample_sizes(
     assert "accuracy" in criterion
     assert "not visible" in criterion
     assert criterion.count("labeled pairs") == len(CRITERIA_KEYS)
-    assert "Ramp or beveled threshold: n=10, accuracy 77.8%, not visible 10.0%" in criterion
+    # n counts the failed cell too: 7 correct + 2 wrong + 1 abstained + 1 failed.
+    # It is the denominator the rates printed beside it are computed over, and
+    # a figure whose stated sample size disagrees with its own bars is worse
+    # than one with no number on it at all.
+    assert "Ramp or beveled threshold: n=11, accuracy 77.8%, not visible 9.1%" in criterion
 
     distance = (output / "condition_distance_m.svg").read_text(encoding="utf-8")
     lighting = (output / "condition_lighting.svg").read_text(encoding="utf-8")

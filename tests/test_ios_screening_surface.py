@@ -231,3 +231,79 @@ def test_a_view_the_upload_drain_removed_does_not_fail_the_whole_set():
 
 def _body_of(source, signature):
     return source.split(signature, 1)[1].split("\n    }", 1)[0]
+
+
+# --- TICK-399: a refused answer is not a verdict, and not silence either -----
+#
+# CI never builds Swift, so these are source-level guards like the rest of this
+# file. What they protect: the server can now answer 200 with a criterion whose
+# verdict is null because its answer was REFUSED, and the phone has to be able
+# to say that -- "no verdict" is what it shows for a criterion nobody answered,
+# which is a different fact, and `absent` is what it must never show.
+
+CRITERION_STRUCT = APP_TREE / "Screening" / "ScreeningResponse.swift"
+CHECKS_VIEW = APP_TREE / "UI" / "ScreeningChecksView.swift"
+
+
+def test_the_phone_decodes_why_a_criterion_has_no_verdict():
+    """Both halves: the reason, and the word the server refused.
+
+    Dropping either from CodingKeys decodes silently to nil -- the phone would
+    fall back to "no verdict" and say the server was quiet about a criterion it
+    had in fact answered and been refused on.
+    """
+    source = CRITERION_STRUCT.read_text(encoding="utf-8")
+    keys = source.split("private enum CodingKeys", 1)[1].split("}", 1)[0]
+    assert "rejected" in keys
+    assert 'rejectedValue = "rejected_value"' in keys, (
+        "the server sends rejected_value in snake_case; without the mapping it "
+        "decodes to nil and the refused word is never shown"
+    )
+    assert "let rejected: String?" in source
+    assert "let rejectedValue: String?" in source
+
+
+def test_a_refused_criterion_is_rendered_as_refused_not_as_silence():
+    view = CHECKS_VIEW.read_text(encoding="utf-8")
+    assert "criterion.rejected" in view, (
+        "the checks view no longer branches on a refused criterion, so it shows "
+        "the same 'no verdict' it shows for one that was never answered"
+    )
+    assert "rejectedValue" in view
+    branch = view.split("private func verdict(", 1)[1].split("\n    }", 1)[0]
+    assert branch.index("criterion.rejected") < branch.index('"no verdict"'), (
+        "the refused branch must be reached before the silent one, or it never runs"
+    )
+
+
+def test_the_phone_never_maps_a_refused_word_onto_a_verdict():
+    """`not_applicable` is not `absent` and is not `not_visible`.
+
+    The refused word is repeated verbatim and framed as not being a verdict.
+    Anything that turned it into one -- here or anywhere on the device -- is
+    the single collapse this product forbids most strongly.
+    """
+    view = CHECKS_VIEW.read_text(encoding="utf-8")
+    note = view.split("private static func rejectionNote(", 1)[1].split(
+        "\n    }", 1)[0]
+    assert "which is not a verdict" in note
+    for verdict in ("absent", "not_visible", "present"):
+        assert f'"{verdict}"' not in note, (
+            f"rejectionNote mentions the verdict {verdict!r}; a refused answer "
+            "must never be turned into one"
+        )
+    for path in swift_sources():
+        text = path.read_text(encoding="utf-8")
+        for refused in ("not_applicable", "cannot_determine"):
+            if refused in text:
+                assert "ScreeningCriterion" not in text.split(refused, 1)[0][-200:], (
+                    f"{path.relative_to(REPO_ROOT)} puts an ADA-check value near a "
+                    "screening criterion; those vocabularies are separate"
+                )
+
+
+def test_the_refused_branch_is_noticed_when_it_goes():
+    """Break the rule, confirm red: a guard that has never failed is not a guard."""
+    view = CHECKS_VIEW.read_text(encoding="utf-8")
+    without = view.replace("criterion.rejected", "criterion.evidence")
+    assert "criterion.rejected" not in without

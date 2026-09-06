@@ -22,7 +22,7 @@ function reviewChipsHTML(chipsOnly){
     if(chipsOnly) return present.join('');
     return (present.length?present.join(''):`<span class="vc-notseen">No features confirmed from this photo yet — it still helps.</span>`) +
       (notSeen.length?`<span class="vc-notseen">Not seen this time: ${notSeen.join(' · ')}</span>`:'') +
-      (notAssessed.length?`<span class="vc-notseen">Not assessed this time: ${notAssessed.join(' · ')} — the check did not come back. Publishing checks the photo again.</span>`:'');
+      (notAssessed.length?`<span class="vc-notseen">Not assessed this time: ${notAssessed.join(' · ')} — the answer for it could not be used. Publishing checks the photo again.</span>`:'');
   }
   if(liveSimulated()){
     const chips=STAGED.map(([k,c])=>
