@@ -187,45 +187,49 @@ struct ROIReviewView: View {
         .background(Self.chrome)
     }
 
+    /// Two rows rather than one.
+    ///
+    /// The primary role fills its row by design, so all three in a line left the Spacers doing
+    /// nothing and put Discard hard against the confirm. Separated, and Discard carries a mark of
+    /// its own -- `role: .destructive` buys nothing under a custom ButtonStyle, and Discard
+    /// looking like Undo is how an operator throws away six placements while reaching to correct
+    /// one.
+    ///
+    /// Neither text control takes the quiet role: its label is `subduedInk`, 1.78:1 on this
+    /// chrome. On a dark ground the light half of the palette does the work -- marigold at
+    /// 10.81:1 and sky at 8.33:1.
     private var controls: some View {
-        HStack {
-            // Not the quiet role: its label is subduedInk, which is 1.78:1 on this chrome and
-            // cannot be read. On a dark ground the light half of the palette does the work.
-            //
-            // Discard also keeps a mark of its own. `role: .destructive` buys nothing under a
-            // custom ButtonStyle, and Discard sitting next to Undo in identical chrome is how an
-            // operator throws away six placements while reaching to correct one.
-            Button(role: .destructive, action: onDiscard) {
-                HStack(spacing: EntryMapLayout.space2) {
-                    EntryMapIconView(icon: .close, size: 16, tint: EntryMapPalette.marigold400)
-                    Text("Discard")
-                        .entryMapText(EntryMapTypography.subheading)
-                        .foregroundStyle(EntryMapPalette.marigold400)
-                }
-                .frame(minHeight: EntryMapLayout.touchTargetMinimum)
-                .padding(.horizontal, EntryMapLayout.space3)
-            }
-            .buttonStyle(.plain)
-            Spacer()
-            Button {
-                undo()
-            } label: {
-                Text("Undo")
-                    .entryMapText(EntryMapTypography.subheading)
-                    .foregroundStyle(marks.isEmpty
-                                     ? EntryMapPalette.onDarkGround.opacity(0.4)
-                                     : EntryMapPalette.onDarkGround)
-                    .frame(minHeight: EntryMapLayout.touchTargetMinimum)
-                    .padding(.horizontal, EntryMapLayout.space3)
-            }
-            .buttonStyle(.plain)
-            .disabled(marks.isEmpty)
-            Spacer()
+        VStack(spacing: EntryMapLayout.space3) {
             Button("Use frame") {
                 if case .success(let taps) = ROIValidation.taps(from: marks) { onConfirm(taps) }
             }
             .buttonStyle(EntryMapButtonStyle(role: .primary))
             .disabled(next != nil)
+
+            HStack {
+                Button(role: .destructive, action: onDiscard) {
+                    HStack(spacing: EntryMapLayout.space2) {
+                        EntryMapIconView(icon: .close, size: 16,
+                                         tint: EntryMapPalette.marigold400)
+                        Text("Discard")
+                            .entryMapText(EntryMapTypography.subheading)
+                            .foregroundStyle(EntryMapPalette.marigold400)
+                    }
+                    .frame(minHeight: EntryMapLayout.touchTargetMinimum)
+                    .padding(.horizontal, EntryMapLayout.space3)
+                }
+                .buttonStyle(.plain)
+                Spacer()
+                Button { undo() } label: {
+                    Text("Undo")
+                        .entryMapText(EntryMapTypography.subheading)
+                        .foregroundStyle(EntryMapPalette.onDarkGround)
+                        .frame(minHeight: EntryMapLayout.touchTargetMinimum)
+                        .padding(.horizontal, EntryMapLayout.space3)
+                }
+                .buttonStyle(.plain)
+                .disabled(marks.isEmpty)
+            }
         }
     }
 

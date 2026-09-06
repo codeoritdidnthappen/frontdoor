@@ -42,7 +42,8 @@ struct EntranceLabelingView: View {
                                 Button { draft.select(truth, for: criterion) } label: {
                                     Text(truth.label)
                                         .entryMapText(EntryMapTypography.overline)
-                                        .frame(maxWidth: .infinity)
+                                        .frame(maxWidth: .infinity,
+                                               minHeight: EntryMapLayout.touchTargetMinimum)
                                         .padding(.vertical, EntryMapLayout.space3)
                                         .foregroundStyle(selected
                                                          ? EntryMapPalette.onViolet
@@ -58,7 +59,6 @@ struct EntranceLabelingView: View {
                                                 .stroke(selected
                                                         ? EntryMapPalette.violet600
                                                         : EntryMapPalette.edge))
-                                        .frame(minHeight: EntryMapLayout.touchTargetMinimum)
                                 }
                                     .buttonStyle(.plain)
                                     .accessibilityAddTraits(
