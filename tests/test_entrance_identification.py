@@ -130,3 +130,56 @@ def test_a_photographed_entrance_records_the_views_it_was_read_from(entrances, c
             continue
         assert "surveyed_location" not in record["basis"], entrance_id
         assert len(views) == len(captures[entrance_id]), entrance_id
+
+
+# --- records revised after the first run (TICK-341 re-read, #382) -----------
+
+RECORD_KEYS = {
+    "status", "name", "address", "place_id", "confidence", "basis",
+    "evidence", "reason", "views_read", "place_match",
+}
+#: Present only on a record that was re-read after the first run. It keeps
+#: the fields it replaced, so nothing in the file is silently overwritten.
+PROVENANCE_KEYS = {"run", "read_on", "model", "previous"}
+PREVIOUS_KEYS = {"status", "name", "address", "confidence", "basis", "evidence", "reason"}
+
+
+def test_every_record_has_the_same_shape(entrances):
+    for entrance_id, record in sorted(entrances.items()):
+        extra = set(record) - RECORD_KEYS
+        assert extra <= {"provenance"}, f"{entrance_id} carries unknown keys {extra}"
+        assert RECORD_KEYS <= set(record), f"{entrance_id} is missing {RECORD_KEYS - set(record)}"
+
+
+def test_a_re_read_record_keeps_what_it_replaced(entrances):
+    """A re-read updates a record with provenance; it never overwrites one."""
+    re_read = {e: r for e, r in entrances.items() if "provenance" in r}
+    assert re_read, "the #382 re-read touched at least one record"
+    for entrance_id, record in sorted(re_read.items()):
+        provenance = record["provenance"]
+        assert set(provenance) == PROVENANCE_KEYS, entrance_id
+        assert provenance["run"] == "re-identified after #382 blur fix", entrance_id
+        assert set(provenance["previous"]) == PREVIOUS_KEYS, entrance_id
+        previous = provenance["previous"]
+        current = {key: record[key] for key in PREVIOUS_KEYS}
+        assert current != previous, f"{entrance_id} records a re-read that changed nothing"
+        # The views are the same captures: only the blur changed, not the walk.
+        assert record["views_read"], entrance_id
+
+
+def test_a_door_identified_after_the_last_match_pass_says_so(entrances):
+    """A re-read that names a door invalidates the place decision recorded for
+    it. The record must not keep the old verdict; it carries the pending
+    reason until `entrance_matching match` re-runs. A door still unidentified
+    keeps `not_identified`, which no pass would change."""
+    for entrance_id, record in sorted(entrances.items()):
+        if "provenance" not in record:
+            continue
+        match = record["place_match"]
+        if record["status"] == "unidentified":
+            assert match["unmatched_reason"] == "not_identified", entrance_id
+            continue
+        if record["place_id"]:
+            continue
+        assert match["unmatched_reason"] == "match_pass_pending", entrance_id
+        assert match["how"] is None, entrance_id

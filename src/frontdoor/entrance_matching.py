@@ -128,6 +128,12 @@ UNMATCHED_REASONS = {
     "ambiguous_candidates": "more than one catalogued place passes both gates, or one of them cannot be tested",
     "bracket_too_wide": "the stretch of street this door is bracketed to is wider than a block, which is no longer a claim about where one door is",
     "place_claimed_by_another_entrance": "another entrance matched the same place, and a place cannot be two front doors",
+    # Set by a data change, never by _match_one: the identification file was
+    # revised after the last ``match`` pass (a door re-read, or a street number
+    # newly read), so the recorded verdict no longer describes this record.
+    # The next ``match`` pass replaces it; until then the door is not pinnable
+    # and says why.
+    "match_pass_pending": "the identification was revised after the last match pass; run `python -m frontdoor.entrance_matching match` to decide a place for it",
 }
 
 
