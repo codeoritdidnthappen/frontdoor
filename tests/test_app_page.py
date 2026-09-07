@@ -6,6 +6,7 @@ served bytes, not on a copy elsewhere.
 """
 
 import json
+import re
 import shutil
 import subprocess
 from importlib import resources
@@ -267,9 +268,23 @@ def test_the_worker_never_caches_an_answer_about_a_real_doorway():
     worker = (
         resources.files("frontdoor_server").joinpath("app-sw.js").read_text(encoding="utf-8")
     )
-    assert 'const SHELL = ["/app", "/app-icon.png", "/app-manifest.json"];' in worker
+    shell = worker.split("const SHELL =", 1)[1].split("];", 1)[0]
+    cached = set(re.findall(r'"([^"]+)"', shell))
+    # Pinned as a set rather than a literal line, because the self-hosted faces joined it
+    # and the string match made that look like a safety regression when it is not. Adding
+    # anything still means changing this test on purpose, which is the point.
+    assert cached == {
+        "/app",
+        "/app-icon.png",
+        "/app-manifest.json",
+        "/app-fonts/AtkinsonHyperlegibleNext-Variable.woff2",
+        "/app-fonts/AtkinsonHyperlegibleNext-Italic-Variable.woff2",
+        "/app-fonts/NunitoSans-ExtraBold.ttf",
+    }, cached
+    # The property the set above exists to protect: nothing that answers about a real
+    # doorway may be served from a cache, however the shell is spelled.
     for never_cached in ("/screen", "/screen/publish", "/map/data", "/scan/photo"):
-        assert f'"{never_cached}"' not in worker.split("const SHELL")[1].split("]")[0]
+        assert never_cached not in cached
 
 
 def test_the_page_registers_the_worker_and_links_the_manifest():
@@ -402,3 +417,74 @@ def test_the_app_page_tells_a_contributor_when_a_published_scan_could_not_be_rea
     live = _block(page().get_data(as_text=True), "function loadLiveMap(){")
     assert "j.scans_skipped" in live
     assert "toast(" in live.split("j.scans_skipped", 1)[1]
+
+
+# --------------------------------------------------------------------------- self-hosted type
+
+
+FONTS = [
+    "AtkinsonHyperlegibleNext-Variable.woff2",
+    "AtkinsonHyperlegibleNext-Italic-Variable.woff2",
+    "NunitoSans-ExtraBold.ttf",
+]
+
+
+def test_the_page_fetches_no_typeface_from_another_origin():
+    """The page used to pull its faces from fonts.googleapis.com.
+
+    Its fallback chain ends in system-ui, so a venue with slow, captive-portalled or
+    filtered wifi silently dropped the whole type system with nothing to say it had
+    happened -- and an installable page meant to launch with no signal cannot depend on a
+    font it can only fetch from someone else. It also stopped disclosing every visitor to
+    Google, which on a product where people state disability-related needs is a decision
+    rather than a default.
+
+    Comments may still name the domain -- one explains why it is gone. What may not appear
+    is a request: a stylesheet link, an @import, or a font source anywhere but this origin.
+    """
+    html = page().get_data(as_text=True)
+    without_comments = re.sub(r"<!--.*?-->", "", html, flags=re.S)
+    for host in ("fonts.googleapis.com", "fonts.gstatic.com"):
+        assert host not in without_comments, f"the page still reaches {host} for type"
+    sources = re.findall(r"@font-face\s*\{[^}]*?url\(\s*['\"]?([^'\")]+)", html)
+    assert sources, "no @font-face rule found; the page declares no type of its own"
+    for source in sources:
+        assert source.startswith("/app-fonts/"), f"font served from off-origin: {source}"
+
+
+def test_every_face_the_page_asks_for_is_actually_served():
+    """Page and route have to agree. A renamed file is a silent fallback to system-ui."""
+    client = create_app().test_client()
+    html = client.get("/app").get_data(as_text=True)
+    asked = set(re.findall(r"/app-fonts/([\w\-.\[\]]+)", html))
+    assert asked, "the page references no self-hosted font"
+    for name in sorted(asked):
+        response = client.get(f"/app-fonts/{name}")
+        assert response.status_code == 200, f"the page asks for {name} and it 404s"
+        assert response.headers["Content-Type"].startswith("font/")
+
+
+def test_the_fonts_are_served_immutable_so_the_worker_can_hold_them():
+    client = create_app().test_client()
+    for name in FONTS:
+        response = client.get(f"/app-fonts/{name}")
+        assert response.status_code == 200
+        assert len(response.data) > 10_000, f"{name} looks truncated"
+        assert "immutable" in response.headers["Cache-Control"]
+
+
+def test_an_unknown_font_name_is_refused_rather_than_joined_to_a_path():
+    client = create_app().test_client()
+    for name in ("nope.woff2", "..%2fapp.py", "../app.py"):
+        assert client.get(f"/app-fonts/{name}").status_code == 404
+
+
+def test_the_installed_app_carries_its_own_type_offline():
+    """Without the faces in the shell, the installed app launches with no signal in the
+    system font -- which is the failure self-hosting them exists to prevent."""
+    worker = (
+        resources.files("frontdoor_server").joinpath("app-sw.js").read_text(encoding="utf-8")
+    )
+    shell = worker.split("const SHELL =", 1)[1].split("];", 1)[0]
+    for name in FONTS:
+        assert f"/app-fonts/{name}" in shell, f"{name} is not in the service worker shell"

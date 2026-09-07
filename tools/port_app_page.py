@@ -93,7 +93,9 @@ OPS: list[Op] = [
         ),
         kind="replace_region",
         anchor='<link rel="apple-touch-icon"',
-        until='<link rel="preconnect" href="https://fonts.googleapis.com">',
+        # Was the fonts.googleapis.com preconnect until the type moved to this origin
+        # (self-hosted faces). The type comment that replaced it is the new boundary.
+        until='<!-- Round 4 type.',
         fragment="head.html",
     ),
     Op(

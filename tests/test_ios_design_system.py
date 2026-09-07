@@ -408,6 +408,77 @@ def test_no_system_font_size_is_hardcoded_in_the_layer_or_the_restyled_screen():
             f"{swift.name} reaches past the scale to a system font")
 
 
+def _postscript_name(path):
+    """The name `UIFont(name:)` and `Font.custom(_:)` actually resolve, read out of the file.
+
+    Not the filename and not the family: three different names, and only this one decides
+    whether the app renders in its own typeface or silently in San Francisco.
+    """
+    import struct
+
+    data = path.read_bytes()
+    tables = struct.unpack(">H", data[4:6])[0]
+    offset = None
+    for index in range(tables):
+        entry = 12 + 16 * index
+        if data[entry:entry + 4] == b"name":
+            offset = struct.unpack(">I", data[entry + 8:entry + 12])[0]
+    assert offset is not None, f"{path.name} has no name table"
+    count, storage = struct.unpack(">HH", data[offset + 2:offset + 6])
+    for index in range(count):
+        record = offset + 6 + 12 * index
+        platform, _, _, name_id, length, string_offset = struct.unpack(
+            ">HHHHHH", data[record:record + 12])
+        if name_id != 6:
+            continue
+        raw = data[offset + storage + string_offset:][:length]
+        return raw.decode("utf-16-be") if platform == 3 else raw.decode("latin-1")
+    return None
+
+
+def test_every_face_the_layer_names_is_present_and_resolvable():
+    """The check that could not exist until the files did.
+
+    Before this, `Resources/Fonts` held a README and nothing else, and the app rendered in
+    San Francisco at the scale's sizes and weights with nothing in the log to say so. The
+    guard that was supposed to cover it compared the .ttf names Swift asks for against the
+    UIAppFonts list -- two lists that were both satisfied by files nobody had added.
+
+    A missing file is caught here. So is the subtler one: a face whose PostScript name does
+    not match the raw value, which is what `Font.custom` resolves and what no filename check
+    can see.
+    """
+    directory = ROOT / "ios" / "FrontdoorCapture" / "Resources" / "Fonts"
+    faces = dict(re.findall(
+        r'case (\w+) = "([\w-]+)"', read(LAYER / "EntryMapTypography.swift")))
+    files = dict(re.findall(
+        r'case \.(\w+): return "([\w-]+\.ttf)"', read(LAYER / "EntryMapTypography.swift")))
+    assert faces and files, "could not read the Face enum"
+
+    missing, mismatched = [], []
+    for case, postscript in faces.items():
+        path = directory / files[case]
+        if not path.exists():
+            missing.append(files[case])
+            continue
+        actual = _postscript_name(path)
+        if actual != postscript:
+            mismatched.append(f"{files[case]} is {actual!r}, Swift asks for {postscript!r}")
+    assert not missing, (
+        f"faces the layer names but the bundle does not carry: {missing}. "
+        "The app renders in San Francisco and says nothing.")
+    assert not mismatched, f"PostScript names that will not resolve: {mismatched}"
+
+
+def test_the_font_licences_travel_with_the_fonts():
+    """Both families are OFL, which requires the licence to be distributed with them."""
+    directory = ROOT / "ios" / "FrontdoorCapture" / "Resources" / "Fonts"
+    licences = sorted(p.name for p in directory.glob("OFL*.txt"))
+    assert licences == ["OFL-AtkinsonHyperlegibleNext.txt", "OFL-NunitoSans.txt"], licences
+    for name in licences:
+        assert "SIL OPEN FONT LICENSE" in read(directory / name).upper()
+
+
 def test_the_registered_fonts_are_the_faces_the_layer_asks_for():
     """A font registered under one name and asked for under another fails silently: iOS falls back
     to San Francisco and logs nothing the app can see."""
