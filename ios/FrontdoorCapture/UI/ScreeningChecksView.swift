@@ -19,6 +19,9 @@ struct ScreeningChecksView: View {
     let run: ScreeningRun
     let onDone: () -> Void
 
+    /// Read so the verdict row can stack instead of crushing its two halves onto one line.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private static let knownVerdicts = ["present", "absent", "not_visible"]
 
     var body: some View {
@@ -124,16 +127,26 @@ struct ScreeningChecksView: View {
     @ViewBuilder
     private func verdict(_ criterion: ScreeningResponse.Criterion?) -> some View {
         if let criterion, let verdict = criterion.verdict {
-            HStack(spacing: EntryMapLayout.space2) {
+            // The verdict and its confidence share a line until they cannot. At the accessibility
+            // sizes there is not room for both, and it was the verdict word itself that broke --
+            // "presen / t" against "confiden / ce high", on the screen the whole scan exists to
+            // produce. Stacked, each gets the width.
+            let layout = dynamicTypeSize.isAccessibilitySize
+                ? AnyLayout(VStackLayout(alignment: .leading, spacing: EntryMapLayout.space1))
+                : AnyLayout(HStackLayout(spacing: EntryMapLayout.space2))
+            HStack(alignment: .firstTextBaseline, spacing: EntryMapLayout.space2) {
                 EntryMapIconView(icon: icon(for: verdict), size: 22, tint: tint(for: verdict))
-                Text(verdict)
-                    .entryMapText(EntryMapTypography.subheading)
-                    .foregroundStyle(EntryMapPalette.ink)
-                if let confidence = criterion.confidence {
-                    Text("confidence \(confidence)")
-                        .entryMapText(EntryMapTypography.captionNumeric)
-                        .foregroundStyle(EntryMapPalette.subduedInk)
+                layout {
+                    Text(verdict)
+                        .entryMapText(EntryMapTypography.subheading)
+                        .foregroundStyle(EntryMapPalette.ink)
+                    if let confidence = criterion.confidence {
+                        Text("confidence \(confidence)")
+                            .entryMapText(EntryMapTypography.captionNumeric)
+                            .foregroundStyle(EntryMapPalette.subduedInk)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             if let evidence = criterion.evidence, !evidence.isEmpty {
                 Text(evidence)
