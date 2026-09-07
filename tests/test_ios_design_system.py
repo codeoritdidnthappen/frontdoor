@@ -97,8 +97,12 @@ def test_no_hex_colour_is_spelled_outside_the_palette():
         # `\bColor\(` so `UIColor(EntryMapPalette.ink)` is not read as a raw colour -- converting
         # an approved token for UIKit is the opposite of spelling one. `UIColor(` on anything else
         # is still caught, which is what stops that becoming the loophole.
+        # `UIColor\.` catches the dot-syntax form. `UIColor(EntryMapPalette.ink)` is a paren and
+        # so is not matched by it -- converting an approved token for UIKit is the opposite of
+        # spelling a colour, and is the only UIColor this layer is allowed.
         found = re.findall(
-            r"\bColor\(|UIColor\((?!EntryMapPalette\.)|0x[0-9A-Fa-f]{6}\b|#[0-9A-Fa-f]{6}\b",
+            r"\bColor\(|UIColor\((?!EntryMapPalette\.)|UIColor\.|"
+            r"0x[0-9A-Fa-f]{6}\b|#[0-9A-Fa-f]{6}\b",
             body)
         # `Color(entryMapHex:)` is fileprivate to the palette, so any `Color(` here is a raw one.
         if found:
@@ -744,16 +748,23 @@ def test_no_screen_takes_a_system_control_style():
     screen *writes* and a system control style is a request for styling nobody wrote. Any control
     style the design system has no token for is the same bug waiting to happen.
     """
-    styles = ["pickerStyle(.segmented)", "pickerStyle(.wheel)", "pickerStyle(.menu)",
-              "buttonStyle(.bordered", "buttonStyle(.borderless", "datePickerStyle(",
-              "toggleStyle(.switch)", "progressViewStyle(.circular)", "labelStyle(.titleAndIcon)"]
+    # An allow-list, because the denylist this replaced promised the class and delivered nine
+    # strings: `.pickerStyle(SegmentedPickerStyle())` -- the same defect in the older spelling --
+    # and `.textFieldStyle(.roundedBorder)` both walked straight through it.
+    #
+    # `foregroundStyle` is not a control style; the palette guards below own it.
+    control_style = re.compile(r"\.(?!foregroundStyle)(\w+Style)\(\s*([^\n]*)")
+    allowed = ("EntryMapButtonStyle(", ".plain)")
     offenders = {}
     for swift in screens():
         body = "\n".join(re.sub(r"//.*", "", line) for line in read(swift).splitlines())
-        found = [style for style in styles if style in body]
+        found = [f".{name}({arg.strip()[:40]}" for name, arg in control_style.findall(body)
+                 if not arg.lstrip().startswith(allowed)]
         if found:
             offenders[swift.name] = found
-    assert offenders == {}, f"screens taking a system control style: {offenders}"
+    assert offenders == {}, (
+        f"screens taking a control style the design system has no token for: {offenders}. "
+        "Use EntryMapButtonStyle, or .plain to say the screen draws its own chrome.")
 
 
 def test_no_screen_spells_a_colour_swiftui_supplies():

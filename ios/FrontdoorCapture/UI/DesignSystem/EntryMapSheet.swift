@@ -86,9 +86,15 @@ enum EntryMapNavigationAppearance {
         _ style: EntryMapTextStyle, textStyle: UIFont.TextStyle
     ) -> UIFont {
         guard let face = UIFont(name: style.face.rawValue, size: style.size) else {
-            // The face failed to register. Falling back keeps the bar readable rather than
-            // crashing the app over a title; `test_the_registered_fonts_are_the_faces_the_layer
-            // _asks_for` is what stops this arriving unnoticed.
+            // This branch is not a rare safety net. `Resources/Fonts` holds a README and no font
+            // files -- they are third-party binaries left uncommitted pending a licence call --
+            // so it is what every build takes today, and the bar renders in San Francisco at the
+            // scale's sizes and weights.
+            //
+            // No test catches that, and one here would not either: the guard in the suite
+            // compares the .ttf names this layer asks for against the UIAppFonts list, and both
+            // lists are satisfied by files nobody has added. `UIFont(name:)` resolves a
+            // PostScript name, which is a third thing again. See Resources/Fonts/README.md.
             return UIFont.preferredFont(forTextStyle: textStyle)
         }
         return UIFontMetrics(forTextStyle: textStyle).scaledFont(for: face)
