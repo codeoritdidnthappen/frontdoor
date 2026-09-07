@@ -58,6 +58,16 @@ struct EntryMapButtonStyle: ButtonStyle {
         /// which is the quiet kind of failure.
         @Environment(\.isFocused) private var isFocused
         @Environment(\.accessibilityReduceMotion) private var reduceMotion
+        /// A `.disabled(_:)` applied over this style used to change nothing an eye could see: the
+        /// control kept its full violet fill and simply stopped answering. Five screens do that,
+        /// and the ROI footer's "Use frame" was found sitting at full saturation with nothing
+        /// marked yet -- a control that looks ready and is not is worse than one that looks
+        /// unavailable, because the only way to learn is to tap it and get nothing.
+        ///
+        /// Painting a disabled control as unavailable is a floor, not the intent. The intent is
+        /// above: an unavailable control keeps the tap and says what is needed. A screen reaching
+        /// for `.disabled(_:)` still throws that away; it just no longer lies about it.
+        @Environment(\.isEnabled) private var isEnabled
 
         let configuration: ButtonStyleConfiguration
         let role: Role
@@ -65,6 +75,9 @@ struct EntryMapButtonStyle: ButtonStyle {
         let unavailableExplanation: String?
 
         private var pressed: Bool { configuration.isPressed }
+
+        /// Unavailable to look at: either the role was told so, or the control cannot act.
+        private var readsAsUnavailable: Bool { isUnavailable || !isEnabled }
 
         var body: some View {
             configuration.label
@@ -115,7 +128,7 @@ struct EntryMapButtonStyle: ButtonStyle {
                     .overlay {
                         // The scan master keeps its marigold and lays a separate 8% indigo wash
                         // over it while pressed, so the tier colour is deepened, never replaced.
-                        if role == .scan, pressed, !isUnavailable {
+                        if role == .scan, pressed, !readsAsUnavailable {
                             RoundedRectangle(cornerRadius: EntryMapButtonStyle.cornerRadius)
                                 .fill(EntryMapPalette.indigo900.opacity(0.08))
                         }
@@ -144,7 +157,7 @@ struct EntryMapButtonStyle: ButtonStyle {
             // lavender"; the artwork picks the deeper of the two UI lavenders — not the pin path's
             // lavender, which is not a surface — and that is what keeps the indigo label from
             // floating at 13.63:1 `ink` on `lavender200`.
-            if isUnavailable { return EntryMapPalette.lavender200 }
+            if readsAsUnavailable { return EntryMapPalette.lavender200 }
             switch role {
             case .primary:
                 return pressed ? EntryMapPalette.deepAccent : EntryMapPalette.violet600
@@ -159,7 +172,7 @@ struct EntryMapButtonStyle: ButtonStyle {
         }
 
         private var keylineColour: Color {
-            if isUnavailable { return EntryMapPalette.lavender200 }
+            if readsAsUnavailable { return EntryMapPalette.lavender200 }
             switch role {
             case .primary:
                 return pressed ? EntryMapPalette.deepAccent : EntryMapPalette.violet600
@@ -173,7 +186,7 @@ struct EntryMapButtonStyle: ButtonStyle {
         }
 
         private var labelColour: Color {
-            if isUnavailable { return EntryMapPalette.ink }
+            if readsAsUnavailable { return EntryMapPalette.ink }
             switch role {
             case .primary: return EntryMapPalette.onViolet
             case .secondary, .quiet: return EntryMapPalette.subduedInk

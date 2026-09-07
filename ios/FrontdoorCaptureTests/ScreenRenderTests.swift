@@ -176,6 +176,22 @@ final class ScreenRenderTests: XCTestCase {
                                       onPublish: {}, onDiscard: {}), "review-gate")
     }
 
+    /// The metrology tap screen, and the only one with light type on a dark chrome.
+    ///
+    /// Rendered because its footer controls were changed to fix a contrast failure that was
+    /// computed, not seen: the quiet role's label is `subduedInk`, which is 1.78:1 on this
+    /// chrome. The arithmetic said unreadable and the fix went in blind. This is the picture.
+    ///
+    /// The marks are left unplaced, so this is the first prompt an operator meets. The nudge pad
+    /// only appears once a point exists, which is why the footer here is the confirm row alone.
+    func testRenderROIReview() {
+        let doorway = swatch(.darkGray, CGSize(width: 3024, height: 4032))
+        writeBoth(
+            ROIReviewView(image: doorway, pixelWidth: 3024, pixelHeight: 4032,
+                          onConfirm: { _ in }, onDiscard: {}),
+            "roi-review")
+    }
+
     func testRenderConditionsSheet() {
         let sheet = ConditionsSheet(
             mode: .screening,

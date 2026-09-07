@@ -739,10 +739,35 @@ def test_the_masters_only_use_path_commands_the_parser_supports():
 def test_the_unavailable_control_is_lavender_and_indigo_and_never_grey():
     source = read(LAYER / "EntryMapButtonStyle.swift")
     body = "\n".join(re.sub(r"//.*", "", line) for line in source.splitlines())
-    assert "if isUnavailable { return EntryMapPalette.lavender200 }" in body
-    assert "if isUnavailable { return EntryMapPalette.ink }" in body
+    # `readsAsUnavailable`, not `isUnavailable`: the paint now covers a control that was told it
+    # is unavailable AND one that simply cannot act. The colours it lands on are unchanged, which
+    # is what this test is about.
+    assert "if readsAsUnavailable { return EntryMapPalette.lavender200 }" in body
+    assert "if readsAsUnavailable { return EntryMapPalette.ink }" in body
     for grey in (".gray", "grey", "systemGray", "foregroundStyle(.secondary"):
         assert grey not in body, f"the control layer reaches for {grey}"
+
+
+def test_a_disabled_control_is_painted_unavailable_rather_than_ready():
+    """`.disabled(_:)` over this style used to change nothing an eye could see.
+
+    The control kept its full violet fill and stopped answering, so "ready" and "cannot act"
+    looked identical -- found on the ROI footer's "Use frame", sitting at full saturation with
+    nothing marked yet. Five screens apply `.disabled(_:)` over the style, so the style is where
+    this has to be answered; a screen-by-screen fix would be five chances to forget.
+
+    This is a floor, not the intent. The intent is the test below: an unavailable control keeps
+    the tap and says what is needed.
+    """
+    body = read(LAYER / "EntryMapButtonStyle.swift")
+    assert "@Environment(\\.isEnabled)" in body, (
+        "the style never reads isEnabled, so a disabled control paints as a ready one")
+    assert "isUnavailable || !isEnabled" in body, (
+        "the unavailable paint must cover both the flag and a disabled control")
+    # Every paint decision goes through the combined test, never the flag alone.
+    stripped = "\n".join(re.sub(r"//.*", "", line) for line in body.splitlines())
+    assert "if isUnavailable" not in stripped, (
+        "a paint branch still reads the flag alone, so a disabled control slips past it")
 
 
 def test_an_unavailable_control_still_receives_the_tap():
