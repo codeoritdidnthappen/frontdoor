@@ -1,42 +1,61 @@
 # Bundled fonts
 
-The design layer asks for four faces by PostScript name. `UIAppFonts` in `ios/project.yml`
-registers them by file name, and `EntryMapTypography.Face` names both — a pytest guard
-(`tests/test_ios_design_system.py`) fails if the two lists ever stop matching.
+The four faces `EntryMapTypography.Face` asks for, by PostScript name. `UIAppFonts` in
+`ios/project.yml` registers them by file name; the two lists and the PostScript names inside the
+files are checked against each other by `tests/test_ios_design_system.py`.
 
-Drop these four files here:
+| File | PostScript name | Family | Weight | Used for |
+|---|---|---|---:|---|
+| `AtkinsonHyperlegibleNext-Regular.ttf` | `AtkinsonHyperlegibleNext-Regular` | Atkinson Hyperlegible Next | 400 | body and callout |
+| `AtkinsonHyperlegibleNext-SemiBold.ttf` | `AtkinsonHyperlegibleNext-SemiBold` | Atkinson Hyperlegible Next | 600 | labels, buttons, captions |
+| `AtkinsonHyperlegibleNext-Bold.ttf` | `AtkinsonHyperlegibleNext-Bold` | Atkinson Hyperlegible Next | 700 | headings and the display step |
+| `NunitoSans-ExtraBold.ttf` | `NunitoSans-ExtraBold` | Nunito Sans | 800 | the wordmark, when set in type rather than drawn |
 
-| File | Family | Weight | Used for |
-|---|---|---:|---|
-| `AtkinsonHyperlegibleNext-Regular.ttf` | Atkinson Hyperlegible Next | 400 | body and callout |
-| `AtkinsonHyperlegibleNext-SemiBold.ttf` | Atkinson Hyperlegible Next | 600 | labels, buttons, captions |
-| `AtkinsonHyperlegibleNext-Bold.ttf` | Atkinson Hyperlegible Next | 700 | headings and the display step |
-| `NunitoSans-ExtraBold.ttf` | Nunito Sans | 800 | the wordmark, when it is set in type rather than drawn |
+Static instances, not variable files. `Font.custom(_:size:relativeTo:)` addresses a single named
+instance, so a variable font registered here resolves to its default weight for every face — all
+four steps would render identically and nothing would say so.
 
-Both families are under the SIL Open Font License. Atkinson Hyperlegible Next is published by the
-Braille Institute; Nunito Sans is on Google Fonts. Take the static instances, not the variable
-files — `Font.custom(_:size:relativeTo:)` addresses a single named instance, and a variable font
-registered here resolves to its default weight for every face.
+## Licences
 
-**The files are not committed.** They are third-party binaries with their own licence text, and
-the repository has no vendored-binary convention to hang them on; that call belongs to whoever
-owns the licence question, not to this change.
+Both families are under the SIL Open Font License, which permits bundling in an application and
+requires the licence to travel with the font. `OFL-AtkinsonHyperlegibleNext.txt` and
+`OFL-NunitoSans.txt` are here for that reason and are checked by the suite.
 
-## Until they are here
+Atkinson Hyperlegible Next is published by the Braille Institute; Nunito Sans by Google Fonts.
 
-`Font.custom` falls back to the system face **silently** when a PostScript name does not resolve.
-So an app built without these files renders in San Francisco at the right sizes, weights, leading
-and tracking, and nothing in the log says otherwise. That is deliberate — a missing font should not
-be a crash — but it does mean "the type looks like iOS" is the symptom to watch for, and the first
-thing to check on a Mac is that these four files are here and that their PostScript names match
-`EntryMapTypography.Face`. Confirm each with:
+## Provenance
+
+Taken from the upstream repositories rather than a font site, so the bytes are traceable:
+
+| File | Source |
+|---|---|
+| Atkinson faces | `googlefonts/atkinson-hyperlegible-next`, `fonts/ttf/` |
+| `NunitoSans-ExtraBold.ttf` | `googlefonts/NunitoSans`, `fonts/ttf/` |
+
+Google Fonts ships both families **variable-only**, which is why these come from upstream: the
+static instances the bundle needs are not in `google/fonts`.
+
+## What this fixed
+
+Until these files were added the directory held only this README, and the app rendered in San
+Francisco at the scale's sizes, weights, leading and tracking — silently, because `Font.custom`
+falls back without a word. The guard that was supposed to catch it compared the `.ttf` names Swift
+asks for against the `UIAppFonts` list, two lists that were both satisfied by files nobody had
+added. `test_every_face_the_layer_names_is_present_and_resolvable` now reads the PostScript name
+out of each file, which is the name that actually decides.
+
+The web app is served the same two families from `src/frontdoor_server/fonts`, self-hosted for the
+same reason: it used to fetch them from `fonts.googleapis.com` and degraded to `system-ui` on any
+network that was slow or filtered.
+
+## Checking a face by hand
 
 ```
 fc-scan --format "%{postscriptname}\n" AtkinsonHyperlegibleNext-Regular.ttf
 ```
 
-or by opening the file in Font Book and reading the PostScript name field.
+or open it in Font Book and read the PostScript name field.
 
-The token file names the family as "Atkinson Hyperlegible" — the first release. The faces above are
-Atkinson Hyperlegible **Next**, its successor, which is what the native app was asked for. If the
-two ever have to be told apart in copy, the token file is the one that is behind.
+The token file names the family as "Atkinson Hyperlegible", the first release. These are Atkinson
+Hyperlegible **Next**, its successor, which is what the native app asks for. If the two ever have
+to be told apart in copy, the token file is the one that is behind.

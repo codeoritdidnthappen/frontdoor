@@ -24,7 +24,12 @@
  */
 
 const CACHE = "entrymap-__COMMIT__";
-const SHELL = ["/app", "/app-icon.png", "/app-manifest.json"];
+const SHELL = ["/app", "/app-icon.png", "/app-manifest.json",
+  // Self-hosted since the type moved off the CDN. Without these the installed app
+  // launches offline in the system font, which is the failure this all exists to stop.
+  "/app-fonts/AtkinsonHyperlegibleNext-Variable.woff2",
+  "/app-fonts/AtkinsonHyperlegibleNext-Italic-Variable.woff2",
+  "/app-fonts/NunitoSans-ExtraBold.ttf"];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

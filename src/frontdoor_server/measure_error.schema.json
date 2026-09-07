@@ -12,6 +12,7 @@
         "sidecar is not valid JSON",
         "sidecar failed validation",
         "no such endpoint",
+      "unknown font",
         "wrong method for this endpoint",
         "request body too large",
         "unsupported content type",

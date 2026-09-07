@@ -518,6 +518,46 @@ def create_app():
         response.headers["Cache-Control"] = "public, max-age=86400"
         return response
 
+    # The three faces the app page asks for, by exact name. An allow-list rather than a
+    # path join: a filename that reaches the filesystem is a traversal waiting to happen,
+    # and this route has exactly three legitimate answers.
+    _APP_FONTS = {
+        "AtkinsonHyperlegibleNext-Variable.woff2": "font/woff2",
+        "AtkinsonHyperlegibleNext-Italic-Variable.woff2": "font/woff2",
+        "NunitoSans-ExtraBold.ttf": "font/ttf",
+    }
+
+    @app.get("/app-fonts/<name>")
+    def app_font(name: str):
+        """The page's typefaces, from this origin rather than a CDN.
+
+        The page used to pull these from fonts.googleapis.com. Its fallback chain ends in
+        system-ui, so a venue with slow or filtered wifi silently dropped the entire type
+        system with nothing to say it had happened -- and an installable page that is meant
+        to launch with no signal cannot have a font it can only fetch from someone else.
+        Serving them here also stops disclosing every visitor to Google, which matters more
+        than usual on a product where people state disability-related needs.
+
+        Immutable: the bytes for a given filename never change, so a year is honest and the
+        service worker can hold them in its shell.
+        """
+        mimetype = _APP_FONTS.get(name)
+        if mimetype is None:
+            return _error(
+                "unknown font",
+                "this origin serves only the three faces the app page declares",
+                status=404,
+            )
+        body = (
+            resources.files("frontdoor_server")
+            .joinpath("fonts")
+            .joinpath(name)
+            .read_bytes()
+        )
+        response = Response(body, mimetype=mimetype)
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+
     @app.post("/measure")
     def measure():
         if "image" not in request.files:

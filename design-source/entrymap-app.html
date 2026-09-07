@@ -5,8 +5,6 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/codeoritdidnthappen/frontdoor/main/docs/brand/entrymap-touch-icon.png"><meta name="apple-mobile-web-app-title" content="EntryMap"><meta name="apple-mobile-web-app-capable" content="yes">
 <title>EntryMap &mdash; phone prototype</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Round 4 type. The asset library names Atkinson Hyperlegible for UI and Nunito Sans
      for the wordmark. Atkinson Hyperlegible is drawn for low vision -- unambiguous
      letterforms, a wide aperture, distinct I/l/1 and 0/O -- which for an accessibility
@@ -14,9 +12,36 @@
      original family ships only 400/700, which cannot carry this file's three-weight
      ladder, so the variable "Next" cut (200-800) is used; the ladder is re-pitched to
      500/650/800 to fit its axis. Nunito Sans is loaded because the official wordmark
-     SVGs set it by name, and inline SVG uses the document's fonts. -->
-<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:ital,wght@0,200..800;1,200..800&family=Nunito+Sans:wght@700..900&display=swap" rel="stylesheet">
+     SVGs set it by name, and inline SVG uses the document's fonts.
+
+     Served from this origin, not fonts.googleapis.com. Three reasons, and the first is
+     the one that matters on the day: the fallback chain ends in system-ui, so a venue
+     with slow, captive-portalled or filtered wifi silently drops the whole type system
+     and nothing says so. Second, this page is installable and meant to launch with no
+     signal -- a CDN font cannot be in the service worker's shell. Third, a request to
+     Google on every load discloses the visitor's IP and user agent, which on a product
+     where people state disability-related needs is a decision, not a default.
+
+     Both families are OFL; the licences travel with them in src/frontdoor_server/fonts.
+     `swap` is kept as the display strategy: text must be readable before the face
+     arrives, which is the same reason native falls back rather than blocking. -->
 <style>
+@font-face {
+  font-family: 'Atkinson Hyperlegible Next';
+  src: url('/app-fonts/AtkinsonHyperlegibleNext-Variable.woff2') format('woff2-variations');
+  font-weight: 200 800; font-style: normal; font-display: swap;
+}
+@font-face {
+  font-family: 'Atkinson Hyperlegible Next';
+  src: url('/app-fonts/AtkinsonHyperlegibleNext-Italic-Variable.woff2') format('woff2-variations');
+  font-weight: 200 800; font-style: italic; font-display: swap;
+}
+@font-face {
+  font-family: 'Nunito Sans';
+  src: url('/app-fonts/NunitoSans-ExtraBold.ttf') format('truetype');
+  font-weight: 800; font-style: normal; font-display: swap;
+}
+
 /* ============ tokens ============ */
 :root{
   /* ---- ROUND 7: THE CANONICAL PALETTE ------------------------------------------
