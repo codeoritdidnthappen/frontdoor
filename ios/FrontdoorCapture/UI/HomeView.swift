@@ -213,28 +213,44 @@ struct HomeView: View {
     /// one from tokens already in the library -- a violet pill on the lavender edge colour,
     /// nothing new invented. Worth a designer's eye before it spreads to a second screen.
     private var modePicker: some View {
-        HStack(spacing: 0) {
+        // Side by side until the words stop fitting. At the accessibility sizes "Screening" wrapped
+        // to "Screeni / ng" and sat against the capsule's curve; two full-width rows give each
+        // label the whole line, which is what the segments were competing for.
+        let stack = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: EntryMapLayout.space1))
+            : AnyLayout(HStackLayout(spacing: 0))
+        return stack {
             modeSegment("Screening", mode: .screening)
             modeSegment("Metrology", mode: .metrology)
         }
         .padding(EntryMapLayout.space1)
-        .background(EntryMapPalette.edge, in: Capsule())
+        .background(EntryMapPalette.edge,
+                    in: RoundedRectangle(cornerRadius: segmentRadius + EntryMapLayout.space1))
         .accessibilityElement(children: .contain)
         .accessibilityLabel("Capture mode")
     }
 
+    /// A capsule's curve eats the ends of a long label, so the segments take the pill radius only
+    /// while they are short enough to stay on one line.
+    private var segmentRadius: CGFloat {
+        dynamicTypeSize.isAccessibilitySize
+            ? EntryMapLayout.radiusMedium : EntryMapLayout.radiusPill
+    }
+
     private func modeSegment(_ title: String, mode: CaptureMode) -> some View {
         let selected = controller.captureMode == mode
+        let shape = RoundedRectangle(cornerRadius: segmentRadius)
         return Button {
             controller.captureMode = mode
         } label: {
             Text(title)
                 .entryMapText(EntryMapTypography.subheading)
                 .foregroundStyle(selected ? EntryMapPalette.onViolet : EntryMapPalette.subduedInk)
-                .frame(maxWidth: .infinity)
-                .frame(minHeight: EntryMapLayout.touchTargetMinimum)
-                .background(selected ? EntryMapPalette.violet600 : Color.clear, in: Capsule())
-                .contentShape(Capsule())
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, EntryMapLayout.space3)
+                .frame(maxWidth: .infinity, minHeight: EntryMapLayout.touchTargetMinimum)
+                .background(selected ? EntryMapPalette.violet600 : Color.clear, in: shape)
+                .contentShape(shape)
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(selected ? .isSelected : [])
