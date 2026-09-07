@@ -87,9 +87,10 @@ struct ConditionsSheet: View {
                                    surface: $surface, occlusion: $occlusion,
                                    showsSurface: mode.carriesMetrologyTruth)
                 } header: {
-                    Text("Conditions for the next shot")
+                    Text("Conditions for the next shot").entryMapSectionHeader()
                 } footer: {
                     Text("Applies to captures from here on, not to ones already taken.")
+                        .entryMapSectionFooter()
                 }
                 if let rejection {
                     Section {
@@ -104,8 +105,7 @@ struct ConditionsSheet: View {
                     }
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(EntryMapPalette.ground)
+            .entryMapForm()
             .navigationTitle("Conditions")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -123,5 +123,8 @@ struct ConditionsSheet: View {
                 }
             }
         }
+        // Toolbar buttons, picker values and cursors. Here and not on the Form or the root --
+        // see `entryMapForm()` for why both of those were tried and dropped.
+        .tint(EntryMapPalette.violet600)
     }
 }

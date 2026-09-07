@@ -42,6 +42,9 @@ struct ScreeningChecksView: View {
                 ToolbarItem(placement: .confirmationAction) { Button("Done", action: onDone) }
             }
         }
+        // Toolbar buttons, picker values and cursors. Here and not on the Form or the root --
+        // see `entryMapForm()` for why both of those were tried and dropped.
+        .tint(EntryMapPalette.violet600)
     }
 
     private var header: some View {

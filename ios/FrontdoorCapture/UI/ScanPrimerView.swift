@@ -64,6 +64,9 @@ struct ScanPrimerView: View {
                 .background(EntryMapPalette.card)
             }
         }
+        // Toolbar buttons, picker values and cursors. Here and not on the Form or the root --
+        // see `entryMapForm()` for why both of those were tried and dropped.
+        .tint(EntryMapPalette.violet600)
     }
 
     /// The brand lockup is a dark-ground piece of artwork, so it brings its own indigo with it

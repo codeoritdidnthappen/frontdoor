@@ -29,42 +29,21 @@ struct EntranceLabelingView: View {
                         LabeledContent("Labeling as", value: operatorStore.name)
                     }
                 } header: {
-                    Text("Operator")
+                    Text("Operator").entryMapSectionHeader()
                 } footer: {
                     Text("Set once on this phone. The server records the labeling date.")
+                        .entryMapSectionFooter()
                 }
 
                 ForEach(ScreeningCriterion.allCases) { criterion in
-                    Section(criterion.label) {
+                    Section {
                         HStack {
                             ForEach(LabelTruth.allCases) { truth in
-                                let selected = draft.answers[criterion] == truth
-                                Button { draft.select(truth, for: criterion) } label: {
-                                    Text(truth.label)
-                                        .entryMapText(EntryMapTypography.overline)
-                                        .frame(maxWidth: .infinity,
-                                               minHeight: EntryMapLayout.touchTargetMinimum)
-                                        .padding(.vertical, EntryMapLayout.space3)
-                                        .foregroundStyle(selected
-                                                         ? EntryMapPalette.onViolet
-                                                         : EntryMapPalette.ink)
-                                        .background(
-                                            selected
-                                            ? EntryMapPalette.violet600 : EntryMapPalette.card,
-                                            in: RoundedRectangle(
-                                                cornerRadius: EntryMapLayout.radiusSmall))
-                                        .overlay(
-                                            RoundedRectangle(
-                                                cornerRadius: EntryMapLayout.radiusSmall)
-                                                .stroke(selected
-                                                        ? EntryMapPalette.violet600
-                                                        : EntryMapPalette.edge))
-                                }
-                                    .buttonStyle(.plain)
-                                    .accessibilityAddTraits(
-                                        selected ? .isSelected : [])
+                                chip(truth, for: criterion)
                             }
                         }
+                    } header: {
+                        Text(criterion.label).entryMapSectionHeader()
                     }
                 }
 
@@ -85,12 +64,39 @@ struct EntranceLabelingView: View {
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
             }
-            .scrollContentBackground(.hidden)
-            .background(EntryMapPalette.ground)
+            .entryMapForm()
             .navigationTitle("Label \(entranceId)")
             .interactiveDismissDisabled()
             .onAppear(perform: restoreQueuedRecord)
         }
+        // Toolbar buttons, picker values and cursors. Here and not on the Form or the root --
+        // see `entryMapForm()` for why both of those were tried and dropped.
+        .tint(EntryMapPalette.violet600)
+    }
+
+    /// One of the four answers for one criterion.
+    ///
+    /// Lifted out of the `Form` rather than left inline: as one expression, with three ternaries
+    /// feeding a background, an overlay and a foreground, the type checker gave up on it.
+    private func chip(_ truth: LabelTruth, for criterion: ScreeningCriterion) -> some View {
+        let selected = draft.answers[criterion] == truth
+        let shape = RoundedRectangle(cornerRadius: EntryMapLayout.radiusSmall)
+        let fill: Color = selected ? EntryMapPalette.violet600 : EntryMapPalette.card
+        let keyline: Color = selected ? EntryMapPalette.violet600 : EntryMapPalette.edge
+        let label: Color = selected ? EntryMapPalette.onViolet : EntryMapPalette.ink
+        return Button {
+            draft.select(truth, for: criterion)
+        } label: {
+            Text(truth.label)
+                .entryMapText(EntryMapTypography.overline)
+                .foregroundStyle(label)
+                .frame(maxWidth: .infinity, minHeight: EntryMapLayout.touchTargetMinimum)
+                .background(fill, in: shape)
+                .overlay(shape.stroke(keyline))
+                .contentShape(shape)
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private var chosenOperator: String {

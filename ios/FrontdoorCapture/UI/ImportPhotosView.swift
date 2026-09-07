@@ -29,12 +29,14 @@ struct ImportPhotosView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Entrance") {
+                Section {
                     TextField("E-014", text: $entranceId)
                         .textInputAutocapitalization(.characters)
                         .autocorrectionDisabled()
                         .entryMapText(EntryMapTypography.bodyNumeric)
                         .foregroundStyle(EntryMapPalette.ink)
+                } header: {
+                    Text("Entrance").entryMapSectionHeader()
                 }
 
                 Section {
@@ -42,11 +44,12 @@ struct ImportPhotosView: View {
                                    surface: $surface, occlusion: $occlusion,
                                    showsSurface: false)
                 } header: {
-                    Text("Conditions these photos were taken in")
+                    Text("Conditions these photos were taken in").entryMapSectionHeader()
                 } footer: {
                     Text("Recorded now, from memory, because the photos were taken earlier. "
                          + "That is weaker than tagging at the door and is why importing is a "
                          + "rescue path, not the normal one.")
+                        .entryMapSectionFooter()
                 }
 
                 Section {
@@ -84,8 +87,7 @@ struct ImportPhotosView: View {
                     }
                 }
             }
-            .scrollContentBackground(.hidden)
-            .background(EntryMapPalette.ground)
+            .entryMapForm()
             .navigationTitle("Import photos")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -98,6 +100,9 @@ struct ImportPhotosView: View {
                 }
             }
         }
+        // Toolbar buttons, picker values and cursors. Here and not on the Form or the root --
+        // see `entryMapForm()` for why both of those were tried and dropped.
+        .tint(EntryMapPalette.violet600)
     }
 
     private func runImport() async {

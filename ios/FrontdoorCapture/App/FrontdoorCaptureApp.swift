@@ -5,6 +5,10 @@ import SwiftUI
 /// exhibit behaviour the error budget does not characterise (R-11).
 @main
 struct FrontdoorCaptureApp: App {
+    /// The navigation bar is UIKit and only takes a font from the appearance proxy, so this has
+    /// to happen before any bar exists.
+    init() { EntryMapNavigationAppearance.install() }
+
     var body: some Scene {
         WindowGroup {
             RootView()
