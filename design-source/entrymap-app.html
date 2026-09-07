@@ -5,6 +5,12 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/codeoritdidnthappen/frontdoor/main/docs/brand/entrymap-touch-icon.png"><meta name="apple-mobile-web-app-title" content="EntryMap"><meta name="apple-mobile-web-app-capable" content="yes">
 <title>EntryMap &mdash; phone prototype</title>
+<!-- The palette is light-only -- eleven colours, no dark variants, a contrast report that
+     pairs them against light grounds. The page paints its own surfaces so Dark Mode does not
+     break what it draws, but without this the browser still draws its half in dark: the caret
+     and selection in the search and entrance fields, scrollbars, and on iOS the keyboard and
+     any select popup. The native app declares the same thing as UIUserInterfaceStyle: Light. -->
+<meta name="color-scheme" content="light">
 <!-- Round 4 type. The asset library names Atkinson Hyperlegible for UI and Nunito Sans
      for the wordmark. Atkinson Hyperlegible is drawn for low vision -- unambiguous
      letterforms, a wide aperture, distinct I/l/1 and 0/O -- which for an accessibility
