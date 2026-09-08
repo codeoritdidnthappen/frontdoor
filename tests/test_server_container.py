@@ -37,7 +37,13 @@ IMAGE = "frontdoor-server:tick062"
 # `frontdoor.faceblur` loads OpenCV and runs decode -> blur -> re-encode on every image, which
 # the 256 MB figure predates. The client saw a 502 with an empty body, because the app died
 # mid-request and Fly's proxy answered instead.
-MEMORY_CAP = "512m"
+# Raised again to 1024 on 2026-09-08. 512 held for the 200 KB PNG it was measured on and did
+# not hold for a photograph: a 294 KB, 960x1280 JPEG from the real capture set killed the
+# worker in 2.5s against production, and so did the 1.2 MB original. `faceblur._decode` calls
+# cv2.imdecode at FULL resolution, and a 12 MP phone image is ~36 MB as a BGR array before the
+# detector makes its own 2048- and 1600-side copies. This test exists precisely so the number
+# here and the number in fly.toml cannot drift, and it caught this change.
+MEMORY_CAP = "1024m"
 
 # A full-resolution still is a few megabytes, well above what the other tests send.
 FULL_RESOLUTION_STILL = b"\xff\xd8\xff\xe0" + b"x" * (12 * 1024 * 1024)
