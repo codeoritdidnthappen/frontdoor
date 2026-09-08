@@ -13,7 +13,7 @@ import re
 from importlib import resources
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, request, abort
+from flask import Flask, Response, jsonify, request
 from jsonschema import Draft202012Validator, ValidationError
 from werkzeug.exceptions import HTTPException
 
@@ -534,22 +534,28 @@ def create_app():
     # mark sits inside the centre 80% safe circle with the indigo ground bleeding
     # to every edge; the full-bleed artwork would lose its corners to a circular
     # mask.
-    _APP_ICONS = {
-        "app-icon-192.png",
-        "app-icon-512.png",
-        "app-icon-512-maskable.png",
-    }
-
-    @app.get("/<icon_name>")
-    def app_icon_sized(icon_name):
-        if icon_name not in _APP_ICONS:
-            abort(404)
-        icon = (
-            resources.files("frontdoor_server").joinpath(icon_name).read_bytes()
-        )
+    # Registered one by one rather than behind a "/<name>" rule. A variable rule at
+    # the root is a catch-all: it swallows every unmatched single-segment path, so
+    # `GET /measure` -- which should be 405, because only POST is defined -- became
+    # a 404 from this handler instead. The suite caught it; three explicit routes
+    # cannot do that to anything.
+    def _serve_app_icon(filename):
+        icon = resources.files("frontdoor_server").joinpath(filename).read_bytes()
         response = Response(icon, mimetype="image/png")
         response.headers["Cache-Control"] = "public, max-age=86400"
         return response
+
+    @app.get("/app-icon-192.png")
+    def app_icon_192():
+        return _serve_app_icon("app-icon-192.png")
+
+    @app.get("/app-icon-512.png")
+    def app_icon_512():
+        return _serve_app_icon("app-icon-512.png")
+
+    @app.get("/app-icon-512-maskable.png")
+    def app_icon_512_maskable():
+        return _serve_app_icon("app-icon-512-maskable.png")
 
     # The three faces the app page asks for, by exact name. An allow-list rather than a
     # path join: a filename that reaches the filesystem is a traversal waiting to happen,
