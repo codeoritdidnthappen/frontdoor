@@ -1,2 +1,8 @@
 <link rel="apple-touch-icon" sizes="180x180" href="/app-icon.png"><link rel="icon" sizes="180x180" href="/app-icon.png"><meta name="apple-mobile-web-app-title" content="EntryMap"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"><link rel="manifest" href="/app-manifest.json"><meta name="theme-color" content="#1E1142"><meta name="mobile-web-app-capable" content="yes">
 <title>EntryMap</title>
+<!-- The palette is light-only -- eleven colours, no dark variants, a contrast report that pairs
+     them against light grounds. The page paints its own surfaces, so Dark Mode does not break
+     what it draws; without this the browser still draws its half dark -- the caret and selection
+     in the search and entrance fields, scrollbars, and on iOS the keyboard and any select popup.
+     The native app declares the same thing as UIUserInterfaceStyle: Light. -->
+<meta name="color-scheme" content="light">

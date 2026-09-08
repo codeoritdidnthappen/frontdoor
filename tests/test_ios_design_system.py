@@ -898,3 +898,44 @@ def test_the_asset_catalog_does_not_silently_require_an_app_icon():
         "icon, so xcodebuild fails. Add an AppIcon.appiconset or set "
         'ASSETCATALOG_COMPILER_APPICON_NAME: "".'
     )
+
+
+def test_the_app_declares_itself_light_only_because_the_palette_is():
+    """The palette has eleven colours and no dark variants; the contrast report pairs them
+    against light grounds only. An app that follows the system appearance therefore gets its
+    chrome drawn dark by SwiftUI and UIKit while the palette paints deep indigo on top of it.
+
+    Found on a real phone in Dark Mode: the entrance field and the rejection banner were
+    unreadable. Every render and every simulator check in this repository had been light.
+
+    The Info.plist key, not `.preferredColorScheme(.light)`: the damage is in chrome the app
+    does not draw -- list rows, the navigation bar, the keyboard -- which a SwiftUI modifier
+    does not reach.
+    """
+    project = read(PROJECT)
+    assert "UIUserInterfaceStyle: Light" in project, (
+        "the app follows the system appearance, so Dark Mode draws chrome the light-only "
+        "palette cannot be read against"
+    )
+
+
+def test_no_screen_defines_a_dark_variant_the_palette_cannot_honour():
+    """The counterpart: while the app is pinned light, a screen reaching for a dark-mode
+    branch is writing colours the palette has not approved and the contrast report has not
+    measured. If a dark palette ever ships, this test goes with the pin above."""
+    offenders = {}
+    for swift in screens() + sorted(LAYER.glob("*.swift")):
+        body = "\n".join(re.sub(r"//.*", "", line) for line in read(swift).splitlines())
+        # Appearance decisions only. `UITraitCollection` is deliberately NOT here: it carries
+        # preferredContentSizeCategory, size classes and layout direction as well, and the
+        # recurring defect in this app is layout at the accessibility text sizes -- the first
+        # person to read the content-size category the UIKit way should not get a red test
+        # telling them they branched on appearance.
+        found = [token for token in ("colorScheme == .dark", "colorScheme == .light",
+                                     "@Environment(\\.colorScheme)", "preferredColorScheme(",
+                                     "userInterfaceStyle == .dark", "overrideUserInterfaceStyle")
+                 if token in body]
+        if found:
+            offenders[swift.name] = found
+    assert offenders == {}, (
+        f"these branch on appearance while the palette has only a light half: {offenders}")

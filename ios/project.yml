@@ -33,6 +33,18 @@ targets:
           - AtkinsonHyperlegibleNext-SemiBold.ttf
           - AtkinsonHyperlegibleNext-Bold.ttf
           - NunitoSans-ExtraBold.ttf
+        # The design system is light-only: eleven approved colours, no dark variants, and a
+        # contrast report that pairs them against light grounds only. The app never said so, so
+        # on a phone in Dark Mode SwiftUI drew the Form's row backgrounds near-black while the
+        # palette painted `ink` -- a deep indigo -- on top of them. Found on a real phone: the
+        # entrance fields and the rejection banner were unreadable.
+        #
+        # Declared here rather than with `.preferredColorScheme(.light)` because the damage was
+        # in chrome SwiftUI and UIKit draw -- list rows, the navigation bar, the keyboard -- and
+        # only the Info.plist key reaches all of it.
+        #
+        # When the library ships a dark palette and a contrast report to match, this line goes.
+        UIUserInterfaceStyle: Light
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
         # D-014: capture geometry is fixed, so the instrument does not rotate.
@@ -49,8 +61,17 @@ targets:
         FrontdoorUploadKey: $(FRONTDOOR_UPLOAD_KEY)
     settings:
       base:
-        # Free provisioning (D-025, TICK-001). Set DEVELOPMENT_TEAM locally; it is
-        # deliberately not committed, because it differs per team member's Apple ID.
+        # Free provisioning (D-025, TICK-001). Still not committed -- it differs per team
+        # member's Apple ID -- but read from the environment rather than typed into Xcode's
+        # Signing & Capabilities editor.
+        #
+        # The .xcodeproj is generated and untracked, so every `xcodegen generate` rewrites it and
+        # silently discards a team set through the UI. That is not hypothetical: a team selected
+        # in Xcode was destroyed by a regeneration minutes later, and the only symptom was the
+        # same "requires a development team" error as never having set one.
+        #
+        #     export FRONTDOOR_DEVELOPMENT_TEAM=XXXXXXXXXX
+        DEVELOPMENT_TEAM: $(FRONTDOOR_DEVELOPMENT_TEAM)
         CODE_SIGN_STYLE: Automatic
         # No app icon, stated rather than defaulted. The design-system port added
         # Resources/Assets.xcassets, and the moment a catalog exists Xcode looks for an icon set
