@@ -27,6 +27,13 @@ document.getElementById('btn-allow-cam').addEventListener('click',()=>{
   requestGeoFix();  /* places the scan when it was not launched from a card */
 });
 document.getElementById('btn-shutter').addEventListener('click',async ()=>{
+  /* ROUND 10, the capture coach. Both lines are the design source's and both fall
+     inside the region this op replaces, so -- like the shutter wash below -- they
+     only reach the served page through here. stopCoach() is the one that matters:
+     without it the 5 Hz frame readback and the devicemotion listener keep running
+     through the wash, the upload and the processing screen. */
+  ackCapture();          /* the guide acknowledges the frame, on the press itself */
+  stopCoach();           /* nothing is coached about a photograph already taken */
   if(camStream){
     const frame=await captureFrame();
     stopCamera();
