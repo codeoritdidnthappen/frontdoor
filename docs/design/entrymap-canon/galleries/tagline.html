@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tagline gallery — "Access starts before you arrive."</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- The two faces the build already loads, requested with the identical query so this
+     page cannot introduce a weight or a style the prototype does not have. -->
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible+Next:ital,wght@0,200..800;1,200..800&family=Nunito+Sans:wght@700..900&display=swap" rel="stylesheet">
+<style>
+  /* ===== the canonical twelve, verbatim from
+     design/board-refs/entrymap-build-ready/asset-library/tokens/variables.css ===== */
+  :root{
+    --indigo900:#1E1142; --indigo800:#28165A; --violet600:#4F34DB; --violet800:#38239B;
+    --sky400:#76BCFD;    --sky700:#1B6599;    --marigold400:#FDB327; --amber700:#8C5400;
+    --lavender-path:#CFBCEE; --lavender100:#F5F2FC; --lavender200:#E8E1F7; --white:#FFFFFF;
+
+    /* the build's derived roles, copied from phone-app-prototype.html :root.
+       Nothing here is new; every value is either one of the twelve or a mix of two
+       of them that the prototype already authors and already states a figure for. */
+    --ink:var(--indigo900);
+    --sub:#463B63;              /* indigo900 -> white 17.6% */
+    --blue-ink:#1C4B7E;         /* Estimated tier text ink */
+    --marigold-ink:#6B4014;     /* Scanned tier text ink */
+    --purple-ink:var(--violet800); /* Owner-confirmed tier text ink */
+    --card:var(--white);
+    --wash-quiet:#F9F7FD;       /* white -> lavender100 62%: the tier tile fill */
+    --purple:var(--violet600);
+    --marigold:var(--marigold400);
+    --blue-edge:var(--sky700);
+    --marigold-edge:var(--indigo900);
+    --bezel:#100924;
+    --ui-lavender-1:var(--lavender100);
+    --ui-lavender-2:var(--lavender200);
+    --ring-select:inset 0 0 0 2px var(--purple);
+    --elev-3-dark:0 -1px 0 rgba(16,9,36,.10), 0 -8px 28px rgba(16,9,36,.34);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:var(--white);color:var(--indigo900);
+    font:15px/1.6 'Atkinson Hyperlegible Next','Atkinson Hyperlegible',system-ui,'Segoe UI',Arial,sans-serif;
+    font-variant-numeric:tabular-nums;
+  }
+  main{max-width:1290px;margin:0 auto;padding:34px 22px 110px}
+  h1{font-size:29px;line-height:1.15;margin:0 0 6px;letter-spacing:-.02em}
+  h2{font-size:22px;margin:60px 0 6px;padding-top:22px;border-top:2px solid var(--lavender200);letter-spacing:-.015em}
+  h3{font-size:13px;margin:26px 0 8px;letter-spacing:.08em;text-transform:uppercase;color:var(--violet800)}
+  p{max-width:82ch;margin:0 0 10px}
+  .lede{font-size:16.5px;color:var(--indigo800);max-width:86ch}
+  .muted{color:var(--indigo800);opacity:.86}
+  code{font-family:Consolas,'Cascadia Mono',Menlo,monospace;font-size:.9em;background:var(--lavender100);
+       padding:1px 5px;border-radius:4px}
+  .rule{background:var(--lavender100);border-left:6px solid var(--violet600);
+        padding:16px 22px;border-radius:0 10px 10px 0;margin:18px 0 6px;max-width:88ch}
+  .rule b{display:block;margin-bottom:4px;letter-spacing:.01em}
+  .verdict{background:#FFF7E6;border-left:6px solid var(--marigold400);
+           padding:16px 22px;border-radius:0 10px 10px 0;margin:18px 0;max-width:88ch}
+  .rec{background:var(--lavender100);border-left:6px solid var(--violet600);
+       padding:18px 24px;border-radius:0 10px 10px 0;margin-top:16px;max-width:88ch;font-size:16px}
+
+  table{border-collapse:collapse;font-size:13.5px;margin:10px 0 0}
+  th,td{border:1px solid var(--lavender200);padding:5px 11px;text-align:left;vertical-align:top}
+  th{background:var(--lavender100);font-weight:700;font-size:12.5px;letter-spacing:.01em}
+  td.n{text-align:right;font-variant-numeric:tabular-nums}
+  td.pass{color:var(--indigo900);font-weight:700}
+  td.warn{color:var(--amber700);font-weight:700}
+  .tw{overflow-x:auto;max-width:100%;padding-bottom:4px}
+  .sw{display:inline-block;width:13px;height:13px;border-radius:3px;vertical-align:-2px;
+      margin-right:6px;border:1px solid var(--lavender-path)}
+
+  .case{display:grid;grid-template-columns:1fr 1fr;gap:22px;max-width:100%;margin-top:16px}
+  .case p{max-width:none}
+  .case b{display:block;margin-bottom:3px}
+  @media (max-width:820px){.case{grid-template-columns:1fr}}
+
+  /* ================= the harness: the real welcome screen, cropped ================= */
+  .rack{display:flex;gap:18px;align-items:flex-start;overflow-x:auto;padding:6px 2px 12px}
+  .rig{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:7px}
+  .rig > small{font-size:11.5px;color:var(--indigo800);opacity:.9;letter-spacing:.02em}
+
+  /* .phone reproduces the prototype's frame and, crucially, its ONE type anchor:
+     every step is a multiple of --root-fs and the text-size preference moves only
+     that one number. 390px wide with an 11px border under border-box is a 368px
+     screen, which is the real text column this headline has to hold. */
+  .phone,.bare{
+    background:var(--white);
+    font-family:'Atkinson Hyperlegible Next','Atkinson Hyperlegible',system-ui,'Segoe UI',Arial,sans-serif;
+    --root-fs:15px;
+    font-size:var(--root-fs);
+    --fs-h1:   calc(1.5  * var(--root-fs));
+    --fs-body: calc(0.95 * var(--root-fs));
+    --fs-meta: calc(0.78 * var(--root-fs));
+    --fs-micro:calc(0.7  * var(--root-fs));
+    --lh-h1:1.1; --lh-body:1.5; --lh-micro:1.25; --lh-meta:1.35; --lh-row:1.3;
+    --ls-h1:-0.02em; --ls-caps-wide:0.14em; --ls-flat:0;
+    --fw-body:500; --fw-strong:650; --fw-display:800;
+    --sp-1:2px; --sp-2:4px; --sp-3:6px; --sp-4:8px; --sp-5:12px; --sp-6:16px; --sp-7:24px; --sp-8:32px;
+    --r-3:16px; --r-5:24px; --tap:48px; --inset-onboard:26px;
+  }
+  .phone{
+    width:390px;height:668px;border-radius:48px;border:11px solid var(--bezel);
+    overflow:hidden;position:relative;display:flex;flex-direction:column;
+  }
+  .phone[data-textsize="large"]{--root-fs:16.2px}
+  .phone[data-textsize="larger"]{--root-fs:18.9px}
+  /* the card-only strip: the same card, the same 368px screen width, the same token
+     block (declared above on .phone,.bare so the strip cannot silently render at
+     browser defaults), no bezel and no hero. */
+  .bare{width:368px;border:1px solid var(--lavender200);border-radius:14px;overflow:hidden}
+
+  .obscreen{background:#1E1142;display:flex;flex-direction:column;flex:1;min-height:0}
+  .wl-hero{
+    position:relative;flex:1 1 auto;padding:46px var(--inset-onboard) 0;
+    display:flex;flex-direction:column;align-items:center;gap:var(--sp-5);overflow:hidden;min-height:0;
+  }
+  .wl-lock{display:flex;flex-direction:column;align-items:center;gap:var(--sp-5);margin:auto 0}
+  .wl-word{margin-bottom:var(--sp-1);display:flex;justify-content:center}
+  .wl-tag{
+    font-size:var(--fs-micro);font-weight:var(--fw-strong);line-height:var(--lh-micro);
+    letter-spacing:var(--ls-caps-wide);text-transform:uppercase;color:#E8E1F7;text-align:center;
+  }
+  .wl-sky{display:block;width:100%;margin-top:var(--sp-6);margin-bottom:-2px}
+  .wl-card{
+    flex:0 0 auto;background:var(--card);border-radius:var(--r-5) var(--r-5) 0 0;
+    padding:var(--sp-8) var(--sp-7) var(--sp-8);display:flex;flex-direction:column;align-items:center;
+    position:relative;z-index:2;box-shadow:var(--elev-3-dark);
+  }
+  .bare .wl-card{border-radius:0;box-shadow:none}
+  /* the headline: everything a treatment changes is set per-fragment, so the h1
+     itself carries only what all four share. */
+  .wl-h{text-align:center;color:var(--ink);letter-spacing:var(--ls-h1);
+        font-size:var(--fs-h1);font-weight:var(--fw-display);line-height:var(--lh-h1);
+        text-wrap:pretty}
+  .wl-h .fg{line-height:inherit}
+  .wl-p{font-size:var(--fs-body);color:var(--sub);font-weight:var(--fw-body);text-align:center;
+        line-height:var(--lh-body);margin-top:var(--sp-5);max-width:290px;letter-spacing:var(--ls-flat)}
+  .wl-tiers{display:flex;gap:var(--sp-3);width:100%;margin-top:var(--sp-7)}
+  .wl-tier{
+    flex:1;display:flex;flex-direction:column;align-items:center;gap:var(--sp-3);text-align:center;
+    padding:var(--sp-5) var(--sp-2);border-radius:var(--r-3);background:var(--wash-quiet);
+  }
+  .wl-tier b{font-size:var(--fs-micro);font-weight:var(--fw-strong);line-height:var(--lh-micro);
+             letter-spacing:var(--ls-flat)}
+  .wl-tier.t-est b{color:var(--blue-ink)}
+  .wl-tier.t-scan b{color:var(--marigold-ink)}
+  .wl-tier.t-own b{color:var(--purple-ink)}
+  .wl-actions{width:100%;display:flex;flex-direction:column;gap:var(--sp-5);padding-top:var(--sp-7)}
+  .btn{
+    flex:1;min-height:var(--tap);border-radius:var(--r-3);font-family:inherit;
+    font-weight:var(--fw-strong);font-size:var(--fs-body);display:flex;align-items:center;
+    justify-content:center;border:none;line-height:var(--lh-row);letter-spacing:var(--ls-flat);
+  }
+  .btn.primary{background:var(--purple);color:#fff;font-weight:var(--fw-display)}
+  .btn.ghost{background:#fff;color:var(--purple-ink);box-shadow:var(--ring-select)}
+  .ob-foot{font-size:var(--fs-meta);color:var(--sub);font-weight:var(--fw-body);text-align:center;
+           margin-top:var(--sp-5);line-height:var(--lh-meta)}
+  .wl-mark{font-family:'Nunito Sans',Aptos,Arial,sans-serif;font-weight:750;font-size:44px;
+           letter-spacing:-.045em;line-height:1;color:#fff}
+  .wl-mark i{font-style:normal;color:var(--sky400)}
+</style>
+</head>
+<body>
+<main>
+
+<h1>Tagline gallery — “Access starts before you arrive.”</h1>
+<p class="lede">Four typographic treatments of the welcome screen’s headline, drawn on the real card, on the
+real aubergine hero, with the three trust-tier tiles in place beneath. The sentence does not change. Every
+colour is one of the canonical twelve from <code>asset-library/tokens/variables.css</code> or one of the
+prototype’s own documented mixes of two of them, and the only faces are the two the build already loads.</p>
+<p class="muted">Read the four treatments as four answers to one question the product owner asked: <em>“this
+phrase needs more enhanced ui. like the before and access are important. maybe change the font of before or
+change font of access. or colors?”</em> The colour half of that question has an answer, and it is the first
+section of this page rather than the last, because it removes a tool rather than adding one.</p>
+
+<!-- ============================================================================ -->
+<h2>The constraint: colour is spoken for on this screen</h2>
+
+<div class="rule">
+  <b>The rule, stated before anything is drawn.</b>
+  In this product colour carries meaning and only meaning. Three accents are owned outright by the three
+  trust tiers — sky for <b>Estimated</b>, marigold for <b>Scanned on-site</b>, violet for
+  <b>Owner-confirmed</b> — and on this screen the three tier tiles sit immediately below the headline:
+  measured on the cards below, <b>95&nbsp;px</b> from the bottom of the headline to the top of the tiles, on
+  the same white surface, with nothing between them but one line of subhead. A tier accent in the headline is
+  therefore not a decorative choice; it is a pointer at the tile underneath it.
+</div>
+
+<p>This is testable rather than assertable, so it is tested. Below, the headline is drawn four times at the
+default text size: once as the build draws it today, and three times with one word carried into a tier ink.
+The inks used are not approximations of the tier accents — they are the exact tokens
+<code>.wl-tier.t-est b</code>, <code>.wl-tier.t-scan b</code> and <code>.wl-tier.t-own b</code> already
+paint the tile labels with, so the headline word and the tile label below it are byte-identical hexes on the
+same surface.</p>
+
+<div class="rack" id="rack-collision"></div>
+
+<div class="verdict" id="collision-verdict"></div>
+
+<p>One nuance worth recording, because it is the reason the four treatments below are not colourless.
+<code>--ink</code> (indigo900 <span class="sw" style="background:#1E1142"></span><code>#1E1142</code>) is the
+product’s default text ink on every screen — it is also <code>--match-good</code> and the map’s label ink,
+but it makes no tier claim because it is what all text is. <code>--sub</code>
+(<span class="sw" style="background:#463B63"></span><code>#463B63</code>) is the same indigo carried 17.6%
+toward white and is the ink of the subhead directly below the headline; it is a step on the neutral ramp,
+not an accent. Those two, and the absence of every other ink, are the whole colour budget here.</p>
+
+<!-- ============================================================================ -->
+<h2>What that leaves, and the harness</h2>
+<p>With hue unavailable, the honest tools are <b>weight</b>, <b>size</b>, <b>italic</b> and <b>spacing</b> —
+and one structural tool, the line break. That is not a workaround; it is the finding. A headline that has to
+sit above a colour legend is a headline that has to earn its emphasis from the type itself.</p>
+<p class="muted">Each treatment is drawn three times, at the three text-size steps the app actually ships:
+<code>--root-fs</code> 15&nbsp;px (Default), 16.2&nbsp;px (Large) and 18.9&nbsp;px (Larger). The steps are
+multiples of that one anchor exactly as in the prototype, so <code>--fs-h1</code> is 22.5 / 24.3 / 28.35&nbsp;px
+and every fragment size below is a multiple of it. The phone is 390&nbsp;px with an 11&nbsp;px bezel under
+<code>border-box</code>, so the screen is 368&nbsp;px and the card’s text column is 320&nbsp;px — the real
+measure this sentence has to wrap inside. The frame is cropped in height (668&nbsp;px, not 844) so twelve of
+them fit on one page: the card and everything in it — padding, headline, subhead, tiles, buttons — is at full
+size and is what a phone renders, and the crop is absorbed entirely by the hero above, which is why the
+skyline sits closer to the card here than it does on a real handset.</p>
+
+<div id="galleries"></div>
+
+<!-- ============================================================================ -->
+<h2>All four at the default size</h2>
+<p>The same card, the same 320&nbsp;px measure, <code>--root-fs</code> 15&nbsp;px, tiles in place. Two items
+are not treatments. <b>T1b</b> is T1 with its two quiet words dropped to <code>--sub</code>, included because
+that is the only ink move the constraint above leaves open and it should be judged beside the others rather
+than described. <b>R</b> is the recommendation at the foot of this page, drawn here so it can be compared
+directly with the four it is drawn from.</p>
+<div class="rack" id="rack-strip"></div>
+
+<!-- ============================================================================ -->
+<h2>Every ink on this page, measured</h2>
+<p>Contrast is computed in the page, from the hexes the page actually paints, by the WCAG 2.x relative
+luminance formula. The two surfaces are the card (<code>--card</code>
+<span class="sw" style="background:#fff"></span><code>#FFFFFF</code>) and the tier tile
+(<code>--wash-quiet</code> <span class="sw" style="background:#F9F7FD"></span><code>#F9F7FD</code>).</p>
+<div class="tw" id="ink-table"></div>
+<p class="muted" id="size-note"></p>
+<p class="muted"><b>One small disagreement, recorded rather than smoothed over.</b>
+<code>phone-app-prototype.html</code> comments <code>--blue-ink</code> and <code>--marigold-ink</code> as
+“8.89:1 on white”. Computed here from the shipped hexes themselves, they are 8.91:1 and 8.87:1 — the two inks
+were solved to a target of 8.89 and the solutions land a hundredth either side of it. Nothing is wrong with
+either figure and nothing depends on the difference; it is noted so that a later reader does not treat this
+page and the build as contradicting each other. <code>--purple-ink</code> agrees exactly at 11.16:1.</p>
+
+<!-- ============================================================================ -->
+<div id="wrapsection"></div>
+
+<!-- ============================================================================ -->
+<h2>Recommendation</h2>
+<div class="rec" id="recbox"></div>
+<h3>R — drawn, at all three text sizes</h3>
+<div class="rack" id="reco-rack"></div>
+<div class="tw" id="frag-R"></div>
+
+</main>
+
+<script>
+/* ============================ contrast ============================ */
+function lum(hex){
+  const c = hex.replace('#','').match(/.{2}/g).map(h => parseInt(h,16)/255)
+    .map(v => v <= 0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4));
+  return 0.2126*c[0] + 0.7152*c[1] + 0.0722*c[2];
+}
+function ratio(a,b){ const la=lum(a), lb=lum(b); return (Math.max(la,lb)+0.05)/(Math.min(la,lb)+0.05); }
+const R = (a,b) => Math.round(ratio(a,b)*100)/100;
+
+/* ============================ palette ============================ */
+const INK = {
+  ink:        {hex:'#1E1142', name:'--ink (indigo900)',        role:'default text ink, no tier meaning'},
+  sub:        {hex:'#463B63', name:'--sub',                    role:'neutral ramp; the subhead’s own ink'},
+  blueInk:    {hex:'#1C4B7E', name:'--blue-ink',               role:'ESTIMATED tier label ink'},
+  marigoldInk:{hex:'#6B4014', name:'--marigold-ink',           role:'SCANNED ON-SITE tier label ink'},
+  purpleInk:  {hex:'#38239B', name:'--purple-ink (violet800)', role:'OWNER-CONFIRMED tier label ink'}
+};
+const CARD = '#FFFFFF', TILE = '#F9F7FD';
+
+/* ============================ the tier pins ============================
+   Path data lifted verbatim from pinSVG() in design/phone-app-prototype.html, with
+   no match halo and no selection keyline, which is exactly how the welcome tiles
+   call it: pinSVG('est'|'scan'|'owner', 30). The white lift strokes are kept
+   because they are what put every pin outline against a light surface.          */
+const TEAR = 'M48 6c-21 0-36 15.7-36 35.3 0 25.1 24.3 45.8 33.5 52.8a4 4 0 0 0 5 0C59.7 87.1 84 66.4 84 41.3 84 21.7 69 6 48 6Z';
+const PIN_VB = '-8 1 112 95.1', PIN_AR = 112/95.1;
+function pinHalo(){
+  return '<path d="'+TEAR+'" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="15.7" stroke-linejoin="round"/>'
+       + '<path d="'+TEAR+'" fill="none" stroke="#fff" stroke-opacity=".62" stroke-width="10.2" stroke-linejoin="round"/>'
+       + '<path d="'+TEAR+'" fill="none" stroke="#fff" stroke-width="5.9" stroke-linejoin="round"/>';
+}
+function pinSVG(tier, h){
+  h = h || 30;
+  const w = Math.round(h * PIN_AR * 100) / 100;
+  let s = '<svg width="'+w+'" height="'+h+'" viewBox="'+PIN_VB+'" fill="none" aria-hidden="true"'
+        + ' focusable="false" style="overflow:visible;display:block">' + pinHalo();
+  if(tier === 'est'){
+    s += '<path d="'+TEAR+'" fill="#FFFFFF" stroke="var(--blue-edge)" stroke-width="4"/>'
+       + '<path d="M32 60V22h32v38" fill="none" stroke="var(--blue-edge)" stroke-width="4"'
+       +   ' stroke-linecap="round" stroke-linejoin="round"/>'
+       + '<circle cx="40" cy="60" r="2.2" fill="var(--blue-edge)"/>'
+       + '<circle cx="48" cy="60" r="2.2" fill="var(--blue-edge)"/>'
+       + '<circle cx="56" cy="60" r="2.2" fill="var(--blue-edge)"/>';
+  } else if(tier === 'scan'){
+    s += '<path d="'+TEAR+'" fill="var(--marigold)" stroke="var(--marigold-edge)" stroke-width="4"'
+       +   ' stroke-linejoin="round"/>'
+       + '<g fill="none" stroke="var(--ink)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">'
+       +   '<circle cx="48" cy="34" r="9"/><path d="M30 69c1-15 8-23 18-23s17 8 18 23Z"/></g>';
+  } else {
+    s += '<path d="'+TEAR+'" fill="var(--purple)" stroke="#FFFFFF" stroke-width="4"/>'
+       + '<g fill="none" stroke="#FFFFFF" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round">'
+       +   '<path d="M28 38h40l-4-12H32Z"/><path d="M30 38v30h36V38M42 68V51h13v17"/>'
+       +   '<path d="M28 38c0 5 6 7 10 3 4 4 9 4 13 0 4 4 9 4 13 0 4 4 10 2 10-3"/></g>'
+       + '<circle cx="88" cy="28" r="14" fill="#FFFFFF" stroke="var(--purple-ink)" stroke-width="3"/>'
+       + '<g fill="none" stroke="var(--purple-ink)" stroke-width="3" stroke-linecap="round"'
+       +   ' stroke-linejoin="round"><path d="m81 28 5 5 9-11"/></g>';
+  }
+  return s + '</svg>';
+}
+
+/* the hero skyline, verbatim from #ob-welcome */
+const SKY = '<svg class="wl-sky" viewBox="0 0 320 92" preserveAspectRatio="none" aria-hidden="true">'
++ '<rect x="6" y="34" width="44" height="58" rx="3" fill="#2E1E5E"/>'
++ '<rect x="56" y="18" width="38" height="74" rx="3" fill="#3E2F6A"/>'
++ '<rect x="100" y="44" width="52" height="48" rx="3" fill="#2E1E5E"/>'
++ '<rect x="158" y="26" width="42" height="66" rx="3" fill="#2A166E"/>'
++ '<rect x="206" y="50" width="46" height="42" rx="3" fill="#2E1E5E"/>'
++ '<rect x="258" y="30" width="56" height="62" rx="3" fill="#3E2F6A"/>'
++ '<g fill="#76BCFD" opacity=".85">'
++ '<rect x="14" y="44" width="7" height="7" rx="1.5"/><rect x="28" y="44" width="7" height="7" rx="1.5"/>'
++ '<rect x="64" y="28" width="7" height="7" rx="1.5"/><rect x="78" y="42" width="7" height="7" rx="1.5"/>'
++ '<rect x="110" y="54" width="7" height="7" rx="1.5"/><rect x="166" y="36" width="7" height="7" rx="1.5"/>'
++ '<rect x="266" y="40" width="7" height="7" rx="1.5"/><rect x="294" y="54" width="7" height="7" rx="1.5"/></g>'
++ '<g fill="#FDB327" opacity=".92">'
++ '<rect x="42" y="58" width="7" height="7" rx="1.5"/><rect x="78" y="28" width="7" height="7" rx="1.5"/>'
++ '<rect x="138" y="54" width="7" height="7" rx="1.5"/><rect x="184" y="36" width="7" height="7" rx="1.5"/>'
++ '<rect x="238" y="60" width="7" height="7" rx="1.5"/><rect x="280" y="40" width="7" height="7" rx="1.5"/></g>'
++ '<rect x="122" y="72" width="16" height="20" rx="2" fill="#fff" opacity=".92"/>'
++ '<rect x="222" y="74" width="14" height="18" rx="2" fill="#fff" opacity=".6"/></svg>';
+
+/* The wordmark's WORD, in its own face and its own two-tone pairing (sky400 "entry",
+   white "map", Nunito Sans 750, tracking -3/68em) -- the same numbers wordmarkSVG()
+   uses. The mark PNG is deliberately not carried into this page; what T3 needs from
+   the lockup is the FACE sitting directly above the headline, and that is here. */
+const WORD = '<div class="wl-mark" aria-label="EntryMap"><i>entry</i>map</div>';
+
+/* ============================ the four treatments ============================
+   A fragment is {t, w, k, ink, ital, fam, ls}:
+     w    font-weight on the variable axis (Atkinson 200-800, Nunito 700-900)
+     k    multiplier on --fs-h1, so a fragment size is k x 1.5 x --root-fs
+     ink  a key into INK
+     ls   letter-spacing in em, overriding --ls-h1 (-0.02em)
+   Nothing else is available to a treatment: no hue, no face beyond the two loaded. */
+const TREATMENTS = [
+{
+  id:'T1', title:'Weight and scale',
+  sub:'One ink, two sizes, two weights. The emphasis pair is <i>Access</i> and <i>before</i>, because the idea is that access exists ahead of the trip; “starts” and “you arrive.” are connective tissue and are drawn as such.',
+  lines:[[
+    {t:'Access',      w:800, k:1.16, ink:'ink', ls:-0.03},
+    {t:'starts',      w:500, k:0.80, ink:'ink', ls:0},
+    {t:'before',      w:800, k:1.00, ink:'ink', ls:-0.02},
+    {t:'you arrive.', w:500, k:0.80, ink:'ink', ls:0}
+  ]],
+  why:'Emphasis is carried by two channels at once — weight 500 to 800, and 18.0&nbsp;px to 26.1&nbsp;px, a 45% size jump — so it survives at every text size, in high contrast, and in a screenshot. It uses no colour at all, so it cannot be misread as pointing at a tile. And it is measurably the most compact of the four: shrinking two of the four words buys back more width than raising “Access” spends, so at the default size the whole sentence fits on <b>one</b> 301.2&nbsp;px line inside the 320&nbsp;px column, where the flat line as built today needs two.',
+  against:'It is the loudest of the four, and it puts four sizes into a seven-word sentence, which is close to the limit of what reads as one line rather than as a ransom note. Two of those sizes are a real problem for this product in particular: “starts” and “you arrive.” land at 18.0&nbsp;px at weight 500 at the default size, which is <b>not</b> large-scale text under WCAG, so those two words answer to the 7:1 body floor rather than 4.5:1 — they clear it, but a headline step is now silently producing body-sized text on an accessibility product’s first screen. And the one-line fit is fragile: it holds only at the default size and breaks to two lines at Large and Larger, so the composition the owner approves at 15&nbsp;px is not the composition two thirds of the text-size settings render.'
+},
+{
+  id:'T2', title:'Italic on “before”',
+  sub:'Everything at the display weight and the h1 step, exactly as today, with one word in the true italic. The italic is already downloaded — the font link requests <code>ital,wght@0,200..800;1,200..800</code> — and is used nowhere in the build.',
+  lines:[[
+    {t:'Access',      w:800, k:1.00, ink:'ink', ls:-0.02},
+    {t:'starts',      w:800, k:1.00, ink:'ink', ls:-0.02},
+    {t:'before',      w:800, k:1.00, ink:'ink', ls:-0.02, ital:true},
+    {t:'you arrive.', w:800, k:1.00, ink:'ink', ls:-0.02}
+  ]],
+  why:'One italic word in an otherwise upright line is the quietest strong emphasis in typography, and it is the one this sentence is actually asking for: “before” is doing prepositional work, and italic is how a reader is told to lean on a preposition. Nothing about size, colour, weight or line count changes, so no contrast figure, no wrap and no tile relationship moves — measured below, the italic shares the upright’s cap height and x-height exactly, so the vertical rhythm of the line is untouched. It spends an asset that is already downloaded and used nowhere in the build.',
+  against:'It marks one word, not the pair — “Access” gets nothing, and the owner named both. Atkinson Hyperlegible Next’s italic is a true italic but a deliberately restrained one (the face is drawn for legibility, not for flourish): at 22.5&nbsp;px it is a real difference, and at arm’s length it is a small one. And italic is the emphasis a low-vision reader is least likely to resolve, on a screen whose whole subject is low-vision access — which is an argument for pairing it with a second channel, not for using it alone.'
+},
+{
+  id:'T3', title:'The wordmark’s face on “Access”',
+  sub:'“Access” set in Nunito Sans, the wordmark’s own face, at the same weight and the same step as the rest of the line. The only variable is the typeface, so the test is clean.',
+  lines:[[
+    {t:'Access',      w:800, k:1.00, ink:'ink', ls:-0.04, fam:'nun'},
+    {t:'starts',      w:800, k:1.00, ink:'ink', ls:-0.02},
+    {t:'before',      w:800, k:1.00, ink:'ink', ls:-0.02},
+    {t:'you arrive.', w:800, k:1.00, ink:'ink', ls:-0.02}
+  ]],
+  why:'It ties the first word of the promise to the mark standing directly above it in the same composition — on this screen and only on this screen, the wordmark and the headline are visible together — and it is the only treatment that adds brand rather than only hierarchy. Nunito Sans is warmer and rounder than Atkinson, so “Access” gains a different texture without gaining a different size or colour — the emphasis is qualitative, not louder.',
+  against:'Shown honestly, this is the weakest of the four. Atkinson Hyperlegible Next and Nunito Sans are both humanist sans faces of similar width and colour, so the swap is not read as a decision — it is read as a rendering fault, a missing font, or a word pasted in from somewhere else. The measurement below is the specific reason: at 22.5&nbsp;px and weight 800, Nunito’s cap height is 16.0&nbsp;px against Atkinson’s 15.0, while its x-height is 11.0 against Atkinson’s 12.0. So the “A” of “Access” pushes 1&nbsp;px <em>above</em> the line’s cap line and the “ccess” sits 1&nbsp;px <em>below</em> its x-line — the word is simultaneously too tall and too small, which reads as broken rather than emphasised. It also breaks the rule the wordmark rests on: Nunito Sans is the mark’s face, and the mark should be the only thing in this product that speaks in it.'
+},
+{
+  id:'T4', title:'A line break with hierarchy',
+  sub:'The emphasis becomes structural. “Access starts” is the setup, at a smaller step and the strong weight rather than the display weight; “before you arrive.” is the claim, at the display weight and a larger step.',
+  lines:[
+    [{t:'Access starts', w:650, k:0.86, ink:'ink', ls:-0.01}],
+    [{t:'before you arrive.', w:800, k:1.14, ink:'ink', ls:-0.025}]
+  ],
+  why:'It is the only treatment whose emphasis cannot be lost. The break is a hard structural fact — it survives every text size, high contrast, a screenshot, and a reader who is not looking closely — and it fixes the wrap, which today is decided by whatever the measure happens to be at each of the three sizes. It also states the idea in the right order: a setup line and a payoff line, with the payoff carrying the word the product is actually about.',
+  against:'It is a rewrite of the composition, not a treatment of the line, and it splits the emphasis pair the owner named: “Access” loses its stress to the whole second line, so the sentence ends up stressing the timing rather than the thing. Structurally it is also the least neutral option here — it hard-codes a break that the wrap currently makes for itself, so a future copy change, a longer translation or a fifth text-size step all have to be re-fitted by hand rather than just re-wrapping. And the quiet first line is one step away from a trap: dropping it to <code>--sub</code> to make the contrast between the two lines clearer would give it the same ink as the subhead immediately below, at which point the headline has three tonal bands and the reader cannot tell where it ends.'
+}
+];
+
+/* THE RECOMMENDATION, DRAWN. T2's italic on "before" plus the one element of T1 that
+   costs nothing: "Access" one step up at the display weight. Every fragment stays at
+   weight 800, so unlike T1 and T4 no word drops below WCAG's large-text threshold at
+   any of the three text sizes, and the ink is --ink throughout. */
+const RECO = {
+  id:'R', title:'T2 + the “Access” step from T1',
+  lines:[[
+    {t:'Access',      w:800, k:1.16, ink:'ink', ls:-0.03},
+    {t:'starts',      w:800, k:1.00, ink:'ink', ls:-0.02},
+    {t:'before',      w:800, k:1.00, ink:'ink', ls:-0.02, ital:true},
+    {t:'you arrive.', w:800, k:1.00, ink:'ink', ls:-0.02}
+  ]]
+};
+
+/* T1 with its quiet words on the neutral ramp -- a strip item, not a
+   fifth treatment. This is the ONLY ink move the tier constraint leaves open. */
+const T1B = {
+  id:'T1b', title:'T1, quiet words on --sub',
+  lines:[[
+    {t:'Access',      w:800, k:1.16, ink:'ink', ls:-0.03},
+    {t:'starts',      w:500, k:0.80, ink:'sub', ls:0},
+    {t:'before',      w:800, k:1.00, ink:'ink', ls:-0.02},
+    {t:'you arrive.', w:500, k:0.80, ink:'sub', ls:0}
+  ]]
+};
+
+/* the collision probes: today's treatment, then one word carried into each tier ink */
+const PROBES = [
+  {id:'C0', label:'As built today', note:'flat: one size, one weight, --ink',
+   lines:[[{t:'Access starts before you arrive.', w:800, k:1.00, ink:'ink', ls:-0.02}]]},
+  {id:'C1', label:'“Access” in --blue-ink', note:'the ESTIMATED tile’s own ink, #1C4B7E',
+   lines:[[{t:'Access', w:800, k:1.00, ink:'blueInk', ls:-0.02},
+           {t:'starts before you arrive.', w:800, k:1.00, ink:'ink', ls:-0.02}]]},
+  {id:'C2', label:'“before” in --marigold-ink', note:'the SCANNED tile’s own ink, #6B4014',
+   lines:[[{t:'Access starts', w:800, k:1.00, ink:'ink', ls:-0.02},
+           {t:'before', w:800, k:1.00, ink:'marigoldInk', ls:-0.02},
+           {t:'you arrive.', w:800, k:1.00, ink:'ink', ls:-0.02}]]},
+  {id:'C3', label:'“Access” in --purple-ink', note:'the OWNER-CONFIRMED tile’s own ink, #38239B',
+   lines:[[{t:'Access', w:800, k:1.00, ink:'purpleInk', ls:-0.02},
+           {t:'starts before you arrive.', w:800, k:1.00, ink:'ink', ls:-0.02}]]}
+];
+
+/* ============================ rendering ============================ */
+const FAM = {
+  atk:"'Atkinson Hyperlegible Next','Atkinson Hyperlegible',system-ui,'Segoe UI',Arial,sans-serif",
+  nun:"'Nunito Sans',Aptos,Arial,sans-serif"
+};
+function fragHTML(f){
+  const st = [
+    'font-size:calc(' + f.k + ' * var(--fs-h1))',
+    'font-weight:' + f.w,
+    'color:' + INK[f.ink].hex,
+    'letter-spacing:' + (f.ls === undefined ? -0.02 : f.ls) + 'em',
+    'font-style:' + (f.ital ? 'italic' : 'normal'),
+    'font-family:' + FAM[f.fam || 'atk']
+  ].join(';');
+  return '<span class="fg" style="' + st + '">' + f.t + '</span>';
+}
+function headlineHTML(lines){
+  return lines.map(function(segs){
+    const maxK = Math.max.apply(null, segs.map(function(s){ return s.k; }));
+    const lh = 'line-height:calc(' + (Math.round(maxK * 1.12 * 1000)/1000) + ' * var(--fs-h1))';
+    return '<div style="' + lh + '">' + segs.map(fragHTML).join(' ') + '</div>';
+  }).join('');
+}
+function cardHTML(lines){
+  return '<div class="wl-card">'
+    + '<h1 class="wl-h">' + headlineHTML(lines) + '</h1>'
+    + '<p class="wl-p">Find entrances and places that fit your needs.</p>'
+    + '<div class="wl-tiers" role="group" aria-label="What the pins mean">'
+    +   '<div class="wl-tier t-est">' + pinSVG('est',30) + '<b>Estimated</b></div>'
+    +   '<div class="wl-tier t-scan">' + pinSVG('scan',30) + '<b>Scanned<br>on-site</b></div>'
+    +   '<div class="wl-tier t-own">' + pinSVG('owner',30) + '<b>Owner-<br>confirmed</b></div>'
+    + '</div>'
+    + '<div class="wl-actions">'
+    +   '<div class="btn primary">Sign in</div>'
+    +   '<div class="btn ghost">Continue as guest</div>'
+    +   '<div class="ob-foot">Guest choices stay on this device.</div>'
+    + '</div></div>';
+}
+function phoneHTML(lines, size){
+  return '<div class="phone"' + (size ? ' data-textsize="'+size+'"' : '') + '>'
+    + '<div class="obscreen">'
+    +   '<div class="wl-hero"><div class="wl-lock">'
+    +     '<div class="wl-word">' + WORD + '</div>'
+    +     '<div class="wl-tag">Austin &middot; downtown</div>'
+    +   '</div>' + SKY + '</div>'
+    +   cardHTML(lines)
+    + '</div></div>';
+}
+function rig(inner, caption){
+  return '<div class="rig">' + inner + '<small>' + caption + '</small></div>';
+}
+
+/* ---- the collision rack ---- */
+document.getElementById('rack-collision').innerHTML =
+  PROBES.map(function(p){
+    return rig(phoneHTML(p.lines), '<b>' + p.id + '</b> &middot; ' + p.label + '<br>' + p.note);
+  }).join('');
+
+/* ---- the four treatment galleries ---- */
+const SIZES = [
+  {key:null,     name:'Default', root:15},
+  {key:'large',  name:'Large',   root:16.2},
+  {key:'larger', name:'Larger',  root:18.9}
+];
+document.getElementById('galleries').innerHTML = TREATMENTS.map(function(T){
+  const rack = SIZES.map(function(S){
+    return rig(phoneHTML(T.lines, S.key),
+      '<b>' + S.name + '</b> &middot; --root-fs ' + S.root + 'px &middot; --fs-h1 '
+      + (Math.round(S.root*1.5*100)/100) + 'px');
+  }).join('');
+  return '<h2>' + T.id + ' &mdash; ' + T.title + '</h2>'
+    + '<p>' + T.sub + '</p>'
+    + '<div class="rack">' + rack + '</div>'
+    + '<h3>Fragments, measured</h3>'
+    + '<div class="tw" id="frag-' + T.id + '"></div>'
+    + '<div class="case"><div><b>For</b><p>' + T.why + '</p></div>'
+    +   '<div><b>Against</b><p>' + T.against + '</p></div></div>';
+}).join('');
+
+/* ---- per-treatment fragment tables ---- */
+function sizeClass(px, w){
+  /* WCAG 2.x: large-scale text is >= 18.66px bold, or >= 24px at any weight.
+     "bold" is taken here as >= 700 on the variable axis. */
+  if(px >= 24) return 'large';
+  if(px >= 18.66 && w >= 700) return 'large';
+  return 'normal';
+}
+function fragTable(T){
+  let rows = '';
+  T.lines.forEach(function(segs, li){
+    segs.forEach(function(f){
+      const ink = INK[f.ink];
+      const r = R(ink.hex, CARD);
+      const px = SIZES.map(function(S){ return Math.round(f.k * S.root * 1.5 * 100)/100; });
+      const cls = px.map(function(p){ return sizeClass(p, f.w); });
+      const floor = cls.map(function(c){ return c === 'large' ? 4.5 : 7; });
+      const worst = Math.max.apply(null, floor);
+      rows += '<tr><td>' + (T.lines.length > 1 ? ('L' + (li+1) + ' &middot; ') : '')
+        + '<b>' + f.t + '</b></td>'
+        + '<td>' + (f.fam === 'nun' ? 'Nunito Sans' : 'Atkinson HN') + (f.ital ? ' <i>italic</i>' : '') + '</td>'
+        + '<td class="n">' + f.w + '</td>'
+        + '<td class="n">' + f.k.toFixed(2) + '&times;</td>'
+        + '<td class="n">' + px[0] + ' / ' + px[1] + ' / ' + px[2] + '</td>'
+        + '<td>' + cls.join(' / ') + '</td>'
+        + '<td><span class="sw" style="background:' + ink.hex + '"></span>' + ink.name + '</td>'
+        + '<td class="n">' + r.toFixed(2) + ':1</td>'
+        + '<td class="' + (r >= worst ? 'pass' : 'warn') + '">'
+        + (r >= worst ? 'passes ' : 'FAILS ') + worst.toFixed(1) + ':1</td></tr>';
+    });
+  });
+  document.getElementById('frag-' + T.id).innerHTML =
+    '<table><thead><tr><th>Fragment</th><th>Face</th><th>Weight</th><th>Step</th>'
+    + '<th>px @ 15 / 16.2 / 18.9</th><th>WCAG size class</th><th>Ink</th>'
+    + '<th>on --card</th><th>Verdict</th></tr></thead><tbody>' + rows + '</tbody></table>';
+}
+TREATMENTS.concat([RECO]).forEach(fragTable);
+
+/* ---- the comparison strip ---- */
+document.getElementById('rack-strip').innerHTML =
+  TREATMENTS.concat([T1B, RECO]).map(function(T){
+    return rig('<div class="bare">' + cardHTML(T.lines) + '</div>',
+      '<b>' + T.id + '</b> &middot; ' + T.title);
+  }).join('');
+
+/* ---- the ink table ---- */
+(function(){
+  let rows = '';
+  Object.keys(INK).forEach(function(k){
+    const i = INK[k];
+    const rc = R(i.hex, CARD), rt = R(i.hex, TILE);
+    rows += '<tr><td><span class="sw" style="background:' + i.hex + '"></span><code>' + i.name + '</code></td>'
+      + '<td><code>' + i.hex + '</code></td>'
+      + '<td>' + i.role + '</td>'
+      + '<td class="n">' + rc.toFixed(2) + ':1</td>'
+      + '<td class="n">' + rt.toFixed(2) + ':1</td>'
+      + '<td class="' + (Math.min(rc,rt) >= 7 ? 'pass' : 'warn') + '">'
+      + (Math.min(rc,rt) >= 7 ? 'clears 7:1 (body floor)'
+         : (Math.min(rc,rt) >= 4.5 ? 'clears 4.5:1 only' : 'below 4.5:1')) + '</td></tr>';
+  });
+  document.getElementById('ink-table').innerHTML =
+    '<table><thead><tr><th>Token</th><th>Hex</th><th>Role in this product</th>'
+    + '<th>on --card #FFFFFF</th><th>on --wash-quiet #F9F7FD</th><th>Verdict</th></tr></thead>'
+    + '<tbody>' + rows + '</tbody></table>';
+  document.getElementById('size-note').innerHTML =
+    'The brief’s floors: the product’s body-text floor is 7:1 and this is large display text, '
+    + 'so 4.5:1 is the applicable floor. Every ink on this page clears both on both surfaces, so contrast '
+    + 'is not what decides between the four treatments. The one figure worth carrying forward is the '
+    + '<b>size class</b> column above: T1 drives its two quiet words to 18.0&nbsp;px at weight 500 at the '
+    + 'default size, which is <b>not</b> large text by WCAG and therefore answers to the 7:1 body floor '
+    + 'rather than 4.5:1 — <code>--ink</code> clears it at ' + R('#1E1142', CARD).toFixed(2) + ':1 and '
+    + '<code>--sub</code> at ' + R('#463B63', CARD).toFixed(2) + ':1, so both are safe, but it is the one '
+    + 'place where a treatment changes which rule applies.';
+})();
+
+/* ---- the collision verdict, written after the probes are on the page ---- */
+(function(){
+  const d1 = R(INK.blueInk.hex, CARD), d2 = R(INK.marigoldInk.hex, CARD), d3 = R(INK.purpleInk.hex, CARD);
+  document.getElementById('collision-verdict').innerHTML =
+    '<b>Verdict: the claim holds, and it holds harder than stated.</b>'
+    + '<p>Rendered with the tiles in place, C1, C2 and C3 do not read as emphasis. They read as a legend '
+    + 'key. In C1 the eye goes straight from the blue “Access” to the blue “Estimated” label 90&nbsp;px '
+    + 'below and infers a relationship that is not there — that the headline is talking about the '
+    + 'Estimated tier, or that “Access” is the least trustworthy word in the sentence. C3 is worse than '
+    + 'the other two for a second reason: <code>--purple-ink</code> is violet800, which is simultaneously '
+    + 'the Owner-confirmed tier ink, the link ink, and one step from the brand violet on the “Sign in” '
+    + 'button in the same card, so a violet word in the headline is ambiguous three ways.</p>'
+    + '<p>This is not a near-miss of hue that could be tuned away. The probes use the tile tokens '
+    + 'themselves — <code>' + INK.blueInk.hex + '</code>, <code>' + INK.marigoldInk.hex + '</code>, '
+    + '<code>' + INK.purpleInk.hex + '</code>, measuring ' + d1.toFixed(2) + ':1, ' + d2.toFixed(2) + ':1 and '
+    + d3.toFixed(2) + ':1 on the card — so the headline word and the tile label are the identical hex '
+    + 'on the identical surface. There is no version of “a bit bluer” that stops the association, because '
+    + 'the association is not caused by resemblance; it is caused by the product having spent that hue. '
+    + 'Any <em>other</em> hue would be a thirteenth colour, which the palette rule forbids outright.</p>'
+    + '<p><b>So colour is unavailable on this line.</b> That is the finding, and it is worth stating '
+    + 'plainly rather than working around: the honest tools for this headline are weight, size, italic and '
+    + 'spacing. The four treatments below use only those.</p>';
+})();
+
+/* ---- the recommendation, drawn at all three sizes so it can be judged, not just read ---- */
+document.getElementById('reco-rack').innerHTML = SIZES.map(function(S){
+  return rig(phoneHTML(RECO.lines, S.key),
+    '<b>' + S.name + '</b> &middot; --root-fs ' + S.root + 'px &middot; --fs-h1 '
+    + (Math.round(S.root*1.5*100)/100) + 'px');
+}).join('');
+
+document.getElementById('recbox').innerHTML =
+  '<p><b>Take T2 — the italic on “before” — and add the one element of T1 that costs nothing: '
+  + '“Access” one step up at the same display weight.</b></p>'
+  + '<p>T2 is the right instinct at the wrong size of gesture: it spends an asset that is already '
+  + 'downloaded and used nowhere, it moves no contrast figure, no wrap and no tile relationship, and the '
+  + 'italic shares the upright’s cap height and x-height exactly — but it marks one word when the owner '
+  + 'named two. T1 marks both and is the only treatment that survives a glance, but on its own it puts '
+  + 'four sizes into seven words and drops two of them below WCAG’s large-text threshold, and its '
+  + 'one-line fit holds only at the default text size, so the composition the owner signs off is not the '
+  + 'one two thirds of the size settings render. Raising “Access” to k&nbsp;1.16 at weight 800 and '
+  + 'setting “before” in the true italic, with “starts” and “you arrive.” left exactly as they are today, '
+  + 'marks the pair on two different channels — one loud, one quiet — in one ink, with every fragment '
+  + 'still at weight 800 and therefore still large-scale text at all three sizes, and the same two-line '
+  + 'composition at all three (measured: 60.5 / 65.1 / 75.0&nbsp;px, two lines throughout), which is the '
+  + 'one thing T1 cannot promise.</p>'
+  + '<p class="muted">T3 is a no on the measurement, not on taste: 16.0&nbsp;px of cap against '
+  + '15.0 and 11.0&nbsp;px of x-height against 12.0 means the substituted word is too tall and too small '
+  + 'at once, and Nunito Sans should stay the mark’s and only the mark’s. T4 is the best answer to a '
+  + 'different question — if the composition is reopened, an authored two-line headline beats a wrap the '
+  + 'measure decides — but it moves the stress off “Access” and hard-codes a break that every future copy '
+  + 'change has to re-fit.</p>';
+
+/* ---- measured wraps and face metrics, once the two faces have actually loaded ----
+   Measured off the CARDS THAT ARE ON THIS PAGE, not off a synthetic probe: the h1 is
+   read where it sits, inside the real 320px column, so a wrap reported here is the
+   wrap the reader is looking at. */
+function capMetrics(family, weight, style){
+  const c = document.createElement('canvas').getContext('2d');
+  c.font = (style || 'normal') + ' ' + weight + ' 22.5px ' + family;
+  const A = c.measureText('A'), x = c.measureText('x');
+  return {cap: Math.round(A.actualBoundingBoxAscent*100)/100,
+          xh:  Math.round(x.actualBoundingBoxAscent*100)/100};
+}
+if(document.fonts && document.fonts.ready){
+  document.fonts.ready.then(function(){
+    /* --- wraps --- */
+    const racks = [].slice.call(document.querySelectorAll('#galleries .rack'))
+                    .concat([document.getElementById('reco-rack')]);
+    let rows = '';
+    TREATMENTS.concat([RECO]).forEach(function(T, ti){
+      const rigs = racks[ti].querySelectorAll('.rig');
+      SIZES.forEach(function(S, si){
+        const h = rigs[si].querySelector('.wl-h');
+        let lines = 0, authored = h.children.length;
+        Array.prototype.forEach.call(h.children, function(row){
+          const lh = parseFloat(getComputedStyle(row).lineHeight);
+          lines += Math.max(1, Math.round(row.getBoundingClientRect().height / lh));
+        });
+        const box = h.getBoundingClientRect();
+        rows += '<tr><td>' + T.id + '</td><td>' + S.name + '</td>'
+          + '<td class="n">' + authored + '</td>'
+          + '<td class="n">' + lines + '</td>'
+          + '<td class="n">' + Math.round(box.width*10)/10 + 'px</td>'
+          + '<td class="n">' + Math.round(box.height*10)/10 + 'px</td>'
+          + '<td class="' + (lines > 2 ? 'warn' : 'pass') + '">'
+          + (lines > 2 ? 'three lines' : (lines === 1 ? 'one line' : 'two lines')) + '</td></tr>';
+      });
+    });
+    /* --- face metrics, which is what T3 actually turns on --- */
+    const mA = capMetrics("'Atkinson Hyperlegible Next'", 800);
+    const mI = capMetrics("'Atkinson Hyperlegible Next'", 800, 'italic');
+    const mN = capMetrics("'Nunito Sans'", 800);
+    const fm = [['Atkinson Hyperlegible Next 800', mA], ['Atkinson HN 800 italic', mI],
+                ['Nunito Sans 800', mN]].map(function(r){
+      return '<tr><td>' + r[0] + '</td><td class="n">' + r[1].cap + 'px</td>'
+        + '<td class="n">' + r[1].xh + 'px</td>'
+        + '<td class="n">' + (Math.round(r[1].xh/r[1].cap*1000)/1000) + '</td></tr>';
+    }).join('');
+
+    document.getElementById('wrapsection').innerHTML =
+      '<h2>Measured on the page: wraps, and the two faces</h2>'
+      + '<p>Taken after <code>document.fonts.ready</code> from the fifteen full-size cards on this page '
+      + '(the twelve above and the three under the recommendation), in the card’s '
+      + 'real text column (368&nbsp;px screen less 24&nbsp;px of card padding each side = 320&nbsp;px), '
+      + 'so these are the loaded faces’ own metrics and not a fallback’s. “Authored” is how many lines '
+      + 'the treatment writes; “rendered” is how many the measure produces.</p>'
+      + '<div class="tw"><table><thead><tr><th>Treatment</th><th>Text size</th><th>Authored lines</th>'
+      + '<th>Rendered lines</th><th>Block width</th><th>Block height</th><th>Result</th></tr></thead>'
+      + '<tbody>' + rows + '</tbody></table></div>'
+      + '<h3>The two faces, at 22.5&nbsp;px, weight 800</h3>'
+      + '<p>Cap height and x-height read from the rendered glyph boxes. This is the number T3 lives or '
+      + 'dies on: at the same nominal size the two faces do not share either datum, so a Nunito word '
+      + 'inside an Atkinson line sits at a different height top <em>and</em> bottom.</p>'
+      + '<div class="tw"><table><thead><tr><th>Face</th><th>Cap height (“A”)</th>'
+      + '<th>x-height (“x”)</th><th>x-height / cap</th></tr></thead><tbody>' + fm + '</tbody></table></div>'
+      + '<p class="muted">The italic row is the quiet argument for T2: Atkinson Hyperlegible Next’s '
+      + 'italic has the <b>same</b> cap height and the same x-height as its upright, so an italic word '
+      + 'changes the texture of the line without disturbing its vertical rhythm by a single pixel — '
+      + 'which is exactly what the Nunito substitution in T3 cannot say.</p>';
+  });
+}
+</script>
+</body>
+</html>
