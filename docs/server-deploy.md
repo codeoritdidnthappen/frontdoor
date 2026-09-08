@@ -606,6 +606,25 @@ machine — with gunicorn's 30 s timeout in front of the model call.
 > The machine is now **512 MB** (`fly.toml`, not `fly scale` — see below), and the same request
 > returns **200 in 6.4 s**. The figures below are kept because their *reasoning* still holds; the
 > numbers do not.
+
+> **Superseded again 2026-09-08 — 512 MB held for a PNG and not for a photograph.** A 294 KB,
+> 960×1280 JPEG from the capture set OOM-killed the worker in 2.5 s against production, and so
+> did the 1.2 MB original — the same empty-bodied 502. The machine is **1024 MB** (#451), and
+> those photographs return 200 in 19.6 s and 26.6 s.
+>
+> **TICK-453 (#453) then removed the waste that raise was covering for, and kept 1024 anyway.**
+> `faceblur._decode` was calling `cv2.imdecode` at full resolution; it now decodes through the
+> JPEG decoder's own 1/2–1/4–1/8 scaling to `faceblur.DECODE_MAX_SIDE` (2048), which is also the
+> long side of the stored image. The committed sidecars put the capture set at 4284×5712 and
+> 3024×4032, so the 73 MB and 37 MB BGR arrays are no longer allocated: over 78 real photographs
+> at capture resolution, peak working set fell **892.7 MB → 753.7 MB**.
+>
+> 753.7 MB still does not fit in 512, and the phase-by-phase measurement says why: the decode is
+> ~10 MB of it, while YuNet at 2048 adds ~260 MB and the six Haar passes at 1600 add ~330 MB.
+> Neither detector ever read the full-size array, so neither got smaller. The photographs that
+> were measured dying at 512 MB are below the cap and come out byte-identical (62 of 62, same
+> bytes, same 1010 blur regions), so the fix cannot change their outcome. **The decision recorded
+> in `fly.toml` is to stay at 1024**; moving it needs the detector working set, not the decode.
 >
 > **`fly scale memory` alone does not stick.** It is reverted by the next `fly deploy`, which is
 > what happened on 2026-09-04: the machine was scaled to 512, a deploy silently put it back to

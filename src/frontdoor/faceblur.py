@@ -26,6 +26,15 @@ had no YuNet detection anywhere near them and 87 sat on lettering, while on
 the 17 face-bearing pilot photos every face the union covered was already
 covered by YuNet. See HAAR_CORROBORATION_IOU.
 
+Resolution policy - deliberate, read before "fixing":
+    The image is decoded to at most DECODE_MAX_SIDE on the long side and the
+    stored bytes inherit that cap, so ONE number is the working resolution,
+    the resolution of the stored evidence photograph, and the coordinate space
+    that face boxes and blur_regions are reported in. It is not a quality
+    setting: detection reads nothing above 2048 (YUNET_MAX_SIDE), so decoding
+    a 12 MP capture at full size allocated ~36 MB and threw every one of those
+    pixels away at the first resize (#453). See DECODE_MAX_SIDE.
+
 EXIF policy - deliberate, read before "fixing":
     Re-encoding through OpenCV drops the entire EXIF block, GPS included -
     which is exactly what the ticket's location-stripping AC asks for. The one
@@ -90,6 +99,63 @@ YUNET_SMALL_FACE_FRACTION = 0.05
 #: pilot photos, ~20px through-glass faces score ~0.6 at 2048 and ~0.2 at
 #: 1600. One YuNet pass at 2048 is still far cheaper than the Haar stack.
 YUNET_MAX_SIDE = 2048
+
+#: The image is DECODED to at most this many pixels on the long side, and the
+#: stored bytes inherit that cap - it is both the working resolution and the
+#: resolution of the evidence photograph a contributor sees.
+#:
+#: Why this number, from both sides:
+#:  - Detection reads nothing larger. YUNET_MAX_SIDE is 2048 because the
+#:    pilot's ~20px through-glass faces score ~0.6 at 2048 and ~0.2 at 1600,
+#:    and the Haar pass reads 1600. Decoding above 2048 buys no recall: the
+#:    first thing every detector does is resize back down to it.
+#:  - Evidence stays legible. The stored image is what a contributor sees on
+#:    a card and in a receipt, and what a re-look re-reads; 2048 on the long
+#:    side is far more than a card needs and keeps a re-look useful.
+#: This DOES shrink the stored photograph: the committed sidecars put the
+#: capture set at 4284x5712 (216 captures) and 3024x4032 (57), and those are
+#: now stored at 1536x2048 and 1512x2016 - which is what the project's own
+#: derivative set already uses. Nothing downstream reads the stored image at a
+#: size the cap takes away: the vision call gets these bytes, the card and the
+#: receipt display them far smaller, and detection never read above 2048 in
+#: the first place.
+#: Raising DECODE_MAX_SIDE above YUNET_MAX_SIDE only costs memory; lowering it
+#: below silently shrinks what the primary detector sees, which is the recall
+#: this module exists to protect. tests/test_faceblur.py pins the relation.
+#:
+#: Before this cap (#453) _decode called cv2.imdecode at FULL resolution: the
+#: capture set's 24 MP frame is ~73 MB as a BGR array and its 12 MP frame
+#: ~37 MB, paid for and thrown away by the first detector resize. Live /screen
+#: requests were OOM-killed on real photographs and the caller saw a 502 with
+#: an empty body.
+DECODE_MAX_SIDE = 2048
+
+#: How far below DECODE_MAX_SIDE a reduced decode is allowed to land.
+#:
+#: The JPEG decoder offers 1/2, 1/4 and 1/8 and nothing between, so a strict
+#: "never below the cap" rule would decode the canonical 12 MP capture
+#: (4032 px long) at FULL resolution, because 4032/2 = 2016 is 1.6% short --
+#: the exact allocation this cap exists to prevent. 0.95 admits that 1.6% and
+#: refuses anything worse: the working image is never more than 102 px short
+#: of 2048, against the 448 px drop (2048 -> 1600) that measurably costs
+#: YuNet the small through-glass faces. The bound is one-sided; whatever a
+#: reduced decode leaves ABOVE the cap is taken off by _cap_to_max_side.
+DECODE_UNDERSHOOT = 0.95
+
+#: Reduction factor -> imdecode flag, largest reduction first. These decode at
+#: 1/2, 1/4 and 1/8 scale INSIDE the JPEG decoder, so the full-size array is
+#: never allocated -- which is the point, and the reason a full decode
+#: followed by a resize is not a substitute for them.
+_REDUCED_DECODE = (
+    (8, cv2.IMREAD_REDUCED_COLOR_8),
+    (4, cv2.IMREAD_REDUCED_COLOR_4),
+    (2, cv2.IMREAD_REDUCED_COLOR_2),
+)
+
+#: Start-of-frame markers, whose payload carries the image dimensions. 0xC4
+#: (Huffman tables), 0xC8 (reserved) and 0xCC (arithmetic coding conditioning)
+#: share the range and are not frames.
+_SOF_MARKERS = frozenset(m for m in range(0xC0, 0xD0) if m not in (0xC4, 0xC8, 0xCC))
 
 #: The YuNet model committed with the package; see models/README.md for
 #: source and license. Committed so runtime needs no download.
@@ -271,20 +337,123 @@ def _detect_yunet(small):
 
 
 def _decode(image_bytes):
-    """Decode to a BGR array with EXIF orientation physically applied.
+    """Decode to a capped BGR array with EXIF orientation physically applied.
 
     IMREAD_IGNORE_ORIENTATION turns off OpenCV's own EXIF handling so the
-    rotation happens exactly once, here, where it is explicit and tested.
+    rotation happens exactly once, here, where it is explicit and tested. The
+    reduced-decode flags carry that same bit, so the cap adds no second
+    rotation path.
+
+    The long side is capped at DECODE_MAX_SIDE (#453). For a JPEG the cap is
+    applied inside the decoder wherever the 1/2-1/4-1/8 ladder can reach it,
+    so the full-size array is never allocated; _cap_to_max_side takes off
+    whatever the ladder leaves above the cap. Everything downstream -- the
+    detector copies, the pixelation, blur_regions, the re-encoded bytes -- is
+    derived from the array this returns, so the cap moves all of them
+    together and no geometry has to be translated between spaces.
     """
     if not image_bytes:
         raise InvalidImageError("could not decode image bytes")
     img = cv2.imdecode(
-        np.frombuffer(image_bytes, dtype=np.uint8),
-        cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION,
+        np.frombuffer(image_bytes, dtype=np.uint8), _decode_flags(image_bytes)
     )
     if img is None:
         raise InvalidImageError("could not decode image bytes")
-    return _apply_orientation(img, _exif_orientation(image_bytes))
+    # Capped before the rotation rather than after: the cap is about the long
+    # side, which no rotation or flip changes, so this is the same picture
+    # with one fewer oversized array alive at once.
+    return _apply_orientation(_cap_to_max_side(img), _exif_orientation(image_bytes))
+
+
+def _decode_flags(image_bytes):
+    """The imdecode flags for these bytes: reduced wherever the decoder can.
+
+    Chosen from the JPEG frame header, so the choice costs no pixels. The
+    largest reduction whose result still clears DECODE_UNDERSHOOT of the cap
+    wins. Bytes whose dimensions no header gives up -- PNG, WebP, anything
+    that is not a JPEG, or a JPEG whose header does not parse -- decode
+    normally and are capped afterwards by _cap_to_max_side. OpenCV honours
+    the reduced flags in the DECODER only for codecs that can scale while
+    decoding; for the others it decodes in full and resizes, which saves
+    nothing, so this does not pretend otherwise.
+    """
+    base = cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION
+    size = _jpeg_dimensions(image_bytes)
+    if size is None:
+        return base
+    floor = DECODE_MAX_SIDE * DECODE_UNDERSHOOT
+    for factor, flag in _REDUCED_DECODE:
+        if max(size) / factor >= floor:
+            return flag | cv2.IMREAD_IGNORE_ORIENTATION
+    return base
+
+
+def _cap_to_max_side(img):
+    """Downscale so the long side is at most DECODE_MAX_SIDE; else unchanged.
+
+    INTER_AREA, the filter the detector copies already use. A no-op for every
+    photograph in the current capture set (1536x2048) and for anything a
+    reduced decode has already brought under the cap.
+    """
+    height, width = img.shape[:2]
+    scale = DECODE_MAX_SIDE / max(height, width)
+    if scale >= 1.0:
+        return img
+    # Explicit dsize with a one-pixel floor rather than fx/fy: cv2.resize
+    # derives the size by rounding, and a very long thin frame rounds its
+    # short side to zero, which raises cv2.error out of the privacy path --
+    # past both exceptions the endpoints catch, so not a failure this module
+    # gets to fail closed on.
+    return cv2.resize(
+        img,
+        (max(1, round(width * scale)), max(1, round(height * scale))),
+        interpolation=cv2.INTER_AREA,
+    )
+
+
+def _jpeg_segments(image_bytes):
+    """Yield (marker, payload) for each JPEG marker segment carrying a length.
+
+    Stops at the start of scan, and at the first byte that is not a marker:
+    both readers want what the HEADER says, and entropy-coded data is not it.
+    Bytes that are not a JPEG yield nothing. Shared by the orientation reader
+    and the dimension reader so there is one walk to be right about.
+    """
+    if image_bytes[:2] != b"\xff\xd8":
+        return  # not a JPEG; PNG/WebP carry no EXIF orientation worth honoring
+    i = 2
+    while i + 4 <= len(image_bytes):
+        if image_bytes[i] != 0xFF:
+            return
+        marker = image_bytes[i + 1]
+        if marker == 0xFF:  # fill byte ahead of the real marker
+            i += 1
+            continue
+        if marker == 0xD8 or marker == 0x01 or 0xD0 <= marker <= 0xD7:
+            i += 2
+            continue
+        if marker == 0xDA:  # start of scan: no header segments past this point
+            return
+        length = int.from_bytes(image_bytes[i + 2 : i + 4], "big")
+        if length < 2:
+            return
+        yield marker, image_bytes[i + 4 : i + 2 + length]
+        i += 2 + length
+
+
+def _jpeg_dimensions(image_bytes):
+    """(width, height) from the JPEG frame header, or None if unreadable.
+
+    None is not a failure: it means "decode normally, cap afterwards".
+    """
+    for marker, payload in _jpeg_segments(image_bytes):
+        if marker in _SOF_MARKERS:
+            if len(payload) < 5:
+                return None
+            height = int.from_bytes(payload[1:3], "big")
+            width = int.from_bytes(payload[3:5], "big")
+            return (width, height) if width > 0 and height > 0 else None
+    return None
 
 
 def _exif_orientation(image_bytes):
@@ -293,24 +462,9 @@ def _exif_orientation(image_bytes):
     OpenCV's decoder ignores EXIF, so the JPEG APP1 segment is walked by hand:
     find the Exif APP1, then tag 0x0112 in IFD0 of its TIFF block.
     """
-    if image_bytes[:2] != b"\xff\xd8":
-        return 1  # not a JPEG; PNG/WebP carry no EXIF orientation worth honoring
-    i = 2
-    while i + 4 <= len(image_bytes):
-        if image_bytes[i] != 0xFF:
-            return 1
-        marker = image_bytes[i + 1]
-        if marker == 0xD8 or marker == 0x01 or 0xD0 <= marker <= 0xD7:
-            i += 2
-            continue
-        if marker == 0xDA:  # start of scan: no APP segments past this point
-            return 1
-        length = int.from_bytes(image_bytes[i + 2 : i + 4], "big")
-        if length < 2:
-            return 1
-        if marker == 0xE1 and image_bytes[i + 4 : i + 10] == b"Exif\x00\x00":
-            return _orientation_from_tiff(image_bytes[i + 10 : i + 2 + length])
-        i += 2 + length
+    for marker, payload in _jpeg_segments(image_bytes):
+        if marker == 0xE1 and payload[:6] == b"Exif\x00\x00":
+            return _orientation_from_tiff(payload[6:])
     return 1
 
 

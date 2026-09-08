@@ -79,4 +79,24 @@ primary_region = "sjc"          # near WNAM, where the R2 buckets live (D-026)
   # This is headroom, not the fix. The fix is to stop decoding at full resolution, because
   # detection immediately downscales anyway and the full array is never used at full size.
   # That is its own ticket; this line is what makes a live scan work today.
+  #
+  # 1024 KEPT, not forgotten -- decided by TICK-453 (#453), which made that fix. The decode is
+  # now capped at faceblur.DECODE_MAX_SIDE (2048) using the JPEG decoder's own 1/2-1/4-1/8
+  # scaling, so the full-size array is never allocated. The committed sidecars put the capture
+  # set at 4284x5712 (216 captures) and 3024x4032 (57), and those two arrays -- 73 MB and 37 MB
+  # of BGR -- are gone. Measured over 78 real photographs at capture resolution, peak working
+  # set fell from 892.7 MB to 753.7 MB.
+  #
+  # 753.7 MB does not fit in 512. The decode was never where the memory was: measured phase by
+  # phase on one photograph, decode costs ~10 MB, YuNet at 2048 adds ~260 MB and the six Haar
+  # passes at 1600 add ~330 MB, and neither detector ever read the full-size array, so neither
+  # got smaller. The photographs that were measured OOM-killing this worker at 512 MB (a 294 KB
+  # 960x1280 JPEG and its 1.2 MB original) are BELOW the cap, and the branch processes them to
+  # byte-identical output -- 62 of 62 real photographs came back with the same bytes and the
+  # same 1010 blur regions. A change that is a provable no-op on those photographs cannot change
+  # what 512 MB did to them, so returning this line to 512 would restore the empty-bodied 502.
+  #
+  # What would move it is the detector working set, which needs its own recall argument and its
+  # own ticket. Until then this stays 1024 and the reason is here rather than in a merged commit
+  # message nobody re-reads.
   memory = "1024mb"
