@@ -1,11 +1,15 @@
 """The Green-or-Gray rule and the map endpoints (TICK-247, #169).
 
-The two-state rule is load-bearing: the public map may render "Verified
-Accessible" (green) or "Not Yet Checked" (neutral) and nothing else — no red
+The two-state rule is load-bearing: the public map may render "Scanned
+on-site" (green) or "Not Yet Checked" (neutral) and nothing else — no red
 state, no public negative verdict, no third state, for any input including
 deliberately adversarial rows. These tests pin that contract on the Python
 side (frontdoor.map_states), which is where the server computes every state
 the page renders.
+
+Both of those labels say how the evidence was collected. Neither is a
+conclusion about whether a person can get in, and tests/test_public_map_claims
+holds that invariant (TICK-461, #461) over the public surface.
 
 The page renders those two server states as the reference UI's trust tiers
 (Estimated / Scanned on-site / Owner-confirmed) and the page-level tests
@@ -22,10 +26,11 @@ from importlib import resources
 import pytest
 
 from frontdoor.map_states import (
+    CRITERIA,
     OBSERVATION_LABELS,
     STAMP_LABELS,
     STATE_NEUTRAL,
-    STATE_VERIFIED,
+    STATE_SCANNED,
     STATES,
     checklist_for_row,
     pin_for_row,
@@ -62,9 +67,9 @@ def row(**overrides):
 # The contract table: input row -> the one state it must map to.
 STATE_CONTRACT = [
     # The only green path: human-verified, non-imagery source.
-    (row(status="verified", source="onsite_visit"), STATE_VERIFIED),
-    (row(status="verified", source=None), STATE_VERIFIED),
-    ({"status": "verified"}, STATE_VERIFIED),
+    (row(status="verified", source="onsite_visit"), STATE_SCANNED),
+    (row(status="verified", source=None), STATE_SCANNED),
+    ({"status": "verified"}, STATE_SCANNED),
     # Imagery alone never produces green, even claiming verified status.
     (row(status="verified", source="streetview"), STATE_NEUTRAL),
     # The normal pre-catalogue row.
@@ -102,9 +107,12 @@ def test_state_contract(value, expected):
 
 
 def test_exactly_two_states_exist():
-    assert STATES == {STATE_VERIFIED, STATE_NEUTRAL}
+    assert STATES == {STATE_SCANNED, STATE_NEUTRAL}
     assert set(STAMP_LABELS) == STATES
-    assert STAMP_LABELS[STATE_VERIFIED] == "Verified Accessible"
+    # Both labels say how the evidence was collected, not what was concluded
+    # (TICK-461, #461). test_public_map_claims holds the census that keeps an
+    # accessibility word out of either of them.
+    assert STAMP_LABELS[STATE_SCANNED] == "Scanned on-site"
     assert STAMP_LABELS[STATE_NEUTRAL] == "Not Yet Checked"
 
 
@@ -194,7 +202,7 @@ def test_payload_every_pin_state_is_public():
     pins = {pin["place_id"]: pin for pin in payload["pins"]}
     assert set(pins) == {"verified", "estimated", "uncovered", "adversarial"}
     assert all(pin["state"] in STATES for pin in pins.values())
-    assert pins["verified"]["state"] == STATE_VERIFIED
+    assert pins["verified"]["state"] == STATE_SCANNED
     assert pins["estimated"]["state"] == STATE_NEUTRAL
     assert pins["uncovered"]["state"] == STATE_NEUTRAL
     assert pins["adversarial"]["state"] == STATE_NEUTRAL
@@ -241,8 +249,8 @@ def test_tier_mapping_honesty(client):
     body = match.group(1)
     assert "pin.owner_confirmed" in body
     assert '"tier-owner"' in body
-    assert 'state === VERIFIED_STATE ? "tier-scanned" : "tier-estimated"' in body
-    assert '"verified_accessible"' in html  # the exact server token, nothing looser
+    assert 'state === SCANNED_STATE ? "tier-scanned" : "tier-estimated"' in body
+    assert '"scanned_on_site"' in html  # the exact server token, nothing looser
 
 
 def test_page_has_no_negative_and_no_match_state_hue(client):
@@ -418,7 +426,7 @@ def test_map_data_serves_precomputed_states(client, tmp_path, monkeypatch):
     payload = response.get_json()
     assert payload["dataset_error"] is None
     states = {pin["place_id"]: pin["state"] for pin in payload["pins"]}
-    assert states == {"green": STATE_VERIFIED, "gray": STATE_NEUTRAL}
+    assert states == {"green": STATE_SCANNED, "gray": STATE_NEUTRAL}
 
 
 def test_map_data_degrades_when_dataset_missing(client, tmp_path, monkeypatch):
@@ -505,8 +513,8 @@ def test_map_data_merges_the_curated_publication_as_well_as_the_volume(
     payload = client.get("/map/data").get_json()
 
     states = {pin["place_id"]: pin["state"] for pin in payload["pins"]}
-    assert states == {"green": "verified_accessible",
-                      "onsite": "verified_accessible"}
+    assert states == {"green": "scanned_on_site",
+                      "onsite": "scanned_on_site"}
     assert payload["published_scans_loaded"] == 1
     assert payload["published_scans_error"] is None
     assert payload["published_scans_skipped"] == 0
@@ -519,7 +527,7 @@ def test_map_data_merges_the_curated_publication_as_well_as_the_volume(
     assert payload["published_scans_error"] is not None
     assert payload["scans_loaded"] == 1
     states = {pin["place_id"]: pin["state"] for pin in payload["pins"]}
-    assert states["green"] == "verified_accessible"
+    assert states["green"] == "scanned_on_site"
     assert states["onsite"] == "not_yet_checked"
 
 

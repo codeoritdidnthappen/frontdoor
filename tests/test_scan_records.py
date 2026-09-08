@@ -18,7 +18,7 @@ from frontdoor.map_states import (
     OBSERVATION_NOT_VISIBLE,
     OBSERVATION_VISIBLE,
     STATE_NEUTRAL,
-    STATE_VERIFIED,
+    STATE_SCANNED,
     checklist_for_row,
     state_for_row,
 )
@@ -258,7 +258,7 @@ def _obs(row):
 
 _RANK = {OBSERVATION_NOT_ASSESSED: 0, OBSERVATION_NOT_VISIBLE: 1,
          OBSERVATION_VISIBLE: 2}
-_STATE_RANK = {STATE_NEUTRAL: 0, STATE_VERIFIED: 1}
+_STATE_RANK = {STATE_NEUTRAL: 0, STATE_SCANNED: 1}
 
 # Base rows and scans chosen to include the downgrade attempts: honest
 # all-absent scans, adversarial verdicts, junk shapes.
@@ -310,18 +310,28 @@ def test_an_already_verified_row_is_left_exactly_as_it_is():
 def test_a_scan_upgrades_a_neutral_pin_to_the_verified_scanned_state():
     merged, meta = merge_scans({PLACE: precat_row()}, [scan()])
     row = merged[PLACE]
-    assert state_for_row(row) == STATE_VERIFIED
+    assert state_for_row(row) == STATE_SCANNED
     assert row["source"] == "community_scan"
     # Freshness moved forward to the scan's date.
     assert row["imagery_date"] == "2026-09-04"
     assert meta == {PLACE: {"scan_count": 1, "last_scanned": "2026-09-04"}}
 
 
-def test_scan_confidences_are_scaled_to_the_maps_zero_one_range():
+def test_scan_confidences_stay_on_the_one_public_scale():
+    """TICK-462, #462 — this test used to assert the opposite.
+
+    It pinned a division by 100 into the map's supposed 0-1 range, and that
+    division was the second scale: the pre-catalogue rows the merge writes
+    into are on the engine's 0-100 scale, so a merged row could carry 20.0
+    beside 0.8 and /map/data served both as `confidence`. The merge is
+    monotone and only replaces an entry the scan RAISES, so the rescaled
+    values were the model's most confident readings, and a percentage
+    renderer showed 0.8 as 1%.
+    """
     merged, _ = merge_scans({}, [scan()])
     row = merged[PLACE]
     entry = row["criteria"]["accessible_door_hardware"]
-    assert entry == {"verdict": "present", "confidence": 0.8}
+    assert entry == {"verdict": "present", "confidence": 80}
 
 
 def test_freshness_is_monotone_across_scans():
@@ -337,7 +347,7 @@ def test_a_scan_matches_by_distance_and_name_without_a_place_id():
                              "lat": 40.0001, "lng": -75.0001})  # ~14 m away
     merged, meta = merge_scans({PLACE: precat_row()}, [record])
     assert list(merged) == [PLACE]
-    assert state_for_row(merged[PLACE]) == STATE_VERIFIED
+    assert state_for_row(merged[PLACE]) == STATE_SCANNED
     assert PLACE in meta
 
 
@@ -349,7 +359,7 @@ def test_a_disagreeing_name_nearby_does_not_match_and_adds_its_own_pin():
     assert state_for_row(merged[PLACE]) == STATE_NEUTRAL  # untouched
     new_key = next(k for k in merged if k != PLACE)
     assert new_key == "scan:s9"
-    assert state_for_row(merged[new_key]) == STATE_VERIFIED
+    assert state_for_row(merged[new_key]) == STATE_SCANNED
     assert merged[new_key]["name"] == "Completely Different Deli"
     assert merged[new_key]["location"] == {"lat": 40.0001, "lng": -75.0001}
 
@@ -358,7 +368,7 @@ def test_a_scan_for_an_unknown_place_id_adds_a_row_under_it():
     record = scan(place_ref={"place_id": "ChIJnew", "name": "New Spot",
                              "lat": 41.0, "lng": -76.0})
     merged, meta = merge_scans({PLACE: precat_row()}, [record])
-    assert state_for_row(merged["ChIJnew"]) == STATE_VERIFIED
+    assert state_for_row(merged["ChIJnew"]) == STATE_SCANNED
     assert meta["ChIJnew"]["scan_count"] == 1
 
 
@@ -371,7 +381,7 @@ def test_merge_is_total_over_junk_scans_and_junk_datasets():
     assert meta == {}
     for dataset in (None, [], "junk", 7):
         merged, meta = merge_scans(dataset, [scan()])
-        assert state_for_row(merged[PLACE]) == STATE_VERIFIED
+        assert state_for_row(merged[PLACE]) == STATE_SCANNED
     merged, meta = merge_scans({PLACE: precat_row()}, "not-a-list")
     assert merged == {PLACE: precat_row()}
 

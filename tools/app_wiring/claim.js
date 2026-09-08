@@ -209,8 +209,11 @@ async function openWorkspace(rec){
   if(!r.ok){ toast(j.detail || 'Workspace is not ready yet'); return; }
   const pin=j.pin||{};
   document.getElementById('ws-bizhead').innerHTML=bizheadHTML(pin.name||'', pin.place_id||'');
-  const tier=pin.owner_confirmed?'Owner-confirmed':(pin.state==='verified_accessible'?'Scanned on-site':'Estimated');
-  document.getElementById('ws-pin').textContent=tier+' — '+ (pin.label||'');
+  const tier=pin.owner_confirmed?'Owner-confirmed':(pin.state==='scanned_on_site'?'Scanned on-site':'Estimated');
+  /* TICK-461: for a scanned pin the stamp label now says exactly what the tier says
+     ("Scanned on-site"), because both describe how the evidence was collected rather
+     than what was concluded. Say it once when they agree. */
+  document.getElementById('ws-pin').textContent = (pin.label && pin.label!==tier) ? tier+' — '+pin.label : tier;
   document.getElementById('ws-status').textContent='Claim '+j.claim.status+'. A claim never changes the public pin; attested in-app capture does.';
   document.getElementById('ws-incentives').textContent=j.incentives||'';
   claimSessionSave(rec);

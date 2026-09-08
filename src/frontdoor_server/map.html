@@ -293,7 +293,7 @@
 <script>
 "use strict";
 
-var VERIFIED_STATE = "verified_accessible";
+var SCANNED_STATE = "scanned_on_site";
 
 var TIER_LABELS = {
   "tier-estimated": "Estimated",
@@ -302,13 +302,13 @@ var TIER_LABELS = {
 };
 
 // Honest tier mapping. The legal stamp is still exactly two states
-// (frontdoor.map_states.state_for_row): verified_accessible or not_yet_checked.
+// (frontdoor.map_states.state_for_row): scanned_on_site or not_yet_checked.
 // Owner-confirmed is an extra pin field from attested in-app capture, never a
 // third stamp state and never a claim approval.
 function tierClass(pin) {
   if (pin && pin.owner_confirmed) return "tier-owner";
   var state = pin && typeof pin === "object" ? pin.state : pin;
-  return state === VERIFIED_STATE ? "tier-scanned" : "tier-estimated";
+  return state === SCANNED_STATE ? "tier-scanned" : "tier-estimated";
 }
 
 // State-record provenance detection, keyed on the provenance source string.
@@ -449,24 +449,37 @@ function freshness(dateStr) {
   return { text: text, monthName: MONTHS[m - 1] + " " + y, stale: months > 12, known: true };
 }
 
+// Confidence arrives on the one scale the payload states (TICK-462): a
+// percentage from 0 through 100, the scale the screening engine answers on.
+// This reader used to want 0-1 and silently dropped everything above it,
+// which is why every Estimated pin's card read "Awaiting scan" while its
+// checklist carried confidences all along. No coping with a second scale
+// here: a value outside 0-100 is not a confidence this page knows how to
+// draw, and it draws nothing rather than guessing which scale it is on.
+var CONFIDENCE_MAX = 100;
+var CONFIDENCE_HIGH = 75;
+var CONFIDENCE_MEDIUM = 50;
+
 function confidenceSummary(checklist) {
   var values = [];
   (checklist || []).forEach(function (item) {
     if (item && typeof item.confidence === "number" &&
-        item.confidence >= 0 && item.confidence <= 1) {
+        item.confidence >= 0 && item.confidence <= CONFIDENCE_MAX) {
       values.push(item.confidence);
     }
   });
   if (!values.length) return { label: "Awaiting scan", dots: 0 };
   var mean = values.reduce(function (a, b) { return a + b; }, 0) / values.length;
-  if (mean >= 0.75) return { label: "High", dots: 3 };
-  if (mean >= 0.5) return { label: "Medium", dots: 2 };
+  if (mean >= CONFIDENCE_HIGH) return { label: "High", dots: 3 };
+  if (mean >= CONFIDENCE_MEDIUM) return { label: "Medium", dots: 2 };
   return { label: "Low", dots: 1 };
 }
 
 function dotsFor(confidence) {
-  if (typeof confidence !== "number" || confidence < 0 || confidence > 1) return 0;
-  return confidence >= 0.75 ? 3 : confidence >= 0.5 ? 2 : 1;
+  if (typeof confidence !== "number" ||
+      confidence < 0 || confidence > CONFIDENCE_MAX) return 0;
+  return confidence >= CONFIDENCE_HIGH ? 3
+    : confidence >= CONFIDENCE_MEDIUM ? 2 : 1;
 }
 
 function dotTriple(count) {

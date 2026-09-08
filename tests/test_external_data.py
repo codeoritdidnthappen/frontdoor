@@ -30,7 +30,7 @@ from frontdoor.external_data import (
 )
 from frontdoor.map_states import (
     STATE_NEUTRAL,
-    STATE_VERIFIED,
+    STATE_SCANNED,
     prepare_map_payload,
     state_for_row,
 )
@@ -264,10 +264,10 @@ def test_never_negative_guarantee_no_pin_change():
     assert len(disagreements) == 2  # both rows conflict with wheelchair=no
     assert before == after
     states = {pin["place_id"]: pin["state"] for pin in after["pins"]}
-    assert states == {"estimated": STATE_NEUTRAL, "verified": STATE_VERIFIED}
+    assert states == {"estimated": STATE_NEUTRAL, "verified": STATE_SCANNED}
     # And state_for_row itself has no external-data input at all.
     assert state_for_row(row) == STATE_NEUTRAL
-    assert state_for_row(verified) == STATE_VERIFIED
+    assert state_for_row(verified) == STATE_SCANNED
 
 
 # --- /map/data passthrough --------------------------------------------------
@@ -318,8 +318,8 @@ def test_map_data_provenance_does_not_alter_states_or_shape(
     make_dataset_env(tmp_path, monkeypatch, dataset)
     payload = client.get("/map/data").get_json()
     (pin,) = payload["pins"]
-    assert pin["state"] == STATE_VERIFIED
-    assert pin["label"] == "Verified Accessible"
+    assert pin["state"] == STATE_SCANNED
+    assert pin["label"] == "Scanned on-site"
     assert pin["provenance"]  # provenance stacks ON the state, never sets it
     assert payload["dataset_error"] is None
 

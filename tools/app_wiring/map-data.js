@@ -1,7 +1,7 @@
 /* ===================== live map data (same origin) =====================
    GET /map/data is the server's public pin list: the pre-catalogue merged with every published
    scan. Its pins merge into the embedded set by place_id and the server wins — a place the server
-   marks verified (its Scanned tier) takes the server's verdicts, count and date, and a pin this
+   marks scanned on-site (its Scanned tier) takes the server's verdicts, count and date, and a pin this
    page does not know is added. A place the server still lists as not-yet-checked keeps the
    embedded detail, which is the same estimate with its evidence text. No server, or a
    dataset_error, leaves the embedded pins exactly as they are.
@@ -12,13 +12,19 @@ function critFromChecklist(checklist, keymap){
   const crit={};
   (checklist||[]).forEach(c=>{
     if(!OBS_TO_V[c.observation]) return;
-    const conf = typeof c.confidence==='number' ? (c.confidence<=1 ? c.confidence*100 : c.confidence) : 0;
+    /* TICK-462: /map/data carries exactly one confidence scale and says so on the
+       payload -- a percentage from 0 through 100, the scale the engine answers on.
+       This line used to multiply anything <= 1 by 100: a reader coping with a
+       producer that rescaled, which is what let the field mean two different
+       things depending on which record it came from. The producer is fixed
+       (frontdoor.scan_records._scan_criteria), so the value is taken as served. */
+    const conf = typeof c.confidence==='number' ? c.confidence : 0;
     crit[keymap ? (keymap[c.key]||c.key) : c.key] = {v:OBS_TO_V[c.observation], c:Math.round(conf), e:''};
   });
   return crit;
 }
 function mergeServerPin(pin, base){
-  const scanned = pin.state==='verified_accessible';
+  const scanned = pin.state==='scanned_on_site';
   const p = base || {id:String(pin.place_id), name:pin.name||'Entrance', lat:pin.location.lat, lng:pin.location.lng, crit:{}, tier:'est', date:pin.imagery_date||null};
   if(!base) places.push(p);
   /* TICK-387: corroborated corrections say the world may have moved. It is a FRESHNESS

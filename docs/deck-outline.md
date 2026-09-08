@@ -258,9 +258,11 @@ happens, not after.
    `https://frontdoor-measure.fly.dev/app`: **186 pins live as of 2026-09-06**, provenance
    stacked from open-licensed Commons photos (PR #254) and OSM community tags (PR #245). Three
    tier pins per the launch ladder; every pre-catalogue pin honestly marked Estimated with its
-   imagery date. **5 of those pins now read Verified Accessible** — the first on-site evidence to
+   imagery date. **5 of those pins now read Scanned on-site** — the first on-site evidence to
    reach the public map (PR #343). Read the live counts off `/map/data` on the day rather than
-   from this line.
+   from this line. The label says how the evidence was collected, not that a place is accessible
+   (#461): the top rung of the ladder is somebody standing at the door with a camera, and there is
+   no rung above it because the next one would be a compliance claim a photograph cannot support.
 2. **Scan an unknown door LIVE on stage.** Photo in → **~7 seconds** → pin drops with the
    per-criterion checklist filling in. This is the marketing pop, and the number behind it is
    Section 3's: 97% committed accuracy on the offline eval, abstention when it can't see.
@@ -438,7 +440,7 @@ accuracy (#437). Section 4 carries that disclosure; these rows carry the arithme
 | **92% vs 93%** | §3, §7 | committed accuracy with and without face blur, controlled comparison — the claim is that blurring costs nothing, and a 1-point gap on one run does not establish otherwise in either direction | PR #243 (TICK-257) |
 | **0/17** | §3 | pilot photographs with a face still recognisable after blur, per the independent audit | PR #243 |
 | **88.9% / 79.5%** | §7, §9, §10 | Estimated tier: committed accuracy and abstention rate over 11 place_id-verified doors from Street View imagery | live pre-catalogue run (TICK-248) |
-| **186 pins / 5 Verified Accessible** | §6 | the live map at 2026-09-06 | read `/map/data` on the day; do not quote this line |
+| **186 pins / 5 Scanned on-site** | §6 | the live map at 2026-09-06 | read `/map/data` on the day; do not quote this line |
 | **~70M / 28.7% / 3-6M** | §1 | US adults with a functional disability, and the wheelchair-using subset | CDC BRFSS 2022 |
 | **~$0.03 per business** | §6, §10 | pre-catalogue screening cost | pre-catalogue run cost accounting |
 | **10.0 minutes** | timing | the section budget below, checked by the dry run | TICK-104 / #404 |

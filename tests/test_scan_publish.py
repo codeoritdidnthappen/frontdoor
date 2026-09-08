@@ -678,7 +678,7 @@ def test_map_data_serves_every_matched_scan_as_scanned_on_site(
     assert matched, "the publication put nothing on the map at all"
     for entry in matched:
         pin = by_place[entry["place_ref"]["place_id"]]
-        assert pin["state"] == "verified_accessible"
+        assert pin["state"] == "scanned_on_site"
         assert pin["ai_estimated"] is False
         assert pin["last_scanned"] == dates[entry["entrance_id"]]
         assert pin["imagery_date"] == dates[entry["entrance_id"]]
@@ -722,8 +722,8 @@ def test_a_place_held_by_identifier_alone_draws_no_pin_either(
 def test_the_map_publishes_no_negative_state_or_wording(map_payload):
     """Green-or-Gray, checked on what /map/data actually serves."""
     for pin in map_payload["pins"]:
-        assert pin["state"] in ("verified_accessible", "not_yet_checked")
-        assert pin["label"] in ("Verified Accessible", "Not Yet Checked")
+        assert pin["state"] in ("scanned_on_site", "not_yet_checked")
+        assert pin["label"] in ("Scanned on-site", "Not Yet Checked")
         for item in pin["checklist"]:
             assert item["observation"] in (
                 "visible", "not_visible", "not_assessed")
