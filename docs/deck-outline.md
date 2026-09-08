@@ -416,6 +416,47 @@ cut for time. It fits in the 30 seconds budgeted; rehearse it at that length spe
 
 ---
 
+## Every figure on the deck, and where it comes from (TICK-402)
+
+A number that cannot be traced is a number the presenter cannot defend, and hand-typing one is how
+a slide and the dataset drift apart. Every figure the deck says out loud is below, with its source
+and what it actually describes.
+
+**Two things are true of every accuracy figure here and must be said wherever one appears.** They
+describe **four criteria** — ramp-or-bevel, handrails, accessible door hardware, accessibility
+signage — and **not** step-free entry, which the interface names and the engine does not assess
+(#368). And they are scored against a reference **produced by a model reading the same
+photographs**, so they measure agreement between two readings that share their blind spots, not
+accuracy (#437). Section 4 carries that disclosure; these rows carry the arithmetic.
+
+| Figure | Where it appears | What it actually is | Source |
+|---|---|---|---|
+| **97%** | §1, §5, §6, §7 | 75 of 77 committed verdicts agreeing with the reference, over the 12-entrance pilot set, four criteria, **one unrepeated run** | `screening_eval` output; engine PR #240 |
+| **90% → 97%** | §3 | the same figure before and after the integrated multi-view call; both single runs | PR #240 |
+| **38 → 4** | §3 | abstentions over the same set, before and after that change | PR #240 |
+| **~7s median** | §3, §6 | per-entrance latency on the sonnet-class model, integrated call | `screening_eval` latency section |
+| **92% vs 93%** | §3, §7 | committed accuracy with and without face blur, controlled comparison — the claim is that blurring costs nothing, and a 1-point gap on one run does not establish otherwise in either direction | PR #243 (TICK-257) |
+| **0/17** | §3 | pilot photographs with a face still recognisable after blur, per the independent audit | PR #243 |
+| **88.9% / 79.5%** | §7, §9, §10 | Estimated tier: committed accuracy and abstention rate over 11 place_id-verified doors from Street View imagery | live pre-catalogue run (TICK-248) |
+| **186 pins / 5 Verified Accessible** | §6 | the live map at 2026-09-06 | read `/map/data` on the day; do not quote this line |
+| **~70M / 28.7% / 3-6M** | §1 | US adults with a functional disability, and the wheelchair-using subset | CDC BRFSS 2022 |
+| **~$0.03 per business** | §6, §10 | pre-catalogue screening cost | pre-catalogue run cost accounting |
+| **10.0 minutes** | timing | the section budget below, checked by the dry run | TICK-104 / #404 |
+
+**The three figures that carry a stated uncertainty**, because a single run has no error bar:
+
+- Two identical runs of the unchanged prompt differed by **1.7 points of accuracy and about 8% of
+  coverage** on the entrances where nothing else went wrong (#395). Anything inside that band is
+  not a difference.
+- The engine sets no sampling temperature and this SDK and model reject one, so that variation is
+  irreducible rather than a setting nobody turned off (#394, closed).
+- The same photograph now returns the same verdict, because the assessment is stored against the
+  image hash (#435). That fixes reproducibility for a resubmission; it does not give the original
+  measurement an error bar.
+
+**A figure that reaches a slide either was re-measured, or carries that band, or leaves the deck.**
+There is no fourth option, and the freeze is the last moment to choose.
+
 ## Timing budget summary
 
 | Section | Minutes |
