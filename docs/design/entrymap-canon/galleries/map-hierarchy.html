@@ -1,0 +1,905 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EntryMap — map hierarchy and density</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* ============ tokens (mirrors phone-app-prototype.html) ============ */
+:root{
+  --ground:#EDEBFA;
+  --card:#FFFFFF;
+  --ink:#241F3A;
+  --sub:#4A4463;
+  --blue:#5B8DEF;
+  --blue-ink:#1E3A8A;
+  --blue-edge:#3F79DC;
+  --marigold:#F0A32F;
+  --marigold-ink:#6E4A00;
+  --marigold-edge:#8A5A00;
+  --purple:#7053C5;
+  --purple-ink:#4B2E9E;
+  --purple-wash:#F0EBFC;
+  --teal-ink:#0E5E66;
+  --match-green:#1B7A3D;
+  --match-ink:#0F5228;
+  --street:#FFFFFF;
+  --block:#F7F6FE;
+  --tree:#AFC2F2;
+  --tree-lite:#C4D0F6;
+  --edge:#8E88A8;
+  --shadow:0 10px 30px rgba(36,31,58,.16);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#EFEEF4;color:var(--ink);font-family:Nunito,system-ui,-apple-system,"Segoe UI",sans-serif}
+body{padding:28px 24px 80px;line-height:1.5}
+.wrap{max-width:2060px;margin:0 auto}
+h1{font-size:26px;font-weight:900;letter-spacing:-.01em}
+h2{font-size:17px;font-weight:900;margin:34px 0 10px}
+h3{font-size:14px;font-weight:800}
+p{max-width:74ch;font-size:14px;color:var(--sub);font-weight:600}
+p+p{margin-top:8px}
+b,strong{color:var(--ink);font-weight:800}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.92em;background:#fff;border:1px solid #E2DFF0;border-radius:5px;padding:1px 5px}
+.rule{background:#fff;border:1px solid #E2DFF0;border-left:4px solid var(--purple);border-radius:12px;padding:12px 16px;margin:14px 0 0;max-width:78ch}
+.rule p{max-width:none}
+hr{border:none;border-top:1px solid #E0DEEA;margin:30px 0}
+
+/* ============ panel row ============ */
+.row{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start;margin-top:16px}
+.panel{width:390px;flex:0 0 auto}
+.panel-head{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
+.panel-num{width:22px;height:22px;flex:0 0 auto;border-radius:50%;background:var(--purple);color:#fff;
+  font-size:12px;font-weight:900;display:flex;align-items:center;justify-content:center}
+.panel-title{font-size:14px;font-weight:900}
+.panel-sub{font-size:12.5px;font-weight:700;color:var(--sub);min-height:34px;margin-bottom:8px}
+.stage{position:relative;width:390px;border-radius:18px;overflow:hidden;background:var(--ground);
+  border:1px solid #D9D5EC;box-shadow:var(--shadow)}
+.stage .ground{position:absolute;inset:0}
+.stage .markers{position:absolute;inset:0}
+.tally{margin-top:8px;font-size:11.5px;font-weight:800;color:var(--sub);
+  background:#fff;border:1px solid #E2DFF0;border-radius:8px;padding:6px 9px}
+.tally .ok{color:var(--match-ink)}
+
+/* ============ markers ============ */
+.mk{position:absolute;width:44px;height:44px;margin:-22px 0 0 -22px;
+  background:none;border:none;padding:0;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:opacity .18s ease, transform .18s ease}
+.mk:focus-visible{outline:3px solid var(--purple);outline-offset:-3px;border-radius:50%}
+.mk .art{display:flex;align-items:center;justify-content:center;transition:transform .18s ease}
+.mk.sel{z-index:900 !important}
+.mk.sel .art{transform:scale(1.28)}
+.mk.dim{opacity:.34}
+.mk.hush{opacity:.7}
+
+/* SVG paint through tokens, with fallbacks baked into the markup */
+.mk .halo{fill:#fff;opacity:.78}
+.mk-owner .body{fill:var(--purple,#7053C5);stroke:#fff}
+.mk-owner .badge{fill:var(--purple,#7053C5);stroke:#fff}
+.mk-scan  .body{fill:var(--marigold,#F0A32F);stroke:var(--marigold-edge,#8A5A00)}
+.mk-est   .ring{stroke:var(--blue-edge,#3F79DC);fill:none}
+.mk-est   .dot{fill:var(--blue-edge,#3F79DC)}
+.match-good{stroke:var(--match-green,#1B7A3D)}
+.match-part{stroke:var(--teal-ink,#0E5E66)}
+.sel-halo{stroke:var(--purple,#7053C5);fill:none}
+
+/* clusters: a place COUNT, never an average of anything */
+.cl{position:absolute;width:44px;height:44px;margin:-22px 0 0 -22px;border:none;padding:0;cursor:pointer;
+  background:none;display:flex;align-items:center;justify-content:center}
+.cl:focus-visible{outline:3px solid var(--purple);outline-offset:-3px;border-radius:50%}
+.cl .disc{border-radius:50%;background:#fff;color:var(--purple-ink,#4B2E9E);
+  font-family:inherit;font-weight:900;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 0 3px rgba(112,83,197,.24), 0 4px 12px rgba(36,31,58,.18);
+  transition:transform .18s ease}
+.cl:hover .disc{transform:scale(1.06)}
+.cl.open .disc{background:var(--purple,#7053C5);color:#fff;box-shadow:0 0 0 3px rgba(112,83,197,.3)}
+.leader{position:absolute;height:1.5px;background:rgba(112,83,197,.4);transform-origin:0 50%;pointer-events:none}
+
+/* ============ legend ============ */
+.legend{display:flex;flex-wrap:wrap;gap:10px;margin-top:14px}
+.lv{background:#fff;border:1px solid #E2DFF0;border-radius:12px;padding:12px 16px;width:286px}
+.lv-top{display:flex;align-items:center;gap:6px;min-height:56px}
+.lv-name{font-size:13.5px;font-weight:900;display:block}
+.lv-tier{font-size:11.5px;font-weight:700;color:var(--sub)}
+.lv-why{font-size:11.5px;font-weight:600;color:var(--sub);margin-top:8px;line-height:1.45;min-height:48px}
+.lv-size{font-size:11px;font-weight:800;color:var(--purple-ink);margin-top:6px}
+.lv-art{width:90px;flex:0 0 auto;display:flex;align-items:center;justify-content:center}
+
+/* ============ lab controls ============ */
+.lab{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;margin-top:14px}
+.controls{width:430px;background:#fff;border:1px solid #E2DFF0;border-radius:14px;padding:16px 18px}
+.ctl{padding:12px 0;border-bottom:1px solid #EFEDF7}
+.ctl:last-child{border-bottom:none}
+.ctl-label{display:flex;justify-content:space-between;align-items:center;gap:10px;font-size:13px;font-weight:800}
+.ctl-val{font-weight:900;color:var(--purple-ink);font-variant-numeric:tabular-nums}
+.ctl-help{font-size:11.5px;font-weight:600;color:var(--sub);margin-top:5px;line-height:1.45}
+input[type=range]{width:100%;margin-top:8px;accent-color:var(--purple)}
+.sw{display:flex;align-items:center;gap:9px;font-size:13px;font-weight:800;cursor:pointer;min-height:32px}
+.sw input{width:18px;height:18px;accent-color:var(--purple);cursor:pointer}
+.seg{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.seg button{font-family:inherit;font-size:12px;font-weight:800;padding:7px 11px;min-height:34px;
+  border-radius:9px;border:1.5px solid var(--edge);background:#fff;color:var(--sub);cursor:pointer}
+.seg button[aria-pressed=true]{background:var(--purple-wash);border-color:var(--purple);color:var(--purple-ink)}
+.readout{margin-top:12px;font-size:12px;font-weight:700;color:var(--sub);line-height:1.6}
+.readout b{display:inline-block;min-width:26px;color:var(--ink)}
+
+/* ============ notes ============ */
+.notes{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px}
+.note{width:430px;background:#fff;border:1px solid #E2DFF0;border-radius:14px;padding:14px 18px}
+.note h3{margin-bottom:6px}
+.note p{font-size:12.5px;max-width:none}
+.note.warn{border-left:4px solid var(--marigold)}
+
+.street-label{font-weight:800;fill:#3F3A5C;font-size:10.5px;letter-spacing:.14em}
+.g-ground{fill:var(--ground,#EDEBFA)}
+.g-block{fill:var(--block,#F7F6FE)}
+.g-street{fill:var(--street,#FFFFFF)}
+.g-tree{fill:var(--tree,#AFC2F2)}
+.g-tree2{fill:var(--tree-lite,#C4D0F6)}
+
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{transition-duration:.001ms !important;animation-duration:.001ms !important;animation-iteration-count:1 !important}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Map hierarchy and density</h1>
+<p style="margin-top:8px">Sixty-four real places across three downtown blocks — the same dataset the prototype
+uses (52 estimated from a street-imagery run, 11 on-site scans, 1 owner-confirmed), on the same projection and the
+same map ground. Every panel below draws all sixty-four. They differ only in how much visual weight each one is
+allowed to take.</p>
+
+<div class="rule">
+  <p><b>The one rule the hierarchy encodes.</b> Pin weight says <b>how much evidence exists about an entrance</b>
+  — nothing else. A bigger pin means somebody stood at that door, or the owner attested to it. It never means the
+  entrance is better, more accessible, or recommended. Nothing on this page ever marks a place as failing: places
+  that do not match a needs profile recede in opacity, because we lack evidence about them, and recession is not a
+  verdict.</p>
+</div>
+
+<h2>The four levels</h2>
+<div class="legend" id="legend"></div>
+
+<h2>Five renderings of the same sixty-four places</h2>
+<div class="row" id="variants"></div>
+
+<hr>
+
+<h2>Density rules, running on the real data</h2>
+<p>The three rules from section 10 are implemented, not described. Move the controls and watch them bite. The tally
+under the map always reconciles to 64 — a place is either a marker or a member of a numbered cluster, and nothing
+is ever dropped.</p>
+<div class="lab">
+  <div class="panel" style="width:390px">
+    <div class="panel-sub" id="lab-caption">Defaults: overlap threshold 40%, ceiling 12 full pins, estimated
+      minimum spacing 22px.</div>
+    <div class="stage" id="lab-stage" style="height:620px"></div>
+    <div class="tally" id="lab-tally"></div>
+  </div>
+  <div class="controls">
+    <div class="ctl">
+      <div class="ctl-label"><span>Overlap threshold — the weaker level yields</span><span class="ctl-val" id="v-ov">40%</span></div>
+      <input type="range" id="c-ov" min="15" max="90" value="40" step="5" aria-label="Overlap threshold percent">
+      <div class="ctl-help">Two markers are compared by true circle-intersection area over the <em>smaller</em>
+        marker's area. Past the threshold the weaker level yields — estimated before scanned, scanned before owner —
+        and drops into a cluster. Owner never yields to anything.</div>
+    </div>
+    <div class="ctl">
+      <div class="ctl-label"><span>Ceiling on full pins at phone width</span><span class="ctl-val" id="v-cap">12</span></div>
+      <input type="range" id="c-cap" min="2" max="20" value="12" step="1" aria-label="Maximum full pins">
+      <div class="ctl-help">Past the ceiling the lowest level furthest from the map centre converts to a cluster
+        first. The real data holds exactly 12 full pins, so the default sits right on the line — drag it down to 5
+        and watch scanned pins become counts while the single owner pin never does.</div>
+    </div>
+    <div class="ctl">
+      <div class="ctl-label"><span>Estimated ring minimum spacing</span><span class="ctl-val" id="v-sp">22px</span></div>
+      <input type="range" id="c-sp" min="0" max="46" value="22" step="2" aria-label="Estimated minimum spacing pixels">
+      <div class="ctl-help">My call: yes, they need one. Drag to 0 to see the rash — rings clumping into shapes the
+        eye reads as objects. 22px (about 1.5 ring diameters) keeps them reading as evenly-scattered texture.</div>
+    </div>
+    <div class="ctl">
+      <label class="sw"><input type="checkbox" id="c-zoom"> Zoomed out (2.2×) — estimated collapses into counts</label>
+      <label class="sw"><input type="checkbox" id="c-flat"> Render flat, as the control does — hierarchy off</label>
+      <div class="ctl-help">Turning the hierarchy off with density still on shows how much of the calm comes from
+        the levels rather than from the clustering.</div>
+    </div>
+    <div class="ctl">
+      <div class="ctl-label"><span>Needs profile</span></div>
+      <div class="seg" id="c-persona"></div>
+      <div class="ctl-help">Matching places hold full opacity and take a match ring. Non-matching recede in opacity
+        only — no cross, no grey-out, no "does not meet". Most estimated places recede under any profile for the
+        honest reason that nobody has checked them.</div>
+    </div>
+    <div class="ctl">
+      <div class="ctl-label"><span>Selection</span></div>
+      <div class="seg" id="c-select"></div>
+      <div class="ctl-help">The selected place is exempt from every rule above: never clustered, never dimmed,
+        never yields, always drawn on top. Tap any marker on any map to select it.</div>
+    </div>
+    <div class="readout" id="lab-readout"></div>
+  </div>
+</div>
+
+<hr>
+
+<h2>What I decided, where the spec was silent</h2>
+<div class="notes" id="notes"></div>
+
+</div>
+
+<script>
+'use strict';
+
+/* ===================== the real dataset, lifted from phone-app-prototype.html ===================== */
+const PLACES = [
+{"id":"ChIJI0NJGQC1RIYRivvBm9Uksus","n":"Live BEE HIVE","lat":30.2637568,"lng":-97.7471762,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJS2eoYeW1RIYR012mLJy4Zv0","n":"Virence","lat":30.2640453,"lng":-97.7475715,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJ-ZzJsgi1RIYReSzJmxfpg3c","n":"Austin Budget Office","lat":30.2648963,"lng":-97.747196,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJdz2rSQ-1RIYR8m2aI-Dn1q4","n":"Maid Planet","lat":30.265382,"lng":-97.747541,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJLWsXeaW1RIYRbTe_iOLqyYk","n":"DEN Property Group","lat":30.2659049,"lng":-97.7471917,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJT6rIjYq1RIYRrP4nT2hz5qk","n":"Sugarwolf Bakery","lat":30.2664047,"lng":-97.7475899,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJqe38AQa1RIYRh8jExRIRmZc","n":"III Forks","lat":30.2641922,"lng":-97.746646,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJ-ZzJsgi1RIYRYGWFCqb9V0g","n":"Austin Financial Services Department","lat":30.2650449,"lng":-97.7471051,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJ0zCFXgC1RIYRbR-HJvVBe2c","n":"Serenade","lat":30.2653727,"lng":-97.7467933,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJ48BbGwa1RIYRmm_eeZzlf3E","n":"215 Cesar Chavez/Lavaca","lat":30.2637489,"lng":-97.7462543,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJ469o8Xq1RIYRNpIOXPWTnPk","n":"Verkada","lat":30.2641296,"lng":-97.7463437,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJ70A8Q4-1RIYRw3AHGb3RPVc","n":"Spritzer Garage Doors Co.","lat":30.2647573,"lng":-97.7464871,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJVSpIsAi1RIYRFTBTIgQIlww","n":"AMLI Downtown","lat":30.265293,"lng":-97.7463092,"t":"est","f":{"signage":"checked","hardware":"present","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJEbrxxwi1RIYRrIDiDWHuFK0","n":"Stratus Properties Inc","lat":30.2658258,"lng":-97.7465473,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJAQBA0Ai1RIYRdcJ7WjEhyUo","n":"plodes studio","lat":30.2664356,"lng":-97.7465084,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJ-TmN7pO1RIYRM-BV0neKLJA","n":"Group Therapy","lat":30.2671074,"lng":-97.7464235,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJK8r6Fwa1RIYR_4oCefoSg2w","n":"Rock Royalty 4 bedroom Suite","lat":30.2634792,"lng":-97.7457809,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJ-W3pGAa1RIYREKqV7YGaFR0","n":"Murphy Industrial Products","lat":30.2638656,"lng":-97.7456642,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJFUx7ltW1RIYRyRK0gQb-xSM","n":"Sneaker Politics","lat":30.2646824,"lng":-97.7460957,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJhdt7wwi1RIYR2Phpvl2Hjsc","n":"Republic Square Station (NB)","lat":30.266218,"lng":-97.746056,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJrX4ev361RIYRsk8HlvAmbiA","n":"Twins Rooftop","lat":30.2666103,"lng":-97.7457797,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJ5Z-wFgC1RIYRZDq_uKQ9mfM","n":"Manny's","lat":30.2675879,"lng":-97.7459566,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJn6pkHwa1RIYRPFO3zCVimdE","n":"Clif Baggett Cpa, LLC","lat":30.2640903,"lng":-97.7454096,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJn6pkHwa1RIYRs_xMkNBHkdg","n":"Ashton Austin","lat":30.2645078,"lng":-97.7454648,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJq6pOlgi1RIYRVLnCaTjJoao","n":"[solidcore] Downtown Austin","lat":30.2651775,"lng":-97.7456261,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJ2V3VYAm1RIYRQEHkpkQaUOc","n":"Lion Street Inc.","lat":30.2659685,"lng":-97.74532,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJKXF6xXO1RIYRm1Mk86PvJak","n":"The Pub - Downtown","lat":30.2669961,"lng":-97.7453625,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"present","ramp":"unknown"}},
+{"id":"ChIJbVP_3wi1RIYR17jn9Oqcj6w","n":"Lavaca Street Bar","lat":30.2671465,"lng":-97.7456424,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJJSdpJQa1RIYRqH-ng-eaAKc","n":"ATX MetroBike Station","lat":30.2633188,"lng":-97.7450616,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJFSp06wRV2YARbwaGimbA-x8","n":"SNH Capital Partners","lat":30.2639427,"lng":-97.7448645,"t":"est","f":{"signage":"checked","hardware":"present","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJJ4tAsoE1W4YRuKNCYjtemi0","n":"Cousins Properties","lat":30.2656997,"lng":-97.7450281,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJ404U66S1RIYRgapAPlRGAh4","n":"Driftwood Downtown","lat":30.2663958,"lng":-97.7447294,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"present","ramp":"unknown"}},
+{"id":"ChIJLyB8fgC1RIYRhQY5JLjh-Nk","n":"Frosty’s Christmas Bar Austin","lat":30.2668844,"lng":-97.7449805,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJ5ST765DLRIYRastGozc0GnY","n":"Veracruz All Natural","lat":30.2630218,"lng":-97.7444521,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJ5YC4tLyoRIYRr_71IO5USZQ","n":"Creative Curbing, LLC","lat":30.2633784,"lng":-97.7445474,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJEfmCgwi1RIYRRaXH9uKcJH8","n":"Urban Wine + Liquor","lat":30.2648683,"lng":-97.7442284,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJb3jLJ2W1RIYRtZMZKRdqcDs","n":"Food Club","lat":30.2655858,"lng":-97.7444247,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJIcQ99wi1RIYRDk-jP8lZ0fw","n":"The Capital Grille","lat":30.2662705,"lng":-97.7444668,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"present","ramp":"unknown"}},
+{"id":"ChIJtxx1fZO1RIYRR1Gn6q4Rwe8","n":"SUSHI ROKU AUSTIN","lat":30.2665443,"lng":-97.7443354,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJAc2DMIe1RIYRLq9Zr7joMNU","n":"Arlo Grey by Kristen Kish","lat":30.2627097,"lng":-97.7441138,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJN4QMZKa1RIYRaAv37rSVINc","n":"Shawarma Point","lat":30.2636937,"lng":-97.7437856,"t":"est","f":{"signage":"checked","hardware":"present","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJAQ9XKQa1RIYRT0yG6VuqGMU","n":"WeRecoverData Data Recovery Inc. - Austin - Drop-Off","lat":30.2639746,"lng":-97.7440671,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"present","ramp":"unknown"}},
+{"id":"ChIJoZsHcQi1RIYRfyBnp0UxNMI","n":"Cooper's Old Time Pit Bar-B-Que","lat":30.2649418,"lng":-97.7437436,"t":"est","f":{"signage":"checked","hardware":"present","handrails":"present","ramp":"unknown"}},
+{"id":"ChIJdRoWVyVNW4YR0TSK09tbXSQ","n":"Austhentico","lat":30.2657117,"lng":-97.7439832,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJAWPLQgi1RIYRZUsZxtASSpE","n":"Patagonia","lat":30.2659645,"lng":-97.7438133,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJP5drpsK1RIYRksb28shp9sQ","n":"Kelly's Corner","lat":30.2671127,"lng":-97.743771,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJafBkzqC1RIYRd6kCkUgKTZY","n":"Puente fotos Austin","lat":30.2640608,"lng":-97.7475312,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJx_s0haq0RIYR9iYotp2My9U","n":"Economic Growth and Redevelopment Services Offices","lat":30.2648963,"lng":-97.747196,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJ1fWp49S1RIYRK1CkyZEfzEo","n":"3Ten Austin City Limits","lat":30.2652971,"lng":-97.7471929,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJeVE-Jwa1RIYR1RGVPeiGij4","n":"Farm-A","lat":30.2642296,"lng":-97.7467687,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJWUqUsQi1RIYRbdK_eUQK0As","n":"Austin City Channel 6","lat":30.2649532,"lng":-97.7467873,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJAQBAygi1RIYRHy2_0_5L5m0","n":"Blue Room","lat":30.2653727,"lng":-97.7467933,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"door-01","n":"DeSano Pizzeria Napoletana","lat":30.266248,"lng":-97.74586,"t":"scan","f":{"step_free":"present","ramp":"checked","handrails":"checked","button":"checked","hardware":"present","approach":"present","signage":"checked","width":"unknown"}},
+{"id":"door-02","n":"CardVault by Tom Brady","lat":30.265746,"lng":-97.74613,"t":"scan","f":{"step_free":"present","ramp":"checked","handrails":"checked","button":"checked","hardware":"present","approach":"present","signage":"checked","width":"unknown"}},
+{"id":"door-03","n":"Which Wich","lat":30.265711,"lng":-97.745976,"t":"scan","f":{"step_free":"present","ramp":"checked","handrails":"checked","button":"checked","hardware":"checked","approach":"present","signage":"checked","width":"unknown"}},
+{"id":"door-04","n":"Royal Blue Grocery","lat":30.265689,"lng":-97.745879,"t":"scan","f":{"step_free":"present","ramp":"checked","handrails":"checked","button":"checked","hardware":"present","approach":"present","signage":"checked","width":"present"}},
+{"id":"door-05","n":"Cathy's Cleaners and Alterations","lat":30.265655,"lng":-97.745755,"t":"scan","f":{"step_free":"present","ramp":"checked","handrails":"checked","button":"checked","hardware":"present","approach":"present","signage":"checked","width":"unknown"}},
+{"id":"door-06","n":"Bill's Oyster","lat":30.265619,"lng":-97.745634,"t":"scan","f":{"step_free":"present","ramp":"checked","handrails":"checked","button":"checked","hardware":"present","approach":"present","signage":"checked","width":"unknown"}},
+{"id":"door-07","n":"RedFarm","lat":30.265541,"lng":-97.745391,"t":"scan","f":{"step_free":"present","ramp":"checked","handrails":"checked","button":"checked","hardware":"present","approach":"present","signage":"checked","width":"unknown"}},
+{"id":"door-08","n":"SEV Laser","lat":30.265351,"lng":-97.745454,"t":"scan","f":{"step_free":"checked","ramp":"present","handrails":"present","button":"checked","hardware":"present","approach":"present","signage":"checked","width":"present"}},
+{"id":"door-09","n":"Austin Transit Partnership","lat":30.26493,"lng":-97.745192,"t":"scan","f":{"step_free":"checked","ramp":"unknown","handrails":"present","button":"unknown","hardware":"present","approach":"checked","signage":"checked","width":"unknown"}},
+{"id":"door-10","n":"Sweetgreen","lat":30.264887,"lng":-97.745632,"t":"scan","f":{"step_free":"present","ramp":"checked","handrails":"checked","button":"unknown","hardware":"present","approach":"present","signage":"present","width":"present"}},
+{"id":"door-11","n":"Jo's Coffee (Downtown)","lat":30.265013,"lng":-97.746096,"t":"owner","f":{"step_free":"checked","ramp":"unknown","handrails":"present","button":"checked","hardware":"unknown","approach":"present","signage":"checked","width":"unknown"}},
+{"id":"door-12","n":"The Ashton (Ashton Austin residential tower)","lat":30.263882,"lng":-97.74537,"t":"scan","f":{"step_free":"present","ramp":"checked","handrails":"checked","button":"checked","hardware":"present","approach":"present","signage":"unknown","width":"present"}}
+];
+
+/* ===================== geography, lifted verbatim ===================== */
+const BBOX = {lat0:30.2625, lat1:30.2677, lng0:-97.7476, lng1:-97.7437};
+const ZOOM_OUT_K = 2.2;
+function viewBox(zoomedOut){
+  if(!zoomedOut) return BBOX;
+  const cla=(BBOX.lat0+BBOX.lat1)/2, cln=(BBOX.lng0+BBOX.lng1)/2;
+  const hl=(BBOX.lat1-BBOX.lat0)/2*ZOOM_OUT_K, hg=(BBOX.lng1-BBOX.lng0)/2*ZOOM_OUT_K;
+  return {lat0:cla-hl, lat1:cla+hl, lng0:cln-hg, lng1:cln+hg};
+}
+function proj(lat,lng,W,H,pad,V){
+  const x = pad + (lng-V.lng0)/(V.lng1-V.lng0)*(W-2*pad);
+  const y = pad + (1-(lat-V.lat0)/(V.lat1-V.lat0))*(H-2*pad);
+  return [x,y];
+}
+const H_STREETS = [
+  {lat:30.26320, w:13, label:null},
+  {lat:30.26500, w:12, label:'W 2ND ST'},
+  {lat:30.26592, w:12, label:'W 3RD ST'},
+  {lat:30.26685, w:12, label:'W 4TH ST'},
+];
+const V_STREETS = [
+  {lng:-97.74715, w:11, label:null},
+  {lng:-97.74620, w:11, label:'LAVACA ST'},
+  {lng:-97.74530, w:11, label:'COLORADO ST'},
+  {lng:-97.74430, w:15, label:null},
+];
+function streetsFor(zoomedOut){
+  if(!zoomedOut) return {h:H_STREETS, v:V_STREETS};
+  const h=H_STREETS.map(s=>({...s,w:Math.round(s.w*.55)})), v=V_STREETS.map(s=>({...s,w:Math.round(s.w*.55)}));
+  for(let n=1;n<=4;n++){
+    h.push({lat:30.26320-n*0.00091,w:6,label:null}); h.push({lat:30.26685+n*0.00093,w:6,label:null});
+    v.push({lng:-97.74715-n*0.00095,w:6,label:null}); v.push({lng:-97.74430+n*0.00095,w:6,label:null});
+  }
+  return {h,v};
+}
+const PAD = 22;
+function groundSVG(W,H,zoomedOut){
+  const V = viewBox(zoomedOut);
+  const {h:HS,v:VS} = streetsFor(zoomedOut);
+  let s = `<svg width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" aria-hidden="true" focusable="false" style="display:block">`;
+  s += `<rect width="${W}" height="${H}" class="g-ground"/>`;
+  const hy = HS.map(st=>proj(st.lat,V.lng0,W,H,PAD,V)[1]);
+  const vx = VS.map(st=>proj(V.lat0,st.lng,W,H,PAD,V)[0]);
+  const ys=[-8,...hy,H+8].sort((a,b)=>a-b), xs=[-8,...vx,W+8].sort((a,b)=>a-b);
+  for(let i=0;i<ys.length-1;i++)for(let j=0;j<xs.length-1;j++){
+    const x0=xs[j]+9,y0=ys[i]+9,bw=xs[j+1]-xs[j]-18,bh=ys[i+1]-ys[i]-18;
+    if(bw>14&&bh>14) s+=`<rect x="${x0}" y="${y0}" width="${bw}" height="${bh}" rx="7" class="g-block"/>`;
+  }
+  HS.forEach((st,i)=>{s+=`<rect x="-4" y="${hy[i]-st.w/2}" width="${W+8}" height="${st.w}" class="g-street"/>`;});
+  VS.forEach((st,i)=>{s+=`<rect x="${vx[i]-st.w/2}" y="-4" width="${st.w}" height="${H+8}" class="g-street"/>`;});
+  HS.forEach((st,i)=>{ if(st.label) s+=`<text class="street-label" x="${W*0.30}" y="${hy[i]+3.6}" text-anchor="middle">${st.label}</text>`;});
+  VS.forEach((st,i)=>{ if(st.label) s+=`<text class="street-label" x="${vx[i]}" y="${H*0.80}" text-anchor="middle" transform="rotate(-90 ${vx[i]} ${H*0.80})" dy="3.5">${st.label}</text>`;});
+  let seed=7; const rnd=()=> (seed=(seed*16807)%2147483647)/2147483647;
+  for(let t=0;t<44;t++){
+    const x=rnd()*W, y=rnd()*H;
+    if(hy.some(v=>Math.abs(y-v)<12) || vx.some(v=>Math.abs(x-v)<12)) continue;
+    s+=`<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.4" class="g-tree"/><circle cx="${(x+4.5).toFixed(1)}" cy="${(y+2.5).toFixed(1)}" r="1.7" class="g-tree2"/>`;
+  }
+  return s+'</svg>';
+}
+
+/* ===================== needs profiles, lifted verbatim ===================== */
+const PERSONAS = {
+  none:      {label:'None', crit:[]},
+  wheelchair:{label:'Wheelchair', crit:['step_free','ramp','width']},
+  cane:      {label:'Cane or walker', crit:['step_free','handrails']},
+  lowvision: {label:'Low vision', crit:['signage','approach']},
+  grip:      {label:'Limited grip', crit:['hardware','button']},
+};
+function matchOf(p, key){
+  const crit = PERSONAS[key] ? PERSONAS[key].crit : [];
+  if(!crit.length) return null;
+  let sat=0;
+  for(const ck of crit){
+    let ok = p.f[ck]==='present';
+    if(ck==='ramp' && p.f.step_free==='present') ok = true;
+    if(ok) sat++;
+  }
+  return {state: sat===crit.length ? 'good' : sat>0 ? 'partial' : 'unknown', sat, total:crit.length};
+}
+
+/* ===================== the four levels ===================== */
+/* Sizes are the drawn width of the teardrop (or the ring's outer diameter).
+   Chosen so the ratios read at arm's length: owner is 4/3 of scanned, and estimated
+   is a little over a third of owner — different in KIND, not merely in degree. */
+const LEVEL = {
+  owner:{rank:3, size:40, r:20, tier:'Owner-confirmed', level:1},
+  scan: {rank:2, size:30, r:15, tier:'Scanned on-site', level:2},
+  est:  {rank:1, size:14, r:7,   tier:'Estimated',      level:3},
+};
+const FLAT_SIZE = 28;   /* the control: one weight for all sixty-four */
+const TEAR = 'M18 41.5C13.9 34.7 5.5 27.2 5.5 15.8a12.5 12.5 0 1125 0C30.5 27.2 22.1 34.7 18 41.5Z';
+const GL = {
+  person:'<path d="M12 5.2a2.7 2.7 0 110 5.4 2.7 2.7 0 010-5.4zM6.7 18.2c.7-3 2.8-4.6 5.3-4.6s4.6 1.6 5.3 4.6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>',
+  store:'<path d="M5.5 10.5v7h13v-7M4 7l1.6-2.8h12.8L20 7c0 1.3-.9 2.3-2.1 2.3-1 0-1.9-.7-2.1-1.7-.2 1-1.1 1.7-2.1 1.7h-3.4c-1 0-1.9-.7-2.1-1.7-.2 1-1.1 1.7-2.1 1.7C4.9 9.3 4 8.3 4 7zM10 17.5v-4h4v4" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
+};
+
+/* One SVG builder for every marker. `state` carries the modifiers.
+   viewBox is padded so the white lift halo and the match/selection rings fit. */
+function markerSVG(tier, size, o){
+  o = o || {};
+  const VB = 76, C = VB/2;                       /* 76-unit square, teardrop is 36 wide */
+  const EST_R = 5.6, EST_SW = 2.2;               /* the level-3 ring, in viewBox units */
+  /* `size` is the drawn width of the mark itself: the teardrop for levels 1-2, the ring's
+     outer diameter for level 3. k converts that to viewBox units. */
+  const k = (tier==='est' && !o.full) ? size/(2*EST_R+EST_SW) : size/36;
+  const w = VB*k;
+  const rings = (radius) => {
+    let s='';
+    if(o.selected) s += `<circle cx="${C}" cy="${C}" r="${radius+7}" class="sel-halo" stroke-width="3.4" opacity=".55"/>`;
+    if(o.match==='good')    s += `<circle cx="${C}" cy="${C}" r="${radius+3.4}" class="match-good" fill="none" stroke-width="3.4"/>`;
+    if(o.match==='partial') s += `<circle cx="${C}" cy="${C}" r="${radius+3.4}" class="match-part" fill="none" stroke-width="3" stroke-dasharray="6 4.5"/>`;
+    return s;
+  };
+  if(tier==='est' && !o.full){
+    /* Level 3 — a small dashed ring. No teardrop, no glyph, no lift halo:
+       it is ground texture that happens to be tappable, not a claim. */
+    return `<svg width="${w}" height="${w}" viewBox="0 0 ${VB} ${VB}" aria-hidden="true" focusable="false">
+      ${rings(EST_R)}
+      <circle cx="${C}" cy="${C}" r="${EST_R}" class="ring" stroke-width="${EST_SW}" stroke-dasharray="2.35 2.05"/>
+    </svg>`;
+  }
+  /* Levels 1 and 2 (and the flat control) — the full teardrop on its white lift halo */
+  const tx = C-18, ty = C-22;
+  let inner;
+  if(tier==='owner'){
+    inner = `<path d="${TEAR}" class="body" stroke-width="2" stroke-linejoin="round"/>
+      <g transform="translate(6.6 4.8) scale(.95)">${GL.store}</g>
+      <circle cx="28.5" cy="26.5" r="6.4" class="badge" stroke-width="2"/>
+      <path d="M25.7 26.5l2 2 3.5-3.9" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>`;
+  } else if(tier==='scan'){
+    inner = `<path d="${TEAR}" class="body" stroke-width="2.2" stroke-linejoin="round"/>
+      <g transform="translate(8.4 6.2) scale(.8)">${GL.person}</g>`;
+  } else {
+    /* estimated drawn as a full pin — only ever used by the control panel */
+    inner = `<path d="${TEAR}" fill="#fff" stroke="var(--blue-edge,#3F79DC)" stroke-width="2.6" stroke-dasharray="4 3" stroke-linejoin="round"/>
+      <text x="18" y="21" text-anchor="middle" font-family="Georgia,serif" font-style="italic" font-weight="700" font-size="14" fill="#1E3A8A">i</text>`;
+  }
+  return `<svg width="${w}" height="${w}" viewBox="0 0 ${VB} ${VB}" aria-hidden="true" focusable="false">
+    <circle cx="${C}" cy="${C-4}" r="15.5" class="halo"/>
+    ${rings(17)}
+    <g transform="translate(${tx} ${ty})">${inner}</g>
+  </svg>`;
+}
+function clusterDiscHTML(n){
+  const d = n>=10 ? 40 : 34;
+  const f = n>=10 ? 13 : 14;
+  return `<span class="disc" style="width:${d}px;height:${d}px;font-size:${f}px" aria-hidden="true">${n}</span>`;
+}
+
+/* ===================== density engine ===================== */
+/* circle-intersection area over the SMALLER circle's area */
+function overlapFrac(x1,y1,r1,x2,y2,r2){
+  const d = Math.hypot(x1-x2, y1-y2);
+  if(d >= r1+r2) return 0;
+  const rs = Math.min(r1,r2), rl = Math.max(r1,r2);
+  if(d <= rl-rs) return 1;
+  const a1 = rs*rs*Math.acos((d*d + rs*rs - rl*rl)/(2*d*rs));
+  const a2 = rl*rl*Math.acos((d*d + rl*rl - rs*rs)/(2*d*rl));
+  const a3 = .5*Math.sqrt((-d+rs+rl)*(d+rs-rl)*(d-rs+rl)*(d+rs+rl));
+  return (a1+a2-a3) / (Math.PI*rs*rs);
+}
+
+const DEFAULTS = {overlap:.40, cap:12, spacing:22};
+
+/* Returns {pins:[], clusters:[], counted:n} for one panel. */
+function layout(cfg){
+  const W = cfg.W, H = cfg.H;
+  const V = viewBox(cfg.zoomedOut);
+  const cx = W/2, cy = H/2;
+  const flat = !!cfg.flat;
+  const overlap = cfg.overlap==null ? DEFAULTS.overlap : cfg.overlap;
+  const cap     = cfg.cap==null     ? DEFAULTS.cap     : cfg.cap;
+  const spacing = cfg.spacing==null ? DEFAULTS.spacing : cfg.spacing;
+
+  const items = PLACES.map(p=>{
+    const [x,y] = proj(p.lat,p.lng,W,H,PAD,V);
+    const L = LEVEL[p.t];
+    const r = flat ? FLAT_SIZE/2 : L.r;
+    return {p, x, y, r, rank: p.id===cfg.selectedId ? 99 : L.rank,
+            dc: Math.hypot(x-cx, y-cy), sel: p.id===cfg.selectedId};
+  });
+
+  if(!cfg.density){
+    return {pins: items, clusters: [], counted: items.length};
+  }
+
+  /* Zoom-out rule: estimated stops being a pin at all and becomes count material,
+     so the wide view answers "where has anyone actually been". Selection is exempt. */
+  const yielded = [];
+  let live = items;
+  if(cfg.zoomedOut && !flat){
+    live = [];
+    items.forEach(it => (it.p.t==='est' && !it.sel) ? yielded.push(it) : live.push(it));
+  }
+
+  /* Priority order: stronger level first, then nearest the centre of the view.
+     Placing the strong first is what makes "the weaker level yields" fall out. */
+  live.sort((a,b)=> b.rank-a.rank || a.dc-b.dc);
+
+  const placed = [];
+  live.forEach(it=>{
+    if(it.sel){ placed.push(it); return; }          /* exempt from everything */
+    let lost = false;
+    for(const q of placed){
+      if(q.rank < it.rank) continue;               /* a weaker marker can never push you out */
+      /* Two markers of the SAME level are equally worth showing, so they tolerate more
+         overlap than a weak-against-strong pair before the later one (further from the
+         centre of the view — `placed` is already in that order) yields. */
+      const thresh = q.rank === it.rank ? Math.min(.95, overlap + .10) : overlap;
+      if(overlapFrac(it.x,it.y,it.r, q.x,q.y,q.r) > thresh){ lost = true; break; }
+    }
+    /* estimated rings also hold a minimum distance from each other, or they read as a rash */
+    if(!lost && !flat && it.p.t==='est' && spacing>0){
+      for(const q of placed){
+        if(q.p.t!=='est' || q.sel) continue;
+        if(Math.hypot(it.x-q.x, it.y-q.y) < spacing){ lost = true; break; }
+      }
+    }
+    if(lost) yielded.push(it); else placed.push(it);
+  });
+
+  /* Ceiling on full pins. Weakest level, furthest from centre, converts first. */
+  const isFull = it => flat || it.p.t!=='est';
+  let fulls = placed.filter(isFull);
+  if(fulls.length > cap){
+    const order = fulls.filter(it=>!it.sel).sort((a,b)=> a.rank-b.rank || b.dc-a.dc);
+    let excess = fulls.length - cap;
+    while(excess-- > 0 && order.length){
+      const victim = order.shift();
+      placed.splice(placed.indexOf(victim),1);
+      yielded.push(victim);
+    }
+  }
+
+  /* Everything that yielded becomes a numbered disc. Nothing is dropped. */
+  /* Zoomed out the whole town is closer together, so the cluster cell grows in SCREEN
+     space — otherwise the wide view trades sixty-four pins for twenty discs, which is
+     the same mess in a different colour. */
+  const CELL = cfg.zoomedOut ? 96 : 60;
+  const cells = new Map();
+  yielded.forEach(it=>{
+    const key = Math.floor(it.x/CELL)+','+Math.floor(it.y/CELL);
+    if(!cells.has(key)) cells.set(key,[]);
+    cells.get(key).push(it);
+  });
+  const clusters = [], singles = [];
+  cells.forEach((list,key)=>{
+    if(list.length<2){ singles.push(list[0]); return; }
+    clusters.push({key, members:list,
+      x:list.reduce((a,e)=>a+e.x,0)/list.length,
+      y:list.reduce((a,e)=>a+e.y,0)/list.length});
+  });
+  /* A lone yielder joins the nearest cluster rather than being drawn back into the
+     collision it just lost, or — if there is no cluster at all — is drawn anyway. */
+  singles.forEach(it=>{
+    let best=null, bd=Infinity;
+    clusters.forEach(c=>{ const d=Math.hypot(c.x-it.x,c.y-it.y); if(d<bd){bd=d;best=c;} });
+    if(best){ best.members.push(it); } else { placed.push(it); }
+  });
+  clusters.forEach(c=>{
+    c.x = c.members.reduce((a,e)=>a+e.x,0)/c.members.length;
+    c.y = c.members.reduce((a,e)=>a+e.y,0)/c.members.length;
+  });
+
+  /* A disc is a density indicator, not a place, so it is allowed to slide off its own
+     centroid to stop sitting on top of a pin — which would undo the whole hierarchy by
+     covering the strongest mark on the map with the weakest kind of mark. */
+  const discR = c => (c.members.length>=10 ? 40 : 34)/2 + 2;
+  for(let pass=0; pass<14; pass++){
+    let moved = false;
+    clusters.forEach(c=>{
+      const others = placed.map(q=>({x:q.x,y:q.y,r:q.r}))
+        .concat(clusters.filter(o=>o!==c).map(o=>({x:o.x,y:o.y,r:discR(o)})));
+      others.forEach(q=>{
+        const need = discR(c) + q.r + 3;
+        let dx=c.x-q.x, dy=c.y-q.y, d=Math.hypot(dx,dy);
+        if(d >= need) return;
+        if(d < .01){ dx=1; dy=0; d=1; }
+        c.x += dx/d*(need-d); c.y += dy/d*(need-d); moved = true;
+      });
+      c.x = Math.max(24, Math.min(W-24, c.x));
+      c.y = Math.max(24, Math.min(H-24, c.y));
+    });
+    if(!moved) break;
+  }
+
+  return {pins: placed, clusters,
+          counted: placed.length + clusters.reduce((a,c)=>a+c.members.length,0)};
+}
+
+/* ===================== rendering ===================== */
+function tierName(t){ return LEVEL[t].tier; }
+function sentence(p, m){
+  let s = p.n + ' — ' + tierName(p.t) + '.';
+  if(m) s += m.state==='good' ? ' Matches all ' + m.total + ' of your needs.'
+          : m.state==='partial' ? ' Matches ' + m.sat + ' of your ' + m.total + ' needs.'
+          : ' We have no evidence yet about your needs here.';
+  return s;
+}
+
+/* one panel = one independent bit of state */
+function makePanel(stageEl, tallyEl, cfg){
+  const st = Object.assign({expanded:null}, cfg);
+  st.W = 390; st.H = cfg.H || 560;
+  stageEl.style.height = st.H+'px';
+  stageEl.innerHTML = '<div class="ground"></div><div class="markers"></div>';
+  const groundEl = stageEl.querySelector('.ground');
+  const layerEl  = stageEl.querySelector('.markers');
+  let lastZoom = null;
+
+  function draw(){
+    if(lastZoom !== !!st.zoomedOut){ groundEl.innerHTML = groundSVG(st.W, st.H, st.zoomedOut); lastZoom = !!st.zoomedOut; }
+    const out = layout(st);
+    layerEl.innerHTML = '';
+    const persona = st.persona || 'none';
+
+    const addMarker = (it, opts) => {
+      const p = it.p, m = matchOf(p, persona);
+      const b = document.createElement('button');
+      const flat = !!st.flat;
+      const tierCls = flat ? 'mk-'+p.t : 'mk-'+p.t;
+      b.className = 'mk ' + tierCls + (it.sel ? ' sel' : '');
+      b.style.left = (opts && opts.x!=null ? opts.x : it.x) + 'px';
+      b.style.top  = (opts && opts.y!=null ? opts.y : it.y) + 'px';
+      b.style.zIndex = it.sel ? 900 : (LEVEL[p.t].rank*10 + (opts&&opts.lift?50:0));
+      /* Needs match: matching holds full opacity, non-matching recedes. Never a fail mark. */
+      if(m && m.state==='unknown' && !it.sel) b.classList.add('dim');
+      /* Selection: everything else drops slightly. Nothing is hidden. */
+      if(st.selectedId && !it.sel && !(m && m.state==='unknown')) b.classList.add('hush');
+      const size = flat ? FLAT_SIZE : LEVEL[p.t].size;
+      b.innerHTML = `<span class="art">${markerSVG(p.t, size, {
+        full: flat, selected: it.sel, match: m ? (m.state==='good'?'good':m.state==='partial'?'partial':null) : null
+      })}</span>`;
+      b.setAttribute('aria-label', sentence(p, m));
+      b.addEventListener('click', ()=>{
+        st.selectedId = (st.selectedId===p.id) ? null : p.id;
+        st.expanded = null;
+        if(st.onSelect) st.onSelect(st.selectedId);
+        draw();
+      });
+      layerEl.appendChild(b);
+      return b;
+    };
+
+    out.pins.forEach(it=>addMarker(it));
+
+    out.clusters.forEach(c=>{
+      const open = st.expanded === c.key;
+      if(open){
+        /* Cluster expansion: the members fan out in place around the disc, joined by
+           leader lines, and the disc becomes the collapse control. The frame never moves. */
+        const n = c.members.length;
+        const R = Math.max(38, 9.5*n);
+        c.members.forEach((it,i)=>{
+          const a = (-Math.PI/2) + i*(2*Math.PI/n);
+          const mx = Math.max(16, Math.min(st.W-16, c.x + Math.cos(a)*R));
+          const my = Math.max(16, Math.min(st.H-16, c.y + Math.sin(a)*R));
+          const ln = document.createElement('span');
+          ln.className = 'leader';
+          ln.style.left = c.x+'px'; ln.style.top = c.y+'px';
+          ln.style.width = Math.hypot(mx-c.x, my-c.y)+'px';
+          ln.style.transform = 'rotate('+Math.atan2(my-c.y, mx-c.x)+'rad)';
+          layerEl.appendChild(ln);
+          addMarker(it, {x:mx, y:my, lift:true});
+        });
+      }
+      const b = document.createElement('button');
+      b.className = 'cl' + (open?' open':'');
+      b.style.left = c.x+'px'; b.style.top = c.y+'px';
+      b.style.zIndex = open ? 800 : 5;
+      b.innerHTML = clusterDiscHTML(c.members.length);
+      const tiers = {};
+      c.members.forEach(it=>{ tiers[tierName(it.p.t)] = (tiers[tierName(it.p.t)]||0)+1; });
+      const breakdown = Object.entries(tiers).map(([k,v])=>v+' '+k.toLowerCase()).join(', ');
+      b.setAttribute('aria-label', open
+        ? 'Collapse this group of '+c.members.length+' entrances'
+        : c.members.length+' entrances here ('+breakdown+'). Activate to spread them out.');
+      b.addEventListener('click', ()=>{ st.expanded = open ? null : c.key; draw(); });
+      layerEl.appendChild(b);
+    });
+
+    if(tallyEl){
+      const inCl = out.clusters.reduce((a,c)=>a+c.members.length,0);
+      const fullPins = out.pins.filter(it=>st.flat || it.p.t!=='est').length;
+      const rings = out.pins.length - fullPins;
+      tallyEl.innerHTML =
+        `<span class="ok">${out.counted} of ${PLACES.length} places accounted for</span> · ` +
+        `${fullPins} full pin${fullPins===1?'':'s'} · ${rings} estimated ring${rings===1?'':'s'} · ` +
+        `${out.clusters.length} cluster${out.clusters.length===1?'':'s'} holding ${inCl}`;
+    }
+    if(st.onDraw) st.onDraw(out);
+  }
+  st.draw = draw;
+  draw();
+  return st;
+}
+
+/* ===================== the legend ===================== */
+const LEVEL_COPY = [
+  {t:'owner', name:'Owner-confirmed', role:'1 of 64 places', why:'Rarest and strongest evidence: someone at the door attested to it.', size:'40px teardrop · white lift halo · fused tick'},
+  {t:'scan',  name:'Scanned on-site', role:'11 of 64 places', why:'Somebody stood there and photographed it.', size:'30px teardrop · white lift halo'},
+  {t:'est',   name:'Estimated',       role:'52 of 64 places', why:'Marks that a door is probably there, without borrowing the visual weight of evidence.', size:'14px dashed ring · no glyph · no halo'},
+];
+(function(){
+  const el = document.getElementById('legend');
+  LEVEL_COPY.forEach((L,i)=>{
+    const d = document.createElement('div');
+    d.className='lv';
+    d.innerHTML = `<div class="lv-top">
+        <span class="lv-art mk-${L.t}">${markerSVG(L.t, LEVEL[L.t].size, {})}</span>
+        <span><span class="lv-name">Level ${i+1} · ${L.name}</span><span class="lv-tier">${L.role}</span></span>
+      </div>
+      <div class="lv-why">${L.why}</div><div class="lv-size">${L.size}</div>`;
+    el.appendChild(d);
+  });
+  const d = document.createElement('div');
+  d.className='lv';
+  d.innerHTML = `<div class="lv-top"><span class="lv-art"><span class="disc" style="width:34px;height:34px;font-size:14px;border-radius:50%;background:#fff;color:var(--purple-ink);font-weight:900;display:flex;align-items:center;justify-content:center;box-shadow:0 0 0 3px rgba(112,83,197,.24), 0 4px 12px rgba(36,31,58,.18)" aria-hidden="true">7</span></span>
+      <span><span class="lv-name">Level 4 · Cluster</span><span class="lv-tier">density, not a place</span></span></div>
+    <div class="lv-why">A count of how many entrances are here. Never an average of their tiers, their confidence, or anything else.</div>
+    <div class="lv-size">34px disc, 40px past ten · tap to spread</div>`;
+  el.appendChild(d);
+})();
+
+/* ===================== the five variants ===================== */
+const SELECTED_DEMO = 'door-11';        /* the one owner-confirmed place */
+const VARIANTS = [
+  {title:'Today', sub:'Every one of the sixty-four drawn at the same weight. No focal point, no reading order — the weakest evidence shouts as loudly as the strongest.',
+   cfg:{flat:true, density:false}},
+  {title:'Four-level hierarchy', sub:'Owner-confirmed largest, scanned on-site medium, estimated demoted to a small dashed ring with no glyph, clusters as numbered discs. Same sixty-four places.',
+   cfg:{density:true}},
+  {title:'With a needs profile', sub:'Cane or walker. Matching places hold full opacity and take a match ring; the rest recede in opacity only. Recession means "not yet checked", never "fails".',
+   cfg:{density:true, persona:'cane'}},
+  {title:'Zoomed out', sub:'Estimated collapses entirely into counts. Only the two evidenced tiers stay as pins, so the wide view answers "where has anyone actually been".',
+   cfg:{density:true, zoomedOut:true}},
+  {title:'With a place selected', sub:"Jo's Coffee selected: scaled up with a stronger halo while everything else drops slightly. Nothing is hidden, and the selection is exempt from every density rule.",
+   cfg:{density:true, selectedId:SELECTED_DEMO}},
+];
+(function(){
+  const row = document.getElementById('variants');
+  VARIANTS.forEach((v,i)=>{
+    const wrap = document.createElement('div');
+    wrap.className = 'panel';
+    wrap.innerHTML = `<div class="panel-head"><span class="panel-num" aria-hidden="true">${i+1}</span>
+        <span class="panel-title">${v.title}</span></div>
+      <div class="panel-sub">${v.sub}</div>
+      <div class="stage"></div><div class="tally"></div>`;
+    row.appendChild(wrap);
+    makePanel(wrap.querySelector('.stage'), wrap.querySelector('.tally'), Object.assign({}, v.cfg));
+  });
+})();
+
+/* ===================== the density lab ===================== */
+(function(){
+  const stage = document.getElementById('lab-stage');
+  const tally = document.getElementById('lab-tally');
+  const readout = document.getElementById('lab-readout');
+  let panel;
+  panel = makePanel(stage, tally, {
+    density:true, H:620, overlap:DEFAULTS.overlap, cap:DEFAULTS.cap, spacing:DEFAULTS.spacing,
+    onDraw(out){
+      if(!panel) return;
+      const inCl = out.clusters.reduce((a,c)=>a+c.members.length,0);
+      const byTier = {owner:0, scan:0, est:0};
+      out.pins.forEach(it=>byTier[it.p.t]++);
+      readout.innerHTML =
+        `<b>${byTier.owner}</b> owner-confirmed pin drawn · <b>${byTier.scan}</b> scanned pins · ` +
+        `<b>${byTier.est}</b> estimated rings · <b>${inCl}</b> places inside <b>${out.clusters.length}</b> clusters.` +
+        (panel.selectedId ? '<br>Selected: ' + (PLACES.find(p=>p.id===panel.selectedId)||{}).n + ' — drawn on top, exempt.' : '');
+      const sel = document.getElementById('c-select');
+      sel.querySelectorAll('button').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.id===(panel.selectedId||''))));
+    },
+    onSelect(){ }
+  });
+  const bind = (id, key, fmt, scale) => {
+    const input = document.getElementById(id);
+    const out = document.getElementById(id.replace('c-','v-'));
+    input.addEventListener('input', ()=>{
+      const raw = +input.value;
+      panel[key] = scale ? raw*scale : raw;
+      out.textContent = fmt(raw);
+      panel.expanded = null;
+      panel.draw();
+    });
+  };
+  bind('c-ov','overlap', v=>v+'%', .01);
+  bind('c-cap','cap', v=>String(v));
+  bind('c-sp','spacing', v=>v+'px');
+  document.getElementById('c-zoom').addEventListener('change', e=>{ panel.zoomedOut = e.target.checked; panel.expanded=null; panel.draw(); });
+  document.getElementById('c-flat').addEventListener('change', e=>{ panel.flat = e.target.checked; panel.expanded=null; panel.draw(); });
+
+  const pseg = document.getElementById('c-persona');
+  Object.keys(PERSONAS).forEach(k=>{
+    const b=document.createElement('button');
+    b.type='button'; b.textContent=PERSONAS[k].label;
+    b.setAttribute('aria-pressed', String(k==='none'));
+    b.addEventListener('click',()=>{
+      panel.persona = k==='none' ? null : k;
+      pseg.querySelectorAll('button').forEach(x=>x.setAttribute('aria-pressed','false'));
+      b.setAttribute('aria-pressed','true');
+      panel.draw();
+    });
+    pseg.appendChild(b);
+  });
+  const sseg = document.getElementById('c-select');
+  [{id:'', label:'Nothing selected'},
+   {id:'door-11', label:"Jo's Coffee (owner)"},
+   {id:'door-10', label:'Sweetgreen (scanned)'},
+   {id:PLACES.find(p=>p.t==='est').id, label:'An estimated place'}].forEach(o=>{
+    const b=document.createElement('button');
+    b.type='button'; b.textContent=o.label; b.dataset.id=o.id;
+    b.setAttribute('aria-pressed', String(o.id===''));
+    b.addEventListener('click',()=>{ panel.selectedId = o.id||null; panel.expanded=null; panel.draw(); });
+    sseg.appendChild(b);
+  });
+  panel.draw();   /* once the controls exist, so the readout can reach them */
+})();
+
+/* ===================== decisions ===================== */
+const NOTES = [
+  ['Sizes: 40 / 30 / 15, and a 44px target under all of them',
+   'The teardrop is drawn 40px wide for owner-confirmed and 30px for scanned — a 4:3 ratio, which is the smallest '+
+   'step that still reads as deliberate rather than as a rendering wobble. Estimated is a 15px ring, a little over a '+
+   'third of the owner pin, because level 3 has to differ in <em>kind</em> and not merely in degree. Every marker, '+
+   'including the 15px ring, sits inside a 44&times;44 button.'],
+  ['Halos: two different jobs, two different marks',
+   'The white lift halo from the boards belongs to levels 1 and 2 only — it is what makes a full pin sit above the '+
+   'ground. Estimated rings get no halo at all, which is most of why the map calms down. The match ring is a '+
+   'separate concentric stroke outside the halo: solid green for every need met, dashed teal for some. Selection '+
+   'adds a third, wider purple ring rather than recolouring anything, so the three states can co-occur on one pin '+
+   'without one overwriting another.'],
+  ['Clusters expand in place; they do not zoom',
+   'Tapping a cluster fans its members onto a ring around the disc with thin leader lines, and the disc becomes the '+
+   'collapse control. Zooming instead — which is what the shipped prototype does — throws away the frame the user '+
+   'had just built up. Expanding in place keeps everything else still. The fan is a plain layout change, so reduced '+
+   'motion has nothing to suppress.'],
+  ['Yes, estimated rings need minimum spacing — but it is a smaller fix than it sounds',
+   'Without it they clump and the eye starts reading the clumps as objects: the rash. 22px between centres, about '+
+   '1.5 ring diameters, is where a pair stops fusing into one blob. On <em>this</em> dataset the rule only moves '+
+   'five rings, all of them around Lavaca and 2nd — the rest of the field is already 40 to 90px apart. Five is '+
+   'still worth having, because a fused pair is exactly the thing the eye snags on, but drag the slider to 0 in the '+
+   'lab before believing anyone (including me) who calls it transformative.'],
+  ['Two markers of the same level tolerate more overlap than a weak one under a strong one',
+   'Section 10 says the weaker level yields past about 40%. It does not say what two equals do, and "neither yields" '+
+   'leaves five scanned pins along one block face piled into a caterpillar. My call: same-level pairs yield at 50% '+
+   'rather than 40%, and the one further from the centre of the view is the one that goes, because both are equally '+
+   'worth showing and the tie has to break somewhere. That is what turns the worst two pairs (63% and 53% overlap) '+
+   'into a count while leaving the 42% pair alone.'],
+  ['A cluster disc may slide off its own centroid',
+   'A disc landing on top of the single owner-confirmed pin would undo the whole hierarchy by covering the strongest '+
+   'mark with the weakest kind of mark, so discs repel away from pins and from each other until they are clear. A '+
+   'disc is a density indicator rather than a place, so moving it a few pixels costs nothing; moving a pin would '+
+   'have been a lie about geography, and pins never move.'],
+  ['The control is generous to the current build',
+   'Panel 1 draws all sixty-four at one size. The shipped prototype is not literally that: it varies its pins 26 / '+
+   '30 / 36px. But all three are full teardrops with glyphs and halos, so an 18% size difference is invisible at a '+
+   'glance and the screen reads exactly as panel 1 does. Making the control flat states the problem plainly rather '+
+   'than arguing about ten pixels.'],
+  ['Nothing here can be read as a rating — and one thing had to change so it could not',
+   'The first version of the cluster disc carried the strongest tier of its members as a coloured rim. It looked '+
+   'good and it was wrong: a purple-rimmed cluster reads as "the good cluster". Clusters are now uniformly neutral '+
+   'and carry a count and nothing else. The same reasoning killed a "+3" count badge on crowded pins. Recession '+
+   'under a needs profile is opacity only — never a cross, a grey-out, or a "does not meet" — because we are '+
+   'reporting an absence of evidence, not a judgement of the door.'],
+];
+const HONEST = [
+  ['Still messy: tap targets overlap, and no size choice fixes that',
+   'Fifty-two estimated places in three blocks cannot all have a non-overlapping 44px target at phone width — the '+
+   'geometry forbids it. Rings are spaced 22px apart, so their targets overlap by roughly half and the topmost '+
+   'wins. The mitigation is z-order plus the list view as a guaranteed second path to every place, not a smaller '+
+   'target. Worth saying out loud rather than hiding behind the density rules.'],
+  ['Still messy: the caterpillar on the 3rd Street block face',
+   'Five scanned pins between 3rd and 2nd sit 20 to 30px apart and cascade down-right in a line, because the '+
+   'teardrop tail points down and five real storefronts really are that close. Nothing merges them: after the worst '+
+   'two pairs yield, the rest overlap by 42% and less, and the ceiling is not reached. It is the one place on panel '+
+   '2 that still reads as clutter rather than as a reading order. The honest options are all trade-offs — merge '+
+   'them into a count and lose the evidenced tier exactly where the evidence is densest, or drop the ceiling to '+
+   'about 6 and lose it further out. Try the ceiling slider at 5 or 6 and judge; I did not want to make that call '+
+   'inside a demo.'],
+  ['Still open: a needs profile empties most of the map',
+   'Under any profile roughly fifty places recede, because street imagery cannot evidence step-free entry. The map '+
+   'is honest but thin, and panel 3 is the panel where the product question is loudest — whether the answer is more '+
+   'scans, a softer recession, or copy on the map that says "we have not been to these yet".'],
+];
+(function(){
+  const el = document.getElementById('notes');
+  NOTES.forEach(([h,b])=>{
+    const d=document.createElement('div'); d.className='note';
+    d.innerHTML = `<h3>${h}</h3><p>${b}</p>`; el.appendChild(d);
+  });
+  HONEST.forEach(([h,b])=>{
+    const d=document.createElement('div'); d.className='note warn';
+    d.innerHTML = `<h3>${h}</h3><p>${b}</p>`; el.appendChild(d);
+  });
+})();
+</script>
+</body>
+</html>

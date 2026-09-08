@@ -1,0 +1,1298 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EntryMap — map ground: depth and colour</title>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap" rel="stylesheet">
+<style>
+/* ============ product tokens (mirror phone-app-prototype.html / map-hierarchy.html) ============ */
+:root{
+  --card:#FFFFFF;
+  --ink:#241F3A;
+  --sub:#4A4463;
+  --blue:#5B8DEF;
+  --blue-ink:#1E3A8A;
+  --blue-edge:#3F79DC;
+  --marigold:#F0A32F;
+  --marigold-ink:#6E4A00;
+  --marigold-edge:#8A5A00;
+  --purple:#7053C5;
+  --purple-ink:#4B2E9E;
+  --purple-wash:#F0EBFC;
+  --teal-ink:#0E5E66;
+  --match-green:#1B7A3D;
+  --match-ink:#0F5228;
+  --edge:#8E88A8;
+  --shadow:0 10px 30px rgba(36,31,58,.16);
+}
+/* Ground custom properties (--g-<variant>-<key>) are generated at load from the same
+   palette objects the measurement tables read, so there is exactly one source of truth.
+   Every SVG paint is written as var(--g-x-y, #HEX) with the hex as the literal fallback. */
+
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#EFEEF4;color:var(--ink);font-family:Nunito,system-ui,-apple-system,"Segoe UI",sans-serif}
+body{padding:28px 24px 90px;line-height:1.5}
+.wrap{max-width:1360px;margin:0 auto}
+h1{font-size:26px;font-weight:900;letter-spacing:-.01em}
+h2{font-size:18px;font-weight:900;margin:36px 0 10px}
+h3{font-size:14px;font-weight:800}
+p{max-width:78ch;font-size:14px;color:var(--sub);font-weight:600}
+p+p{margin-top:8px}
+b,strong{color:var(--ink);font-weight:800}
+em{font-style:italic}
+code{font-family:ui-monospace,Consolas,monospace;font-size:.92em;background:#fff;border:1px solid #E2DFF0;border-radius:5px;padding:1px 5px}
+hr{border:none;border-top:1px solid #E0DEEA;margin:34px 0}
+.rule{background:#fff;border:1px solid #E2DFF0;border-left:4px solid var(--purple);border-radius:12px;padding:12px 16px;margin:14px 0 0;max-width:86ch}
+.rule.warn{border-left-color:var(--marigold)}
+.rule.win{border-left-color:var(--match-green)}
+.rule p{max-width:none}
+.rule h3{margin-bottom:5px}
+
+/* ============ variant blocks ============ */
+.variant{margin-top:26px;padding-top:22px;border-top:1px solid #E0DEEA}
+.vhead{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.vname{font-size:19px;font-weight:900}
+.vtag{font-size:11px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:#fff;background:var(--purple);
+  border-radius:20px;padding:3px 10px}
+.vthesis{font-size:14px;font-weight:700;color:var(--sub);max-width:82ch;margin-top:6px}
+
+.row{display:flex;flex-wrap:wrap;gap:22px;align-items:flex-start;margin-top:16px}
+.panel{width:390px;flex:0 0 auto}
+.panel-title{font-size:13px;font-weight:900;margin-bottom:2px}
+.panel-sub{font-size:11.5px;font-weight:700;color:var(--sub);min-height:32px;margin-bottom:8px;line-height:1.4}
+.stage{position:relative;width:390px;border-radius:18px;overflow:hidden;
+  border:1px solid #D9D5EC;box-shadow:var(--shadow)}
+.stage .ground{position:absolute;inset:0}
+.stage .markers{position:absolute;inset:0}
+.tally{margin-top:8px;font-size:11px;font-weight:800;color:var(--sub);
+  background:#fff;border:1px solid #E2DFF0;border-radius:8px;padding:6px 9px}
+.tally .ok{color:var(--match-ink)}
+
+/* small bare-ground comparison strip */
+.strip{display:flex;flex-wrap:wrap;gap:14px;margin-top:14px}
+.chip{width:252px}
+.chip .stage{width:252px}
+.chip-cap{font-size:12px;font-weight:900;margin-top:7px}
+.chip-cap small{display:block;font-size:11px;font-weight:700;color:var(--sub);line-height:1.35;margin-top:2px}
+
+/* ============ swatches + tables ============ */
+.swatches{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}
+.sw{width:118px;background:#fff;border:1px solid #E2DFF0;border-radius:9px;overflow:hidden}
+.sw .chipc{height:34px;border-bottom:1px solid rgba(36,31,58,.09)}
+.sw .meta{padding:5px 7px 6px;font-size:10px;font-weight:800;line-height:1.35}
+.sw .meta span{display:block;color:var(--sub);font-weight:700;font-family:ui-monospace,Consolas,monospace;font-size:9.5px}
+table{border-collapse:collapse;margin-top:12px;font-size:12.5px;background:#fff;border:1px solid #E2DFF0;border-radius:10px;overflow:hidden}
+th,td{padding:7px 11px;text-align:left;border-bottom:1px solid #EFEDF7;font-weight:700}
+th{font-weight:900;font-size:11.5px;letter-spacing:.02em;background:#FAF9FE;color:var(--ink)}
+td.n,th.n{text-align:right;font-family:ui-monospace,Consolas,monospace;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+.pill{font-family:ui-monospace,Consolas,monospace;font-size:11px;font-weight:800;border-radius:5px;padding:2px 6px;white-space:nowrap}
+.pill.pass{background:#DFF3E6;color:#0F5228}
+.pill.fail{background:#FBE3E3;color:#7A1414}
+.pill.tight{background:#FBF0DA;color:#6E4A00}
+.dot{display:inline-block;width:11px;height:11px;border-radius:3px;border:1px solid rgba(36,31,58,.16);
+  vertical-align:-1px;margin-right:5px}
+
+/* ============ markers (lifted from map-hierarchy.html, unchanged) ============ */
+.mk{position:absolute;width:44px;height:44px;margin:-22px 0 0 -22px;
+  background:none;border:none;padding:0;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;
+  transition:opacity .18s ease, transform .18s ease}
+.mk:focus-visible{outline:3px solid var(--purple);outline-offset:-3px;border-radius:50%}
+.mk .art{display:flex;align-items:center;justify-content:center;transition:transform .18s ease}
+.mk.sel{z-index:900 !important}
+.mk.sel .art{transform:scale(1.28)}
+.mk.dim{opacity:.34}
+.mk.hush{opacity:.7}
+.mk .halo{fill:#fff;opacity:.78}
+.mk-owner .body{fill:var(--purple,#7053C5);stroke:#fff}
+.mk-owner .badge{fill:var(--purple,#7053C5);stroke:#fff}
+.mk-scan  .body{fill:var(--marigold,#F0A32F);stroke:var(--marigold-edge,#8A5A00)}
+.mk-est   .ring{stroke:var(--blue-edge,#3F79DC);fill:none}
+.mk-est   .dot{fill:var(--blue-edge,#3F79DC)}
+.match-good{stroke:var(--match-green,#1B7A3D)}
+.match-part{stroke:var(--teal-ink,#0E5E66)}
+.sel-halo{stroke:var(--purple,#7053C5);fill:none}
+.cl{position:absolute;width:44px;height:44px;margin:-22px 0 0 -22px;border:none;padding:0;cursor:pointer;
+  background:none;display:flex;align-items:center;justify-content:center}
+.cl:focus-visible{outline:3px solid var(--purple);outline-offset:-3px;border-radius:50%}
+.cl .disc{border-radius:50%;background:#fff;color:var(--purple-ink,#4B2E9E);
+  font-family:inherit;font-weight:900;display:flex;align-items:center;justify-content:center;
+  box-shadow:0 0 0 3px rgba(112,83,197,.24), 0 4px 12px rgba(36,31,58,.18);
+  transition:transform .18s ease}
+.cl:hover .disc{transform:scale(1.06)}
+
+/* ============ notes ============ */
+.notes{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px}
+.note{width:430px;background:#fff;border:1px solid #E2DFF0;border-radius:14px;padding:14px 18px}
+.note h3{margin-bottom:6px}
+.note p{font-size:12.5px;max-width:none}
+.note.warn{border-left:4px solid var(--marigold)}
+.note.win{border-left:4px solid var(--match-green)}
+
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{transition-duration:.001ms !important;animation-duration:.001ms !important;
+    animation-iteration-count:1 !important;scroll-behavior:auto !important}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Map ground — depth and colour</h1>
+<p style="margin-top:8px">Four grounds for the same three downtown Austin blocks, against the ground the build ships
+today. Same projection, same sixty-four places, same pin hierarchy on top, same footprint geometry — the variants
+differ only in tone, light and landcover, so they can be judged against each other rather than against four different
+maps. Every marker is live: tap one to select it.</p>
+
+<div class="rule">
+  <h3>The rule that shapes all four</h3>
+  <p>Blue is estimated, marigold is scanned on-site, purple is owner-confirmed, green is needs-match, amber is ageing
+  evidence. Those meanings live on markers and are load-bearing. The ground may echo the whole palette, but only at a
+  saturation and value where it reads as terrain. Concretely, enforced and measured below: <b>no ground tone exceeds
+  chroma 43 while the least saturated marker colour is chroma 95</b>; no ground element uses a semantic hue at full
+  strength; no ground element is a lone disc or a teardrop; and canopy is suppressed within 26&nbsp;px of any full pin
+  so nothing decorative lands inside a marker's halo. No red anywhere on any of them.</p>
+</div>
+
+<div class="rule warn">
+  <h3>The measured floor, before any colour was chosen</h3>
+  <p>The estimated marker is the binding constraint, because it is the only one of the three that touches raw ground:
+  levels 1 and 2 sit on a white lift halo, level 3 is a bare dashed ring with no halo at all. Its edge is
+  <code>--blue-edge #3F79DC</code>, relative luminance 0.197. For that ring to hold 3:1, <b>every ground tone a ring
+  can land on must have relative luminance ≥ 0.690</b> — about <code>#D8D8D8</code> in neutral terms. That is the ceiling
+  on how dark this map is allowed to get, and it is why all four variants are light. Depth here had to come from small
+  tonal steps applied consistently, not from a darker palette.</p>
+  <p style="margin-top:8px"><b>And the ground we ship today already breaks it.</b> The tree dots are
+  <code>#AFC2F2</code> (L 0.541) and <code>#C4D0F6</code> (L 0.635). An estimated ring landing on one measures
+  <span class="pill fail">2.37:1</span> and <span class="pill fail">2.75:1</span>. On this dataset that happens — the
+  dots are scattered at random across the blocks the rings sit in. Every variant below fixes it; that fix is the
+  single most valuable thing on this page.</p>
+</div>
+
+<h2>What I derived, because the data had no hierarchy</h2>
+<p>The committed street table has four horizontal and four vertical lines at widths 11–15, which is one width with
+rounding noise, and it labels only five of the eight. Here is the hierarchy I derived and the reasoning, so it can be
+argued with:</p>
+<table id="derived"><thead><tr><th>Street</th><th>In the data</th><th>Derived class</th><th class="n">Width</th><th>Why</th></tr></thead><tbody></tbody></table>
+<p style="margin-top:10px"><b>Two labels added, four alleys invented.</b> The 13&nbsp;px line at lat 30.26320 and the
+15&nbsp;px line at lng −97.74430 were unlabelled; by position in the Austin grid they are <b>W Cesar Chavez St</b> and
+<b>Congress Ave</b>, and both sit far enough inside the frame to carry a label. The gap between Cesar Chavez and W 2nd
+is 0.0018°, exactly twice every other block, so something bisects it: I put a service alley there. Three more alleys
+run mid-block (two east–west, one north–south between Lavaca and Colorado). Downtown Austin blocks really are
+alley-bisected, but <b>these four are placed by grid arithmetic, not surveyed</b> — they are the "thinner again" tier
+the spec asks for, and if the real alley positions matter they should come from data.</p>
+
+<h2>The five grounds, bare</h2>
+<p>No markers, so the ground can be judged on its own before it is judged underneath anything.</p>
+<div class="strip" id="bare"></div>
+
+<hr>
+
+<h2 style="margin-top:8px">The four variants, with markers</h2>
+<p>Each row is the same variant three ways: the default rendering, the same ground with a <b>cane or walker</b> needs
+profile applied, and the high-contrast rendering. The middle panel is the hard one — recession is opacity only, so a
+busy ground is exactly where a receded marker gets lost.</p>
+
+<div id="variants"></div>
+
+<hr>
+
+<h2>Every variant, every pin, every tone it can land on</h2>
+<p>Sampled, not assumed. For each variant I project all sixty-four places, hit-test the marker centre against the
+ground's own paint list, and tally which tone each tier actually lands on. "Most often" below is the modal tone for that
+tier on this dataset; "worst case" is the darkest tone anywhere in the variant that a marker of that tier could land on.
+Levels 1 and 2 are measured against raw ground rather than against their white lift halo, which is the conservative
+reading — the teardrop tail extends past the halo and does touch the ground.</p>
+<table id="bigtable"><thead><tr>
+  <th>Variant</th><th>Pin</th><th>Identifying boundary</th><th>Most often sits on</th><th class="n">Ratio</th>
+  <th>Worst tone in variant</th><th class="n">Ratio</th><th>Verdict</th>
+</tr></thead><tbody></tbody></table>
+
+<div class="rule" id="chromabox">
+  <h3>Saturation check — a marker must be the most saturated thing in its own radius</h3>
+  <p id="chromatext"></p>
+</div>
+
+<hr>
+
+<h2>What this costs to draw</h2>
+<div class="notes" id="cost"></div>
+
+<h2>Recommendation, and what still reads flat</h2>
+<div class="notes" id="notes"></div>
+
+</div>
+
+<script>
+'use strict';
+
+/* =====================================================================
+   1 · dataset, projection and needs profiles — lifted verbatim from
+   design/phone-app-prototype.html via design/map-hierarchy.html so the
+   ground is judged on the real geometry.
+   ===================================================================== */
+const PLACES = [
+{"id":"ChIJI0NJGQC1RIYRivvBm9Uksus","n":"Live BEE HIVE","lat":30.2637568,"lng":-97.7471762,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJS2eoYeW1RIYR012mLJy4Zv0","n":"Virence","lat":30.2640453,"lng":-97.7475715,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJ-ZzJsgi1RIYReSzJmxfpg3c","n":"Austin Budget Office","lat":30.2648963,"lng":-97.747196,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJdz2rSQ-1RIYR8m2aI-Dn1q4","n":"Maid Planet","lat":30.265382,"lng":-97.747541,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJLWsXeaW1RIYRbTe_iOLqyYk","n":"DEN Property Group","lat":30.2659049,"lng":-97.7471917,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJT6rIjYq1RIYRrP4nT2hz5qk","n":"Sugarwolf Bakery","lat":30.2664047,"lng":-97.7475899,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJqe38AQa1RIYRh8jExRIRmZc","n":"III Forks","lat":30.2641922,"lng":-97.746646,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJ-ZzJsgi1RIYRYGWFCqb9V0g","n":"Austin Financial Services Department","lat":30.2650449,"lng":-97.7471051,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJ0zCFXgC1RIYRbR-HJvVBe2c","n":"Serenade","lat":30.2653727,"lng":-97.7467933,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJ48BbGwa1RIYRmm_eeZzlf3E","n":"215 Cesar Chavez/Lavaca","lat":30.2637489,"lng":-97.7462543,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJ469o8Xq1RIYRNpIOXPWTnPk","n":"Verkada","lat":30.2641296,"lng":-97.7463437,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJ70A8Q4-1RIYRw3AHGb3RPVc","n":"Spritzer Garage Doors Co.","lat":30.2647573,"lng":-97.7464871,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJVSpIsAi1RIYRFTBTIgQIlww","n":"AMLI Downtown","lat":30.265293,"lng":-97.7463092,"t":"est","f":{"signage":"checked","hardware":"present","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJEbrxxwi1RIYRrIDiDWHuFK0","n":"Stratus Properties Inc","lat":30.2658258,"lng":-97.7465473,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJAQBA0Ai1RIYRdcJ7WjEhyUo","n":"plodes studio","lat":30.2664356,"lng":-97.7465084,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJ-TmN7pO1RIYRM-BV0neKLJA","n":"Group Therapy","lat":30.2671074,"lng":-97.7464235,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJK8r6Fwa1RIYR_4oCefoSg2w","n":"Rock Royalty 4 bedroom Suite","lat":30.2634792,"lng":-97.7457809,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJ-W3pGAa1RIYREKqV7YGaFR0","n":"Murphy Industrial Products","lat":30.2638656,"lng":-97.7456642,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJFUx7ltW1RIYRyRK0gQb-xSM","n":"Sneaker Politics","lat":30.2646824,"lng":-97.7460957,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJhdt7wwi1RIYR2Phpvl2Hjsc","n":"Republic Square Station (NB)","lat":30.266218,"lng":-97.746056,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJrX4ev361RIYRsk8HlvAmbiA","n":"Twins Rooftop","lat":30.2666103,"lng":-97.7457797,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJ5Z-wFgC1RIYRZDq_uKQ9mfM","n":"Manny's","lat":30.2675879,"lng":-97.7459566,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJn6pkHwa1RIYRPFO3zCVimdE","n":"Clif Baggett Cpa, LLC","lat":30.2640903,"lng":-97.7454096,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJn6pkHwa1RIYRs_xMkNBHkdg","n":"Ashton Austin","lat":30.2645078,"lng":-97.7454648,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJq6pOlgi1RIYRVLnCaTjJoao","n":"[solidcore] Downtown Austin","lat":30.2651775,"lng":-97.7456261,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJ2V3VYAm1RIYRQEHkpkQaUOc","n":"Lion Street Inc.","lat":30.2659685,"lng":-97.74532,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJKXF6xXO1RIYRm1Mk86PvJak","n":"The Pub - Downtown","lat":30.2669961,"lng":-97.7453625,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"present","ramp":"unknown"}},
+{"id":"ChIJbVP_3wi1RIYR17jn9Oqcj6w","n":"Lavaca Street Bar","lat":30.2671465,"lng":-97.7456424,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJJSdpJQa1RIYRqH-ng-eaAKc","n":"ATX MetroBike Station","lat":30.2633188,"lng":-97.7450616,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJFSp06wRV2YARbwaGimbA-x8","n":"SNH Capital Partners","lat":30.2639427,"lng":-97.7448645,"t":"est","f":{"signage":"checked","hardware":"present","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJJ4tAsoE1W4YRuKNCYjtemi0","n":"Cousins Properties","lat":30.2656997,"lng":-97.7450281,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJ404U66S1RIYRgapAPlRGAh4","n":"Driftwood Downtown","lat":30.2663958,"lng":-97.7447294,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"present","ramp":"unknown"}},
+{"id":"ChIJLyB8fgC1RIYRhQY5JLjh-Nk","n":"Frosty’s Christmas Bar Austin","lat":30.2668844,"lng":-97.7449805,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJ5ST765DLRIYRastGozc0GnY","n":"Veracruz All Natural","lat":30.2630218,"lng":-97.7444521,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJ5YC4tLyoRIYRr_71IO5USZQ","n":"Creative Curbing, LLC","lat":30.2633784,"lng":-97.7445474,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJEfmCgwi1RIYRRaXH9uKcJH8","n":"Urban Wine + Liquor","lat":30.2648683,"lng":-97.7442284,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJb3jLJ2W1RIYRtZMZKRdqcDs","n":"Food Club","lat":30.2655858,"lng":-97.7444247,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJIcQ99wi1RIYRDk-jP8lZ0fw","n":"The Capital Grille","lat":30.2662705,"lng":-97.7444668,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"present","ramp":"unknown"}},
+{"id":"ChIJtxx1fZO1RIYRR1Gn6q4Rwe8","n":"SUSHI ROKU AUSTIN","lat":30.2665443,"lng":-97.7443354,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJAc2DMIe1RIYRLq9Zr7joMNU","n":"Arlo Grey by Kristen Kish","lat":30.2627097,"lng":-97.7441138,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJN4QMZKa1RIYRaAv37rSVINc","n":"Shawarma Point","lat":30.2636937,"lng":-97.7437856,"t":"est","f":{"signage":"checked","hardware":"present","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJAQ9XKQa1RIYRT0yG6VuqGMU","n":"WeRecoverData Data Recovery Inc. - Austin - Drop-Off","lat":30.2639746,"lng":-97.7440671,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"present","ramp":"unknown"}},
+{"id":"ChIJoZsHcQi1RIYRfyBnp0UxNMI","n":"Cooper's Old Time Pit Bar-B-Que","lat":30.2649418,"lng":-97.7437436,"t":"est","f":{"signage":"checked","hardware":"present","handrails":"present","ramp":"unknown"}},
+{"id":"ChIJdRoWVyVNW4YR0TSK09tbXSQ","n":"Austhentico","lat":30.2657117,"lng":-97.7439832,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJAWPLQgi1RIYRZUsZxtASSpE","n":"Patagonia","lat":30.2659645,"lng":-97.7438133,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJP5drpsK1RIYRksb28shp9sQ","n":"Kelly's Corner","lat":30.2671127,"lng":-97.743771,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJafBkzqC1RIYRd6kCkUgKTZY","n":"Puente fotos Austin","lat":30.2640608,"lng":-97.7475312,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJx_s0haq0RIYR9iYotp2My9U","n":"Economic Growth and Redevelopment Services Offices","lat":30.2648963,"lng":-97.747196,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJ1fWp49S1RIYRK1CkyZEfzEo","n":"3Ten Austin City Limits","lat":30.2652971,"lng":-97.7471929,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJeVE-Jwa1RIYR1RGVPeiGij4","n":"Farm-A","lat":30.2642296,"lng":-97.7467687,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"unknown","ramp":"unknown"}},
+{"id":"ChIJWUqUsQi1RIYRbdK_eUQK0As","n":"Austin City Channel 6","lat":30.2649532,"lng":-97.7467873,"t":"est","f":{"signage":"unknown","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"ChIJAQBAygi1RIYRHy2_0_5L5m0","n":"Blue Room","lat":30.2653727,"lng":-97.7467933,"t":"est","f":{"signage":"checked","hardware":"unknown","handrails":"checked","ramp":"unknown"}},
+{"id":"door-01","n":"DeSano Pizzeria Napoletana","lat":30.266248,"lng":-97.74586,"t":"scan","f":{"step_free":"present","ramp":"checked","handrails":"checked","button":"checked","hardware":"present","approach":"present","signage":"checked","width":"unknown"}},
+{"id":"door-02","n":"CardVault by Tom Brady","lat":30.265746,"lng":-97.74613,"t":"scan","f":{"step_free":"present","ramp":"checked","handrails":"checked","button":"checked","hardware":"present","approach":"present","signage":"checked","width":"unknown"}},
+{"id":"door-03","n":"Which Wich","lat":30.265711,"lng":-97.745976,"t":"scan","f":{"step_free":"present","ramp":"checked","handrails":"checked","button":"checked","hardware":"checked","approach":"present","signage":"checked","width":"unknown"}},
+{"id":"door-04","n":"Royal Blue Grocery","lat":30.265689,"lng":-97.745879,"t":"scan","f":{"step_free":"present","ramp":"checked","handrails":"checked","button":"checked","hardware":"present","approach":"present","signage":"checked","width":"present"}},
+{"id":"door-05","n":"Cathy's Cleaners and Alterations","lat":30.265655,"lng":-97.745755,"t":"scan","f":{"step_free":"present","ramp":"checked","handrails":"checked","button":"checked","hardware":"present","approach":"present","signage":"checked","width":"unknown"}},
+{"id":"door-06","n":"Bill's Oyster","lat":30.265619,"lng":-97.745634,"t":"scan","f":{"step_free":"present","ramp":"checked","handrails":"checked","button":"checked","hardware":"present","approach":"present","signage":"checked","width":"unknown"}},
+{"id":"door-07","n":"RedFarm","lat":30.265541,"lng":-97.745391,"t":"scan","f":{"step_free":"present","ramp":"checked","handrails":"checked","button":"checked","hardware":"present","approach":"present","signage":"checked","width":"unknown"}},
+{"id":"door-08","n":"SEV Laser","lat":30.265351,"lng":-97.745454,"t":"scan","f":{"step_free":"checked","ramp":"present","handrails":"present","button":"checked","hardware":"present","approach":"present","signage":"checked","width":"present"}},
+{"id":"door-09","n":"Austin Transit Partnership","lat":30.26493,"lng":-97.745192,"t":"scan","f":{"step_free":"checked","ramp":"unknown","handrails":"present","button":"unknown","hardware":"present","approach":"checked","signage":"checked","width":"unknown"}},
+{"id":"door-10","n":"Sweetgreen","lat":30.264887,"lng":-97.745632,"t":"scan","f":{"step_free":"present","ramp":"checked","handrails":"checked","button":"unknown","hardware":"present","approach":"present","signage":"present","width":"present"}},
+{"id":"door-11","n":"Jo's Coffee (Downtown)","lat":30.265013,"lng":-97.746096,"t":"owner","f":{"step_free":"checked","ramp":"unknown","handrails":"present","button":"checked","hardware":"unknown","approach":"present","signage":"checked","width":"unknown"}},
+{"id":"door-12","n":"The Ashton (Ashton Austin residential tower)","lat":30.263882,"lng":-97.74537,"t":"scan","f":{"step_free":"present","ramp":"checked","handrails":"checked","button":"checked","hardware":"present","approach":"present","signage":"unknown","width":"present"}}
+];
+
+const BBOX = {lat0:30.2625, lat1:30.2677, lng0:-97.7476, lng1:-97.7437};
+const PAD = 22;
+function proj(lat,lng,W,H,pad,V){
+  const x = pad + (lng-V.lng0)/(V.lng1-V.lng0)*(W-2*pad);
+  const y = pad + (1-(lat-V.lat0)/(V.lat1-V.lat0))*(H-2*pad);
+  return [x,y];
+}
+
+const PERSONAS = {
+  none:      {label:'None', crit:[]},
+  wheelchair:{label:'Wheelchair', crit:['step_free','ramp','width']},
+  cane:      {label:'Cane or walker', crit:['step_free','handrails']},
+  lowvision: {label:'Low vision', crit:['signage','approach']},
+  grip:      {label:'Limited grip', crit:['hardware','button']},
+};
+function matchOf(p, key){
+  const crit = PERSONAS[key] ? PERSONAS[key].crit : [];
+  if(!crit.length) return null;
+  let sat=0;
+  for(const ck of crit){
+    let ok = p.f[ck]==='present';
+    if(ck==='ramp' && p.f.step_free==='present') ok = true;
+    if(ok) sat++;
+  }
+  return {state: sat===crit.length ? 'good' : sat>0 ? 'partial' : 'unknown', sat, total:crit.length};
+}
+
+/* =====================================================================
+   2 · the pin hierarchy — lifted verbatim from design/map-hierarchy.html.
+   Nothing here is edited. The ground has to work under these, not the
+   other way round.
+   ===================================================================== */
+const LEVEL = {
+  owner:{rank:3, size:40, r:20, tier:'Owner-confirmed', level:1},
+  scan: {rank:2, size:30, r:15, tier:'Scanned on-site', level:2},
+  est:  {rank:1, size:14, r:7,  tier:'Estimated',       level:3},
+};
+const TEAR = 'M18 41.5C13.9 34.7 5.5 27.2 5.5 15.8a12.5 12.5 0 1125 0C30.5 27.2 22.1 34.7 18 41.5Z';
+const GL = {
+  person:'<path d="M12 5.2a2.7 2.7 0 110 5.4 2.7 2.7 0 010-5.4zM6.7 18.2c.7-3 2.8-4.6 5.3-4.6s4.6 1.6 5.3 4.6" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"/>',
+  store:'<path d="M5.5 10.5v7h13v-7M4 7l1.6-2.8h12.8L20 7c0 1.3-.9 2.3-2.1 2.3-1 0-1.9-.7-2.1-1.7-.2 1-1.1 1.7-2.1 1.7h-3.4c-1 0-1.9-.7-2.1-1.7-.2 1-1.1 1.7-2.1 1.7C4.9 9.3 4 8.3 4 7zM10 17.5v-4h4v4" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>',
+};
+function markerSVG(tier, size, o){
+  o = o || {};
+  const VB = 76, C = VB/2;
+  const EST_R = 5.6, EST_SW = 2.2;
+  const k = (tier==='est' && !o.full) ? size/(2*EST_R+EST_SW) : size/36;
+  const w = VB*k;
+  const rings = (radius) => {
+    let s='';
+    if(o.selected) s += '<circle cx="'+C+'" cy="'+C+'" r="'+(radius+7)+'" class="sel-halo" stroke-width="3.4" opacity=".55"/>';
+    if(o.match==='good')    s += '<circle cx="'+C+'" cy="'+C+'" r="'+(radius+3.4)+'" class="match-good" fill="none" stroke-width="3.4"/>';
+    if(o.match==='partial') s += '<circle cx="'+C+'" cy="'+C+'" r="'+(radius+3.4)+'" class="match-part" fill="none" stroke-width="3" stroke-dasharray="6 4.5"/>';
+    return s;
+  };
+  if(tier==='est' && !o.full){
+    return '<svg width="'+w+'" height="'+w+'" viewBox="0 0 '+VB+' '+VB+'" aria-hidden="true" focusable="false">'
+      + rings(EST_R)
+      + '<circle cx="'+C+'" cy="'+C+'" r="'+EST_R+'" class="ring" stroke-width="'+EST_SW+'" stroke-dasharray="2.35 2.05"/></svg>';
+  }
+  const tx = C-18, ty = C-22;
+  let inner;
+  if(tier==='owner'){
+    inner = '<path d="'+TEAR+'" class="body" stroke-width="2" stroke-linejoin="round"/>'
+      + '<g transform="translate(6.6 4.8) scale(.95)">'+GL.store+'</g>'
+      + '<circle cx="28.5" cy="26.5" r="6.4" class="badge" stroke-width="2"/>'
+      + '<path d="M25.7 26.5l2 2 3.5-3.9" fill="none" stroke="#fff" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>';
+  } else {
+    inner = '<path d="'+TEAR+'" class="body" stroke-width="2.2" stroke-linejoin="round"/>'
+      + '<g transform="translate(8.4 6.2) scale(.8)">'+GL.person+'</g>';
+  }
+  return '<svg width="'+w+'" height="'+w+'" viewBox="0 0 '+VB+' '+VB+'" aria-hidden="true" focusable="false">'
+    + '<circle cx="'+C+'" cy="'+(C-4)+'" r="15.5" class="halo"/>'
+    + rings(17)
+    + '<g transform="translate('+tx+' '+ty+')">'+inner+'</g></svg>';
+}
+function clusterDiscHTML(n){
+  const d = n>=10 ? 40 : 34, f = n>=10 ? 13 : 14;
+  return '<span class="disc" style="width:'+d+'px;height:'+d+'px;font-size:'+f+'px" aria-hidden="true">'+n+'</span>';
+}
+function overlapFrac(x1,y1,r1,x2,y2,r2){
+  const d = Math.hypot(x1-x2, y1-y2);
+  if(d >= r1+r2) return 0;
+  const rs = Math.min(r1,r2), rl = Math.max(r1,r2);
+  if(d <= rl-rs) return 1;
+  const a1 = rs*rs*Math.acos((d*d + rs*rs - rl*rl)/(2*d*rs));
+  const a2 = rl*rl*Math.acos((d*d + rl*rl - rs*rs)/(2*d*rl));
+  const a3 = .5*Math.sqrt((-d+rs+rl)*(d+rs-rl)*(d-rs+rl)*(d+rs+rl));
+  return (a1+a2-a3) / (Math.PI*rs*rs);
+}
+const DEFAULTS = {overlap:.40, cap:12, spacing:22};
+function layout(cfg){
+  const W = cfg.W, H = cfg.H, V = BBOX;
+  const cx = W/2, cy = H/2;
+  const items = PLACES.map(p=>{
+    const xy = proj(p.lat,p.lng,W,H,PAD,V);
+    const L = LEVEL[p.t];
+    return {p, x:xy[0], y:xy[1], r:L.r, rank: p.id===cfg.selectedId ? 99 : L.rank,
+            dc: Math.hypot(xy[0]-cx, xy[1]-cy), sel: p.id===cfg.selectedId};
+  });
+  const yielded = [];
+  const live = items.slice().sort((a,b)=> b.rank-a.rank || a.dc-b.dc);
+  const placed = [];
+  live.forEach(it=>{
+    if(it.sel){ placed.push(it); return; }
+    let lost = false;
+    for(const q of placed){
+      if(q.rank < it.rank) continue;
+      const thresh = q.rank === it.rank ? Math.min(.95, DEFAULTS.overlap + .10) : DEFAULTS.overlap;
+      if(overlapFrac(it.x,it.y,it.r, q.x,q.y,q.r) > thresh){ lost = true; break; }
+    }
+    if(!lost && it.p.t==='est'){
+      for(const q of placed){
+        if(q.p.t!=='est' || q.sel) continue;
+        if(Math.hypot(it.x-q.x, it.y-q.y) < DEFAULTS.spacing){ lost = true; break; }
+      }
+    }
+    if(lost) yielded.push(it); else placed.push(it);
+  });
+  let fulls = placed.filter(it=>it.p.t!=='est');
+  if(fulls.length > DEFAULTS.cap){
+    const order = fulls.filter(it=>!it.sel).sort((a,b)=> a.rank-b.rank || b.dc-a.dc);
+    let excess = fulls.length - DEFAULTS.cap;
+    while(excess-- > 0 && order.length){
+      const victim = order.shift();
+      placed.splice(placed.indexOf(victim),1);
+      yielded.push(victim);
+    }
+  }
+  const CELL = 60, cells = new Map();
+  yielded.forEach(it=>{
+    const key = Math.floor(it.x/CELL)+','+Math.floor(it.y/CELL);
+    if(!cells.has(key)) cells.set(key,[]);
+    cells.get(key).push(it);
+  });
+  const clusters = [], singles = [];
+  cells.forEach((list,key)=>{
+    if(list.length<2){ singles.push(list[0]); return; }
+    clusters.push({key, members:list, x:0, y:0});
+  });
+  singles.forEach(it=>{
+    let best=null, bd=Infinity;
+    clusters.forEach(c=>{
+      const mx=c.members.reduce((a,e)=>a+e.x,0)/c.members.length;
+      const my=c.members.reduce((a,e)=>a+e.y,0)/c.members.length;
+      const d=Math.hypot(mx-it.x,my-it.y); if(d<bd){bd=d;best=c;}
+    });
+    if(best) best.members.push(it); else placed.push(it);
+  });
+  clusters.forEach(c=>{
+    c.x = c.members.reduce((a,e)=>a+e.x,0)/c.members.length;
+    c.y = c.members.reduce((a,e)=>a+e.y,0)/c.members.length;
+  });
+  const discR = c => (c.members.length>=10 ? 40 : 34)/2 + 2;
+  for(let pass=0; pass<14; pass++){
+    let moved = false;
+    clusters.forEach(c=>{
+      const others = placed.map(q=>({x:q.x,y:q.y,r:q.r}))
+        .concat(clusters.filter(o=>o!==c).map(o=>({x:o.x,y:o.y,r:discR(o)})));
+      others.forEach(q=>{
+        const need = discR(c) + q.r + 3;
+        let dx=c.x-q.x, dy=c.y-q.y, d=Math.hypot(dx,dy);
+        if(d >= need) return;
+        if(d < .01){ dx=1; dy=0; d=1; }
+        c.x += dx/d*(need-d); c.y += dy/d*(need-d); moved = true;
+      });
+      c.x = Math.max(24, Math.min(W-24, c.x));
+      c.y = Math.max(24, Math.min(H-24, c.y));
+    });
+    if(!moved) break;
+  }
+  return {pins: placed, clusters, counted: placed.length + clusters.reduce((a,c)=>a+c.members.length,0)};
+}
+
+/* =====================================================================
+   3 · colour — one source of truth for CSS custom properties, for the
+   SVG fallbacks, and for the measurement tables.
+   ===================================================================== */
+const PALETTES = {
+  today: {name:'Today', t:{
+    ground:'#EDEBFA', block:'#F7F6FE', street:'#FFFFFF', tree:'#AFC2F2', tree2:'#C4D0F6'}},
+
+  paper: {name:'Paper', t:{
+    ground:'#E2DEF2', parcel:'#E9E6F6',
+    s1:'#FFFFFF', s2:'#FCFBFF', s3:'#F8F6FE', s4:'#F2EFFB', casing:'#DEDAEE',
+    b1:'#FEFDFF', b2:'#FAF9FE', b3:'#F5F3FC', b4:'#F0EDF9',
+    shade:'#DEDAEE', can:'#DCE3F0', can2:'#E9EDF7', plaza:'#F5EFE4', label:'#413C5E'}},
+
+  terrain: {name:'Terrain', t:{
+    ground:'#EFE8DA', parcel:'#EBE4D4',
+    s1:'#FFFDF8', s2:'#FCF9F2', s3:'#F7F3EA', s4:'#F0EADD', casing:'#E2DDCF',
+    b1:'#FFFCF5', b2:'#FAF5EC', b3:'#F3F0FA', b4:'#EDEAF6', b5:'#F6F1E5',
+    shade:'#E2DDCF', can:'#D9E2D6', can2:'#E8EEE4', plaza:'#F8EACD', label:'#4A4030'}},
+
+  relief: {name:'Relief', t:{
+    ground:'#E1DEEC', parcel:'#E6E3F0',
+    s1:'#FFFFFF', s2:'#FBFAFE', s3:'#F5F3FB', s4:'#EFEDF7', casing:'#DEDAEE',
+    b1:'#FDFCFF', b2:'#F9F7FD', b3:'#F4F2FB', b4:'#EFECF8', b5:'#E9E6F4',
+    shade:'#DEDAEE', shade2:'#E4E1EE', lit:'#FFFFFF',
+    can:'#DEE3F0', can2:'#EAEEF7', plaza:'#F4F1E9', label:'#3E3959'}},
+
+  districts: {name:'Districts', t:{
+    ground:'#EAE8F4', parcel:'#EFEDF7',
+    s1:'#FFFFFF', s2:'#FCFCFE', s3:'#F7F6FC', s4:'#F1F0F8', casing:'#DEDBEC',
+    w1:'#EBE5F9', w2:'#F8EEDB', w3:'#E4EDE1', w4:'#E1EAF6',
+    b1:'#F9F6FE', b2:'#FEFAF2', b3:'#F5F9F3', b4:'#F4F8FD', b5:'#FCFBFE',
+    shade:'#DEDBEC', can:'#D8E4D6', can2:'#E8F0E6', plaza:'#FAF2E2', label:'#3F3A5C'}},
+
+  hc: {name:'High contrast', t:{
+    ground:'#FFFFFF', block:'#FFFFFF',
+    s1:'#EDEDF1', s2:'#F3F3F6', s3:'#F6F6F9', s4:'#F9F9FB',
+    line:'#403B58', label:'#1B1830'}},
+};
+
+/* emit the custom properties from the same objects */
+(function(){
+  let css = ':root{';
+  Object.keys(PALETTES).forEach(vk=>{
+    const t = PALETTES[vk].t;
+    Object.keys(t).forEach(k=>{ css += '--g-'+vk+'-'+k+':'+t[k]+';'; });
+  });
+  css += '}';
+  const el = document.createElement('style');
+  el.textContent = css;
+  document.head.appendChild(el);
+})();
+
+/* var(--token, #hex) — the hex fallback is the palette's own value, never a second guess */
+function P(vk, key){ return 'var(--g-'+vk+'-'+key+', '+PALETTES[vk].t[key]+')'; }
+
+/* ---------- colour maths, same formulae as design/pins-and-icons.html ---------- */
+function lum(hex){
+  const n = parseInt(hex.slice(1),16);
+  const c = [(n>>16)&255,(n>>8)&255,n&255].map(function(v){
+    v/=255; return v<=.04045 ? v/12.92 : Math.pow((v+.055)/1.055, 2.4);
+  });
+  return .2126*c[0] + .7152*c[1] + .0722*c[2];
+}
+function ratio(a,b){
+  let l1 = lum(a), l2 = lum(b);
+  if(l2>l1){ const t=l1; l1=l2; l2=t; }
+  return (l1+.05)/(l2+.05);
+}
+function chroma(hex){
+  const n = parseInt(hex.slice(1),16);
+  const r=(n>>16)&255, g=(n>>8)&255, b=n&255;
+  return Math.max(r,g,b)-Math.min(r,g,b);
+}
+const fmt = v => v.toFixed(2)+':1';
+
+/* The three pins and their identifying boundaries, exactly as the marker CSS paints them. */
+const PINS = [
+  {k:'est',   name:'Estimated',       edge:'#3F79DC', edgeName:'dashed ring --blue-edge #3F79DC', halo:false},
+  {k:'scan',  name:'Scanned on-site', edge:'#8A5A00', edgeName:'rim --marigold-edge #8A5A00',     halo:true},
+  {k:'owner', name:'Owner-confirmed', edge:'#7053C5', edgeName:'fill --purple #7053C5',           halo:true},
+];
+const MATCH_RING = '#1B7A3D';
+
+/* =====================================================================
+   4 · the ground — built as a data model first, so the same array both
+   serialises to SVG and answers "which tone is under this pin?".
+   ===================================================================== */
+
+/* Derived road hierarchy. The committed data carries widths 11–15, which is
+   one width with rounding noise, and labels five of eight lines. */
+const SW    = {primary:16, secondary:11, minor:8, alley:4.5};
+const SW_HC = {primary:14, secondary:10, minor:8, alley:5};
+const CURB  = {primary:6, secondary:4, minor:3.5, alley:1.2};
+
+const STREETS_H = [
+  {lat:30.26320, cls:'primary',   label:'W CESAR CHAVEZ ST', lx:.30},
+  {lat:30.26410, cls:'alley',     label:null},
+  {lat:30.26500, cls:'secondary', label:'W 2ND ST', lx:.42},
+  {lat:30.26546, cls:'alley',     label:null},
+  {lat:30.26592, cls:'secondary', label:'W 3RD ST', lx:.42},
+  {lat:30.26638, cls:'alley',     label:null},
+  {lat:30.26685, cls:'secondary', label:'W 4TH ST', lx:.42},
+];
+const STREETS_V = [
+  {lng:-97.74715, cls:'primary',   label:'GUADALUPE ST', ly:.17},
+  {lng:-97.74620, cls:'primary',   label:'LAVACA ST',    ly:.70},
+  {lng:-97.74575, cls:'alley',     label:null},
+  {lng:-97.74530, cls:'minor',     label:'COLORADO ST',  ly:.24},
+  {lng:-97.74430, cls:'primary',   label:'CONGRESS AVE', ly:.80},
+];
+/* Streets that carry a tree band, and on which side. Deliberately sparse — a
+   band on every frontage reads as a green stripe glued to every road. */
+const TREED_V = {'-97.74430':'both', '-97.74715':'east'};
+const TREED_H = {'30.26685':'south'};
+const DERIVED_ROWS = [
+  ['W Cesar Chavez St','13 px, <b>unlabelled</b>','Primary',16,'Southernmost and already the widest east–west line. By position in the Austin grid it is Cesar Chavez, a true arterial. Label added.'],
+  ['W 2nd / 3rd / 4th St','12 px, labelled','Secondary',11,'Numbered cross streets. The spec’s own rule: named avenues primary, numbered streets secondary.'],
+  ['Guadalupe St','11 px, <b>unlabelled</b>','Primary',16,'One block west of Lavaca. Guadalupe and Lavaca are downtown Austin’s one-way arterial pair. Label added.'],
+  ['Lavaca St','11 px, labelled','Primary',16,'The other half of that pair.'],
+  ['Colorado St','11 px, labelled','Minor',8,'A named street but not an arterial — the one place the "named = primary" shortcut had to be overruled by the city.'],
+  ['Congress Ave','15 px, <b>unlabelled</b>','Primary',16,'Already the widest line in the data, and it is Congress. Label added.'],
+  ['Four service alleys','<b>not in the data</b>','Alley',4.5,'Three east–west, one north–south, placed mid-block by grid arithmetic. Derived, not surveyed.'],
+];
+
+function mulberry(seed){
+  let a = seed >>> 0;
+  return function(){
+    a += 0x6D2B79F5;
+    let t = a;
+    t = Math.imul(t ^ (t>>>15), t | 1);
+    t ^= t + Math.imul(t ^ (t>>>7), t | 61);
+    return ((t ^ (t>>>14)) >>> 0) / 4294967296;
+  };
+}
+
+/* Which blocks carry which landcover / district. Keyed by (row, col) in the
+   derived grid, counted from the top-left of the frame. Hand-placed against the
+   real neighbourhood: Republic Square sits off the north-west corner, Congress
+   is the retail spine, the Guadalupe/Lavaca corridor is civic. */
+const LANDCOVER = {
+  /* keys are (row,col) in the derived grid, row 0 = north of W 4th, col 0 = west of Guadalupe */
+  '0,0':'park', '0,1':'park', '2,1':'plaza', '4,4':'plaza', '6,3':'plaza', '3,2':'court', '5,5':'court'
+};
+/* by column: civic along Guadalupe/Lavaca, transit at Republic Square, retail down to Congress */
+const DISTRICT = {0:'w1', 1:'w1', 2:'w4', 3:'w4', 4:'w2', 5:'w2'};
+
+/* Buildings are drawn identically in all four variants; only the tones and the
+   light change. One seed, one geometry, so the comparison is fair. */
+const GEO_SEED = 20250905;
+
+function splitRect(r, depth, rnd, out){
+  const long = Math.max(r.w, r.h);
+  if(depth >= 3 || long < 36 || (r.w < 26 && r.h < 26)){ out.push(r); return; }
+  const horiz = r.w >= r.h;
+  const t = .36 + rnd()*.28;
+  if(horiz){
+    const a = Math.round(r.w*t);
+    if(a < 12 || r.w-a < 12){ out.push(r); return; }
+    splitRect({x:r.x, y:r.y, w:a, h:r.h}, depth+1, rnd, out);
+    splitRect({x:r.x+a, y:r.y, w:r.w-a, h:r.h}, depth+1, rnd, out);
+  } else {
+    const a = Math.round(r.h*t);
+    if(a < 12 || r.h-a < 12){ out.push(r); return; }
+    splitRect({x:r.x, y:r.y, w:r.w, h:a}, depth+1, rnd, out);
+    splitRect({x:r.x, y:r.y+a, w:r.w, h:r.h-a}, depth+1, rnd, out);
+  }
+}
+
+/* Returns {shapes, labels, stats}. shapes are painted in array order; toneAt()
+   walks the array backwards, which is exactly what the renderer paints. */
+function buildGround(W, H, vk){
+  const hc = vk === 'hc';
+  const V = BBOX;
+  const widths = hc ? SW_HC : SW;
+  const shapes = [], labels = [];
+  const push = (s) => { shapes.push(s); return s; };
+
+  const hs = STREETS_H.map(s => ({...s, y: proj(s.lat, V.lng0, W, H, PAD, V)[1], w: widths[s.cls]}))
+                      .sort((a,b)=>a.y-b.y);
+  const vs = STREETS_V.map(s => ({...s, x: proj(V.lat0, s.lng, W, H, PAD, V)[0], w: widths[s.cls]}))
+                      .sort((a,b)=>a.x-b.x);
+  const rowEdges = [{y:-16, w:0, cls:'frame'}].concat(hs).concat([{y:H+16, w:0, cls:'frame'}]);
+  const colEdges = [{x:-16, w:0, cls:'frame'}].concat(vs).concat([{x:W+16, w:0, cls:'frame'}]);
+
+  /* --- 0 · the ground itself --- */
+  push({t:'rect', x:0, y:0, w:W, h:H, key:'ground'});
+
+  /* --- 1 · blocks and their buildings --- */
+  /* Two independent streams. `rnd` decides geometry and is consumed identically by
+     every variant, so all four share one city. `trnd` decides tone, which differs
+     per variant — keeping it separate is what makes the geometry claim true. */
+  const rnd  = mulberry(GEO_SEED);
+  const trnd = mulberry(GEO_SEED + 11);
+  const SUN = {dx: hc ? 0 : (vk==='relief' ? 3 : 2.2), dy: hc ? 0 : (vk==='relief' ? 3 : 2.2)};
+  let footprints = 0;
+  const openSpaces = [];
+
+  for(let i=0;i<rowEdges.length-1;i++){
+    for(let j=0;j<colEdges.length-1;j++){
+      const m0 = CURB[rowEdges[i].cls]   || 0, m1 = CURB[rowEdges[i+1].cls] || 0;
+      const n0 = CURB[colEdges[j].cls]   || 0, n1 = CURB[colEdges[j+1].cls] || 0;
+      const y0 = rowEdges[i].y   + rowEdges[i].w/2   + m0;
+      const y1 = rowEdges[i+1].y - rowEdges[i+1].w/2 - m1;
+      const x0 = colEdges[j].x   + colEdges[j].w/2   + n0;
+      const x1 = colEdges[j+1].x - colEdges[j+1].w/2 - n1;
+      const cw = x1-x0, ch = y1-y0;
+      if(cw < 12 || ch < 12) continue;
+      const cell = {x:x0, y:y0, w:cw, h:ch};
+      const cover = LANDCOVER[i+','+j];
+
+      if(hc){
+        /* High contrast simplifies: one block per parcel, hard outline, nothing else. */
+        push({t:'rect', x:x0, y:y0, w:cw, h:ch, rx:2, key:'block', stroke:'line', sw:1.25});
+        continue;
+      }
+
+      /* the parcel field the buildings sit in (yards, service, surface lots) */
+      const parcelKey = (vk==='districts')
+        ? (cover==='park' ? 'w3' : (DISTRICT[j] || 'parcel'))
+        : (cover==='park' ? 'can2' : 'parcel');
+      push({t:'rect', x:x0, y:y0, w:cw, h:ch, rx:4, key:parcelKey});
+
+      if(cover === 'park'){
+        openSpaces.push({x:x0, y:y0, w:cw, h:ch, kind:'park'});
+        continue;                       /* a park has no footprints */
+      }
+
+      const leaves = [];
+      splitRect(cell, 0, rnd, leaves);
+      const bodies = [];
+      leaves.forEach(L=>{
+        const g = 1.1;                  /* party-wall gap: buildings, not one slab */
+        const r = {x:L.x+g, y:L.y+g, w:L.w-2*g, h:L.h-2*g};
+        if(r.w < 7 || r.h < 7) return;
+        const roll = rnd();
+        if(cover === 'plaza' && roll < .55){ openSpaces.push({...r, kind:'plaza'}); return; }
+        if(cover === 'court' && roll < .40){ openSpaces.push({...r, kind:'court'}); return; }
+        if(roll > .935){ openSpaces.push({...r, kind:'court'}); return; }  /* the odd courtyard */
+        let tone;
+        if(vk === 'districts'){
+          const d = DISTRICT[j];
+          tone = d==='w1' ? 'b1' : d==='w2' ? 'b2' : d==='w4' ? 'b4' : 'b5';
+          if(trnd() > .72) tone = 'b5';
+        } else if(vk === 'relief'){
+          /* the ramp is keyed to footprint area: bigger mass, brighter top face */
+          const a = r.w*r.h;
+          tone = a > 2600 ? 'b1' : a > 1700 ? 'b2' : a > 1100 ? 'b3' : a > 620 ? 'b4' : 'b5';
+        } else if(vk === 'terrain'){
+          tone = ['b1','b2','b3','b4','b5'][Math.floor(trnd()*5)];
+        } else {
+          tone = ['b1','b2','b3','b4'][Math.floor(trnd()*4)];
+        }
+        bodies.push({r, tone});
+      });
+      /* shadow pass, then body pass: one light direction, and the gaps between
+         buildings become shadow lines rather than gaps */
+      if(SUN.dx){
+        /* Relief gets a two-step falloff — an outer pale step then the shadow proper.
+           Two flat rects, not a blur: the same read at a fraction of the cost. */
+        if(vk === 'relief')
+          bodies.forEach(b=>push({t:'rect', x:b.r.x+SUN.dx+2, y:b.r.y+SUN.dy+2, w:b.r.w, h:b.r.h, rx:1.5, key:'shade2'}));
+        bodies.forEach(b=>push({t:'rect', x:b.r.x+SUN.dx, y:b.r.y+SUN.dy, w:b.r.w, h:b.r.h, rx:1.5, key:'shade'}));
+      }
+      bodies.forEach(b=>{
+        push({t:'rect', x:b.r.x, y:b.r.y, w:b.r.w, h:b.r.h, rx:1.5, key:b.tone});
+        footprints++;
+      });
+      if(vk === 'relief'){
+        bodies.forEach(b=>push({t:'path', d:'M'+f1(b.r.x)+' '+f1(b.r.y+b.r.h)+'L'+f1(b.r.x)+' '+f1(b.r.y)+'L'+f1(b.r.x+b.r.w)+' '+f1(b.r.y),
+                                key:'lit', asStroke:true, sw:1.1}));
+      }
+    }
+  }
+
+  /* --- 2 · open space: plazas, courtyards, the park --- */
+  if(!hc){
+    openSpaces.forEach(o=>{
+      const key = o.kind==='park' ? (vk==='districts'?'w3':'can2') : o.kind==='plaza' ? 'plaza' : 'parcel';
+      push({t:'rect', x:o.x, y:o.y, w:o.w, h:o.h, rx:3, key});
+    });
+  }
+
+  /* --- 3 · streets, casing first so the road reads as a carved channel --- */
+  const streetKey = {primary:'s1', secondary:'s2', minor:'s3', alley:'s4'};
+  hs.forEach(st=>{
+    if(!hc && st.cls !== 'alley')
+      push({t:'rect', x:-6, y:st.y-st.w/2-1, w:W+12, h:st.w+2, key:'casing'});
+    push({t:'rect', x:-6, y:st.y-st.w/2, w:W+12, h:st.w, key:streetKey[st.cls]});
+  });
+  vs.forEach(st=>{
+    if(!hc && st.cls !== 'alley')
+      push({t:'rect', x:st.x-st.w/2-1, y:-6, w:st.w+2, h:H+12, key:'casing'});
+    push({t:'rect', x:st.x-st.w/2, y:-6, w:st.w, h:H+12, key:streetKey[st.cls]});
+  });
+
+  /* --- 4 · tree canopy, as areas rather than scattered dots ---
+     Rosettes are always four or more overlapping circles, never a lone disc, so
+     nothing on the ground can be mistaken for a marker. Any rosette landing
+     within 26 px of a full pin is dropped, so canopy never sits in a halo. */
+  let canopyGroups = 0;
+  if(!hc){
+    const fullPins = PLACES.filter(p=>p.t!=='est').map(p=>{
+      const xy = proj(p.lat, p.lng, W, H, PAD, BBOX);
+      return {x:xy[0], y:xy[1]};
+    });
+    const clear = (x,y,r) => !fullPins.some(q=>Math.hypot(q.x-x, q.y-y) < 26+(r||0));
+
+    /* (a) the grove: a filled area with a scalloped canopy over it — an area,
+           not a sprinkle, and never a lone disc */
+    openSpaces.filter(o=>o.kind==='park').forEach(o=>{
+      push({t:'rect', x:o.x, y:o.y, w:o.w, h:o.h, rx:6, key:(vk==='districts'?'w3':'can2')});
+      const pitch = 8, r = 5.6;
+      for(let y=o.y+6; y<=o.y+o.h-4; y+=pitch)
+        for(let x=o.x+6; x<=o.x+o.w-4; x+=pitch){
+          if(!clear(x,y,r)) continue;
+          push({t:'circle', cx:x, cy:y, r, key:'can'}); canopyGroups++;
+        }
+    });
+
+    /* (b) street-tree bands: a continuous strip with a scalloped edge, sitting
+           in the kerb zone. Reads as a row of canopy, never as dots. */
+    const band = (x0,y0,w,h,vert)=>{
+      push({t:'rect', x:x0, y:y0, w, h, rx:3.5, key:'can2'});
+      const pitch = 7.5, r = 4.6;
+      if(vert){
+        const cx = x0 + w/2;
+        for(let y=y0+6; y<y0+h-4; y+=pitch){
+          if(!clear(cx,y,r)) continue;
+          push({t:'circle', cx, cy:y, r, key:'can'}); canopyGroups++;
+        }
+      } else {
+        const cy = y0 + h/2;
+        for(let x=x0+6; x<x0+w-4; x+=pitch){
+          if(!clear(x,cy,r)) continue;
+          push({t:'circle', cx:x, cy, r, key:'can'}); canopyGroups++;
+        }
+      }
+    };
+    const BW = 9;
+    vs.forEach(st=>{
+      const side = TREED_V[st.lng.toFixed(5)];
+      if(!side) return;
+      if(side==='both' || side==='west') band(st.x - st.w/2 - BW - 1, 8, BW, H-16, true);
+      if(side==='both' || side==='east') band(st.x + st.w/2 + 1, 8, BW, H-16, true);
+    });
+    hs.forEach(st=>{
+      const side = TREED_H[st.lat.toFixed(5)];
+      if(!side) return;
+      if(side==='south') band(8, st.y + st.w/2 + 1, W-16, BW, false);
+      if(side==='north') band(8, st.y - st.w/2 - BW - 1, W-16, BW, false);
+    });
+
+    /* (c) courtyard trees — three lobes minimum, so it is a clump not a disc */
+    openSpaces.filter(o=>o.kind==='court' && o.w>20 && o.h>20).forEach(o=>{
+      const x = o.x+o.w/2, y = o.y+o.h/2;
+      if(!clear(x,y,5)) return;
+      [[0,0,4.6],[-3.4,1.4,3.6],[3.2,1.0,3.4],[0,-3.2,3.4]]
+        .forEach(l=>push({t:'circle', cx:x+l[0], cy:y+l[1], r:l[2], key:'can'}));
+      canopyGroups++;
+    });
+  }
+
+  /* --- 5 · street labels, drawn last, with a paint-order halo (no filter) --- */
+  const LBL = {primary:{size:10.8, op:1}, secondary:{size:10, op:.94}, minor:{size:9.4, op:.9}};
+  hs.forEach(st=>{ if(st.label) labels.push({
+    text:st.label, x:W*(st.lx||.3), y:st.y+3.6, rot:0, cls:st.cls, ...LBL[st.cls]}); });
+  vs.forEach(st=>{ if(st.label) labels.push({
+    text:st.label, x:st.x, y:H*(st.ly||.8), rot:-90, cls:st.cls, ...LBL[st.cls]}); });
+
+  return {shapes, labels, stats:{footprints, canopyGroups, nodes: shapes.length + labels.length}};
+}
+
+function f1(v){ return Math.round(v*10)/10; }
+
+/* the original ground, lifted verbatim from map-hierarchy.html, as the control */
+function buildToday(W,H){
+  const V = BBOX, shapes = [], labels = [];
+  const HS = [{lat:30.26320,w:13,label:null},{lat:30.26500,w:12,label:'W 2ND ST'},
+              {lat:30.26592,w:12,label:'W 3RD ST'},{lat:30.26685,w:12,label:'W 4TH ST'}];
+  const VS = [{lng:-97.74715,w:11,label:null},{lng:-97.74620,w:11,label:'LAVACA ST'},
+              {lng:-97.74530,w:11,label:'COLORADO ST'},{lng:-97.74430,w:15,label:null}];
+  shapes.push({t:'rect',x:0,y:0,w:W,h:H,key:'ground'});
+  const hy = HS.map(st=>proj(st.lat,V.lng0,W,H,PAD,V)[1]);
+  const vx = VS.map(st=>proj(V.lat0,st.lng,W,H,PAD,V)[0]);
+  const ys=[-8,...hy,H+8].sort((a,b)=>a-b), xs=[-8,...vx,W+8].sort((a,b)=>a-b);
+  for(let i=0;i<ys.length-1;i++)for(let j=0;j<xs.length-1;j++){
+    const x0=xs[j]+9,y0=ys[i]+9,bw=xs[j+1]-xs[j]-18,bh=ys[i+1]-ys[i]-18;
+    if(bw>14&&bh>14) shapes.push({t:'rect',x:x0,y:y0,w:bw,h:bh,rx:7,key:'block'});
+  }
+  HS.forEach((st,i)=>shapes.push({t:'rect',x:-4,y:hy[i]-st.w/2,w:W+8,h:st.w,key:'street'}));
+  VS.forEach((st,i)=>shapes.push({t:'rect',x:vx[i]-st.w/2,y:-4,w:st.w,h:H+8,key:'street'}));
+  let seed=7; const rnd=()=> (seed=(seed*16807)%2147483647)/2147483647;
+  for(let t=0;t<44;t++){
+    const x=rnd()*W, y=rnd()*H;
+    if(hy.some(v=>Math.abs(y-v)<12) || vx.some(v=>Math.abs(x-v)<12)) continue;
+    shapes.push({t:'circle',cx:x,cy:y,r:2.4,key:'tree'});
+    shapes.push({t:'circle',cx:x+4.5,cy:y+2.5,r:1.7,key:'tree2'});
+  }
+  HS.forEach((st,i)=>{ if(st.label) labels.push({text:st.label,x:W*.30,y:hy[i]+3.6,rot:0,size:10.5,cls:'secondary'}); });
+  VS.forEach((st,i)=>{ if(st.label) labels.push({text:st.label,x:vx[i],y:H*.80,rot:-90,size:10.5,cls:'secondary'}); });
+  return {shapes, labels, stats:{footprints:0, canopyGroups:0, nodes:shapes.length+labels.length}};
+}
+
+/* ---------- serialise ---------- */
+function serialise(model, W, H, vk){
+  const c = k => P(vk, k);
+  let s = '<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" aria-hidden="true" focusable="false" '
+        + 'style="display:block" shape-rendering="geometricPrecision">';
+  model.shapes.forEach(sh=>{
+    if(sh.t === 'rect'){
+      s += '<rect x="'+f1(sh.x)+'" y="'+f1(sh.y)+'" width="'+f1(sh.w)+'" height="'+f1(sh.h)+'"'
+         + (sh.rx ? ' rx="'+sh.rx+'"' : '')
+         + ' fill="'+c(sh.key)+'"'
+         + (sh.stroke ? ' stroke="'+c(sh.stroke)+'" stroke-width="'+(sh.sw||1)+'"' : '')
+         + '/>';
+    } else if(sh.t === 'circle'){
+      s += '<circle cx="'+f1(sh.cx)+'" cy="'+f1(sh.cy)+'" r="'+f1(sh.r)+'" fill="'+c(sh.key)+'"/>';
+    } else if(sh.t === 'path'){
+      s += '<path d="'+sh.d+'" fill="none" stroke="'+c(sh.key)+'" stroke-width="'+(sh.sw||1)+'"/>';
+    }
+  });
+  const labelInk = PALETTES[vk].t.label || '#3F3A5C';
+  const haloTone = vk==='hc' ? '#FFFFFF' : PALETTES[vk].t.s1;
+  model.labels.forEach(L=>{
+    s += '<text x="'+f1(L.x)+'" y="'+f1(L.y)+'"'
+       + (L.rot ? ' transform="rotate('+L.rot+' '+f1(L.x)+' '+f1(L.y)+')" dy="3.5"' : '')
+       + ' text-anchor="middle" font-family="Nunito,system-ui,sans-serif" font-weight="800"'
+       + ' font-size="'+(L.size||10)+'" letter-spacing=".14em"'
+       + ' fill="'+(vk==='hc' ? 'var(--g-hc-label, #1B1830)' : 'var(--g-'+vk+'-label, '+labelInk+')')+'"'
+       + ' opacity="'+(L.op==null?1:L.op)+'"'
+       + ' paint-order="stroke" stroke="'+haloTone+'" stroke-width="3.2" stroke-linejoin="round">'
+       + L.text + '</text>';
+  });
+  return s + '</svg>';
+}
+
+/* ---------- hit-test: which tone is actually under this point ---------- */
+function toneAt(model, x, y){
+  for(let i=model.shapes.length-1;i>=0;i--){
+    const sh = model.shapes[i];
+    if(sh.t === 'rect'){
+      if(x>=sh.x && x<=sh.x+sh.w && y>=sh.y && y<=sh.y+sh.h) return sh.key;
+    } else if(sh.t === 'circle'){
+      if(Math.hypot(x-sh.cx, y-sh.cy) <= sh.r) return sh.key;
+    }
+  }
+  return 'ground';
+}
+
+/* =====================================================================
+   5 · panels
+   ===================================================================== */
+const MODEL_CACHE = {};
+function modelFor(vk, W, H){
+  const key = vk+'|'+W+'|'+H;
+  if(!MODEL_CACHE[key]) MODEL_CACHE[key] = (vk==='today') ? buildToday(W,H) : buildGround(W,H,vk);
+  return MODEL_CACHE[key];
+}
+
+function tierName(t){ return LEVEL[t].tier; }
+function sentence(p, m){
+  let s = p.n + ' — ' + tierName(p.t) + '.';
+  if(m) s += m.state==='good' ? ' Matches all ' + m.total + ' of your needs.'
+          : m.state==='partial' ? ' Matches ' + m.sat + ' of your ' + m.total + ' needs.'
+          : ' We have no evidence yet about your needs here.';
+  return s;
+}
+
+function makePanel(stageEl, tallyEl, cfg){
+  const st = Object.assign({}, cfg);
+  st.W = cfg.W || 390; st.H = cfg.H || 560;
+  stageEl.style.height = st.H+'px';
+  stageEl.style.width  = st.W+'px';
+  stageEl.innerHTML = '<div class="ground"></div><div class="markers"></div>';
+  const groundEl = stageEl.querySelector('.ground');
+  const layerEl  = stageEl.querySelector('.markers');
+
+  /* The ground is serialised ONCE per panel. Selecting a pin repaints only the
+     marker layer — the same cheap contract the shipped map already has. */
+  groundEl.innerHTML = serialise(modelFor(st.variant, st.W, st.H), st.W, st.H, st.variant);
+  if(st.markers === false){ return st; }
+
+  function draw(){
+    const out = layout(st);
+    layerEl.innerHTML = '';
+    const persona = st.persona || 'none';
+    out.pins.forEach(it=>{
+      const p = it.p, m = matchOf(p, persona);
+      const b = document.createElement('button');
+      b.className = 'mk mk-' + p.t + (it.sel ? ' sel' : '');
+      b.style.left = it.x + 'px';
+      b.style.top  = it.y + 'px';
+      b.style.zIndex = it.sel ? 900 : LEVEL[p.t].rank*10;
+      if(m && m.state==='unknown' && !it.sel) b.classList.add('dim');
+      if(st.selectedId && !it.sel && !(m && m.state==='unknown')) b.classList.add('hush');
+      b.innerHTML = '<span class="art">' + markerSVG(p.t, LEVEL[p.t].size, {
+        selected: it.sel,
+        match: m ? (m.state==='good'?'good':m.state==='partial'?'partial':null) : null
+      }) + '</span>';
+      b.setAttribute('aria-label', sentence(p, m));
+      b.addEventListener('click', ()=>{
+        st.selectedId = (st.selectedId===p.id) ? null : p.id;
+        draw();
+      });
+      layerEl.appendChild(b);
+    });
+    out.clusters.forEach(c=>{
+      const b = document.createElement('button');
+      b.className = 'cl';
+      b.style.left = c.x+'px'; b.style.top = c.y+'px';
+      b.style.zIndex = 5;
+      b.innerHTML = clusterDiscHTML(c.members.length);
+      const tiers = {};
+      c.members.forEach(it=>{ tiers[tierName(it.p.t)] = (tiers[tierName(it.p.t)]||0)+1; });
+      const breakdown = Object.entries(tiers).map(([k,v])=>v+' '+k.toLowerCase()).join(', ');
+      b.setAttribute('aria-label', c.members.length+' entrances here ('+breakdown+').');
+      layerEl.appendChild(b);
+    });
+    if(tallyEl){
+      const inCl = out.clusters.reduce((a,c)=>a+c.members.length,0);
+      const fullPins = out.pins.filter(it=>it.p.t!=='est').length;
+      tallyEl.innerHTML = '<span class="ok">'+out.counted+' of '+PLACES.length+' accounted for</span> · '
+        + fullPins+' full pins · ' + (out.pins.length-fullPins)+' estimated rings · '
+        + out.clusters.length+' clusters holding '+inCl;
+    }
+  }
+  st.draw = draw;
+  draw();
+  return st;
+}
+
+/* =====================================================================
+   6 · page build
+   ===================================================================== */
+const VARIANTS = [
+  {vk:'paper', name:'Paper',
+   thesis:'The board’s own ground, done properly: pale lavender paper, three street widths, blocks cut into real footprints in four near-identical tones, one soft south-east edge on every one. Colour arrives only as a whisper — blue in the canopy, warm paper in the plazas. Nothing here is new; everything here is structural.'},
+  {vk:'terrain', name:'Terrain',
+   thesis:'The whole palette at terrain strength. A warm sand ground, sage canopy, marigold-tinted plazas, cool lavender-grey towers among warm putty low-rise, so a block reads as buildings of different eras. The most illustrative of the four, and the one that most obviously answers "use more of the icon colours".'},
+  {vk:'relief', name:'Relief',
+   thesis:'Depth from light alone. One strong north-west sun, a deeper cast shadow, a lit top-and-left edge on every footprint, and a five-step tonal ramp keyed to building mass rather than to chance. Nearly monochrome; all of the interest is in the third dimension.'},
+  {vk:'districts', name:'Districts',
+   thesis:'Colour at area scale rather than object scale. Whole blocks carry a district wash — civic purple along Guadalupe and Lavaca, transit blue at Republic Square, retail marigold down Congress — with footprints two steps lighter than their own wash. A block-sized field can never be confused with a marker halo.'},
+];
+const BARE = [{vk:'today', name:'Today', note:'One street width, one block tone, no light, tree dots scattered at random. Two of those dots break the estimated ring’s contrast.'}]
+  .concat(VARIANTS.map(v=>({vk:v.vk, name:v.name, note:''})));
+
+/* derived-hierarchy table */
+document.querySelector('#derived tbody').innerHTML = DERIVED_ROWS.map(r=>
+  '<tr><td><strong>'+r[0]+'</strong></td><td>'+r[1]+'</td><td>'+r[2]+'</td><td class="n">'+r[3]+' px</td><td>'+r[4]+'</td></tr>'
+).join('');
+
+/* bare strip */
+(function(){
+  const el = document.getElementById('bare');
+  BARE.forEach(b=>{
+    const d = document.createElement('div');
+    d.className = 'chip';
+    d.innerHTML = '<div class="stage"></div><div class="chip-cap">'+b.name
+      + (b.note ? '<small>'+b.note+'</small>' : '<small>&nbsp;</small>')+'</div>';
+    el.appendChild(d);
+    makePanel(d.querySelector('.stage'), null, {variant:b.vk, W:252, H:362, markers:false});
+  });
+})();
+
+/* variant rows */
+(function(){
+  const host = document.getElementById('variants');
+  VARIANTS.forEach((v,i)=>{
+    const sec = document.createElement('section');
+    sec.className = 'variant';
+    sec.innerHTML =
+      '<div class="vhead"><span class="vname">'+(i+1)+' · '+v.name+'</span>'
+      + '<span class="vtag">variant</span></div>'
+      + '<p class="vthesis">'+v.thesis+'</p>'
+      + '<div class="row">'
+      +   '<div class="panel"><div class="panel-title">Default</div>'
+      +     '<div class="panel-sub">All sixty-four places, four-level hierarchy, no profile set.</div>'
+      +     '<div class="stage"></div><div class="tally"></div></div>'
+      +   '<div class="panel"><div class="panel-title">Needs profile · cane or walker</div>'
+      +     '<div class="panel-sub">Matching places hold full opacity and take a match ring; the rest recede to 34% opacity. This is where a busy ground does its damage.</div>'
+      +     '<div class="stage"></div><div class="tally"></div></div>'
+      +   '<div class="panel"><div class="panel-title">High contrast</div>'
+      +     '<div class="panel-sub">Ground simplified, not enriched: one block tone, hard outlines, no shadow, no canopy, no wash. Road hierarchy survives because it is structure, not decoration.</div>'
+      +     '<div class="stage"></div><div class="tally"></div></div>'
+      + '</div>'
+      + '<div class="swatches"></div>'
+      + '<div class="tonetable"></div>';
+    host.appendChild(sec);
+    const stages = sec.querySelectorAll('.stage');
+    const tallies = sec.querySelectorAll('.tally');
+    makePanel(stages[0], tallies[0], {variant:v.vk});
+    makePanel(stages[1], tallies[1], {variant:v.vk, persona:'cane'});
+    makePanel(stages[2], tallies[2], {variant:'hc'});
+
+    /* swatches, with the estimated-ring ratio on every one */
+    const t = PALETTES[v.vk].t;
+    sec.querySelector('.swatches').innerHTML = Object.keys(t).filter(k=>k!=='label').map(k=>{
+      const hex = t[k], r = ratio('#3F79DC', hex);
+      return '<div class="sw"><div class="chipc" style="background:'+hex+'"></div>'
+        + '<div class="meta">'+k+'<span>'+hex+'</span><span>L '+lum(hex).toFixed(3)+' · C '+chroma(hex)+'</span>'
+        + '<span style="color:'+(r>=3?'#0F5228':'#7A1414')+'">est '+fmt(r)+'</span></div></div>';
+    }).join('');
+
+    /* per-variant landed-tone table */
+    sec.querySelector('.tonetable').innerHTML = variantTable(v.vk);
+  });
+})();
+
+/* ---------- measurement ---------- */
+function sample(vk){
+  const W = 390, H = 560;
+  const model = modelFor(vk, W, H);
+  const tally = {est:{}, scan:{}, owner:{}};
+  PLACES.forEach(p=>{
+    const xy = proj(p.lat, p.lng, W, H, PAD, BBOX);
+    if(xy[0]<0 || xy[0]>W || xy[1]<0 || xy[1]>H) return;
+    const key = toneAt(model, xy[0], xy[1]);
+    tally[p.t][key] = (tally[p.t][key]||0)+1;
+  });
+  return tally;
+}
+function modal(obj){
+  let best=null, n=0, total=0;
+  Object.keys(obj).forEach(k=>{ total+=obj[k]; if(obj[k]>n){n=obj[k];best=k;} });
+  return {key:best, n, total};
+}
+/* the darkest tone in a variant that a marker could land on — every painted
+   area tone, excluding hairline strokes, which are not a background */
+function worstTone(vk){
+  const t = PALETTES[vk].t;
+  let worst=null, wl=2;
+  Object.keys(t).forEach(k=>{
+    if(k==='label' || k==='line' || k==='lit') return;
+    const l = lum(t[k]);
+    if(l < wl){ wl = l; worst = k; }
+  });
+  return worst;
+}
+function verdictPill(r){
+  return r>=3.5 ? '<span class="pill pass">passes 3:1</span>'
+       : r>=3   ? '<span class="pill tight">passes, tight</span>'
+                : '<span class="pill fail">FAILS</span>';
+}
+function variantTable(vk){
+  const t = PALETTES[vk].t, tally = sample(vk), worstK = worstTone(vk);
+  let html = '<table><thead><tr><th>Pin</th><th>Identifying boundary</th><th>Most often sits on</th>'
+    + '<th class="n">Ratio</th><th>Worst tone here</th><th class="n">Ratio</th><th>Verdict</th></tr></thead><tbody>';
+  PINS.forEach(pin=>{
+    const m = modal(tally[pin.k]);
+    const mk = m.key || 'ground', mhex = t[mk] || t.ground;
+    const mr = ratio(pin.edge, mhex);
+    const wr = ratio(pin.edge, t[worstK]);
+    html += '<tr><td><strong>'+pin.name+'</strong></td><td>'+pin.edgeName+'</td>'
+      + '<td><span class="dot" style="background:'+mhex+'"></span>'+mk+' '+mhex
+      + ' <small style="color:#4A4463">('+m.n+' of '+m.total+')</small></td>'
+      + '<td class="n">'+fmt(mr)+'</td>'
+      + '<td><span class="dot" style="background:'+t[worstK]+'"></span>'+worstK+' '+t[worstK]+'</td>'
+      + '<td class="n">'+fmt(wr)+'</td><td>'+verdictPill(Math.min(mr,wr))+'</td></tr>';
+  });
+  const wrG = ratio(MATCH_RING, t[worstK]);
+  html += '<tr><td>Needs-match ring</td><td>--match-green #1B7A3D</td>'
+    + '<td colspan="3" style="color:#4A4463">drawn outside the pin, so it can touch any tone</td>'
+    + '<td class="n">'+fmt(wrG)+'</td><td>'+verdictPill(wrG)+'</td></tr>';
+  html += '</tbody></table>';
+  return html;
+}
+
+/* big cross-variant table */
+(function(){
+  const rows = [];
+  ['today'].concat(VARIANTS.map(v=>v.vk)).forEach(vk=>{
+    const t = PALETTES[vk].t, tally = sample(vk), worstK = worstTone(vk);
+    PINS.forEach((pin,i)=>{
+      const m = modal(tally[pin.k]);
+      const mk = m.key || 'ground', mhex = t[mk] || t.ground;
+      const mr = ratio(pin.edge, mhex), wr = ratio(pin.edge, t[worstK]);
+      rows.push('<tr>'
+        + (i===0 ? '<td rowspan="3"><strong>'+PALETTES[vk].name+'</strong></td>' : '')
+        + '<td>'+pin.name+'</td><td>'+pin.edgeName+'</td>'
+        + '<td><span class="dot" style="background:'+mhex+'"></span>'+mk+' '+mhex+'</td>'
+        + '<td class="n">'+fmt(mr)+'</td>'
+        + '<td><span class="dot" style="background:'+t[worstK]+'"></span>'+worstK+' '+t[worstK]+'</td>'
+        + '<td class="n">'+fmt(wr)+'</td><td>'+verdictPill(Math.min(mr,wr))+'</td></tr>');
+    });
+  });
+  document.querySelector('#bigtable tbody').innerHTML = rows.join('');
+})();
+
+/* chroma statement */
+(function(){
+  let maxC = 0, maxK = '', maxV = '';
+  ['paper','terrain','relief','districts'].forEach(vk=>{
+    const t = PALETTES[vk].t;
+    Object.keys(t).forEach(k=>{
+      if(k==='label') return;
+      const c = chroma(t[k]);
+      if(c > maxC){ maxC = c; maxK = vk+'.'+k+' '+t[k]; maxV = vk; }
+    });
+  });
+  const todayMax = Math.max(chroma('#AFC2F2'), chroma('#C4D0F6'));
+  const minMarker = Math.min(chroma('#3F79DC'), chroma('#8A5A00'), chroma('#7053C5'), chroma('#1B7A3D'), chroma('#F0A32F'));
+  document.getElementById('chromatext').innerHTML =
+    'Across all four variants the most saturated ground tone is <b>'+maxK+'</b> at chroma <b>'+maxC+'</b> '
+    + '(the marigold-tinted plaza in Terrain). The least saturated marker colour is the needs-match ring '
+    + '<code>#1B7A3D</code> at chroma <b>'+minMarker+'</b>, and the loudest marker is marigold <code>#F0A32F</code> '
+    + 'at chroma <b>'+chroma('#F0A32F')+'</b>. Every ground tone therefore sits below every marker colour, with the '
+    + 'narrowest gap being '+(minMarker-maxC)+' points. For comparison, the ground we ship today reaches chroma <b>'
+    + todayMax+'</b> in its tree dots — the current ground is <em>more</em> saturated than any of these four, which '
+    + 'is the part of "use more of the icon colours" that is a trap: more colour has to mean more hues at lower '
+    + 'saturation, not louder ones.';
+})();
+
+/* cost + notes */
+(function(){
+  const W=390, H=560;
+  const cost = ['today'].concat(VARIANTS.map(v=>v.vk)).concat(['hc']).map(vk=>{
+    const m = modelFor(vk, W, H);
+    return {name:PALETTES[vk].name, nodes:m.stats.nodes, fp:m.stats.footprints, can:m.stats.canopyGroups};
+  });
+  const el = document.getElementById('cost');
+  el.innerHTML =
+    '<div class="note"><h3>Node counts, at 390 × 560</h3><table style="margin-top:6px">'
+    + '<thead><tr><th>Ground</th><th class="n">SVG nodes</th><th class="n">Footprints</th><th class="n">Canopy groups</th></tr></thead><tbody>'
+    + cost.map(c=>'<tr><td>'+c.name+'</td><td class="n">'+c.nodes+'</td><td class="n">'+(c.fp||'—')+'</td><td class="n">'+(c.can||'—')+'</td></tr>').join('')
+    + '</tbody></table></div>'
+    + '<div class="note win"><h3>What the approach costs</h3><p>Every ground here is <b>flat-filled rectangles, circles '
+    + 'and one stroked polyline</b>. There is no <code>filter</code>, no <code>feGaussianBlur</code>, no gradient, no '
+    + 'mask, no clip path, no opacity group — nothing that forces the compositor onto an offscreen layer. That is the '
+    + 'whole reason a 4–7× node count is affordable: cost on a map ground is dominated by layer promotion, not by '
+    + 'rectangle count, and a few hundred opaque rects is a single cheap paint.</p>'
+    + '<p style="margin-top:8px">Implied light is <b>two rects per footprint</b> (offset shadow, then body) rather than a '
+    + 'per-element <code>drop-shadow</code>, which would be the expensive way to draw the same thing. Relief spends two '
+    + 'more: a second, paler shadow rect at a wider offset to fake a penumbra, and a one-<code>path</code> lit edge along '
+    + 'top and left. Four elements a building is why Relief is the dearest of the four, and it is still filter-free.</p></div>'
+    + '<div class="note"><h3>Redraw contract</h3><p>The ground is built once per viewport into a single '
+    + '<code>innerHTML</code> string and never touched again. Selecting a pin repaints the marker layer only, which is '
+    + 'the contract the shipped map already has — the ground is not in the tap path. On zoom the model has to be '
+    + 'rebuilt; that is one pass of the same string builder, and the model is memoised per (variant, width, height).</p>'
+    + '<p style="margin-top:8px">The one thing I would watch in the real app: at higher zoom the same subdivision '
+    + 'produces more, smaller cells and the node count grows roughly linearly with visible area. A cap of about 400 '
+    + 'footprints, dropping the subdivision depth by one past it, keeps it bounded. Not implemented here.</p></div>';
+})();
+
+const NOTES = [
+  ['win','Recommendation: <b>Terrain’s colour on Relief’s light</b> — and if only one ships as-is, Terrain',
+   'Two complaints were raised and they have different answers, so the recommendation is a combination rather than a '
+   + 'pick. <b>Terrain owns the colour answer.</b> Put the five bare grounds side by side and it is the only one that '
+   + 'stops looking like a diagram: warm ground, sage canopy bands, a marigold plaza, and cool lavender-grey towers '
+   + 'standing among warm putty low-rise so a block reads as buildings of different eras rather than one slab. That '
+   + 'warm/cool mix is the hard half to get right and it is the half that answers "use more of the icon colours" '
+   + 'without any patch of it reading as state. <b>Relief owns the depth answer.</b> Its two-step cast shadow plus a '
+   + 'lit top-and-left edge is the only treatment here where footprints unmistakably sit <em>on</em> the ground, and '
+   + 'its tonal ramp is the only one keyed to something real — footprint mass — so the variation reads as buildings of '
+   + 'different sizes rather than as noise. Relief’s light model is about fifteen lines and a second shadow tone; '
+   + 'dropping it into Terrain is a much smaller job than recolouring Relief. So: <b>start from Terrain, take Relief’s '
+   + 'shadow.</b> If a decision has to be made today with no further work, Terrain ships and Relief does not, because '
+   + 'Relief on its own answers only half the brief.'],
+  ['warn','The reservation about Terrain, stated plainly',
+   'Terrain is the easiest of the four to like in a review, and that is a reason to be careful with it. It is the one '
+   + 'that competes hardest with the card sheet: the warm sand ground is close in value to the white sheet, so the '
+   + 'sheet floats less than it does over lavender. Its marigold plaza at chroma 43 is the most saturated ground tone '
+   + 'on the page — still 52 points below the least saturated marker, but it is the tone I would watch first. It '
+   + 'passes every measurement here and it is still the one I would want to see on a real phone outdoors before '
+   + 'committing.'],
+  ['','Why not Districts, even though it answers the colour brief most directly',
+   'Districts does exactly what the product owner asked for — the whole palette, visibly, in the map — and the '
+   + 'block-scale wash genuinely cannot be confused with a marker halo. The problem is semantic, not visual: a purple '
+   + 'block behind a purple owner pin reads as agreement between them, and a marigold block behind a marigold scanned '
+   + 'pin reads as reinforcement. Neither is true. The washes encode land use and the pins encode evidence strength, '
+   + 'and putting the same hue on both invites exactly the reading section 11 is written to prevent. Worth keeping as '
+   + 'the idea it is, worth not shipping in these hues.'],
+  ['warn','Honest: Paper is barely distinguishable from Today at a glance, and that is the finding',
+   'Put the two bare grounds side by side at 252 px and Paper reads as "the same map, tidier". Everything Paper does '
+   + 'is real — three street widths, four footprint tones, a consistent edge — and none of it is enough on its own. '
+   + 'The tonal steps between b1 and b4 are 3 to 5 luminance points, which is where the contrast floor forces them, '
+   + 'and at phone size that is at the edge of visible. Paper is the honest lower bound on "how much can change '
+   + 'without anything changing", and it is the reason I do not recommend it: it will not satisfy the complaint that '
+   + 'started this.'],
+  ['warn','Honest: the biggest thing still reading flat is the street surface',
+   'All four variants make blocks sit on the ground, and none of them make the <em>streets</em> read as anything but '
+   + 'empty channels. Real maps carry crossings, medians, the Congress Ave median specifically, parking bays, kerb '
+   + 'radii at the corners. I drew none of it, partly because the geometry is not in the data and partly because every '
+   + 'candidate I sketched put small repeated marks into exactly the zone where estimated rings sit. It is the next '
+   + 'real gain and it needs the road centrelines as data, not as four latitudes and five longitudes.'],
+  ['warn','Honest: the contrast floor is doing more design work than I would like',
+   'The estimated ring at <code>--blue-edge #3F79DC</code> forces every ground tone above luminance 0.690. That is a '
+   + 'genuinely tight ceiling — it is why the shadows are 3 luminance points rather than 8, and why the canopy is a '
+   + 'pale sage rather than a green. Note that <code>design/pins-and-icons.html</code> specifies the estimated edge as '
+   + '<code>#2C63C9</code>, not <code>#3F79DC</code>: that darker blue measures 4.79:1 on today’s ground against '
+   + '3.59:1, and it would drop the floor from 0.690 to 0.459 and roughly double the tonal range available to the '
+   + 'ground. <b>The two committed files disagree, and it is worth settling deliberately rather than by whichever file '
+   + 'the app happens to import.</b> Every number on this page uses the tighter of the two.'],
+  ['','Honest: high contrast is identical across all four, by design',
+   'The three right-hand panels above are the same drawing four times, because high contrast collapses the variants: '
+   + 'one block tone, hard outlines, no shadow, no canopy, no wash. Only the road hierarchy survives, because widths '
+   + 'are structure rather than enrichment. I considered giving each variant a distinct high-contrast treatment and '
+   + 'decided that would be the bug — if high contrast varies by decorative variant, the decoration was load-bearing.'],
+  ['','The rules that are enforced in code, not just described',
+   'Canopy is only ever drawn as an area: a filled grove under an overlapping scalloped canopy, a continuous kerbside '
+   + 'band whose lobes overlap by design (7.5 px pitch against a 9.2 px lobe diameter), or a four-lobe courtyard clump. '
+   + 'No ground element is ever a lone disc that could read as a cluster marker. Any lobe whose centre lands within 26 px '
+   + 'of a full pin is dropped before it is '
+   + 'emitted, so canopy never sits inside a marker halo. Building geometry uses one seed shared by all four variants, '
+   + 'so the comparison isolates tone and light. And the tone each pin lands on is hit-tested against the ground’s '
+   + 'own paint list rather than eyeballed, which is how the tree-dot failure in the current build was found.'],
+];
+(function(){
+  const el = document.getElementById('notes');
+  NOTES.forEach(n=>{
+    const d = document.createElement('div');
+    d.className = 'note' + (n[0] ? ' '+n[0] : '');
+    d.innerHTML = '<h3>'+n[1]+'</h3><p>'+n[2]+'</p>';
+    el.appendChild(d);
+  });
+})();
+</script>
+</body>
+</html>

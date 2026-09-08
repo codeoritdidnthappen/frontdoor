@@ -26,8 +26,9 @@ ever red, should be able to find the answer without asking anyone.
 | `ui-reference-spec.md` | Screen-by-screen reference for the surfaces the prototype covers. |
 | `graphic-critique.md` | A designer's judgement against the targets, as distinct from conformance. Where the build reads unfinished and why. |
 | `incentives-audit.md` | Who benefits from misrepresenting this product, and how its rules can be gamed. The angle no design or code review covers. |
-| `galleries/` | Options drawn and measured before a choice was made, kept because the reasoning is in them. `estimated-mark-4-chosen.html` holds the mark that shipped, with its contrast measured on every ground tone in both contrast modes. `tagline.html` records why colour is unavailable on the welcome headline. |
-| `rounds/` | The briefs for rounds 8 and 9 — what each round was asked to do, and the constraints it had to hold. Useful when a decision looks arbitrary. |
+| `galleries/` | Options drawn and measured before a choice was made, kept because the reasoning is in them. `estimated-mark-4-chosen.html` holds the mark that shipped, with its contrast measured on every ground tone in both contrast modes. `tagline.html` records why colour is unavailable on the welcome headline. `pins-and-icons.html`, `map-ground.html`, `map-hierarchy.html`, `map-ui-directions.html`, `map-ui-hybrids.html` and `illustrations.html` are the earlier rounds' options — the pin set, four map grounds measured against the approved board, the size and halo hierarchy, and the drawn illustrations. |
+| `rounds/` | The briefs for rounds 5 through 9 — what each round was asked to do, and the constraints it had to hold. Useful when a decision looks arbitrary. |
+| `history/` | The audits from before round 7, kept because a fixed defect is evidence about what breaks here. The `-r7` files supersede them; these say what the build was like before. |
 
 ## If you are implementing a screen
 

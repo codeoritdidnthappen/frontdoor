@@ -1,0 +1,1175 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Curb Appeal — A+C Hybrids</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,900;1,9..144,500&family=Karla:wght@400;500;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&display=swap" rel="stylesheet">
+<style>
+/* ================= PAGE CHROME ================= */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--chrome-bg:#1a1a1e;--chrome-ink:#f2f0ec;--chrome-dim:#a8a49b}
+html{scroll-behavior:smooth}
+body{background:var(--chrome-bg);color:var(--chrome-ink);font-family:"Karla",system-ui,sans-serif;line-height:1.5}
+a{color:inherit}
+img,svg{max-width:100%}
+button{font:inherit;cursor:pointer}
+:focus-visible{outline:3px solid #7fd7ff;outline-offset:2px}
+.masthead{max-width:1180px;margin:0 auto;padding:56px 28px 20px}
+.masthead .kicker{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--chrome-dim)}
+.masthead h1{font-family:"Fraunces",serif;font-weight:900;font-size:clamp(32px,4.6vw,54px);line-height:1.04;margin:10px 0 14px}
+.masthead p{max-width:74ch;color:var(--chrome-dim);font-size:16px}
+.jumpnav{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0 8px}
+.jumpnav a{text-decoration:none;font-family:"IBM Plex Mono",monospace;font-size:13px;padding:9px 16px;border:1px solid #36373d;border-radius:999px;transition:border-color .15s}
+.jumpnav a:hover{border-color:#7fd7ff}
+.ladder-note{max-width:1180px;margin:0 auto;padding:0 28px 44px;color:var(--chrome-dim);font-size:14px}
+.ladder-note code{font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:#cfe9d8}
+
+/* ---- shared layout scaffolding (each hybrid recolors it) ---- */
+.hy{scroll-margin-top:16px}
+.hy-head{max-width:1180px;margin:0 auto;padding:64px 28px 24px}
+.hy-head .num{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:.16em;text-transform:uppercase}
+.hy-head h2{font-size:clamp(28px,3.6vw,44px);line-height:1.06;margin:8px 0 14px}
+.hy-head .argue{max-width:76ch;font-size:16px;margin-bottom:10px}
+.hy-head .argue b{font-weight:800}
+.stage{padding:40px 28px 52px}
+.stage-inner{max-width:1180px;margin:0 auto}
+.mapbar{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.demo-grid{display:grid;grid-template-columns:minmax(0,1.32fr) minmax(300px,1fr);gap:26px;align-items:start}
+@media(max-width:920px){.demo-grid{grid-template-columns:1fr}}
+.mapwrap{position:relative;overflow:hidden}
+.mapcanvas{position:relative;width:100%;aspect-ratio:600/430}
+.mapcanvas svg.streets{position:absolute;inset:0;width:100%;height:100%}
+.pin{position:absolute;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;border:0;background:none;padding:0}
+.pin .mk{display:grid;place-items:center;border-radius:50%;position:relative;transition:transform .18s cubic-bezier(.34,1.56,.64,1)}
+.pin:hover .mk,.pin:focus-visible .mk{transform:scale(1.1)}
+.pin .stem{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent}
+.pin .plabel{margin-top:4px;font-size:11px;font-weight:700;letter-spacing:.02em;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.needs-toggle{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px;border:1px solid transparent}
+.needs-toggle button{border:0;border-radius:999px;padding:8px 15px;font-weight:700;font-size:13.5px;background:transparent;transition:background .15s,color .15s}
+.legend{display:flex;flex-wrap:wrap;gap:12px 18px;margin-top:16px;font-size:12.5px}
+.legend .li{display:flex;align-items:center;gap:8px}
+.legend .sw{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;flex:none}
+.legend .roadmap{opacity:.62;font-style:italic}
+.card{overflow:hidden;padding:22px}
+.chips{display:flex;flex-direction:column;gap:8px}
+.chip{display:grid;grid-template-columns:auto 1fr auto;gap:2px 12px;align-items:center;border-radius:12px;padding:10px 14px;transition:box-shadow .15s,opacity .2s}
+.chip .cname{font-weight:700;font-size:14.5px}
+.chip .cmeta{grid-column:2;font-size:12px}
+.chip .cconf{grid-column:3;grid-row:1/3;text-align:right;font-size:11.5px;line-height:1.3}
+.chip .cicon{grid-row:1/3;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:none}
+/* tier badge -> receipt (one tap) */
+.tierbtn{display:flex;align-items:center;gap:9px;border:0;background:none;text-align:left;font-weight:700;font-size:13.5px;padding:7px 0 5px;width:100%}
+.tierbtn .sw{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;flex:none}
+.tierbtn .hint{margin-left:auto;font-size:11px;font-weight:500;opacity:.75}
+.receipt{display:grid;grid-template-columns:88px 1fr;gap:12px;border-radius:12px;padding:12px;margin:4px 0 12px;font-size:12.5px;line-height:1.55}
+.receipt .ph{border-radius:8px;overflow:hidden;aspect-ratio:4/5}
+.receipt .ph svg{display:block;width:100%;height:100%}
+.receipt dl{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;align-content:start}
+.receipt dt{font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;opacity:.75;padding-top:2px}
+.receipt dd{font-weight:600}
+/* needs lens */
+.match-halo{position:absolute;inset:-7px;border-radius:50%;pointer-events:none;opacity:0;transition:opacity .25s,transform .25s;transform:scale(.8)}
+.needs-on .pin[data-match] .match-halo{opacity:1;transform:scale(1)}
+.needs-on .pin[data-match="unknown"]{opacity:.6}
+.matchtag{position:absolute;top:-10px;right:-12px;font-size:10px;font-weight:800;border-radius:999px;padding:2px 7px;opacity:0;transform:translateY(4px);transition:opacity .25s,transform .25s;pointer-events:none;z-index:2}
+.needs-on .pin .matchtag{opacity:1;transform:translateY(0)}
+.legend-needs{display:none}
+.needs-on .legend-tiers{display:none}
+.needs-on .legend-needs{display:flex}
+.foryou{display:none;font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:10px;margin:2px 0 12px}
+.needs-on-card .foryou{display:block}
+.needs-on-card .chip[data-need="0"]{opacity:.45}
+/* growing/upgrading pin: two stacked marks */
+.grower .mkwrap{position:relative;display:grid;place-items:center}
+.grower .mk{grid-area:1/1}
+.grower .mk.new{opacity:0;transform:scale(.35);transition:opacity .5s .25s,transform .55s .25s cubic-bezier(.34,1.56,.64,1)}
+.grower.grown .mk.new{opacity:1;transform:scale(1)}
+.grower.grown .mk.old{opacity:0;transition:opacity .6s .55s}
+.grower .growcue{margin-top:3px;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;border-radius:999px;padding:2px 8px}
+/* scan panel scaffolding */
+.scanpanel{margin-top:30px;padding:24px;display:grid;grid-template-columns:minmax(260px,340px) minmax(0,1fr);gap:26px}
+@media(max-width:860px){.scanpanel{grid-template-columns:1fr}}
+.scanpanel h3{font-size:19px;margin-bottom:4px}
+.scanpanel .sub{font-size:13.5px;margin-bottom:16px}
+.scan-phone{border-radius:22px;padding:14px;position:relative}
+.scan-view{position:relative;border-radius:14px;overflow:hidden;aspect-ratio:4/5}
+.scan-view svg.door{position:absolute;inset:0;width:100%;height:100%}
+.scan-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+.scanning .scan-flash{animation:flash .35s ease-out}
+@keyframes flash{0%{opacity:.92}100%{opacity:0}}
+.scan-ring{position:absolute;inset:0;display:grid;place-items:center;opacity:0;transition:opacity .2s}
+.scanning .scan-ring{opacity:1}
+.scan-ring svg{width:88px;height:88px}
+.scan-ring circle.track{fill:none;stroke-width:5}
+.scan-ring circle.prog{fill:none;stroke-width:5;stroke-linecap:round;stroke-dasharray:226;stroke-dashoffset:226;transform:rotate(-90deg);transform-origin:center}
+.scanning .scan-ring circle.prog{animation:ringfill 3.6s linear .25s forwards}
+@keyframes ringfill{to{stroke-dashoffset:0}}
+.scan-ring .pct{position:absolute;font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:15px}
+.scan-btn{width:100%;margin-top:14px;border:0;border-radius:12px;padding:13px;font-weight:800;font-size:15px;transition:opacity .15s}
+.scan-btn:disabled{opacity:.5;cursor:default}
+.scan-right{display:flex;flex-direction:column;gap:14px;min-width:0}
+.scanlog{border-radius:12px;padding:14px;font-size:12px;min-height:112px}
+.scanlog div{opacity:0;transform:translateY(3px);transition:opacity .3s,transform .3s}
+.scanlog div.on{opacity:1;transform:none}
+.scan-checks{display:flex;flex-direction:column;gap:6px}
+.scan-checks .sc{display:flex;align-items:center;gap:10px;font-size:13.5px;opacity:.35;transition:opacity .3s}
+.scan-checks .sc .tick{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;color:transparent;transition:all .25s;flex:none;border:1.5px solid transparent}
+.scan-checks .sc.on{opacity:1}
+.scan-checks .sc.on .tick{animation:tickpop .3s cubic-bezier(.34,1.56,.64,1)}
+@keyframes tickpop{0%{transform:scale(.5)}100%{transform:scale(1)}}
+.scan-map{position:relative;border-radius:12px;height:150px;overflow:hidden}
+.scan-map svg.mini{position:absolute;inset:0;width:100%;height:100%}
+.scan-map .up-pin{position:absolute;left:58%;top:56%;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center}
+.scan-map .up-pin .mkwrap{position:relative;display:grid;place-items:center}
+.scan-map .up-pin .mk{grid-area:1/1;display:grid;place-items:center;border-radius:50%}
+.scan-map .up-pin .mk.new{opacity:0;transform:scale(.3)}
+.dropped .up-pin .mk.new{opacity:1;transform:scale(1);transition:opacity .45s,transform .55s cubic-bezier(.34,1.56,.64,1)}
+.dropped .up-pin .mk.old{opacity:0;transition:opacity .5s .35s}
+.scan-ripple{position:absolute;left:58%;top:52%;width:14px;height:14px;border-radius:50%;transform:translate(-50%,-50%);opacity:0;pointer-events:none;border:2px solid currentColor}
+.dropped .scan-ripple{animation:ripple 1.2s ease-out .45s 2}
+@keyframes ripple{0%{opacity:.9;width:14px;height:14px}100%{opacity:0;width:120px;height:120px}}
+.scan-status{font-family:"IBM Plex Mono",monospace;font-size:11.5px}
+.kf-notes{margin-top:14px;font-size:12.5px;line-height:1.7}
+.spec{padding:34px 28px 74px}
+.spec-inner{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px}
+.spec h3{font-size:13px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:14px;font-family:"IBM Plex Mono",monospace}
+.swatches{display:flex;flex-wrap:wrap;gap:10px}
+.swatch{width:104px;border-radius:10px;overflow:hidden;font-size:11px}
+.swatch .col{height:52px}
+.swatch .lab{padding:6px 8px;font-family:"IBM Plex Mono",monospace}
+.spec ul{list-style:none;font-size:13.5px}
+.spec li{padding:5px 0;border-bottom:1px dashed transparent}
+.typerow{font-size:15px;line-height:1.6}
+footer.page-foot{max-width:1180px;margin:0 auto;padding:56px 28px 80px;color:var(--chrome-dim);font-size:14px;border-top:1px solid #2b2c31}
+footer.page-foot h2{color:var(--chrome-ink);font-size:18px;margin-bottom:10px}
+footer.page-foot ul{margin:10px 0 0 18px}
+
+/* ================= HYBRID 1 — HEARTH LEDGER (warm crowd) ================= */
+.hyA{background:#FBF7EF;color:#2C241B;font-family:"Karla",sans-serif}
+.hyA .hy-head .num{color:#8A5B21}
+.hyA .hy-head h2{font-family:"Fraunces",serif;font-weight:900}
+.hyA .hy-head h2 em{font-style:italic;font-weight:500;color:#8A5B21}
+.hyA .hy-head .argue{color:#5C4F3F}
+.hyA .hy-head .argue b{color:#2C241B}
+.hyA .mapwrap{border:1.5px solid #2C241B;border-radius:18px;box-shadow:6px 6px 0 #2C241B14}
+.hyA .mapcanvas{background:#F1E8D8}
+.hyA .maptitle{font-family:"Fraunces",serif;font-style:italic;font-size:17px;color:#5C4F3F}
+.hyA .maptitle .ticknum{font-style:normal;font-weight:900;color:#2C241B;font-variant-numeric:tabular-nums;display:inline-block;min-width:3.2ch;text-align:right}
+.hyA .plabel{background:#FBF7EF;border:1px solid #2C241B33;color:#2C241B}
+.hyA .needs-toggle{background:#F1E8D8;border-color:#2C241B26}
+.hyA .needs-toggle button{color:#5C4F3F}
+.hyA .needs-toggle button[aria-pressed="true"]{background:#2C241B;color:#FBF7EF}
+/* pins: wax-seal stamps that GROW with tier (C's grammar in A's material) */
+.hyA .pin.t1 .mk{width:36px;height:36px;background:#FBF7EF;border:2.5px dashed #4A7FA5;color:#38678C;font-family:"Fraunces",serif;font-style:italic;font-weight:600;font-size:16px;box-shadow:0 2px 0 #2C241B1A}
+.hyA .pin.t2 .mk{width:48px;height:48px;background:#D98E0B;border:2.5px solid #FBF7EF;outline:1.5px solid #A96D06;color:#2C241B;box-shadow:0 3px 0 #2C241B26}
+.hyA .pin.t3 .mk{width:58px;height:58px;background:#FFFDF8;border:3px solid #8C5A28;outline:1.5px solid #8C5A28;outline-offset:2px;color:#8C5A28;box-shadow:0 3px 0 #2C241B26}
+.hyA .pin.t1 .stem{border-top:8px solid #4A7FA5}
+.hyA .pin.t2 .stem{border-top:9px solid #A96D06}
+.hyA .pin.t3 .stem{border-top:10px solid #8C5A28}
+.hyA .pin.t3 .mk .duo{display:flex;align-items:center;gap:3px}
+.hyA .match-halo{border:3.5px solid #476A45}
+.hyA .pin[data-match="partial"] .match-halo{border-style:dashed;border-color:#B07C10}
+.hyA .pin[data-match="unknown"] .match-halo{border-style:dotted;border-color:#4A7FA5}
+.hyA .matchtag{background:#476A45;color:#FBF7EF}
+.hyA .pin[data-match="partial"] .matchtag{background:#B07C10;color:#2C241B}
+.hyA .pin[data-match="unknown"] .matchtag{background:#4A7FA5;color:#FBF7EF}
+.hyA .legend{color:#5C4F3F}
+.hyA .grower .growcue{background:#2C241B;color:#FBF7EF}
+.hyA .grower.grown .growcue{background:#476A45}
+.hyA .card{background:#FFFDF8;border:1.5px solid #2C241B;border-radius:18px;box-shadow:6px 6px 0 #2C241B14}
+.hyA .card .cat{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#5C4F3F}
+.hyA .card h3{font-family:"Fraunces",serif;font-weight:900;font-size:26px;margin:4px 0 2px}
+.hyA .tierbtn{color:#8C5A28}
+.hyA .tierbtn .sw{background:#FFFDF8;border:2px solid #8C5A28;color:#8C5A28}
+.hyA .tierbtn .hint{color:#5C4F3F}
+.hyA .receipt{background:#F1E8D8;border:1px solid #2C241B26}
+.hyA .receipt dd{color:#2C241B}
+.hyA .witness{font-family:"Fraunces",serif;font-style:italic;font-size:14.5px;color:#5C4F3F;border-left:3px solid #D98E0B;padding:6px 0 6px 12px;margin:8px 0 12px}
+.hyA .chip{background:#FBF7EF;border:1px solid #2C241B26}
+.hyA .chip .cicon{background:#F1E8D8;color:#476A45}
+.hyA .chip .cmeta{color:#5C4F3F}
+.hyA .chip .cmeta.aging{color:#8A5B21;font-weight:700}
+.hyA .chip .cconf{color:#8C5A28;letter-spacing:2px}
+.hyA .chip.unk{border-style:dashed;border-color:#4A7FA5}
+.hyA .chip.unk .cicon{color:#38678C;background:#EAF1F6;font-family:"Fraunces",serif;font-style:italic;font-weight:600}
+.hyA .chip.unk .cconf{color:#38678C;letter-spacing:0}
+.hyA .foryou{background:#476A45;color:#FBF7EF}
+.hyA .needs-on-card .chip[data-need="1"]{box-shadow:0 0 0 2px #476A45}
+/* hyA scan: developing photograph */
+.hyA .scanpanel{background:#F1E8D8;border:1.5px solid #2C241B;border-radius:18px;box-shadow:6px 6px 0 #2C241B14}
+.hyA .scanpanel h3{font-family:"Fraunces",serif;font-weight:900}
+.hyA .scanpanel .sub{color:#5C4F3F}
+.hyA .scan-phone{background:#2C241B;border:1px solid #2C241B}
+.hyA .scan-view{background:#3B3126}
+.hyA .scan-view svg.door{filter:sepia(.9) saturate(.5) brightness(.8);transition:filter 3.4s ease .5s}
+.hyA .scanning .scan-view svg.door{filter:none}
+.hyA .scan-ring circle.track{stroke:#5C4F3F}
+.hyA .scan-ring circle.prog{stroke:#E9A227}
+.hyA .scan-ring .pct{color:#F6E7C8}
+.hyA .scan-btn{background:#D98E0B;color:#2C241B}
+.hyA .scanlog{background:#FFFDF8;border:1px solid #2C241B26;color:#5C4F3F;font-family:"Fraunces",serif;font-style:italic;font-size:13px}
+.hyA .scanlog .ok{color:#476A45;font-weight:600}
+.hyA .scan-checks .sc{color:#5C4F3F}
+.hyA .scan-checks .sc .tick{border-color:#2C241B33;background:#FFFDF8}
+.hyA .scan-checks .sc.on{color:#2C241B}
+.hyA .scan-checks .sc.on .tick{background:#D98E0B;border-color:#A96D06;color:#2C241B}
+.hyA .scan-map{background:#F1E8D8;border:1px solid #2C241B26}
+.hyA .scan-map .up-pin .mk.old{width:30px;height:30px;background:#FBF7EF;border:2px dashed #4A7FA5;color:#38678C;font-family:"Fraunces",serif;font-style:italic;font-size:13px}
+.hyA .scan-map .up-pin .mk.new{width:42px;height:42px;background:#D98E0B;border:2.5px solid #FBF7EF;outline:1.5px solid #A96D06;color:#2C241B}
+.hyA .scan-ripple{color:#A96D06}
+.hyA .scan-status{color:#8A5B21}
+.hyA .kf-notes{color:#5C4F3F;font-family:"IBM Plex Mono",monospace;font-size:12px}
+.hyA .kf-notes b{color:#8C5A28}
+.hyA .spec{background:#F1E8D8}
+.hyA .spec h3{color:#5C4F3F}
+.hyA .spec li{border-color:#2C241B33}
+.hyA .swatch{background:#FBF7EF;border:1px solid #2C241B26}
+.hyA .spec .typerow .disp{font-family:"Fraunces",serif;font-weight:900;font-size:24px}
+
+/* ================= HYBRID 2 — THE WILLOW BULLETIN (civic print) ================= */
+.hyB{background:#F2F6FF;color:#14204A;font-family:"Karla",sans-serif}
+.hyB .hy-head{border-bottom:3px double #14204A;position:relative}
+.hyB .hy-head .num{color:#5A34B8}
+.hyB .hy-head h2{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;letter-spacing:-.02em}
+.hyB .hy-head h2 .pop{color:#2743D6}
+.hyB .hy-head .argue{color:#3A4778}
+.hyB .hy-head .argue b{color:#14204A}
+.hyB .figno{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#5A34B8;border-top:1.5px solid #14204A;padding-top:6px;margin-bottom:10px;display:block}
+.hyB .mapwrap{border:2.5px solid #14204A;border-radius:4px}
+.hyB .mapcanvas{background:#E4ECFF}
+.hyB .maptitle{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:17px}
+.hyB .plabel{background:#fff;border:1.5px solid #14204A;color:#14204A;border-radius:3px}
+.hyB .needs-toggle{background:#fff;border:1.5px solid #14204A;border-radius:4px}
+.hyB .needs-toggle button{color:#3A4778;border-radius:3px}
+.hyB .needs-toggle button[aria-pressed="true"]{background:#2743D6;color:#fff}
+/* pins: fixed-size print marks; ink weight climbs, not size */
+.hyB .pin .mk{width:44px;height:44px}
+.hyB .pin.t1 .mk{background:#fff;border:2.5px dashed #3E7FB4;color:#20679E;font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:17px}
+.hyB .pin.t2 .mk{background:#F5A300;border:2.5px solid #14204A;color:#14204A}
+.hyB .pin.t3 .mk{background:#fff;border:2.5px solid #2743D6;outline:2px solid #2743D6;outline-offset:2.5px;color:#2743D6}
+.hyB .pin.t1 .stem{border-top:8px solid #3E7FB4}
+.hyB .pin.t2 .stem{border-top:9px solid #14204A}
+.hyB .pin.t3 .stem{border-top:9px solid #2743D6}
+.hyB .match-halo{border:4px solid #0E8A60}
+.hyB .pin[data-match="partial"] .match-halo{border-style:dashed;border-color:#9A6700}
+.hyB .pin[data-match="unknown"] .match-halo{border-style:dotted;border-color:#3E7FB4}
+.hyB .matchtag{background:#0E8A60;color:#fff}
+.hyB .pin[data-match="partial"] .matchtag{background:#F5A300;color:#14204A}
+.hyB .pin[data-match="unknown"] .matchtag{background:#3E7FB4;color:#fff}
+.hyB .legend{color:#3A4778;font-weight:500}
+.hyB .grower .growcue{background:#2743D6;color:#fff}
+.hyB .grower.grown .growcue{background:#0E8A60}
+.hyB .card{background:#fff;border:2.5px solid #14204A;border-radius:4px}
+.hyB .card .cat{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#5A34B8}
+.hyB .card h3{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:26px;margin:4px 0 2px}
+.hyB .tierbtn{color:#2743D6;border-top:1px solid #14204A26;border-bottom:1px solid #14204A26;margin:8px 0 4px}
+.hyB .tierbtn .sw{background:#fff;border:2px solid #2743D6;color:#2743D6}
+.hyB .tierbtn .hint{color:#3A4778}
+.hyB .receipt{background:#F2F6FF;border:1.5px solid #14204A;border-radius:4px}
+.hyB .receipt dd{color:#14204A}
+.hyB .witness{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:17px;line-height:1.35;color:#14204A;border-left:5px solid #F5A300;padding:6px 0 6px 14px;margin:10px 0 6px}
+.hyB .witness-att{font-size:12px;color:#3A4778;margin:0 0 12px 19px;font-style:italic}
+.hyB .chip{background:#F2F6FF;border:1.5px solid #14204A;border-radius:4px}
+.hyB .chip .cicon{background:#0E8A60;color:#fff;border-radius:6px}
+.hyB .chip .cmeta{color:#3A4778}
+.hyB .chip .cmeta.aging{color:#8A5B00;font-weight:700}
+.hyB .chip .cconf{color:#14204A;font-weight:700;font-family:"IBM Plex Mono",monospace}
+.hyB .chip.unk{border-style:dashed;border-color:#3E7FB4;background:#fff}
+.hyB .chip.unk .cicon{background:#fff;border:2px dashed #3E7FB4;color:#20679E;font-weight:800}
+.hyB .chip.unk .cconf{color:#20679E;font-family:"Karla",sans-serif}
+.hyB .foryou{background:#0E8A60;color:#fff;border-radius:4px}
+.hyB .needs-on-card .chip[data-need="1"]{box-shadow:0 0 0 2.5px #0E8A60}
+/* hyB scan: the press proof */
+.hyB .scanpanel{background:#fff;border:2.5px solid #14204A;border-radius:4px}
+.hyB .scanpanel h3{font-family:"Bricolage Grotesque",sans-serif;font-weight:800}
+.hyB .scanpanel .sub{color:#3A4778}
+.hyB .scan-phone{background:#14204A}
+.hyB .scan-view{background:#1E2C5C}
+.hyB .scan-view svg.door{filter:grayscale(1) contrast(1.3);transition:filter 3.4s ease .5s}
+.hyB .scanning .scan-view svg.door{filter:none}
+.hyB .scan-ring circle.track{stroke:#3A4778}
+.hyB .scan-ring circle.prog{stroke:#F5A300}
+.hyB .scan-ring .pct{color:#fff}
+.hyB .scan-btn{background:#F5A300;color:#14204A}
+.hyB .scanlog{background:#F2F6FF;border:1.5px solid #14204A;color:#3A4778;font-family:"IBM Plex Mono",monospace;font-size:11.5px}
+.hyB .scanlog .ok{color:#0E8A60;font-weight:600}
+.hyB .scan-checks .sc{color:#3A4778}
+.hyB .scan-checks .sc .tick{border-color:#14204A33;background:#fff;border-radius:3px}
+.hyB .scan-checks .sc.on{color:#14204A}
+.hyB .scan-checks .sc.on .tick{background:#F5A300;border-color:#14204A;color:#14204A}
+.hyB .scan-map{background:#E4ECFF;border:1.5px solid #14204A}
+.hyB .scan-map .up-pin .mk.old{width:32px;height:32px;background:#fff;border:2px dashed #3E7FB4;color:#20679E;font-weight:800;font-size:14px}
+.hyB .scan-map .up-pin .mk.new{width:38px;height:38px;background:#F5A300;border:2.5px solid #14204A;color:#14204A}
+.hyB .scan-ripple{color:#2743D6}
+.hyB .scan-status{color:#5A34B8}
+.hyB .kf-notes{color:#3A4778;font-family:"IBM Plex Mono",monospace;font-size:12px}
+.hyB .kf-notes b{color:#2743D6}
+.hyB .spec{background:#E4ECFF}
+.hyB .spec h3{color:#2743D6}
+.hyB .spec li{border-color:#14204A33}
+.hyB .swatch{background:#fff;border:1.5px solid #14204A22}
+.hyB .spec .typerow .disp{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:24px}
+
+/* ================= HYBRID 3 — DUSK SHIFT (adaptive warmth) ================= */
+.hyC{
+  --bg:#F3F1E7; --panel:#FFFDF6; --map:#EAE6D4; --line:#26233C; --ink:#26233C; --sub:#57536E;
+  --est:#38678C; --est-border:#4A7FA5; --est-fill:#FFFDF6;
+  --lant:#E1930A; --lant-deep:#A96D06; --lant-ink:#26233C; --lant-glow:transparent;
+  --own:#5A34B8; --own-fill:#FFFDF6; --own-glow:transparent;
+  --good:#33684A; --part:#8A5B21; --amber:#8A5B21;
+  --chipbg:#F3F1E7; --border-w:1.5px;
+  background:var(--bg);color:var(--ink);font-family:"Karla",sans-serif;
+  transition:background .8s ease,color .8s ease;
+}
+.hyC.dusk{
+  --bg:#221C28; --panel:#2C2434; --map:#2A2333; --line:#0F0C14; --ink:#F2EADB; --sub:#B5ABC7;
+  --est:#8FB4D8; --est-border:#6E93B8; --est-fill:#2C2434;
+  --lant:#F5A300; --lant-deep:#F5A300; --lant-ink:#221C28; --lant-glow:#F5A30066;
+  --own:#B08CF0; --own-fill:#2C2434; --own-glow:#B08CF04D;
+  --good:#7FC79A; --part:#E0A93E; --amber:#E0A93E;
+}
+.hyC .hy-head .num{color:var(--part)}
+.hyC .hy-head h2{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;letter-spacing:-.015em}
+.hyC .hy-head h2 em{font-family:"Fraunces",serif;font-style:italic;font-weight:500;color:var(--part)}
+.hyC .hy-head .argue{color:var(--sub)}
+.hyC .hy-head .argue b{color:var(--ink)}
+.hyC .mapwrap{border:2px solid var(--line);border-radius:20px;transition:border-color .8s}
+.hyC .mapcanvas{background:var(--map);transition:background .8s}
+.hyC .mapcanvas svg.streets .ground{fill:var(--map);transition:fill .8s}
+.hyC .mapcanvas svg.streets .blockfill{fill:var(--panel);transition:fill .8s}
+.hyC .mapcanvas svg.streets .blockline{stroke:var(--sub);transition:stroke .8s}
+.hyC .mapcanvas svg.streets text{fill:var(--sub);transition:fill .8s}
+.hyC .maptitle{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:17px}
+.hyC .plabel{background:var(--panel);border:1px solid var(--sub);color:var(--ink);transition:background .8s,color .8s}
+.hyC .daydusk{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:5px;background:var(--panel);border:1.5px solid var(--sub)}
+.hyC .daydusk button{border:0;border-radius:999px;padding:8px 15px;font-weight:800;font-size:13.5px;background:transparent;color:var(--sub)}
+.hyC .daydusk button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.hyC .needs-toggle{background:var(--panel);border-color:var(--sub)}
+.hyC .needs-toggle button{color:var(--sub)}
+.hyC .needs-toggle button[aria-pressed="true"]{background:var(--lant);color:var(--lant-ink)}
+/* pins: sketch -> lantern -> sealed lantern; dusk lights them */
+.hyC .pin .mk{transition:transform .18s cubic-bezier(.34,1.56,.64,1),background .8s,color .8s,border-color .8s,box-shadow .8s}
+.hyC .pin.t1 .mk{width:36px;height:36px;background:var(--est-fill);border:2.5px dashed var(--est-border);color:var(--est);font-family:"Fraunces",serif;font-style:italic;font-weight:600;font-size:16px}
+.hyC .pin.t2 .mk{width:48px;height:48px;background:var(--lant);border:2.5px solid var(--lant-deep);color:var(--lant-ink);box-shadow:0 0 0 0 transparent}
+.hyC.dusk .pin.t2 .mk{box-shadow:0 0 22px var(--lant-glow)}
+.hyC .pin.t3 .mk{width:56px;height:56px;background:var(--own-fill);border:3px solid var(--own);outline:1.5px solid var(--own);outline-offset:2px;color:var(--own)}
+.hyC.dusk .pin.t3 .mk{box-shadow:0 0 24px var(--own-glow)}
+.hyC .pin.t1 .stem{border-top:8px solid var(--est-border)}
+.hyC .pin.t2 .stem{border-top:9px solid var(--lant-deep)}
+.hyC .pin.t3 .stem{border-top:10px solid var(--own)}
+.hyC .match-halo{border:3.5px solid var(--good)}
+.hyC .pin[data-match="partial"] .match-halo{border-style:dashed;border-color:var(--part)}
+.hyC .pin[data-match="unknown"] .match-halo{border-style:dotted;border-color:var(--est-border)}
+.hyC .matchtag{background:var(--good);color:var(--bg)}
+.hyC .pin[data-match="partial"] .matchtag{background:var(--part);color:var(--bg)}
+.hyC .pin[data-match="unknown"] .matchtag{background:var(--est);color:var(--bg)}
+.hyC .legend{color:var(--sub)}
+.hyC .grower .growcue{background:var(--lant);color:var(--lant-ink)}
+.hyC .card{background:var(--panel);border:2px solid var(--line);border-radius:20px;transition:background .8s,border-color .8s}
+.hyC .card .cat{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--sub)}
+.hyC .card h3{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:26px;margin:4px 0 2px}
+.hyC .tierbtn{color:var(--own)}
+.hyC .tierbtn .sw{background:var(--own-fill);border:2px solid var(--own);color:var(--own)}
+.hyC .tierbtn .hint{color:var(--sub)}
+.hyC .receipt{background:var(--chipbg);border:1px solid var(--sub)}
+.hyC.dusk .receipt{--chipbg:#221C28}
+.hyC .receipt dd{color:var(--ink)}
+.hyC .witness{font-family:"Fraunces",serif;font-style:italic;font-size:14.5px;color:var(--sub);border-left:3px solid var(--lant);padding:6px 0 6px 12px;margin:8px 0 12px}
+.hyC .chip{background:var(--chipbg);border:1px solid var(--sub);border-radius:14px;transition:background .8s}
+.hyC.dusk .chip{background:#221C28}
+.hyC .chip .cicon{background:var(--lant);color:var(--lant-ink);border-radius:10px}
+.hyC .chip .cmeta{color:var(--sub)}
+.hyC .chip .cmeta.aging{color:var(--amber);font-weight:700}
+.hyC .chip .cconf{color:var(--part);font-weight:700}
+.hyC .chip.unk{border-style:dashed;border-color:var(--est-border)}
+.hyC .chip.unk .cicon{background:var(--est-fill);border:1.5px dashed var(--est-border);color:var(--est);font-family:"Fraunces",serif;font-style:italic}
+.hyC .chip.unk .cconf{color:var(--est)}
+.hyC .foryou{background:var(--good);color:var(--bg)}
+.hyC .needs-on-card .chip[data-need="1"]{box-shadow:0 0 0 2px var(--good)}
+/* hyC scan: the phone is the lantern */
+.hyC .scanpanel{background:var(--panel);border:2px solid var(--line);border-radius:20px;transition:background .8s}
+.hyC .scanpanel h3{font-family:"Bricolage Grotesque",sans-serif;font-weight:800}
+.hyC .scanpanel .sub{color:var(--sub)}
+.hyC .scan-phone{background:#17131C;transition:box-shadow .8s}
+.hyC.dusk .scan-phone{box-shadow:0 0 44px #F5A30022}
+.hyC .scan-view{background:#241E2C}
+.hyC .scanning .scan-view{animation:lanternup 3.8s ease .4s forwards}
+@keyframes lanternup{to{box-shadow:inset 0 0 70px #F5A30055}}
+.hyC .scan-ring circle.track{stroke:#57536E}
+.hyC .scan-ring circle.prog{stroke:#F5A300}
+.hyC .scan-ring .pct{color:#F2EADB}
+.hyC .scan-btn{background:var(--lant);color:var(--lant-ink)}
+.hyC .scanlog{background:var(--chipbg);border:1px solid var(--sub);color:var(--sub);font-family:"IBM Plex Mono",monospace;font-size:11.5px}
+.hyC.dusk .scanlog{background:#221C28}
+.hyC .scanlog .ok{color:var(--good);font-weight:600}
+.hyC .scan-checks .sc{color:var(--sub)}
+.hyC .scan-checks .sc .tick{border-color:var(--sub);background:var(--panel)}
+.hyC .scan-checks .sc.on{color:var(--ink)}
+.hyC .scan-checks .sc.on .tick{background:var(--lant);border-color:var(--lant-deep);color:var(--lant-ink)}
+.hyC .scan-map{background:var(--map);border:1px solid var(--sub);transition:background .8s}
+.hyC .scan-map .up-pin .mk.old{width:30px;height:30px;background:var(--est-fill);border:2px dashed var(--est-border);color:var(--est);font-family:"Fraunces",serif;font-style:italic;font-size:13px}
+.hyC .scan-map .up-pin .mk.new{width:42px;height:42px;background:var(--lant);border:2.5px solid var(--lant-deep);color:var(--lant-ink)}
+.hyC.dusk .dropped .up-pin .mk.new{box-shadow:0 0 22px var(--lant-glow)}
+.hyC .scan-ripple{color:var(--lant-deep)}
+.hyC .scan-status{color:var(--amber)}
+.hyC .kf-notes{color:var(--sub);font-family:"IBM Plex Mono",monospace;font-size:12px}
+.hyC .kf-notes b{color:var(--part)}
+.hyC .spec{background:var(--map);transition:background .8s}
+.hyC .spec h3{color:var(--sub)}
+.hyC .spec li{border-color:var(--sub)}
+.hyC .swatch{background:var(--panel);border:1px solid var(--sub)}
+.hyC .spec .typerow .disp{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:24px}
+
+/* finished scans keep their developed / printed / lit state */
+.hyA .demo-scan.dropped .scan-view svg.door{filter:none}
+.hyB .demo-scan.dropped .scan-view svg.door{filter:none}
+.hyC .demo-scan.dropped .scan-view{box-shadow:inset 0 0 70px #F5A30044}
+
+/* main-map grower pins (tap to watch Estimated -> Scanned on-site) */
+.hyA .pin.grower .mk.old{width:36px;height:36px;background:#FBF7EF;border:2.5px dashed #4A7FA5;color:#38678C;font-family:"Fraunces",serif;font-style:italic;font-weight:600;font-size:16px;box-shadow:0 2px 0 #2C241B1A}
+.hyA .pin.grower .mk.new{width:48px;height:48px;background:#D98E0B;border:2.5px solid #FBF7EF;outline:1.5px solid #A96D06;color:#2C241B;box-shadow:0 3px 0 #2C241B26}
+.hyA .pin.grower .stem{border-top:8px solid #4A7FA5;transition:border-color .5s .4s}
+.hyA .pin.grower.grown .stem{border-top-color:#A96D06}
+.hyB .pin.grower .mk.old{width:44px;height:44px;background:#fff;border:2.5px dashed #3E7FB4;color:#20679E;font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:17px}
+.hyB .pin.grower .mk.new{width:44px;height:44px;background:#F5A300;border:2.5px solid #14204A;color:#14204A;opacity:0;transform:scale(1.35);transition:opacity .3s .15s,transform .4s .15s ease-in}
+.hyB .pin.grower.grown .mk.new{opacity:1;transform:scale(1)} /* ink press: stamps DOWN onto the page, not inflates */
+.hyB .pin.grower .stem{border-top:8px solid #3E7FB4;transition:border-color .4s .4s}
+.hyB .pin.grower.grown .stem{border-top-color:#14204A}
+.hyC .pin.grower .mk.old{width:36px;height:36px;background:var(--est-fill);border:2.5px dashed var(--est-border);color:var(--est);font-family:"Fraunces",serif;font-style:italic;font-weight:600;font-size:16px}
+.hyC .pin.grower .mk.new{width:48px;height:48px;background:var(--lant);border:2.5px solid var(--lant-deep);color:var(--lant-ink)}
+.hyC.dusk .pin.grower.grown .mk.new{box-shadow:0 0 22px var(--lant-glow)}
+.hyC .pin.grower .stem{border-top:8px solid var(--est-border);transition:border-color .5s .4s}
+.hyC .pin.grower.grown .stem{border-top-color:var(--lant-deep)}
+.pin.grower .mkwrap .match-halo{inset:-7px}
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.001s!important;animation-iteration-count:1!important;transition-duration:.001s!important}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+
+<!-- shared SVG marks: camera, outlined check, storefront (no shields anywhere) -->
+<svg style="display:none" aria-hidden="true">
+  <symbol id="m-cam" viewBox="0 0 24 24"><path d="M4 8h3.2L9 5.8h6L16.8 8H20a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.1" fill="none" stroke="currentColor" stroke-width="1.9"/></symbol>
+  <symbol id="m-check" viewBox="0 0 24 24"><path d="M5 12.5l4.4 4.4L19 7.4" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="m-store" viewBox="0 0 24 24"><path d="M4 9.5 5.2 4h13.6L20 9.5M4 9.5c0 1.2.9 2.2 2.1 2.2s2.2-1 2.2-2.2c0 1.2 1 2.2 2.2 2.2s2.1-1 2.1-2.2c0 1.2 1 2.2 2.2 2.2s2.2-1 2.2-2.2c0 1.2.9 2.2 2 2.2M5.5 11.6V20h13v-8.4M10 20v-5h4v5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="m-photo" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1.8" fill="currentColor"/><path d="M4.5 17.5 10 12.5l3.5 3 3-2.6 3 3.1" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></symbol>
+</svg>
+
+<header class="masthead">
+  <div class="kicker">Curb Appeal · round two · A + C hybrids</div>
+  <h1>Field Notes × Open Doors,<br>three genuinely different marriages.</h1>
+  <p>The brief after review: keep Field Notes' warmth and witness language, keep Open Doors' visible energy — and lock the product model to <b>three tiers</b>. Every hybrid below encodes the same rules: Estimated (dashed, hollow, soft blue — early info, never a bad grade), Scanned on-site (the trust workhorse: photo receipts, dates, scanner counts), Owner-confirmed (attestation, storefront + outlined check — never a shield, never "verified"). Every badge opens its receipt in one tap. Freshness ages in muted amber and talks about time, not the place. The only filter is <b>your needs</b> — trust tier is context on the pin, never a facet.</p>
+  <nav class="jumpnav" aria-label="Hybrids">
+    <a href="#hy-a">H1 · Hearth Ledger</a>
+    <a href="#hy-b">H2 · The Willow Bulletin</a>
+    <a href="#hy-c">H3 · Dusk Shift</a>
+  </nav>
+</header>
+<p class="ladder-note">Fixed ladder in all three — <code>Estimated → Scanned on-site → Owner-confirmed</code>. Pins only climb. Triple-encoded everywhere: <em>shape/size + mark (italic i / camera / check-with-storefront) + line style (dashed / solid / double-rule)</em>, with color as the fourth, redundant channel. Each hybrid's live-scan moment is a working mock — press the button.</p>
+
+<!-- ============ HYBRID 1 — HEARTH LEDGER ============ -->
+<section class="hy hyA" id="hy-a" aria-labelledby="hy-a-h">
+  <div class="hy-head">
+    <div class="num">Hybrid 01 · warm crowd · A materials + C growth</div>
+    <h2 id="hy-a-h">Hearth Ledger — <em>the scrapbook that swells with neighbors</em></h2>
+    <p class="argue"><b>Trust argument:</b> a stranger believes a ledger kept by hand — and believes it more when they can see it being kept. This hybrid sets Open Doors' growing pins and live counters in Field Notes' linen-and-espresso material: every pin is a pressed stamp, and each verification adds wax to the seal, so a bigger mark literally means more people stood at that door. The counter in the map's title is the town's pulse, ticking in serif italics like a ledger line being written.</p>
+    <p class="argue"><b>Stage argument:</b> at projector distance you see a warm parchment map where stamps visibly swell and a number ticks upward mid-demo. Growth reads at 30 feet; the serif warmth reads as "made by people" even before anyone can read a word.</p>
+  </div>
+
+  <div class="stage"><div class="stage-inner">
+    <div class="mapbar">
+      <span class="maptitle">Willow &amp; 5th · <span class="ticknum" data-count="1204">1,204</span> scans this season</span>
+      <div class="needs-toggle" role="group" aria-label="Map lens">
+        <button type="button" aria-pressed="true" data-mode="all">All entrances</button>
+        <button type="button" aria-pressed="false" data-mode="me">My needs · wheelchair</button>
+      </div>
+    </div>
+
+    <div class="demo-grid">
+      <div class="lensroot">
+        <div class="mapwrap demo-root">
+          <div class="mapcanvas">
+            <svg class="streets" viewBox="0 0 600 430" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+              <rect width="600" height="430" fill="#E7DCC6"/>
+              <g fill="#F1E8D8" stroke="#2C241B" stroke-opacity=".18" stroke-width="1.5">
+                <rect x="18" y="18" width="160" height="150" rx="8"/>
+                <rect x="208" y="18" width="220" height="150" rx="8"/>
+                <rect x="458" y="18" width="124" height="150" rx="8"/>
+                <rect x="18" y="198" width="160" height="214" rx="8"/>
+                <rect x="208" y="198" width="220" height="98" rx="8"/>
+                <rect x="208" y="326" width="220" height="86" rx="8"/>
+                <rect x="458" y="198" width="124" height="214" rx="8"/>
+              </g>
+              <rect x="228" y="216" width="180" height="62" rx="8" fill="#D8DFC2" stroke="#476A45" stroke-opacity=".4" stroke-width="1.5"/>
+              <text x="318" y="252" text-anchor="middle" font-family="Fraunces,serif" font-style="italic" font-size="13" fill="#476A45">Willow Green</text>
+              <g font-family="Karla,sans-serif" font-size="10" fill="#6B5D4C" opacity=".85">
+                <text x="192" y="110" transform="rotate(90 192 110)" text-anchor="middle">5th Ave</text>
+                <text x="300" y="190" text-anchor="middle">Willow St</text>
+              </g>
+            </svg>
+
+            <button class="pin t1" style="left:14%;top:30%" data-match="unknown" aria-label="Corner Grocer — Estimated, not yet observed for your needs">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">?</span>i</span><span class="stem"></span>
+              <span class="plabel">Corner Grocer</span>
+            </button>
+            <button class="pin t2" style="left:48%;top:22%" data-match="partial" aria-label="Print Shop — Scanned on-site by 3 neighbors, partial match">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">~</span><svg width="21" height="21"><use href="#m-cam"/></svg></span><span class="stem"></span>
+              <span class="plabel">Print Shop · ×3</span>
+            </button>
+            <button class="pin t3" style="left:76%;top:56%" data-match="good" aria-label="Marigold Café — Owner-confirmed, good match" aria-expanded="true">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">✓</span><span class="duo"><svg width="17" height="17"><use href="#m-store"/></svg><svg width="15" height="15"><use href="#m-check"/></svg></span></span><span class="stem"></span>
+              <span class="plabel">Marigold Café</span>
+            </button>
+            <button class="pin grower" style="left:30%;top:78%" data-match="unknown" aria-label="Bea's Bakery — Estimated. Activate to preview the upgrade to Scanned on-site.">
+              <span class="mkwrap"><span class="match-halo"></span><span class="matchtag">?</span><span class="mk old">i</span><span class="mk new"><svg width="21" height="21"><use href="#m-cam"/></svg></span></span><span class="stem"></span>
+              <span class="plabel">Bea's Bakery</span>
+              <span class="growcue">tap · first scan lands</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="legend legend-tiers" aria-label="Tier legend">
+          <span class="li"><span class="sw" style="width:16px;height:16px;background:#FBF7EF;border:2px dashed #4A7FA5;color:#38678C;font-family:Fraunces,serif;font-style:italic">i</span> Estimated — early info</span>
+          <span class="li"><span class="sw" style="width:22px;height:22px;background:#D98E0B;color:#2C241B"><svg width="12" height="12"><use href="#m-cam"/></svg></span> Scanned on-site — grows with each scan</span>
+          <span class="li"><span class="sw" style="width:26px;height:26px;background:#FFFDF8;border:2px solid #8C5A28;color:#8C5A28"><svg width="13" height="13"><use href="#m-store"/></svg></span> Owner-confirmed</span>
+        </div>
+        <div class="legend legend-needs" aria-label="Match legend">
+          <span class="li"><span class="sw" style="border:3px solid #476A45"></span> Good match for you</span>
+          <span class="li"><span class="sw" style="border:3px dashed #B07C10"></span> Partial — check details</span>
+          <span class="li"><span class="sw" style="border:3px dotted #4A7FA5"></span> Not yet observed</span>
+        </div>
+      </div>
+
+      <article class="card demo-card" aria-label="Marigold Café details">
+        <div class="cat">Café · 212 Willow St</div>
+        <h3>Marigold Café</h3>
+        <button class="tierbtn" type="button" aria-expanded="false">
+          <span class="sw"><svg width="13" height="13"><use href="#m-store"/></svg></span>
+          Owner-confirmed · owner attests, neighbors photographed
+          <span class="hint">tap for the receipt ▾</span>
+        </button>
+        <div class="receipt" hidden>
+          <div class="ph"><svg viewBox="0 0 88 110" aria-label="Receipt photo: café entrance with ramp"><rect width="88" height="110" fill="#E7DCC6"/><rect x="24" y="34" width="40" height="70" rx="2" fill="#8C5A28"/><rect x="30" y="42" width="28" height="34" rx="1" fill="#F6E7C8"/><path d="M6 104h34l-8-10H6z" fill="#C9BCA4"/><rect x="20" y="20" width="48" height="10" rx="2" fill="#D98E0B"/></svg></div>
+          <dl>
+            <dt>Photographed</dt><dd>Tuesday, Aug 31 · morning</dd>
+            <dt>By</dt><dd>4 neighbors, 1 owner</dd>
+            <dt>Method</dt><dd>on-site phone scan ×4 + owner attestation</dd>
+            <dt>Shows</dt><dd>ramp left of door; button at post</dd>
+          </dl>
+        </div>
+        <p class="witness">"Photographed the entrance Tuesday — ramp on the left of the door, button works." — 4 neighbors, 1 owner</p>
+        <div class="foryou">Matched to your needs: wheelchair</div>
+        <div class="chips">
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Step-free entry</span><span class="cmeta">photo from 3 days ago · 4 scans</span><span class="cconf" aria-label="high confidence">●●●</span></div>
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Ramp visible</span><span class="cmeta">photo from 3 days ago · 4 scans</span><span class="cconf" aria-label="high confidence">●●●</span></div>
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Auto door button</span><span class="cmeta">photo from 3 days ago · owner photo</span><span class="cconf" aria-label="medium confidence">●●○</span></div>
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Wide door</span><span class="cmeta aging">newest photo is 6 weeks old — a fresh scan would help</span><span class="cconf" aria-label="medium confidence">●●○</span></div>
+          <div class="chip" data-need="0"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Accessibility signage</span><span class="cmeta">photo from 3 days ago</span><span class="cconf" aria-label="high confidence">●●●</span></div>
+          <div class="chip unk" data-need="0"><span class="cicon">i</span><span class="cname">Easy-grip hardware</span><span class="cmeta">not yet photographed</span><span class="cconf">be the first to scan</span></div>
+        </div>
+      </article>
+    </div>
+
+    <!-- H1 scan moment: the developing photograph -->
+    <div class="scanpanel demo-scan" data-drop="4200" data-end="5200" data-done="Published · Scanned on-site · the ledger grew by one" data-idle="Waiting for a photograph" data-run="Developing…" data-replay="↻ Develop another" data-tick="1">
+      <div>
+        <h3>The demo moment — a photograph develops</h3>
+        <p class="sub">On stage: photograph a door, ~7&nbsp;s while the picture "develops" from sepia to color as the notes write themselves in, then the stamp thumps onto the map, swells, and the season counter ticks +1. Compressed here to ~4.5&nbsp;s.</p>
+        <div class="scan-phone">
+          <div class="scan-view">
+            <svg class="door" viewBox="0 0 200 250" aria-hidden="true">
+              <rect width="200" height="250" fill="#E7DCC6"/>
+              <rect x="20" y="18" width="160" height="42" rx="4" fill="#D98E0B"/>
+              <text x="100" y="44" text-anchor="middle" font-family="Fraunces,serif" font-weight="600" font-size="15" fill="#2C241B">BEA'S BAKERY</text>
+              <rect x="55" y="80" width="90" height="150" rx="3" fill="#8C5A28" stroke="#2C241B" stroke-width="2"/>
+              <rect x="65" y="92" width="70" height="80" rx="2" fill="#F6E7C8"/>
+              <rect x="128" y="150" width="8" height="26" rx="3" fill="#2C241B"/>
+              <circle cx="36" cy="160" r="9" fill="#F6E7C8" stroke="#476A45" stroke-width="2.5"/>
+              <path d="M18 232 L58 232 L46 216" fill="none" stroke="#476A45" stroke-width="3"/>
+            </svg>
+            <div class="scan-flash"></div>
+            <div class="scan-ring"><svg viewBox="0 0 80 80"><circle class="track" cx="40" cy="40" r="36"/><circle class="prog" cx="40" cy="40" r="36"/></svg><span class="pct">0%</span></div>
+          </div>
+          <button class="scan-btn" type="button">📷 Develop the scan</button>
+        </div>
+      </div>
+      <div class="scan-right">
+        <div class="scanlog" aria-live="polite">
+          <div data-t="400">The picture was taken at the curb, facing the door…</div>
+          <div data-t="1200">…the threshold lies flat — <span class="ok">no step to be seen</span></div>
+          <div data-t="2000">…a ramp rises at the left, <span class="ok">gentle and wide</span></div>
+          <div data-t="2800">…a button waits on the post, <span class="ok">at sitting height</span></div>
+          <div data-t="3600">…the ledger accepts the page. <span class="ok">Entered.</span></div>
+        </div>
+        <div class="scan-checks">
+          <div class="sc" data-t="1400"><span class="tick"><svg width="12" height="12"><use href="#m-check"/></svg></span>Step-free entry · seen in this photo</div>
+          <div class="sc" data-t="2200"><span class="tick"><svg width="12" height="12"><use href="#m-check"/></svg></span>Ramp visible · seen in this photo</div>
+          <div class="sc" data-t="3000"><span class="tick"><svg width="12" height="12"><use href="#m-check"/></svg></span>Auto door button · seen in this photo</div>
+          <div class="sc" data-t="3700"><span class="tick"><svg width="12" height="12"><use href="#m-check"/></svg></span>Wide door · seen in this photo</div>
+        </div>
+        <div class="scan-map">
+          <svg class="mini" viewBox="0 0 400 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+            <rect width="400" height="150" fill="#E7DCC6"/>
+            <g fill="#F1E8D8" stroke="#2C241B" stroke-opacity=".15" stroke-width="1.5">
+              <rect x="20" y="20" width="150" height="110" rx="6"/><rect x="200" y="20" width="180" height="50" rx="6"/><rect x="200" y="90" width="180" height="40" rx="6"/>
+            </g>
+          </svg>
+          <span class="scan-ripple"></span>
+          <div class="up-pin"><span class="mkwrap"><span class="mk old">i</span><span class="mk new"><svg width="18" height="18"><use href="#m-cam"/></svg></span></span></div>
+        </div>
+        <div class="scan-status">Waiting for a photograph</div>
+        <p class="kf-notes"><b>Production keyframes (7 s):</b> 0.0s shutter, 120ms → 0.3–5.6s the photo develops sepia→color while ledger lines write themselves in italic (the AI narrates like a field diary — warmth IS the reasoning trace) → 4.2–6.0s wax ticks press in, staggered 300ms → 6.2s the estimated "i" is <b>over-stamped</b> by the camera seal, which inflates 36→48px with one squash-and-stretch pop → 6.5s counter ticks +1 in the map title → two soft ripples. History kept, never replaced.</p>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="spec"><div class="spec-inner">
+    <div>
+      <h3>Palette — hearth inks on linen</h3>
+      <div class="swatches">
+        <div class="swatch"><div class="col" style="background:#FBF7EF"></div><div class="lab">#FBF7EF linen</div></div>
+        <div class="swatch"><div class="col" style="background:#2C241B"></div><div class="lab">#2C241B espresso</div></div>
+        <div class="swatch"><div class="col" style="background:#4A7FA5"></div><div class="lab">#4A7FA5 est. blue</div></div>
+        <div class="swatch"><div class="col" style="background:#D98E0B"></div><div class="lab">#D98E0B hearth marigold</div></div>
+        <div class="swatch"><div class="col" style="background:#8C5A28"></div><div class="lab">#8C5A28 owner bronze</div></div>
+        <div class="swatch"><div class="col" style="background:#476A45"></div><div class="lab">#476A45 match forest</div></div>
+        <div class="swatch"><div class="col" style="background:#8A5B21"></div><div class="lab">#8A5B21 aging amber</div></div>
+      </div>
+    </div>
+    <div>
+      <h3>Type</h3>
+      <p class="typerow"><span class="disp">Fraunces 900</span> names &amp; the ticking counter · italic 500 for witness lines and the scan diary · <b>Karla</b> UI · Plex Mono eyebrows. Espresso on linen ≈ 12.9:1; est. blue text #38678C ≈ 5.6:1.</p>
+    </div>
+    <div>
+      <h3>Motion — stamps that breathe</h3>
+      <ul>
+        <li>From A: press-in stamp landings, paper-unfold cards, over-stamp upgrades (old mark visible a beat under the new).</li>
+        <li>From C: the mark <em>grows</em> 36→48→58px with a single 1.56-overshoot pop; counters tick digit-by-digit.</li>
+        <li>Idle map is still — motion only ever means "evidence just arrived."</li>
+        <li>Reduced motion: develops, pops and ticks jump to end state; counter updates instantly.</li>
+      </ul>
+    </div>
+  </div></div>
+</section>
+
+<!-- ============ HYBRID 2 — THE WILLOW BULLETIN ============ -->
+<section class="hy hyB" id="hy-b" aria-labelledby="hy-b-h">
+  <div class="hy-head">
+    <div class="num">Hybrid 02 · civic print · C palette + A editorial discipline</div>
+    <h2 id="hy-b-h">The Willow Bulletin — <span class="pop">a civic poster that testifies</span></h2>
+    <p class="argue"><b>Trust argument:</b> a stranger believes print. This hybrid takes Open Doors' sky-paper, navy, marigold and violet and sets them with Field Notes' editorial discipline — double-rule borders, figure numbers, and witness testimony promoted to the pull quote. Pins are fixed-size print marks whose <b>ink weight</b> climbs with the tier (dashed sketch → solid marigold plate → cobalt double-rule), because in print, certainty is set heavier, not louder. Every claim is captioned like a photograph in a newspaper: what was seen, when, by whom.</p>
+    <p class="argue"><b>Stage argument:</b> on a projector this is the highest-contrast frame of the three — navy rules on near-white, marigold plates burning at 30 feet. The demo beat is typographic: the scan "goes to press," lines typeset themselves, and the mark is stamped down onto the page like a plate hitting paper.</p>
+  </div>
+
+  <div class="stage"><div class="stage-inner">
+    <span class="figno">Fig. 1 — The entrance map, Willow &amp; 5th · afternoon edition</span>
+    <div class="mapbar">
+      <span class="maptitle">Willow &amp; 5th · 214 doors on record</span>
+      <div class="needs-toggle" role="group" aria-label="Map lens">
+        <button type="button" aria-pressed="true" data-mode="all">Everyone</button>
+        <button type="button" aria-pressed="false" data-mode="me">My needs · stroller + low vision</button>
+      </div>
+    </div>
+
+    <div class="demo-grid">
+      <div class="lensroot">
+        <div class="mapwrap demo-root">
+          <div class="mapcanvas">
+            <svg class="streets" viewBox="0 0 600 430" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+              <rect width="600" height="430" fill="#CBD9F8"/>
+              <g fill="#E4ECFF" stroke="#14204A" stroke-opacity=".3" stroke-width="2">
+                <rect x="16" y="16" width="170" height="160" rx="4"/>
+                <rect x="214" y="16" width="230" height="160" rx="4"/>
+                <rect x="472" y="16" width="112" height="160" rx="4"/>
+                <rect x="16" y="206" width="170" height="208" rx="4"/>
+                <rect x="214" y="206" width="230" height="208" rx="4"/>
+                <rect x="472" y="206" width="112" height="208" rx="4"/>
+              </g>
+              <circle cx="329" cy="310" r="52" fill="#BFE8D4" stroke="#0E8A60" stroke-opacity=".55" stroke-width="2"/>
+              <text x="329" y="315" text-anchor="middle" font-family="'Bricolage Grotesque',sans-serif" font-weight="700" font-size="13" fill="#0A6B4A">the green</text>
+              <g font-family="'IBM Plex Mono',monospace" font-size="10" fill="#3A4778">
+                <text x="300" y="196" text-anchor="middle">WILLOW ST</text>
+                <text x="200" y="215" transform="rotate(90 200 215)" text-anchor="middle">5TH AVE</text>
+              </g>
+            </svg>
+
+            <button class="pin t1" style="left:15%;top:32%" data-match="unknown" aria-label="Corner Grocer — Estimated, not yet observed">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">?</span>i</span><span class="stem"></span>
+              <span class="plabel">Corner Grocer</span>
+            </button>
+            <button class="pin t2" style="left:52%;top:23%" data-match="good" aria-label="Page and Spine Books — Scanned on-site by 7 neighbors, good match" aria-expanded="true">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">✓</span><svg width="21" height="21"><use href="#m-cam"/></svg></span><span class="stem"></span>
+              <span class="plabel">Page &amp; Spine · ×7</span>
+            </button>
+            <button class="pin t3" style="left:81%;top:57%" data-match="partial" aria-label="Sunny Laundromat — Owner-confirmed, partial match">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">~</span><svg width="19" height="19"><use href="#m-store"/></svg></span><span class="stem"></span>
+              <span class="plabel">Sunny Laundromat</span>
+            </button>
+            <button class="pin grower" style="left:30%;top:79%" data-match="unknown" aria-label="Hilltop Records — Estimated. Activate to preview the first scan going to press.">
+              <span class="mkwrap"><span class="match-halo"></span><span class="matchtag">?</span><span class="mk old">i</span><span class="mk new"><svg width="21" height="21"><use href="#m-cam"/></svg></span></span><span class="stem"></span>
+              <span class="plabel">Hilltop Records</span>
+              <span class="growcue">tap · goes to press</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="legend legend-tiers" aria-label="Tier legend">
+          <span class="li"><span class="sw" style="background:#fff;border:2px dashed #3E7FB4;color:#20679E;font-weight:800">i</span> Estimated — penciled in</span>
+          <span class="li"><span class="sw" style="background:#F5A300;border:2px solid #14204A;color:#14204A"><svg width="12" height="12"><use href="#m-cam"/></svg></span> Scanned on-site — printed with photo</span>
+          <span class="li"><span class="sw" style="background:#fff;border:2px solid #2743D6;outline:1.5px solid #2743D6;outline-offset:1.5px;color:#2743D6"><svg width="12" height="12"><use href="#m-store"/></svg></span> Owner-confirmed — set in double rule</span>
+          <span class="li roadmap">† a fourth mark is reserved for independent audits — on the roadmap, printed in no edition yet</span>
+        </div>
+        <div class="legend legend-needs" aria-label="Match legend">
+          <span class="li"><span class="sw" style="border:4px solid #0E8A60"></span> Good for you</span>
+          <span class="li"><span class="sw" style="border:4px dashed #9A6700"></span> Partly — read the captions</span>
+          <span class="li"><span class="sw" style="border:4px dotted #3E7FB4"></span> Not yet observed</span>
+        </div>
+      </div>
+
+      <article class="card demo-card" aria-label="Page and Spine Books details">
+        <div class="cat">Fig. 2 — Bookshop · 508 Willow St</div>
+        <h3>Page &amp; Spine Books</h3>
+        <button class="tierbtn" type="button" aria-expanded="false">
+          <span class="sw" style="border-style:solid;background:#F5A300;border-color:#14204A;color:#14204A"><svg width="12" height="12"><use href="#m-cam"/></svg></span>
+          Scanned on-site · 7 neighbors · newest 2 days ago
+          <span class="hint">tap for the receipt ▾</span>
+        </button>
+        <div class="receipt" hidden>
+          <div class="ph"><svg viewBox="0 0 88 110" aria-label="Receipt photo: bookshop door, level threshold"><rect width="88" height="110" fill="#CBD9F8"/><rect x="22" y="30" width="44" height="74" rx="2" fill="#14204A"/><rect x="28" y="38" width="32" height="40" rx="1" fill="#E4ECFF"/><rect x="14" y="18" width="60" height="9" rx="2" fill="#F5A300"/><rect x="10" y="102" width="68" height="4" fill="#3A4778"/></svg></div>
+          <dl>
+            <dt>Newest photo</dt><dd>Mon, Sep 1 · 5:40 pm</dd>
+            <dt>By</dt><dd>7 neighbors (7 separate visits)</dd>
+            <dt>Method</dt><dd>on-site phone scans, cross-checked</dd>
+            <dt>Shows</dt><dd>level threshold, door 92 cm wide</dd>
+          </dl>
+        </div>
+        <blockquote class="witness">"Level at the threshold, door swings light. My mother's walker had no trouble."</blockquote>
+        <p class="witness-att">— testimony filed with scan #7, Sept 1</p>
+        <div class="foryou">Good for you: stroller + low vision</div>
+        <div class="chips">
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Step-free entry</span><span class="cmeta">photographed 2 days ago · 7 scans</span><span class="cconf">94%</span></div>
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Wide door</span><span class="cmeta">photographed 2 days ago · 5 scans</span><span class="cconf">88%</span></div>
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">High-contrast signage</span><span class="cmeta">photographed 1 week ago · 3 scans</span><span class="cconf">77%</span></div>
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Clear approach</span><span class="cmeta">photographed 2 days ago · 6 scans</span><span class="cconf">91%</span></div>
+          <div class="chip" data-need="0"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Ramp visible</span><span class="cmeta aging">newest photo is 3 weeks old — worth a fresh look</span><span class="cconf">71%</span></div>
+          <div class="chip unk" data-need="0"><span class="cicon">i</span><span class="cname">Auto door button</span><span class="cmeta">no photograph on file</span><span class="cconf">file the first</span></div>
+        </div>
+      </article>
+    </div>
+
+    <!-- H2 scan moment: goes to press -->
+    <div class="scanpanel demo-scan" data-drop="4200" data-end="5200" data-done="PRINTED · SCANNED ON-SITE · EDITION UPDATED" data-idle="PRESS IDLE — AWAITING PHOTOGRAPH" data-run="SETTING TYPE…" data-replay="↻ Run another edition">
+      <div>
+        <h3>The demo moment — the scan goes to press</h3>
+        <p class="sub">On stage: photograph a door, ~7&nbsp;s while the proof develops from halftone to full color and the caption typesets itself, then the mark is <b>stamped down</b> onto the map like a printing plate. Compressed here to ~4.5&nbsp;s.</p>
+        <div class="scan-phone">
+          <div class="scan-view">
+            <svg class="door" viewBox="0 0 200 250" aria-hidden="true">
+              <rect width="200" height="250" fill="#CBD9F8"/>
+              <rect x="20" y="18" width="160" height="42" rx="3" fill="#8236E8"/>
+              <text x="100" y="44" text-anchor="middle" font-family="'Bricolage Grotesque',sans-serif" font-weight="800" font-size="14" fill="#fff">HILLTOP RECORDS</text>
+              <rect x="55" y="80" width="90" height="150" rx="3" fill="#14204A" stroke="#14204A" stroke-width="2"/>
+              <rect x="65" y="92" width="70" height="80" rx="2" fill="#E4ECFF"/>
+              <rect x="128" y="150" width="8" height="26" rx="3" fill="#F5A300"/>
+              <circle cx="36" cy="160" r="9" fill="#E4ECFF" stroke="#2743D6" stroke-width="2.5"/>
+              <path d="M18 232 L58 232 L46 216" fill="none" stroke="#2743D6" stroke-width="3"/>
+            </svg>
+            <div class="scan-flash"></div>
+            <div class="scan-ring"><svg viewBox="0 0 80 80"><circle class="track" cx="40" cy="40" r="36"/><circle class="prog" cx="40" cy="40" r="36"/></svg><span class="pct">0%</span></div>
+          </div>
+          <button class="scan-btn" type="button">▸ Send to press</button>
+        </div>
+      </div>
+      <div class="scan-right">
+        <div class="scanlog" aria-live="polite">
+          <div data-t="400">&gt; PROOF RECEIVED · 4032×3024 · halftone pass</div>
+          <div data-t="1200">&gt; threshold line… <span class="ok">flat — no step in frame</span></div>
+          <div data-t="2000">&gt; door gauge… <span class="ok">reads wide of 90 cm</span></div>
+          <div data-t="2800">&gt; push-plate… <span class="ok">found, left post</span></div>
+          <div data-t="3600">&gt; caption set. <span class="ok">TO PRESS.</span></div>
+        </div>
+        <div class="scan-checks">
+          <div class="sc" data-t="1400"><span class="tick"><svg width="12" height="12"><use href="#m-check"/></svg></span>Step-free entry — in this photograph</div>
+          <div class="sc" data-t="2200"><span class="tick"><svg width="12" height="12"><use href="#m-check"/></svg></span>Wide door — in this photograph</div>
+          <div class="sc" data-t="3000"><span class="tick"><svg width="12" height="12"><use href="#m-check"/></svg></span>Auto door button — in this photograph</div>
+          <div class="sc" data-t="3700"><span class="tick"><svg width="12" height="12"><use href="#m-check"/></svg></span>Clear approach — in this photograph</div>
+        </div>
+        <div class="scan-map">
+          <svg class="mini" viewBox="0 0 400 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+            <rect width="400" height="150" fill="#CBD9F8"/>
+            <g fill="#E4ECFF" stroke="#14204A" stroke-opacity=".3" stroke-width="1.5">
+              <rect x="20" y="20" width="150" height="110" rx="3"/><rect x="200" y="20" width="180" height="50" rx="3"/><rect x="200" y="90" width="180" height="40" rx="3"/>
+            </g>
+          </svg>
+          <span class="scan-ripple"></span>
+          <div class="up-pin"><span class="mkwrap"><span class="mk old">i</span><span class="mk new"><svg width="18" height="18"><use href="#m-cam"/></svg></span></span></div>
+        </div>
+        <div class="scan-status">PRESS IDLE — AWAITING PHOTOGRAPH</div>
+        <p class="kf-notes"><b>Production keyframes (7 s):</b> 0.0s shutter → 0.3–5.4s the proof de-screens halftone→color while the caption typesets character-by-character in mono (the reasoning reads like a photo caption being filed) → 4.2–6.0s checks stamp in square marigold plates → 6.2s the mark <b>presses down</b> onto the map: scale 1.35→1.0 ease-in, one ink-ripple, no bounce — plates don't bounce → 6.4s the pencil "i" fades beneath it, edition line increments. Violet is reserved for figure numbers and the roadmap footnote only.</p>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="spec"><div class="spec-inner">
+    <div>
+      <h3>Palette — festival inks, print discipline</h3>
+      <div class="swatches">
+        <div class="swatch"><div class="col" style="background:#F2F6FF"></div><div class="lab">#F2F6FF sky paper</div></div>
+        <div class="swatch"><div class="col" style="background:#14204A"></div><div class="lab">#14204A navy ink</div></div>
+        <div class="swatch"><div class="col" style="background:#3E7FB4"></div><div class="lab">#3E7FB4 est. sky</div></div>
+        <div class="swatch"><div class="col" style="background:#F5A300"></div><div class="lab">#F5A300 marigold plate</div></div>
+        <div class="swatch"><div class="col" style="background:#2743D6"></div><div class="lab">#2743D6 owner cobalt</div></div>
+        <div class="swatch"><div class="col" style="background:#5A34B8"></div><div class="lab">#5A34B8 violet (captions)</div></div>
+        <div class="swatch"><div class="col" style="background:#0E8A60"></div><div class="lab">#0E8A60 match green</div></div>
+        <div class="swatch"><div class="col" style="background:#8A5B00"></div><div class="lab">#8A5B00 aging amber</div></div>
+      </div>
+    </div>
+    <div>
+      <h3>Type</h3>
+      <p class="typerow"><span class="disp">Bricolage Grotesque 800</span> headlines &amp; witness pull quotes · <b>Karla</b> body · Plex Mono figure numbers, dates and percentages — data always in mono, like column figures. Navy on sky paper ≈ 13.8:1.</p>
+    </div>
+    <div>
+      <h3>Motion — press mechanics</h3>
+      <ul>
+        <li>From A: editorial restraint — rules, captions and testimony carry the page; motion is rare and typographic.</li>
+        <li>From C: the palette pops and the one allowed flourish is physical — the plate stamp-down (scale-in, ease-in, zero bounce).</li>
+        <li>Tier upgrade re-inks the mark heavier in place; the pencil layer stays visible for a beat underneath.</li>
+        <li>Reduced motion: proofs, typesetting and stamps cut straight to the printed state.</li>
+      </ul>
+    </div>
+  </div></div>
+</section>
+
+<!-- ============ HYBRID 3 — DUSK SHIFT ============ -->
+<section class="hy hyC" id="hy-c" aria-labelledby="hy-c-h">
+  <div class="hy-head">
+    <div class="num">Hybrid 03 · my blend · adaptive warmth, sketch → lantern pins</div>
+    <h2 id="hy-c-h">Dusk Shift — <em>daylight civic, lantern-lit by night</em></h2>
+    <p class="argue"><b>Trust argument (the thesis):</b> trust is needed at two different hours. At 2&nbsp;pm you're planning from a sofa — you want Open Doors' bright, legible civic energy. At 8&nbsp;pm you're on the curb deciding whether to push down the block — you want Field Notes' warmth telling you a person was here recently. So the interface <b>shifts with the day</b>: one product, one grammar, two temperatures. The pin grammar carries it — Estimated is a chalk sketch (an outline of a place, honestly unfinished), Scanned on-site inflates into a marigold lantern, Owner-confirmed adds the storefront seal — and at dusk the lanterns <b>light</b>, so the glow on the map is literally the evidence: lit means someone stood here, unlit sketch means not yet. Glow is a fourth, redundant channel — size, mark and line-style carry the tiers on their own.</p>
+    <p class="argue"><b>Stage argument:</b> one button flips the whole room. Mid-demo, the map slides from daylight paper to a deep dusk where every scanned door glows like a shop window — the audience watches trust become visible light. No other direction has a single-gesture transformation this legible from the back row.</p>
+  </div>
+
+  <div class="stage"><div class="stage-inner">
+    <div class="mapbar">
+      <span class="maptitle">Willow &amp; 5th · the doors that are lit</span>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <div class="daydusk" role="group" aria-label="Time of day">
+          <button type="button" aria-pressed="true" data-time="day">☀ Day</button>
+          <button type="button" aria-pressed="false" data-time="dusk">☾ Dusk</button>
+        </div>
+        <div class="needs-toggle" role="group" aria-label="Map lens">
+          <button type="button" aria-pressed="true" data-mode="all">All doors</button>
+          <button type="button" aria-pressed="false" data-mode="me">My needs · low vision</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="demo-grid">
+      <div class="lensroot">
+        <div class="mapwrap demo-root">
+          <div class="mapcanvas">
+            <svg class="streets" viewBox="0 0 600 430" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+              <rect class="ground" width="600" height="430"/>
+              <g class="blockline" fill="none" stroke-opacity=".35" stroke-width="1.8">
+                <rect class="blockfill" x="18" y="18" width="165" height="155" rx="12"/>
+                <rect class="blockfill" x="212" y="18" width="225" height="155" rx="12"/>
+                <rect class="blockfill" x="466" y="18" width="116" height="155" rx="12"/>
+                <rect class="blockfill" x="18" y="202" width="165" height="210" rx="12"/>
+                <rect class="blockfill" x="212" y="202" width="225" height="210" rx="12"/>
+                <rect class="blockfill" x="466" y="202" width="116" height="210" rx="12"/>
+              </g>
+              <g font-family="Karla,sans-serif" font-weight="700" font-size="10.5" opacity=".9">
+                <text x="300" y="192" text-anchor="middle">WILLOW ST</text>
+                <text x="198" y="212" transform="rotate(90 198 212)" text-anchor="middle">5TH AVE</text>
+              </g>
+            </svg>
+
+            <button class="pin t1" style="left:15%;top:33%" data-match="unknown" aria-label="Corner Grocer — Estimated, a sketch so far">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">?</span>i</span><span class="stem"></span>
+              <span class="plabel">Corner Grocer</span>
+            </button>
+            <button class="pin t2" style="left:50%;top:23%" data-match="good" aria-label="Night Owl Diner — Scanned on-site by 5 neighbors, good match">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">✓</span><svg width="21" height="21"><use href="#m-cam"/></svg></span><span class="stem"></span>
+              <span class="plabel">Night Owl Diner · ×5</span>
+            </button>
+            <button class="pin t3" style="left:79%;top:57%" data-match="good" aria-label="Corner Pharmacy — Owner-confirmed, good match" aria-expanded="true">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">✓</span><span style="display:flex;align-items:center;gap:3px"><svg width="16" height="16"><use href="#m-store"/></svg><svg width="14" height="14"><use href="#m-check"/></svg></span></span><span class="stem"></span>
+              <span class="plabel">Corner Pharmacy</span>
+            </button>
+            <button class="pin grower" style="left:29%;top:78%" data-match="partial" aria-label="Luz Tailoring — Estimated. Activate to preview its lantern being lit by a first scan.">
+              <span class="mkwrap"><span class="match-halo"></span><span class="matchtag">~</span><span class="mk old">i</span><span class="mk new"><svg width="21" height="21"><use href="#m-cam"/></svg></span></span><span class="stem"></span>
+              <span class="plabel">Luz Tailoring</span>
+              <span class="growcue">tap · light this lantern</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="legend legend-tiers" aria-label="Tier legend">
+          <span class="li"><span class="sw" style="width:16px;height:16px;background:transparent;border:2px dashed currentColor;font-family:Fraunces,serif;font-style:italic">i</span> Estimated — a sketch, unlit</span>
+          <span class="li"><span class="sw" style="width:22px;height:22px;background:#E1930A;color:#221C28"><svg width="12" height="12"><use href="#m-cam"/></svg></span> Scanned on-site — a lantern, lit at dusk</span>
+          <span class="li"><span class="sw" style="width:26px;height:26px;background:transparent;border:2px solid currentColor"><svg width="13" height="13"><use href="#m-store"/></svg></span> Owner-confirmed — sealed lantern</span>
+        </div>
+        <div class="legend legend-needs" aria-label="Match legend">
+          <span class="li"><span class="sw" style="border:3px solid #33684A"></span> Good match for you</span>
+          <span class="li"><span class="sw" style="border:3px dashed #8A5B21"></span> Partial — check details</span>
+          <span class="li"><span class="sw" style="border:3px dotted #4A7FA5"></span> Not yet observed</span>
+        </div>
+      </div>
+
+      <article class="card demo-card" aria-label="Corner Pharmacy details">
+        <div class="cat">Pharmacy · 44 5th Ave · open till 10</div>
+        <h3>Corner Pharmacy</h3>
+        <button class="tierbtn" type="button" aria-expanded="false">
+          <span class="sw"><svg width="13" height="13"><use href="#m-store"/></svg></span>
+          Owner-confirmed · the owner attests to what the photos show
+          <span class="hint">tap for the receipt ▾</span>
+        </button>
+        <div class="receipt" hidden>
+          <div class="ph"><svg viewBox="0 0 88 110" aria-label="Receipt photo: pharmacy door at evening, lit"><rect width="88" height="110" fill="#2A2333"/><rect x="22" y="28" width="44" height="76" rx="2" fill="#453A52"/><rect x="28" y="36" width="32" height="42" rx="1" fill="#F5A300" opacity=".85"/><rect x="14" y="16" width="60" height="9" rx="2" fill="#B08CF0"/><rect x="10" y="102" width="68" height="4" fill="#0F0C14"/></svg></div>
+          <dl>
+            <dt>Newest photo</dt><dd>Sun, Aug 30 · 7:55 pm (evening light)</dd>
+            <dt>By</dt><dd>3 neighbors + the owner</dd>
+            <dt>Method</dt><dd>on-site scans ×3, owner walkthrough</dd>
+            <dt>Shows</dt><dd>flat entry, lit signage, button works</dd>
+          </dl>
+        </div>
+        <p class="witness">"Went by after dark on purpose — the entry light stays on and the button is easy to find." — neighbor, scan #3</p>
+        <div class="foryou">Matched to your needs: low vision</div>
+        <div class="chips">
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Lit entrance after dark</span><span class="cmeta">evening photo · 4 days ago · 3 scans</span><span class="cconf">high</span></div>
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">High-contrast signage</span><span class="cmeta">photo from 4 days ago · owner + 2 scans</span><span class="cconf">high</span></div>
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Step-free entry</span><span class="cmeta">photo from 4 days ago · 3 scans</span><span class="cconf">high</span></div>
+          <div class="chip" data-need="0"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Auto door button</span><span class="cmeta aging">newest photo is 7 weeks old — evening habits may have changed</span><span class="cconf">medium</span></div>
+          <div class="chip unk" data-need="0"><span class="cicon">i</span><span class="cname">Glare-free interior light</span><span class="cmeta">no evening photo yet</span><span class="cconf">light it up first</span></div>
+        </div>
+      </article>
+    </div>
+
+    <!-- H3 scan moment: lighting a lantern -->
+    <div class="scanpanel demo-scan" data-drop="4200" data-end="5200" data-done="Lantern lit · Scanned on-site · visible from the street" data-idle="Dark doorway — no scan yet" data-run="Kindling…" data-replay="↻ Light another">
+      <div>
+        <h3>The demo moment — lighting a lantern</h3>
+        <p class="sub">On stage, ideally with the room already flipped to dusk: photograph a door, ~7&nbsp;s while the phone's glow "kindles" the frame, then the sketch on the map catches light — a lantern where there was an outline. Compressed here to ~4.5&nbsp;s. Flip the Day/Dusk switch above first; the payoff doubles at dusk.</p>
+        <div class="scan-phone">
+          <div class="scan-view">
+            <svg class="door" viewBox="0 0 200 250" aria-hidden="true">
+              <rect width="200" height="250" fill="#241E2C"/>
+              <rect x="20" y="18" width="160" height="42" rx="4" fill="#3A3244"/>
+              <text x="100" y="44" text-anchor="middle" font-family="'Bricolage Grotesque',sans-serif" font-weight="800" font-size="14" fill="#F2EADB">LUZ TAILORING</text>
+              <rect x="55" y="80" width="90" height="150" rx="3" fill="#3A3244" stroke="#57536E" stroke-width="2"/>
+              <rect x="65" y="92" width="70" height="80" rx="2" fill="#F5A300" opacity=".8"/>
+              <rect x="128" y="150" width="8" height="26" rx="3" fill="#F2EADB"/>
+              <circle cx="36" cy="160" r="9" fill="#2A2333" stroke="#F5A300" stroke-width="2.5"/>
+              <path d="M18 232 L58 232 L46 216" fill="none" stroke="#B08CF0" stroke-width="3"/>
+            </svg>
+            <div class="scan-flash"></div>
+            <div class="scan-ring"><svg viewBox="0 0 80 80"><circle class="track" cx="40" cy="40" r="36"/><circle class="prog" cx="40" cy="40" r="36"/></svg><span class="pct">0%</span></div>
+          </div>
+          <button class="scan-btn" type="button">🏮 Light it</button>
+        </div>
+      </div>
+      <div class="scan-right">
+        <div class="scanlog" aria-live="polite">
+          <div data-t="400">&gt; frame in · evening exposure balanced</div>
+          <div data-t="1200">&gt; threshold… <span class="ok">flat, no lip at the sill</span></div>
+          <div data-t="2000">&gt; entry light… <span class="ok">on, warm, no glare</span></div>
+          <div data-t="2800">&gt; signage contrast… <span class="ok">reads at 6 m</span></div>
+          <div data-t="3600">&gt; kindling the pin… <span class="ok">lit.</span></div>
+        </div>
+        <div class="scan-checks">
+          <div class="sc" data-t="1400"><span class="tick"><svg width="12" height="12"><use href="#m-check"/></svg></span>Step-free entry · this photo</div>
+          <div class="sc" data-t="2200"><span class="tick"><svg width="12" height="12"><use href="#m-check"/></svg></span>Lit entrance after dark · this photo</div>
+          <div class="sc" data-t="3000"><span class="tick"><svg width="12" height="12"><use href="#m-check"/></svg></span>High-contrast signage · this photo</div>
+          <div class="sc" data-t="3700"><span class="tick"><svg width="12" height="12"><use href="#m-check"/></svg></span>Wide door · this photo</div>
+        </div>
+        <div class="scan-map">
+          <svg class="mini" viewBox="0 0 400 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+            <rect class="g3" width="400" height="150" fill="#EAE6D4"/>
+            <g fill="#FFFDF6" stroke="#57536E" stroke-opacity=".4" stroke-width="1.5">
+              <rect x="20" y="20" width="150" height="110" rx="8"/><rect x="200" y="20" width="180" height="50" rx="8"/><rect x="200" y="90" width="180" height="40" rx="8"/>
+            </g>
+          </svg>
+          <span class="scan-ripple"></span>
+          <div class="up-pin"><span class="mkwrap"><span class="mk old">i</span><span class="mk new"><svg width="18" height="18"><use href="#m-cam"/></svg></span></span></div>
+        </div>
+        <div class="scan-status">Dark doorway — no scan yet</div>
+        <p class="kf-notes"><b>Production keyframes (7 s):</b> 0.0s shutter → 0.3–5.6s the viewfinder kindles: an inner glow rises with the progress ring while the log narrates in plain evening language → 4.2–6.0s checks catch light one by one → 6.2s on the map, the chalk sketch <b>ignites</b>: outline crossfades under an inflating lantern (36→48px, one soft overshoot), glow blooms only if the scene is at dusk → 6.5s two warm ripples. Same data, same grammar, day or night — dusk just lets the evidence shine.</p>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="spec"><div class="spec-inner">
+    <div>
+      <h3>Palette — one grammar, two temperatures</h3>
+      <div class="swatches">
+        <div class="swatch"><div class="col" style="background:#F3F1E7"></div><div class="lab">#F3F1E7 day paper</div></div>
+        <div class="swatch"><div class="col" style="background:#221C28"></div><div class="lab">#221C28 dusk plum</div></div>
+        <div class="swatch"><div class="col" style="background:#38678C"></div><div class="lab">#38678C sketch blue</div></div>
+        <div class="swatch"><div class="col" style="background:#F5A300"></div><div class="lab">#F5A300 lantern marigold</div></div>
+        <div class="swatch"><div class="col" style="background:#5A34B8"></div><div class="lab">#5A34B8 owner violet (day)</div></div>
+        <div class="swatch"><div class="col" style="background:#B08CF0"></div><div class="lab">#B08CF0 owner violet (dusk)</div></div>
+        <div class="swatch"><div class="col" style="background:#33684A"></div><div class="lab">#33684A match green</div></div>
+        <div class="swatch"><div class="col" style="background:#E0A93E"></div><div class="lab">#E0A93E dusk amber</div></div>
+      </div>
+    </div>
+    <div>
+      <h3>Type</h3>
+      <p class="typerow"><span class="disp">Bricolage Grotesque 800</span> for wayfinding and headlines (C's voice) · <em style="font-family:Fraunces,serif">Fraunces italic 500</em> for witness testimony and the scan narration (A's voice) · <b>Karla</b> UI · Plex Mono for dates. Both themes hold body text above 10:1; every tier color swaps to a higher-contrast twin at dusk.</p>
+    </div>
+    <div>
+      <h3>Motion — light behaves like light</h3>
+      <ul>
+        <li>The day↔dusk shift is one 800ms cross-tween of custom properties — nothing moves, everything warms.</li>
+        <li>From C: lanterns inflate with one soft overshoot; from A: sketches are over-drawn, never erased.</li>
+        <li>Glow is additive and slow (400ms bloom) and is never the only signal — grayscale keeps size + mark + line style.</li>
+        <li>Reduced motion: theme swaps instantly, lanterns appear lit, no blooms or ripples.</li>
+      </ul>
+    </div>
+  </div></div>
+</section>
+
+<footer class="page-foot">
+  <h2>Self-audit — all three hybrids</h2>
+  <ul>
+    <li><b>WCAG contrast:</b> body text 10.4–13.8:1 in every theme; the weakest text pairing (estimated blue #38678C / #20679E on light grounds) holds ≥ 4.6:1; aging-amber meta text ≥ 4.8:1 and is always accompanied by the word "old", never color alone.</li>
+    <li><b>Colorblind-safe triple encoding:</b> tier = shape/size (36→48→56px, or ink-weight in the Bulletin) + mark (italic i / camera / storefront-with-check) + line style (dashed / solid / double-rule). Match = halo line style (solid/dashed/dotted) + tag glyph (✓/~/?) + color. Deutan, protan, tritan and full grayscale all keep both hierarchies.</li>
+    <li><b>Grayscale projector:</b> Hearth Ledger and Dusk Shift carry tiers by size; the Bulletin by ink density; all pins ≥36px with heavy silhouettes. Dusk glow is redundant — losing it loses nothing.</li>
+    <li><b>Three tiers, fixed words:</b> "Estimated" is dashed, hollow, soft blue, checkless — early info, never a warning; "Scanned on-site" carries the evidence budget (photo receipts, dates, scanner counts, testimony); "Owner-confirmed" is an attestation mark — storefront + outlined check, no shields, and the word "verified" appears nowhere. The cut auditor tier survives only as the Bulletin's explicitly-roadmap footnote.</li>
+    <li><b>Receipts:</b> every tier badge is a button; one tap opens photo, date, method, observer count. Chips name features only — what a photo shows, never a legal claim.</li>
+    <li><b>Freshness:</b> muted amber, worded about time ("newest photo is 6 weeks old"), never red, never about the place.</li>
+    <li><b>Needs, not tiers, filter:</b> the only lens is "my needs" — good/partial/unknown halos double-encoded (line style + glyph + color). No control anywhere filters by trust tier.</li>
+    <li><b>prefers-reduced-motion:</b> every animation — develops, presses, kindles, counters, ripples — collapses to its end state; the scan mocks jump straight to "published".</li>
+  </ul>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  // ---- my-needs lens (per hybrid) ----
+  document.querySelectorAll(".needs-toggle").forEach(function(tg){
+    var section = tg.closest(".hy");
+    var lens = section.querySelector(".lensroot");
+    var card = section.querySelector(".demo-card");
+    tg.querySelectorAll("button").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        tg.querySelectorAll("button").forEach(function(b){ b.setAttribute("aria-pressed", String(b===btn)); });
+        var me = btn.dataset.mode === "me";
+        lens.classList.toggle("needs-on", me);
+        lens.querySelector(".demo-root .mapcanvas").classList.toggle("needs-on", me);
+        if(card) card.classList.toggle("needs-on-card", me);
+      });
+    });
+  });
+
+  // ---- tier badge -> receipt (one tap) ----
+  document.querySelectorAll(".tierbtn").forEach(function(btn){
+    var receipt = btn.nextElementSibling;
+    btn.addEventListener("click", function(){
+      var open = btn.getAttribute("aria-expanded") === "true";
+      btn.setAttribute("aria-expanded", String(!open));
+      receipt.hidden = open;
+      var hint = btn.querySelector(".hint");
+      if(hint) hint.textContent = open ? "tap for the receipt ▾" : "hide the receipt ▴";
+    });
+  });
+
+  // ---- main-map grower pins ----
+  document.querySelectorAll(".pin.grower").forEach(function(pin){
+    pin.addEventListener("click", function(){
+      pin.classList.toggle("grown");
+      var cue = pin.querySelector(".growcue");
+      if(cue) cue.textContent = pin.classList.contains("grown") ? "scanned on-site · tap to replay" : "tap · replay the upgrade";
+    });
+  });
+
+  // ---- Dusk Shift day/dusk switch ----
+  document.querySelectorAll(".daydusk").forEach(function(tg){
+    var section = tg.closest(".hy");
+    tg.querySelectorAll("button").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        tg.querySelectorAll("button").forEach(function(b){ b.setAttribute("aria-pressed", String(b===btn)); });
+        section.classList.toggle("dusk", btn.dataset.time === "dusk");
+      });
+    });
+  });
+
+  // ---- generic scan engine (all three panels) ----
+  document.querySelectorAll(".demo-scan").forEach(function(panel){
+    var btn = panel.querySelector(".scan-btn");
+    var phone = panel.querySelector(".scan-phone");
+    var pct = panel.querySelector(".scan-ring .pct");
+    var logLines = panel.querySelectorAll(".scanlog div");
+    var checks = panel.querySelectorAll(".scan-checks .sc");
+    var status = panel.querySelector(".scan-status");
+    var timers = [];
+    var dropAt = +panel.dataset.drop || 4200;
+    var endAt = +panel.dataset.end || 5200;
+
+    function finishTick(){
+      if(!panel.dataset.tick) return;
+      var num = panel.closest(".hy").querySelector(".ticknum");
+      if(!num) return;
+      var v = (+num.dataset.count || 0) + 1;
+      num.dataset.count = v;
+      num.textContent = v.toLocaleString("en-US");
+    }
+    function reset(){
+      timers.forEach(clearTimeout); timers = [];
+      panel.classList.remove("scanning","dropped");
+      phone.classList.remove("scanning");
+      logLines.forEach(function(l){ l.classList.remove("on"); });
+      checks.forEach(function(c){ c.classList.remove("on"); });
+      pct.textContent = "0%";
+      status.textContent = panel.dataset.idle;
+    }
+    btn.addEventListener("click", function(){
+      reset();
+      btn.disabled = true;
+      if(reduced){
+        logLines.forEach(function(l){ l.classList.add("on"); });
+        checks.forEach(function(c){ c.classList.add("on"); });
+        panel.classList.add("dropped");
+        pct.textContent = "100%";
+        status.textContent = panel.dataset.done;
+        finishTick();
+        btn.disabled = false;
+        btn.textContent = panel.dataset.replay;
+        return;
+      }
+      panel.classList.add("scanning");
+      phone.classList.add("scanning");
+      status.textContent = panel.dataset.run;
+      var t0 = performance.now() + 250, DUR = 3600;
+      (function tick(){
+        var p = Math.min(1, Math.max(0, (performance.now() - t0) / DUR));
+        pct.textContent = Math.round(p*100) + "%";
+        if(p < 1 && phone.classList.contains("scanning")) requestAnimationFrame(tick);
+      })();
+      logLines.forEach(function(l){ timers.push(setTimeout(function(){ l.classList.add("on"); }, +l.dataset.t)); });
+      checks.forEach(function(c){ timers.push(setTimeout(function(){ c.classList.add("on"); }, +c.dataset.t)); });
+      timers.push(setTimeout(function(){
+        panel.classList.add("dropped");
+        pct.textContent = "100%";
+        status.textContent = panel.dataset.done;
+        finishTick();
+      }, dropAt));
+      timers.push(setTimeout(function(){
+        phone.classList.remove("scanning");
+        panel.classList.remove("scanning");
+        btn.disabled = false;
+        btn.textContent = panel.dataset.replay;
+      }, endAt));
+    });
+  });
+})();
+</script>
+</body>
+</html>
