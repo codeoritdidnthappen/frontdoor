@@ -172,18 +172,21 @@ def test_yunet_detects_a_face_without_the_cascades(monkeypatch):
     ), f"no box covers the face center: {boxes}"
 
 
-def test_yunet_boxes_come_back_in_full_resolution_coordinates(monkeypatch):
-    # Detection runs downscaled (DETECT_MAX_SIDE=1600); a face drawn on a
-    # 3200px-wide canvas must come back in that canvas's coordinates.
+def test_yunet_boxes_come_back_in_the_decoded_frames_coordinates(monkeypatch):
+    # Detection runs on its own downscaled copies (YUNET_MAX_SIDE,
+    # DETECT_MAX_SIDE); a face on a 4096px canvas must come back in the
+    # coordinates of the frame the module decoded, which since #453 is capped
+    # at DECODE_MAX_SIDE and is the frame the stored bytes are in. Half scale
+    # here, so the face center at (2048, 1536) is at (1024, 768).
     monkeypatch.setattr(
         faceblur, "_get_cascades", lambda: (_EmptyCascade(), _EmptyCascade())
     )
-    big = np.full((2400, 3200, 3), 200, dtype=np.uint8)
-    big[1000:1400, 1400:1800] = drawn_face(400)  # face center at (1600, 1200)
+    big = np.full((3072, 4096, 3), 200, dtype=np.uint8)
+    big[1336:1736, 1848:2248] = drawn_face(400)
     boxes = detect_faces(encode(big))
     assert any(
-        x <= 1600 <= x + w and y <= 1200 <= y + h for x, y, w, h in boxes
-    ), f"no box covers the face center at full resolution: {boxes}"
+        x <= 1024 <= x + w and y <= 768 <= y + h for x, y, w, h in boxes
+    ), f"no box covers the face center in the decoded frame: {boxes}"
 
 
 def test_yunet_on_a_tiny_flat_frame_returns_no_boxes_without_raising():
@@ -282,11 +285,20 @@ def test_flat_gray_image_has_no_faces():
     assert detect_faces(encode(flat)) == []
 
 
-def test_boxes_are_reported_in_full_resolution_coordinates(monkeypatch):
+def test_boxes_are_reported_in_the_coordinates_of_the_frame_detect_was_given(
+    monkeypatch,
+):
     # Detection runs downscaled (DETECT_MAX_SIDE); boxes must come back in the
-    # coordinates of the image the caller handed in. A cascade box is only
+    # coordinates of the frame _detect was handed. A cascade box is only
     # returned with a YuNet box agreeing (#350), so YuNet is faked to report
     # the same face in ITS frame (YUNET_MAX_SIDE: scale 0.64 on 3200px).
+    #
+    # _detect is called directly rather than through detect_faces: since #453
+    # nothing reaches it above DECODE_MAX_SIDE, so the YuNet copy is normally
+    # scale 1.0 and this rescale would never be exercised end to end. It is
+    # still the code that runs if the cap is ever raised, and undoing the two
+    # detector scales is exactly what puts blur_regions in the stored bytes'
+    # coordinate space, so it stays pinned here.
     class FakeCascade:
         def __init__(self, boxes):
             self._boxes = boxes
@@ -302,7 +314,7 @@ def test_boxes_are_reported_in_full_resolution_coordinates(monkeypatch):
     monkeypatch.setattr(faceblur, "_detect_yunet", lambda small: [(13, 13, 26, 26)])
     big = np.full((2400, 3200, 3), 128, dtype=np.uint8)  # Haar scale = 0.5
 
-    boxes = detect_faces(encode(big))
+    boxes = faceblur._detect(big)
 
     assert (20, 20, 41, 41) in boxes  # the YuNet box, rescaled from 0.64
     # The cascade box, rescaled - once per variant the fake cascade ran on
@@ -418,6 +430,160 @@ def test_blur_regions_are_the_pixelated_footprints_not_the_detections(monkeypatc
     result = process_upload(encode(noisy_image()))
     assert result.face_count == 1
     assert result.blur_regions == ({"x": 82, "y": 62, "w": 96, "h": 96},)
+
+
+# --- the decode cap (TICK-453, #453) -----------------------------------------
+#
+# _decode used to call cv2.imdecode at full resolution. The capture set's
+# 24 MP frame is ~73 MB as a BGR array and its 12 MP frame ~37 MB, allocated
+# and then thrown away by the first detector resize, and live /screen requests
+# were OOM-killed on real photographs. The decode is now capped at
+# DECODE_MAX_SIDE, mostly inside the JPEG decoder so the full array never
+# exists. Everything the module reports -- boxes, blur_regions, the stored
+# bytes -- is in that capped frame.
+
+
+def jpeg_size_header(width, height):
+    """SOI + a start-of-frame carrying these dimensions + start of scan.
+
+    Enough for _decode_flags, which reads the header and nothing else, and it
+    keeps the flag table testable without encoding a 12 MP image per case.
+    """
+    payload = (
+        b"\x08"
+        + height.to_bytes(2, "big")
+        + width.to_bytes(2, "big")
+        + b"\x03\x01\x11\x00\x02\x11\x01\x03\x11\x01"
+    )
+    return (
+        b"\xff\xd8\xff\xc0"
+        + (len(payload) + 2).to_bytes(2, "big")
+        + payload
+        + b"\xff\xda"
+    )
+
+
+def test_the_cap_is_never_below_what_the_detectors_read():
+    # Lowering DECODE_MAX_SIDE under YUNET_MAX_SIDE would silently shrink what
+    # the primary detector sees, which is the recall the module exists for:
+    # measured on the pilot photos, a ~20px through-glass face scores ~0.6 at
+    # 2048 and ~0.2 at 1600. Nothing else in the module would complain.
+    assert faceblur.DECODE_MAX_SIDE >= faceblur.YUNET_MAX_SIDE
+    assert faceblur.DECODE_MAX_SIDE >= faceblur.DETECT_MAX_SIDE
+
+
+@pytest.mark.parametrize(
+    "long_side, reduced",
+    [
+        (1536, cv2.IMREAD_COLOR),  # under the cap: decoded whole
+        (2048, cv2.IMREAD_COLOR),  # the derived set on disk, decoded whole
+        (3000, cv2.IMREAD_COLOR),  # half would be 1500, too far under the cap
+        (4032, cv2.IMREAD_REDUCED_COLOR_2),  # the 12 MP capture: 2016
+        (5712, cv2.IMREAD_REDUCED_COLOR_2),  # the 24 MP capture: 2856
+        (8064, cv2.IMREAD_REDUCED_COLOR_4),  # 48 MP: 2016
+        (16384, cv2.IMREAD_REDUCED_COLOR_8),  # 2048
+    ],
+)
+def test_the_decode_scale_is_chosen_from_the_header(long_side, reduced):
+    flags = faceblur._decode_flags(jpeg_size_header(long_side, long_side * 3 // 4))
+    # IGNORE_ORIENTATION rides along on every branch, or the reduced path
+    # would let OpenCV rotate as well and the rotation would happen twice.
+    assert flags == reduced | cv2.IMREAD_IGNORE_ORIENTATION
+
+
+def test_bytes_with_no_readable_header_decode_whole_and_are_capped_after():
+    # PNG and WebP give no size up cheaply, and OpenCV's reduced flags only
+    # scale inside codecs that can: for the rest it decodes in full and
+    # resizes, which saves nothing. Those decode normally and meet the cap on
+    # the way out instead.
+    assert faceblur._jpeg_dimensions(b"\x89PNG\r\n\x1a\n") is None
+    assert faceblur._jpeg_dimensions(b"\xff\xd8truncated") is None
+    plain = cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION
+    assert faceblur._decode_flags(b"\x89PNG\r\n\x1a\n") == plain
+    ok, buf = cv2.imencode(".png", np.zeros((600, 3000, 3), dtype=np.uint8))
+    assert ok
+    assert max(faceblur._decode(buf.tobytes()).shape[:2]) == faceblur.DECODE_MAX_SIDE
+
+
+def test_a_long_thin_frame_keeps_a_pixel_rather_than_raising():
+    # cv2.resize derives its size by rounding, so a 5000x1 frame rounds its
+    # short side to zero and raises cv2.error -- past both exceptions the
+    # endpoints catch, which is an unbounded 500 rather than the fail-closed
+    # refusal this module owes its callers.
+    out = faceblur._cap_to_max_side(np.zeros((1, 5000, 3), dtype=np.uint8))
+    assert out.shape[:2] == (1, faceblur.DECODE_MAX_SIDE)
+
+
+def test_the_stored_image_is_capped_at_the_stated_constant():
+    # The stored bytes are the evidence photograph. Their long side is
+    # DECODE_MAX_SIDE and not the sensor's, whichever way the decode got there
+    # -- reduced (4096) or resized afterwards (3000).
+    for width, height in ((4096, 3072), (3000, 2250)):
+        result = process_upload(encode(np.full((height, width, 3), 200, np.uint8)))
+        stored = decode(result.image_bytes)
+        assert max(stored.shape[:2]) == faceblur.DECODE_MAX_SIDE
+
+
+def test_a_photograph_over_the_cap_is_reduced_and_still_finds_the_face():
+    # End to end on the reduced path: the face is found, and the recorded
+    # region is in the stored frame's coordinates, not the upload's.
+    big = np.full((3072, 4096, 3), 200, dtype=np.uint8)
+    big[1336:1736, 1848:2248] = drawn_face(400)  # face center at (2048, 1536)
+    result = process_upload(encode(big))
+    stored = decode(result.image_bytes)
+    assert stored.shape[:2] == (1536, 2048)
+    assert result.face_count >= 1
+    assert any(
+        r["x"] <= 1024 <= r["x"] + r["w"] and r["y"] <= 768 <= r["y"] + r["h"]
+        for r in result.blur_regions
+    ), f"no recorded region covers the face center: {result.blur_regions}"
+
+
+def test_blur_regions_locate_the_pixelation_inside_the_stored_bytes(monkeypatch):
+    # blur_regions goes into scan records and /screen responses beside these
+    # bytes, so it is only meaningful in THEIR coordinate space. Pinned by
+    # reading the stored bytes at the recorded rectangle rather than by
+    # trusting the arithmetic: the pixels there must be flat, and the pixels
+    # outside must not be. The source is over the cap, so the frame moved.
+    monkeypatch.setattr(faceblur, "_detect", lambda img: [(300, 200, 200, 200)])
+    result = process_upload(encode(noisy_image(1800, 2400), quality=98))
+    stored = decode(result.image_bytes)
+    assert stored.shape[:2] == (1536, 2048)
+
+    (region,) = result.blur_regions
+    assert region == {"x": 240, "y": 140, "w": 320, "h": 320}
+    assert 0 <= region["x"] and region["x"] + region["w"] <= stored.shape[1]
+    assert 0 <= region["y"] and region["y"] + region["h"] <= stored.shape[0]
+
+    inside = stored[
+        region["y"] : region["y"] + region["h"],
+        region["x"] : region["x"] + region["w"],
+    ]
+    outside = stored[900:1220, 1400:1720]
+    assert inside.std() < outside.std() / 2, (
+        "the recorded rectangle does not land on the pixelation in the stored "
+        f"bytes: inside std {inside.std():.1f}, outside {outside.std():.1f}"
+    )
+
+
+def test_orientation_is_applied_exactly_once_on_a_reduced_decode():
+    # The reduced flags keep IMREAD_IGNORE_ORIENTATION, so OpenCV still does
+    # no rotation of its own and _apply_orientation is the only one. Twice
+    # would leave a 4096x2048 landscape back in landscape (2048x1024) with the
+    # marker in the bottom-right; once leaves it portrait with the marker top
+    # right.
+    img = np.zeros((2048, 4096, 3), dtype=np.uint8)
+    img[0:400, 0:400] = 255
+    tagged = with_exif(encode(img), exif_app1(6))
+    assert faceblur._decode_flags(tagged) == (
+        cv2.IMREAD_REDUCED_COLOR_2 | cv2.IMREAD_IGNORE_ORIENTATION
+    )
+
+    out = decode(strip_gps(tagged))
+
+    assert out.shape[:2] == (2048, 1024)
+    assert out[100, 924].mean() > 200  # marker top-right
+    assert out[100, 100].mean() < 50
 
 
 # --- EXIF: orientation and GPS -----------------------------------------------

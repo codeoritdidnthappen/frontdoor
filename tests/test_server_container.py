@@ -43,6 +43,11 @@ IMAGE = "frontdoor-server:tick062"
 # cv2.imdecode at FULL resolution, and a 12 MP phone image is ~36 MB as a BGR array before the
 # detector makes its own 2048- and 1600-side copies. This test exists precisely so the number
 # here and the number in fly.toml cannot drift, and it caught this change.
+# Still 1024 after TICK-453 (#453) capped the decode, and that is a decision rather than an
+# omission: the cap removes the full-resolution array (peak working set 892.7 -> 753.7 MB over
+# 78 real photographs at capture resolution) but the peak is set by detector working memory --
+# YuNet at 2048 and six Haar passes at 1600 -- which never read that array. fly.toml carries the
+# measurements; if that number moves, this one moves with it.
 MEMORY_CAP = "1024m"
 
 # A full-resolution still is a few megabytes, well above what the other tests send.
