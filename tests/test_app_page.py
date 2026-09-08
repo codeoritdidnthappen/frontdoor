@@ -488,3 +488,52 @@ def test_the_installed_app_carries_its_own_type_offline():
     shell = worker.split("const SHELL =", 1)[1].split("];", 1)[0]
     for name in FONTS:
         assert f"/app-fonts/{name}" in shell, f"{name} is not in the service worker shell"
+
+
+def test_the_manifest_offers_an_icon_ios_and_android_will_actually_use():
+    """180 alone is not enough, and not only for Android.
+
+    Chrome will not offer Add to Home Screen without a 192, and wants 512 for the
+    splash. iOS 16.4 and later PREFERS the manifest's icons over apple-touch-icon
+    when a manifest is present, and falls back to a SCREENSHOT of the page when it
+    finds none it can use — which is what the product owner saw on 2026-09-08 with
+    the head tag and /app-icon.png both correct and serving.
+    """
+    manifest = json.loads(
+        create_app().test_client().get("/app-manifest.json").get_data(as_text=True)
+    )
+    sizes = {icon["sizes"] for icon in manifest["icons"]}
+    assert "192x192" in sizes, "Chrome will not offer the install prompt"
+    assert "512x512" in sizes, "no splash icon, and iOS may fall back to a screenshot"
+
+
+def test_the_maskable_icon_is_its_own_file():
+    """Android crops a maskable icon to the launcher's shape.
+
+    Pointing the maskable entry at the full-bleed artwork loses the mark's corners
+    to a circular mask, so it is a separate drawing with the mark inside the centre
+    80% and the ground bleeding to every edge — not the same bytes under a second
+    purpose, which is what shipped before.
+    """
+    manifest = json.loads(
+        create_app().test_client().get("/app-manifest.json").get_data(as_text=True)
+    )
+    maskable = [i for i in manifest["icons"] if "maskable" in i["purpose"]]
+    assert maskable, "no maskable icon"
+    any_srcs = {i["src"] for i in manifest["icons"] if i["purpose"] == "any"}
+    for icon in maskable:
+        assert icon["src"] not in any_srcs, (
+            f"{icon['src']} is served as both maskable and any; a full-bleed icon "
+            "loses its corners to a circular mask"
+        )
+
+
+def test_every_manifest_icon_is_actually_served():
+    """A manifest naming an icon the server does not have is worse than no icon:
+    the browser tries, fails, and falls back without saying why."""
+    client = create_app().test_client()
+    manifest = json.loads(client.get("/app-manifest.json").get_data(as_text=True))
+    for icon in manifest["icons"]:
+        response = client.get(icon["src"])
+        assert response.status_code == 200, f"{icon['src']} is {response.status_code}"
+        assert response.mimetype == "image/png", icon["src"]

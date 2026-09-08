@@ -518,6 +518,45 @@ def create_app():
         response.headers["Cache-Control"] = "public, max-age=86400"
         return response
 
+    # The manifest's icons, by exact name. An allow-list rather than a path join,
+    # for the same reason the font route uses one.
+    #
+    # 180 alone was not enough, and the reason is not only Android (TICK-431).
+    # Chrome will not offer Add to Home Screen without a 192, and wants 512 for
+    # the splash. iOS 16.4 and later PREFERS the manifest's icons over
+    # apple-touch-icon when a manifest is present, and falls back to a
+    # SCREENSHOT of the page when it finds none it can use -- which is what the
+    # product owner saw on 2026-09-08 with the head tag and /app-icon.png both
+    # correct. One set of icons fixes both platforms.
+    #
+    # The maskable variant is a separate file, not the same bytes under a second
+    # purpose. Android crops a maskable icon to the launcher's own shape, so the
+    # mark sits inside the centre 80% safe circle with the indigo ground bleeding
+    # to every edge; the full-bleed artwork would lose its corners to a circular
+    # mask.
+    # Registered one by one rather than behind a "/<name>" rule. A variable rule at
+    # the root is a catch-all: it swallows every unmatched single-segment path, so
+    # `GET /measure` -- which should be 405, because only POST is defined -- became
+    # a 404 from this handler instead. The suite caught it; three explicit routes
+    # cannot do that to anything.
+    def _serve_app_icon(filename):
+        icon = resources.files("frontdoor_server").joinpath(filename).read_bytes()
+        response = Response(icon, mimetype="image/png")
+        response.headers["Cache-Control"] = "public, max-age=86400"
+        return response
+
+    @app.get("/app-icon-192.png")
+    def app_icon_192():
+        return _serve_app_icon("app-icon-192.png")
+
+    @app.get("/app-icon-512.png")
+    def app_icon_512():
+        return _serve_app_icon("app-icon-512.png")
+
+    @app.get("/app-icon-512-maskable.png")
+    def app_icon_512_maskable():
+        return _serve_app_icon("app-icon-512-maskable.png")
+
     # The three faces the app page asks for, by exact name. An allow-list rather than a
     # path join: a filename that reaches the filesystem is a traversal waiting to happen,
     # and this route has exactly three legitimate answers.
