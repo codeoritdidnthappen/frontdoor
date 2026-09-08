@@ -93,10 +93,30 @@ OPS: list[Op] = [
         ),
         kind="replace_region",
         anchor='<link rel="apple-touch-icon"',
-        # Was the fonts.googleapis.com preconnect until the type moved to this origin
-        # (self-hosted faces). The type comment that replaced it is the new boundary.
+        # The region ends at the type comment, so the two CDN preconnects the design
+        # source carries between the title and that comment are inside it and go. The
+        # stylesheet link that follows the comment is the self_hosted_type op below.
         until='<!-- Round 4 type.',
         fragment="head.html",
+    ),
+    Op(
+        name="self_hosted_type",
+        why=(
+            "the two families are served from this origin, not from a CDN. The design "
+            "source is worked on in a browser with a network and links the CDN "
+            "stylesheet; this page is installable, is meant to launch with no signal, "
+            "and may not disclose a visitor to a third party on every load. This was a "
+            "hand edit to the committed design source until Rounds 10-11 -- which a "
+            "refresh from a new design round silently reverts -- so it is an op now"
+        ),
+        kind="replace",
+        anchor=(
+            '<link href="https://fonts.googleapis.com/css2?'
+            "family=Atkinson+Hyperlegible+Next:ital,wght@0,200..800;1,200..800"
+            '&family=Nunito+Sans:wght@700..900&display=swap" rel="stylesheet">\n'
+            "<style>\n"
+        ),
+        fragment="type-self-hosted.html",
     ),
     Op(
         name="wiring_css",
@@ -463,6 +483,25 @@ WIRING_REQUIRED: list[str] = [
     # that was looked for and not found. Losing this line puts a rejected
     # response in front of a person at a door as an observation.
     "Not assessed this time:",
+    # The type, served from this origin. Without these the page falls back to
+    # system-ui the moment the network is slow, and the installed app launches
+    # in the system face with nothing to say it happened.
+    "url('/app-fonts/AtkinsonHyperlegibleNext-Variable.woff2')",
+    "url('/app-fonts/AtkinsonHyperlegibleNext-Italic-Variable.woff2')",
+    "url('/app-fonts/NunitoSans-ExtraBold.ttf')",
+    # Round 10, and the reason this file's replace_region ops are dangerous: both
+    # lines are the design source's and both fall inside scan_entry's region, so
+    # they reach the page only through the fragment. Losing stopCoach() leaves the
+    # 5 Hz frame readback and the devicemotion listener running after the shutter.
+    "ackCapture();",
+    "stopCoach();",
+    # Round 11's provenance row, likewise inside publish's region. It is the first
+    # thing a contributor is shown about their scan, and -- the wiring's part -- it
+    # says a receipt was joined only for a run that actually published.
+    "document.getElementById('done-prov').innerHTML = provRow(",
+    "function doneProvenance(p, simulated){",
+    "Added to this entrance's receipt as a dated source",
+    "Nothing was published, so nothing joined this entrance's receipt.",
 ]
 
 # ...and none of these. The design source is worked on against a deployed host and a
@@ -477,6 +516,12 @@ WIRING_FORBIDDEN: list[str] = [
     "corrections.unshift(",
     "seeded with three worked examples",
     "stays on the receipt as its own dated source",
+    # The type comes from this origin. Not a preconnect, not a stylesheet link, not
+    # a font source -- and not a comment either, so this can never quietly come back
+    # as "the domain is only mentioned". tests/test_app_page.py enforces the weaker
+    # form (no request); the port enforces the absolute one.
+    "fonts.googleapis.com",
+    "fonts.gstatic.com",
 ]
 
 

@@ -103,6 +103,23 @@ function doneHeading(p, simulated){
     : s==='quarantined' ? 'Privacy hold — the photo stays off the map'
     : 'Scan saved for later — not published yet';
 }
+/* ROUND 11's provenance row, sized to this page rather than to the design source.
+   The design has one outcome and says, flatly, that the scan was added to the
+   entrance's receipt. This page has four, and the same rule as doneHeading() above
+   applies: a screen may only claim what the server actually did. Only a published
+   run joins a receipt, so only a published run says so.
+   Told the outcome, exactly like doneHeading: `simulated` is answered before the pin
+   is looked at, so a simulated run against an entrance somebody really published
+   earlier cannot read that earlier publish back as this run's result. */
+function doneProvenance(p, simulated){
+  if(simulated) return {main:'Simulated scan',
+    sub:"Nothing was published, so nothing joined this entrance's receipt."};
+  const s=p.publish&&p.publish.state;
+  return {main:'Your scan', sub:
+    s==='published' ? "Added to this entrance's receipt as a dated source — sources, dates, and confidence, not a badge."
+    : s==='quarantined' ? "On privacy hold — the photo was not stored, and nothing has joined this entrance's receipt."
+    : "Assessed, but not published yet — it joins this entrance's receipt when it reaches the map."};
+}
 function runDone(p, simulated){
   const h=document.querySelector('#scan-done .scan-h');
   if(h) h.textContent=doneHeading(p, simulated);
@@ -130,6 +147,28 @@ function runDone(p, simulated){
     d.innerHTML=`<span class="pin">${pinSVG(q.tier,pinPx(q.tier,'receipt'))}</span>`;
     mm.appendChild(d);
   });
+  /* ROUND 11: the provenance row, in the receipt's own words and its own component --
+     the first thing a contributor is shown about their scan is the shape it takes on
+     somebody else's card: a dated source, never a badge. It falls inside the region
+     this op replaces, so it only reaches the served page through here. What it says
+     is doneProvenance()'s decision, above, for the same reason the heading is
+     doneHeading()'s: this screen renders the outcome it was handed. */
+  const day=fmtDay(APP_TODAY.join('-'));
+  const prov=doneProvenance(p, simulated);
+  document.getElementById('done-prov').innerHTML = provRow(
+    iconSVG('camera',17,'var(--marigold-ink,#6B4014)'),
+    `<b>${prov.main} · ${day}</b>`,
+    `<span class="pr-sub">${prov.sub}</span>`,
+    'done-scan');
+  const dp=document.querySelector('#done-prov .prov-row');
+  if(dp){
+    /* a run that reached no card -- a simulated scan of an entrance that is not on the
+       map -- has no receipt to open, so the row states the outcome and opens nothing */
+    const opens = !!p.id;
+    dp.setAttribute('aria-label', `${prov.main}, ${day} — ${prov.sub}`+(opens?' Opens the receipt.':''));
+    if(opens) dp.addEventListener('click',()=>{ showScreen('screen-map'); openCard(p.id,'full'); });
+    else { dp.disabled=true; dp.setAttribute('aria-disabled','true'); }
+  }
   const d=document.createElement('div');
   d.style.cssText=`position:absolute;left:${W/2}px;top:${Hh/2}px;pointer-events:none;--mh:34px`;
   d.className='minipin'+(simulated?'':' pin-drop');
