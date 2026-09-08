@@ -13,7 +13,7 @@ import re
 from importlib import resources
 from pathlib import Path
 
-from flask import Flask, Response, jsonify, request
+from flask import Flask, Response, jsonify, request, abort
 from jsonschema import Draft202012Validator, ValidationError
 from werkzeug.exceptions import HTTPException
 
@@ -513,6 +513,39 @@ def create_app():
             resources.files("frontdoor_server")
             .joinpath("app-icon.png")
             .read_bytes()
+        )
+        response = Response(icon, mimetype="image/png")
+        response.headers["Cache-Control"] = "public, max-age=86400"
+        return response
+
+    # The manifest's icons, by exact name. An allow-list rather than a path join,
+    # for the same reason the font route uses one.
+    #
+    # 180 alone was not enough, and the reason is not only Android (TICK-431).
+    # Chrome will not offer Add to Home Screen without a 192, and wants 512 for
+    # the splash. iOS 16.4 and later PREFERS the manifest's icons over
+    # apple-touch-icon when a manifest is present, and falls back to a
+    # SCREENSHOT of the page when it finds none it can use -- which is what the
+    # product owner saw on 2026-09-08 with the head tag and /app-icon.png both
+    # correct. One set of icons fixes both platforms.
+    #
+    # The maskable variant is a separate file, not the same bytes under a second
+    # purpose. Android crops a maskable icon to the launcher's own shape, so the
+    # mark sits inside the centre 80% safe circle with the indigo ground bleeding
+    # to every edge; the full-bleed artwork would lose its corners to a circular
+    # mask.
+    _APP_ICONS = {
+        "app-icon-192.png",
+        "app-icon-512.png",
+        "app-icon-512-maskable.png",
+    }
+
+    @app.get("/<icon_name>")
+    def app_icon_sized(icon_name):
+        if icon_name not in _APP_ICONS:
+            abort(404)
+        icon = (
+            resources.files("frontdoor_server").joinpath(icon_name).read_bytes()
         )
         response = Response(icon, mimetype="image/png")
         response.headers["Cache-Control"] = "public, max-age=86400"

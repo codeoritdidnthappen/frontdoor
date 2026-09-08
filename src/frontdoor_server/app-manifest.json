@@ -9,7 +9,11 @@
   "orientation": "portrait",
   "background_color": "#1E1543",
   "theme_color": "#1E1543",
-  "categories": ["navigation", "utilities", "travel"],
+  "categories": [
+    "navigation",
+    "utilities",
+    "travel"
+  ],
   "icons": [
     {
       "src": "/app-icon.png",
@@ -18,8 +22,20 @@
       "purpose": "any"
     },
     {
-      "src": "/app-icon.png",
-      "sizes": "180x180",
+      "src": "/app-icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/app-icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/app-icon-512-maskable.png",
+      "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
     }
