@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Estimated mark gallery 3 — the ≈ question</title>
+<style>
+  :root{
+    --indigo900:#1E1142; --indigo800:#28165A; --violet600:#4F34DB; --violet800:#38239B;
+    --sky400:#76BCFD; --sky700:#1B6599; --marigold400:#FDB327; --amber700:#8C5400;
+    --lavender-path:#CFBCEE; --lavender100:#F5F2FC; --lavender200:#E8E1F7; --white:#FFFFFF;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--white);color:var(--indigo900);
+       font:15px/1.5 "Atkinson Hyperlegible",Aptos,Arial,sans-serif}
+  main{max-width:1180px;margin:0 auto;padding:32px 24px 96px}
+  h1{font-size:28px;margin:0 0 4px}
+  h2{font-size:22px;margin:56px 0 4px;padding-top:24px;border-top:2px solid var(--lavender200)}
+  h3{font-size:15px;margin:28px 0 8px;letter-spacing:.02em;text-transform:uppercase;color:var(--violet800)}
+  p{max-width:78ch}
+  .lede{font-size:16px;color:var(--indigo800)}
+  .muted{color:var(--indigo800);opacity:.8}
+  code{font-family:Consolas,"Cascadia Mono",Menlo,monospace;font-size:.92em;background:var(--lavender100);padding:1px 5px;border-radius:4px}
+  pre{font-family:Consolas,"Cascadia Mono",Menlo,monospace;font-size:12.5px;line-height:1.45;
+      background:var(--lavender100);border:1px solid var(--lavender200);border-radius:8px;
+      padding:14px 16px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-width:100%}
+  table{border-collapse:collapse;font-size:14px;margin:8px 0 0}
+  th,td{border:1px solid var(--lavender200);padding:6px 12px;text-align:left;vertical-align:top}
+  th{background:var(--lavender100);font-weight:700}
+  td.n{text-align:right;font-variant-numeric:tabular-nums}
+  td.fail{color:var(--amber700);font-weight:700}
+  td.ok{color:var(--indigo900)}
+  .sw{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:6px;border:1px solid var(--lavender-path)}
+  .row{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start}
+  .ground{position:relative;display:inline-flex;align-items:flex-end;gap:22px;padding:18px 22px 14px;border-radius:10px;min-height:96px}
+  .ground .cap{position:absolute;left:10px;top:4px;font-size:11.5px;color:var(--indigo800);opacity:.85;white-space:nowrap}
+  .ground.land{background:var(--lavender100)}
+  .ground.block{background:var(--lavender200)}
+  .ground.edge{background:var(--lavender-path)}
+  .ground.white{background:var(--white);border:1px solid var(--lavender200)}
+  .ground.accent{background:var(--lavender200)}
+  .spot{position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:6px}
+  .spot svg{position:relative}
+  .ground.accent{gap:36px;padding-top:30px}
+  .accent .spot::before{content:"";position:absolute;left:-9px;right:-9px;top:-8px;bottom:16px;background:var(--sky400);border-radius:50%}
+  .tw{overflow-x:auto;max-width:100%}
+  .spot small{font-size:11px;color:var(--indigo800);opacity:.85;position:relative}
+  .halo-row .ground{gap:34px;padding-top:24px}
+  .cand{margin-top:40px}
+  .cand-head{display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap}
+  .cand-head .hero{flex:0 0 auto;padding:22px 26px 16px;background:var(--lavender100);border-radius:12px;display:flex;gap:26px;align-items:flex-end}
+  .cand-head .copy{flex:1 1 420px}
+  .case{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:100%}
+  .case p{max-width:none}
+  .case b{display:block;margin-bottom:4px}
+  .rec{background:var(--lavender100);border-left:6px solid var(--violet600);padding:16px 22px;border-radius:0 10px 10px 0;margin-top:20px}
+  .summary td:nth-child(2){max-width:38ch}
+  .dense{display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start}
+  .dense figure{margin:0;max-width:100%}
+  .dense figcaption{font-size:12.5px;color:var(--indigo800);margin-top:6px}
+  .dense svg{display:block;max-width:100%;height:auto;border-radius:10px}
+  .zoom{display:flex;gap:18px;align-items:flex-end;flex-wrap:wrap}
+  label.tog{display:inline-flex;align-items:center;gap:8px;margin:14px 0 0;font-size:14px;cursor:pointer}
+  @media (max-width:760px){.case{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Estimated mark gallery 3 — the ≈ question</h1>
+  <p class="lede">Round 8, brief §1, third drawing pass. The owner asked: <em>why not something like ≈ instead of the i?</em> Gallery 1’s candidate B tried it once and the drawer judged that it read as water at small sizes. This page treats that as a drawing problem, not a verdict: four ways to put the “approximately” sign on the Estimated tier, each drawn so that it cannot be a river.</p>
+  <p class="muted">Every colour is one of the canonical twelve from <code>asset-library/tokens/variables.css</code>. Pins are composed the way <code>pinSVG</code> composes a library asset: the asset drawing, under it the build’s white lift strokes, under those the match halo (r 50 on the head centre, lavender disc in a match state only). No confidence dots on anything; the owner removed them. No dash or dotted stroke on any mark; the halos own those. Outline is sky700 <code>#1B6599</code> throughout. Scanned and Owner are drawn as the build draws them, minus their dots.</p>
+  <label class="tog"><input type="checkbox" id="lift" checked> Draw the build’s white lift strokes (uncheck to see the outline on the raw ground)</label>
+
+  <h2>Why B read as water, and what changes here</h2>
+  <p>Cartographic water is two or three thin lines, each a wave and a half or more, evenly spaced across the shape, with a generous amplitude. The mathematical ≈ is the opposite on every axis: exactly one period per line, the two lines stacked close (about two and a half stroke widths apart), the pair much wider than it is tall, and the stroke heavy relative to the wave. Gallery 1’s B was drawn at stroke 5.5 with an 8-unit control offset and a 15-unit gap, which put it halfway to the water convention. Every ≈ on this page uses one period, a 5.5-unit control offset (peak about 4 units, wavelength-to-amplitude near 10:1), the outline’s own stroke weight (4), round caps, and a gap of 11 units between the two lines.</p>
+  <div class="row" id="before"></div>
+
+  <h2>Summary</h2>
+  <div id="summary"></div>
+
+  <div id="gallery"></div>
+
+  <h2 id="dense-h">A dense block: clutter</h2>
+  <p>Twelve Estimated marks at 32 in one block beside two Scanned at 36 and one Owner at 40, the kit’s sizes for the three rungs, once in H1 and once in H4. One Estimated mark in each sits on the place accent. The block is drawn with the map’s ground tones: land, block, block edge, place accent.</p>
+  <div class="dense" id="dense"></div>
+
+  <h2 id="recommend">Recommendation</h2>
+  <div id="recbox" class="rec"></div>
+</main>
+
+<script>
+/* ---------- palette: the canonical twelve, nothing else ---------- */
+const P = {
+  indigo900:'#1E1142', indigo800:'#28165A', violet600:'#4F34DB', violet800:'#38239B',
+  sky400:'#76BCFD', sky700:'#1B6599', marigold400:'#FDB327', amber700:'#8C5400',
+  lavenderPath:'#CFBCEE', lavender100:'#F5F2FC', lavender200:'#E8E1F7', white:'#FFFFFF'
+};
+const GROUNDS = [
+  {key:'land',   name:'Land',        hex:P.lavender100},
+  {key:'block',  name:'Block',       hex:P.lavender200},
+  {key:'edge',   name:'Block edge',  hex:P.lavenderPath},
+  {key:'accent', name:'Place accent',hex:P.sky400},
+  {key:'white',  name:'White',       hex:P.white}
+];
+
+/* ---------- geometry shared with the build ---------- */
+const TEAR = 'M48 6c-21 0-36 15.7-36 35.3 0 25.1 24.3 45.8 33.5 52.8a4 4 0 0 0 5 0C59.7 87.1 84 66.4 84 41.3 84 21.7 69 6 48 6Z';
+const HEAD = {x:48, y:41.3};
+const VB = '-8 1 112 95.1', AR = 112/95.1;
+const SW = 4;                       /* the library outline weight; every glyph here matches it */
+const DOT_R = 21.6;                 /* H4 disc: 0.6 x the 36-unit head radius */
+
+/* one period of a sine, tight amplitude: from x0, width w, centre line y, control offset a */
+function wave(x0, w, y, a){
+  const h = w/2, t = h/3, n = v => String(Math.round(v*10)/10);
+  return 'M'+n(x0)+' '+n(y)+'c'+n(t)+' -'+n(a)+' '+n(2*t)+' -'+n(a)+' '+n(h)+' 0s'+n(2*t)+' '+n(a)+' '+n(h)+' 0';
+}
+/* ≈ : two waves stacked, 60% of the head width, gap 11 (2.75 x stroke) */
+function approx(color, cx, cy, span, gap, a, sw){
+  const x0 = cx - span/2;
+  return '<path d="'+wave(x0, span, cy-gap/2, a)+' '+wave(x0, span, cy+gap/2, a)+'" fill="none" stroke="'+color+'" stroke-width="'+sw+'" stroke-linecap="round" stroke-linejoin="round"/>';
+}
+/* ~ : one wave, same span, same weight */
+function tilde(color, cx, cy, span, a, sw){
+  return '<path d="'+wave(cx-span/2, span, cy, a)+'" fill="none" stroke="'+color+'" stroke-width="'+sw+'" stroke-linecap="round" stroke-linejoin="round"/>';
+}
+const HEAD_SPAN = 43.2;   /* 60% of the 72-unit head */
+const HEAD_GAP  = 11;
+const HEAD_AMP  = 5.5;    /* control offset; the peak lands about 4.1 units off the centre line */
+
+/* the build's lift: three white strokes along the outline, widest most transparent */
+function lift(shapes){
+  if(!document.getElementById('lift').checked) return '';
+  const passes = [[15.7,.28],[10.2,.62],[5.9,1]];
+  return shapes.map(s => passes.map(([w,o]) =>
+    s.tag==='circle'
+      ? '<circle cx="'+s.cx+'" cy="'+s.cy+'" r="'+s.r+'" fill="none" stroke="#fff" stroke-opacity="'+o+'" stroke-width="'+(s.sw+w)+'"/>'
+      : '<path d="'+s.d+'" fill="none" stroke="#fff" stroke-opacity="'+o+'" stroke-width="'+(s.sw+w)+'" stroke-linejoin="round"/>'
+  ).join('')).join('');
+}
+function halo(state){
+  const cx=HEAD.x, cy=HEAD.y;
+  if(!state) return '';
+  let h = '<circle cx="'+cx+'" cy="'+cy+'" r="47" fill="'+P.lavenderPath+'" opacity=".55"/>';
+  if(state==='good')    h += '<circle cx="'+cx+'" cy="'+cy+'" r="50" fill="none" stroke="'+P.indigo900+'" stroke-width="6"/><circle cx="'+cx+'" cy="'+cy+'" r="38" fill="none" stroke="'+P.sky400+'" stroke-width="2.4" opacity=".65"/>';
+  if(state==='partial') h += '<circle cx="'+cx+'" cy="'+cy+'" r="50" fill="none" stroke="'+P.violet600+'" stroke-width="6" stroke-dasharray="17.9 10.7" transform="rotate(-90 '+cx+' '+cy+')"/>';
+  if(state==='unknown') h += '<circle cx="'+cx+'" cy="'+cy+'" r="50" fill="none" stroke="'+P.sky700+'" stroke-width="6" stroke-linecap="round" stroke-dasharray="1.2 13.1"/>';
+  return h;
+}
+function wrap(inner, h){
+  const w = Math.round(h*AR*100)/100;
+  return '<svg width="'+w+'" height="'+h+'" viewBox="'+VB+'" fill="none" aria-hidden="true" style="overflow:visible;display:block">'+inner+'</svg>';
+}
+/* nested placement inside a larger scene, by anchor point (tip for teardrops, centre for the dot) */
+function place(inner, h, ax, ay, anchor){
+  const s = h/95.1, w = h*AR;
+  const x = ax - (anchor.x+8)*s, y = ay - (anchor.y-1)*s;
+  return '<svg x="'+x.toFixed(1)+'" y="'+y.toFixed(1)+'" width="'+w.toFixed(1)+'" height="'+h+'" viewBox="'+VB+'" overflow="visible">'+inner+'</svg>';
+}
+const TIP = {x:48, y:94.5};
+
+/* the other two rungs, as the build draws them, minus the dots */
+const SCAN_BODY = '<path d="'+TEAR+'" fill="'+P.marigold400+'" stroke="'+P.indigo900+'" stroke-width="4" stroke-linejoin="round"/>'
+  + '<g fill="none" stroke="'+P.indigo900+'" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><circle cx="48" cy="34" r="9"/><path d="M30 69c1-15 8-23 18-23s17 8 18 23Z"/></g>';
+const OWNER_BODY = '<path d="'+TEAR+'" fill="'+P.violet600+'" stroke="#FFFFFF" stroke-width="4"/>'
+  + '<g fill="none" stroke="#FFFFFF" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"><path d="M28 38h40l-4-12H32Z"/><path d="M30 38v30h36V38M42 68V51h13v17"/><path d="M28 38c0 5 6 7 10 3 4 4 9 4 13 0 4 4 9 4 13 0 4 4 10 2 10-3"/></g>'
+  + '<circle cx="88" cy="28" r="14" fill="#FFFFFF" stroke="'+P.violet800+'" stroke-width="3"/><path d="m81 28 5 5 9-11" fill="none" stroke="'+P.violet800+'" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>';
+const TEAR_LIFT = [{tag:'path', d:TEAR, sw:0}];
+/* gallery 1's B, for the before strip only */
+const B_APPROX = '<path d="M30 35c6-8 12-8 18 0s12 8 18 0M30 50c6-8 12-8 18 0s12 8 18 0" fill="none" stroke="'+P.sky700+'" stroke-width="5.5" stroke-linecap="round"/>';
+const OLD_B_BODY = '<path d="'+TEAR+'" fill="'+P.white+'" stroke="'+P.sky700+'" stroke-width="4"/>' + B_APPROX;
+
+function scanPin(h, match){ return wrap(halo(match)+lift(TEAR_LIFT)+SCAN_BODY, h); }
+function ownerPin(h, match){ return wrap(halo(match)+lift(TEAR_LIFT)+OWNER_BODY, h); }
+function oldBPin(h, match){ return wrap(halo(match)+lift(TEAR_LIFT)+OLD_B_BODY, h); }
+
+/* ---------- the candidates ---------- */
+const CANDS = [
+  {
+    id:'H1', name:'Teardrop, white fill, heavy ≈',
+    line:'The library teardrop, white fill, sky700 outline at weight 4, and a ≈ drawn as a sign: two waves of exactly one period, 43 units wide (60% of the head), control offset 5.5, stacked 11 units apart, stroke 4 to match the outline, round caps.',
+    fill:P.white, fillName:'white', glyph:P.sky700, glyphName:'≈ sky700', silhouette:'teardrop',
+    outline:TEAR_LIFT, anchor:TIP,
+    body(){ return '<path d="'+TEAR+'" fill="'+P.white+'" stroke="'+P.sky700+'" stroke-width="'+SW+'"/>' + approx(P.sky700, HEAD.x, HEAD.y, HEAD_SPAN, HEAD_GAP, HEAD_AMP, SW); },
+    pro:'It says what the tier means with the one glyph in common use that means it, and it says it on the same silhouette and fill as gallery 1’s A, so tier separation from Scanned and Owner is unchanged: white is the fill no other tier uses, and a hollow teardrop beside two filled ones stays the lightest mark on the map. The drawing answers the water reading on every axis that produced it: one period per line, not one and a half; a wavelength-to-amplitude ratio near 10:1, so each line is a bent bar rather than a ripple; the two lines stacked at 2.75 stroke widths so they read as a pair, not as a pattern filling the head; and the outline’s own stroke weight, so the glyph and the rim are one drawing. Measured contrast is the map’s floor for a sky700 outline (3.08:1 on the place accent, 6.24 on its own fill), and the lift strokes put the rim against white everywhere.',
+    con:'At 32px the two lines are 1.35px thick, 3.7px apart, and rise 1.4px: on a 1x display the anti-aliasing flattens the wave and the glyph can read as = (equals), which says exact, the opposite of the tier. On 2x and 3x phone screens it holds. It is not the board’s glyph, so every surface that shows the Estimated mark (legend, onboarding tiles, ladder sheet, card badge, welcome tiles) changes artwork, which is the blast radius the brief warns about. And two horizontal lines inside any shape still invite a river reading when the mark sits over the sky400 place accent; the tight amplitude reduces that risk but the block test below is where it should be judged.'
+  },
+  {
+    id:'H2', name:'Teardrop, white fill, single tilde',
+    line:'Same teardrop, fill and outline as H1; the glyph is one wave, 43 units wide on the head centre line, control offset 6.5, stroke 4. One wave cannot be ripples.',
+    fill:P.white, fillName:'white', glyph:P.sky700, glyphName:'~ sky700', silhouette:'teardrop',
+    outline:TEAR_LIFT, anchor:TIP,
+    body(){ return '<path d="'+TEAR+'" fill="'+P.white+'" stroke="'+P.sky700+'" stroke-width="'+SW+'"/>' + tilde(P.sky700, HEAD.x, HEAD.y, HEAD_SPAN, 6.5, SW); },
+    pro:'The strongest answer to the water objection: water needs repetition, and a single wave has none. The tilde is also the lay shorthand for “roughly” (~5 min, ~$20), which more readers know than the mathematical ≈, and as one stroke with the most air around it of any glyph on the page it survives 32px better than H1’s pair, whose lines can fuse. Silhouette, fill and outline are H1’s, so everything about tier separation and contrast carries over unchanged.',
+    con:'A lone tilde is a weak figure: at 32 it is a 14px squiggle that can read as a dash, a stray n, or a rendering artefact, and the head looks empty around it. The Owner mark already carries a single wave along its roofline (the third stroke in its house drawing), so the two tiers would share a motif at the size where motifs are all that is left. And ~ has other meanings a reader may bring (negation, home directory, “about” in the sense of a topic), so the legend still does the teaching, as it would for H1.'
+  },
+  {
+    id:'H3', name:'Teardrop, sky700 fill, ≈ knocked out in white',
+    line:'The tier inverted: the teardrop filled sky700 with a sky700 outline (so the rim is the lift strokes), and H1’s ≈ drawn in white as negative space, same span, gap and weight.',
+    fill:P.sky700, fillName:'sky700', glyph:P.white, glyphName:'≈ white (knocked out)', silhouette:'teardrop',
+    outline:TEAR_LIFT, anchor:TIP,
+    body(){ return '<path d="'+TEAR+'" fill="'+P.sky700+'" stroke="'+P.sky700+'" stroke-width="'+SW+'"/>' + approx(P.white, HEAD.x, HEAD.y, HEAD_SPAN, HEAD_GAP, HEAD_AMP, SW); },
+    pro:'The most robust figure at 32 on the page: a solid sky700 head is unmissable on every ground (3.08:1 on the place accent is its floor, 4.91 on the block, 5.64 on the land), and the knocked-out glyph gets the best glyph contrast of any candidate, 6.24:1 white on sky700. Nothing in the ground can wash out the fill, and the mark is one colour, which is the simplest thing to draw, export and describe.',
+    con:'It fails the tier by measurement. Sky700 against Owner’s violet600 is 1.18:1: at 32 the two are dark filled teardrops told apart by hue alone and by a knocked-out glyph most viewers will not parse, with Owner’s white rim as the only structural separator. It also inverts the reading order: Estimated becomes the heaviest mark on the map, darker than Scanned’s marigold and as dark as Owner, when the weakest evidence should recede. The fill matches the outline, so the mark has no rim of its own; on the block edge the lift strokes are doing all the edge work. And at 32px the white ≈ is two 1.35px light lines in a dark field, which blur into a grey band faster than dark lines on white do.'
+  },
+  {
+    id:'H4', name:'Tail-less dot: white disc, sky700 ring, ≈ inside',
+    line:'Estimated stops being a teardrop: a white disc of radius 21.6 (0.6 x the head) on the head centre, sky700 ring at weight 4, no tail, with the ≈ inside at 60% of the disc width (26 units), gap 7.6, stroke 4.',
+    fill:P.white, fillName:'white', glyph:P.sky700, glyphName:'≈ sky700', silhouette:'dot (no tail)',
+    outline:[{tag:'circle', cx:HEAD.x, cy:HEAD.y, r:DOT_R, sw:SW}], anchor:{x:HEAD.x, y:HEAD.y},
+    body(){ return '<circle cx="'+HEAD.x+'" cy="'+HEAD.y+'" r="'+DOT_R+'" fill="'+P.white+'" stroke="'+P.sky700+'" stroke-width="'+SW+'"/>' + approx(P.sky700, HEAD.x, HEAD.y, 26, 7.6, 3.4, SW); },
+    pro:'On consumer maps a dot is where a thing roughly is and a pin is where it exactly is, so the silhouette carries the meaning before the glyph does, and the ≈ then confirms it. It is the smallest footprint on the page: at 0.6x the head, twelve of them in a block cover less ground than four teardrops, so the clutter test below is where H4 is strongest. It cannot be confused with either filled teardrop at any size, and the disc sits on the head centre so the halo geometry (r 50) is unchanged.',
+    con:'The ladder stops being one family: two teardrops and a dot read as two kinds of thing, not three rungs of one. The anchor moves from the tip to the disc centre, so the build’s placement offset, the card badge, the legend row and the ladder sheet all change shape, not just artwork. The glyph is the least legible on the page: 26 units wide in a 43-unit disc is 8.7px at 32, with 1.35px lines 2.6px apart, which is a smudge inside a 14px ring. A ring is also what the match halos are, so with a good match it is two concentric solid circles, the collision gallery 1’s D was rejected for.'
+  }
+];
+function candPin(c, h, match){ return wrap(halo(match)+lift(c.outline)+c.body(), h); }
+function assetSource(c){
+  return '<?xml version="1.0" encoding="UTF-8"?>\n'
+   + '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 96 104" role="img" aria-labelledby="title desc">\n'
+   + '  <title id="title">Estimated entrance pin</title><desc id="desc">EntryMap Estimated entrance pin, candidate '+c.id+': '+c.name+'.</desc>\n'
+   + '  ' + c.body().replace(/></g, '>\n  <') + '\n'
+   + '</svg>';
+}
+
+/* ---------- contrast, WCAG 2.x relative luminance ---------- */
+function lum(hex){
+  const c = hex.replace('#','').match(/.{2}/g).map(h => parseInt(h,16)/255)
+    .map(v => v <= 0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4));
+  return 0.2126*c[0] + 0.7152*c[1] + 0.0722*c[2];
+}
+function ratio(a,b){ const la=lum(a), lb=lum(b); return (Math.max(la,lb)+0.05)/(Math.min(la,lb)+0.05); }
+function cell(r){ return '<td class="n '+(r<3?'fail':'ok')+'">'+r.toFixed(2)+':1</td>'; }
+function sw(hex){ return '<span class="sw" style="background:'+hex+'"></span>'; }
+
+function contrastTable(c){
+  const sameFill = c.fill===P.sky700;
+  let t = '<div class="tw"><table><tr><th>Pair</th>'+GROUNDS.map(g=>'<th>'+sw(g.hex)+g.name+'<br><span class="muted">'+g.hex+'</span></th>').join('')+'<th>Own fill</th></tr>';
+  t += '<tr><td>'+sw(P.sky700)+'Outline sky700</td>'+GROUNDS.map(g=>cell(ratio(P.sky700,g.hex))).join('')+(sameFill?'<td class="muted">same as fill (no rim)</td>':cell(ratio(P.sky700,c.fill)))+'</tr>';
+  t += '<tr><td>'+sw(c.fill)+'Fill '+c.fillName+'</td>'+GROUNDS.map(g=>cell(ratio(c.fill,g.hex))).join('')+'<td class="muted">—</td></tr>';
+  t += '<tr><td>'+sw(c.glyph)+'Glyph vs fill</td><td colspan="5" class="muted">glyph sits on the fill only</td>'+cell(ratio(c.glyph,c.fill))+'</tr>';
+  t += '<tr><td>'+sw(c.fill)+'Fill vs Owner violet600 '+sw(P.violet600)+'</td><td colspan="5" class="muted">tier distinctness, fill against fill</td>'+cell(ratio(c.fill,P.violet600))+'</tr>';
+  t += '<tr><td>'+sw(c.fill)+'Fill vs Scanned marigold400 '+sw(P.marigold400)+'</td><td colspan="5" class="muted">tier distinctness, fill against fill</td>'+cell(ratio(c.fill,P.marigold400))+'</tr>';
+  t += '</table></div>';
+  const outlineVals = GROUNDS.map(g=>({v:ratio(P.sky700,g.hex), where:g.name}));
+  if(!sameFill) outlineVals.push({v:ratio(P.sky700,c.fill), where:'own fill'});
+  const worstOutline = outlineVals.reduce((a,b)=>b.v<a.v?b:a);
+  const fillVals = GROUNDS.map(g=>({v:ratio(c.fill,g.hex), where:g.name}));
+  const worstFill = fillVals.reduce((a,b)=>b.v<a.v?b:a);
+  return {html:t, worstOutline, worstFill, glyph:ratio(c.glyph,c.fill), vsOwner:ratio(c.fill,P.violet600), vsScan:ratio(c.fill,P.marigold400)};
+}
+
+/* ---------- the dense block ---------- */
+function denseBlock(c){
+  const W=600, H=330;
+  let s = '<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" aria-hidden="true">';
+  s += '<rect width="'+W+'" height="'+H+'" fill="'+P.lavender100+'"/>';
+  s += '<rect x="36" y="34" width="528" height="262" rx="6" fill="'+P.lavender200+'" stroke="'+P.lavenderPath+'" stroke-width="4"/>';
+  s += '<path d="M36 170h528M300 34v262" stroke="'+P.lavenderPath+'" stroke-width="3"/>';
+  s += '<ellipse cx="450" cy="232" rx="78" ry="42" fill="'+P.sky400+'"/>';
+  /* twelve Estimated at 32, by anchor */
+  const est = [[92,112],[124,138],[156,100],[186,146],[214,116],[248,156],[278,108],[330,150],[362,116],[150,236],[206,258],[452,226]];
+  const est32 = lift(c.outline)+c.body();
+  /* underneath: the other rungs, so the estimated marks are judged over and beside them */
+  s += place(lift(TEAR_LIFT)+SCAN_BODY, 36, 132, 196, TIP);
+  s += place(lift(TEAR_LIFT)+SCAN_BODY, 36, 372, 222, TIP);
+  s += place(lift(TEAR_LIFT)+OWNER_BODY, 40, 300, 256, TIP);
+  est.forEach(([x,y]) => { s += place(est32, 32, x, y, c.anchor); });
+  s += '</svg>';
+  return s;
+}
+
+/* ---------- render ---------- */
+function groundTile(g, pins){
+  return '<div class="ground '+g.key+'"><span class="cap">'+g.name+' '+g.hex+(g.key==='accent'?' over block':'')+'</span>'+pins+'</div>';
+}
+function spot(svg, label){ return '<span class="spot">'+svg+'<small>'+label+'</small></span>'; }
+
+function render(){
+  /* before: gallery 1's B beside H1's redraw, at the same sizes */
+  const h1 = CANDS[0];
+  document.getElementById('before').innerHTML =
+    groundTile(GROUNDS[0], spot(oldBPin(32),'gallery 1 B, 32') + spot(oldBPin(52),'B, 52') + spot(candPin(h1,32),'H1 redraw, 32') + spot(candPin(h1,52),'H1, 52'))
+  + groundTile(GROUNDS[3], spot(oldBPin(40),'B on accent') + spot(candPin(h1,40),'H1 on accent'));
+
+  const worst = {};
+  let g = '';
+  CANDS.forEach(c => {
+    const ct = contrastTable(c);
+    worst[c.id] = ct;
+    g += '<section class="cand" id="cand-'+c.id+'">'
+      + '<h2>'+c.id+' — '+c.name+'</h2>'
+      + '<div class="cand-head"><div class="hero">'+spot(candPin(c,52),'52')+spot(candPin(c,40),'40')+spot(candPin(c,32),'32')+'</div>'
+      + '<div class="copy"><p>'+c.line+'</p><p class="muted">Silhouette: '+c.silhouette+'. Fill: '+c.fillName+'. Glyph: '+c.glyphName+'. Outline: sky700 '+P.sky700+', weight 4. No dots, no dash.</p></div></div>'
+
+      + '<h3>On every ground, 32 / 40 / 52</h3><div class="row">'
+      + GROUNDS.map(gr => groundTile(gr, spot(candPin(c,32),'32')+spot(candPin(c,40),'40')+spot(candPin(c,52),'52'))).join('')
+      + '</div>'
+
+      + '<h3>Beside the other two rungs, at the kit’s sizes, and all three at 32</h3><div class="row">'
+      + groundTile(GROUNDS[0], spot(candPin(c,32),'Est 32')+spot(scanPin(36),'Scan 36')+spot(ownerPin(40),'Owner 40'))
+      + groundTile(GROUNDS[1], spot(candPin(c,40),'Est 40')+spot(scanPin(44),'Scan 44')+spot(ownerPin(48),'Owner 48'))
+      + groundTile(GROUNDS[2], spot(candPin(c,52),'Est 52')+spot(scanPin(56),'Scan 56')+spot(ownerPin(60),'Owner 60'))
+      + groundTile(GROUNDS[0], spot(candPin(c,32),'Est 32')+spot(scanPin(32),'Scan 32')+spot(ownerPin(32),'Owner 32'))
+      + '</div>'
+
+      + '<h3>Inside each match halo, 40 and 52</h3><div class="row halo-row">'
+      + groundTile(GROUNDS[0], spot(candPin(c,40,'good'),'good, solid')+spot(candPin(c,40,'partial'),'partial, dashed')+spot(candPin(c,40,'unknown'),'unknown, dotted'))
+      + groundTile(GROUNDS[1], spot(candPin(c,52,'good'),'good, 52')+spot(candPin(c,52,'partial'),'partial, 52')+spot(candPin(c,52,'unknown'),'unknown, 52'))
+      + '</div>'
+
+      + '<h3>Measured contrast</h3>' + ct.html
+      + '<p class="muted">Below 3:1 is marked. Ratios are outline or fill against the raw ground tone; with the lift strokes on, the outline borders white (6.24:1) on every ground, which is the build’s mitigation and why the raw figure is still printed. The two distinctness rows are fill against the other tiers’ fills: they are not a WCAG pair, but they say whether hue is the only thing telling the rungs apart. Worst for '+c.id+': outline '+ct.worstOutline.v.toFixed(2)+':1 on the '+ct.worstOutline.where.toLowerCase()+'; fill '+ct.worstFill.v.toFixed(2)+':1 on the '+ct.worstFill.where.toLowerCase()+'; glyph '+ct.glyph.toFixed(2)+':1 on its fill.</p>'
+
+      + '<h3>The case</h3><div class="case"><p><b>For</b>'+c.pro+'</p><p><b>Against</b>'+c.con+'</p></div>'
+
+      + '<h3>Asset source (library frame, 96 × 104)</h3><pre>'+assetSource(c).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</pre>'
+      + '</section>';
+  });
+  document.getElementById('gallery').innerHTML = g;
+
+  /* summary */
+  let s = '<div class="tw"><table class="summary"><tr><th>Candidate</th><th>In one line</th><th>Silhouette</th><th>Fill</th><th>Glyph</th><th>Worst outline</th><th>Worst fill</th><th>Glyph on fill</th><th>Fill vs Owner</th></tr>';
+  CANDS.forEach(c => {
+    const w = worst[c.id];
+    s += '<tr><td><a href="#cand-'+c.id+'">'+c.id+'</a>'+(c.id==='H1'?' <b>(recommended)</b>':'')+'</td><td>'+c.name+'</td><td>'+c.silhouette+'</td><td>'+c.fillName+'</td><td>'+c.glyphName+'</td>'
+       + cell(w.worstOutline.v)+cell(w.worstFill.v)+cell(w.glyph)+cell(w.vsOwner)+'</tr>';
+  });
+  s += '</table></div><p class="muted">The outline colour is fixed by the brief, so the worst outline figure is the same 3.08:1 on the place accent for every candidate except H3, where the outline is the fill and has no rim of its own. The fill and the last two columns are where they differ; H3’s 1.18:1 against Owner is the number to read.</p>';
+  document.getElementById('summary').innerHTML = s;
+
+  /* dense block */
+  document.getElementById('dense').innerHTML =
+    '<figure>'+denseBlock(CANDS[0])+'<figcaption>H1: twelve teardrops at 32, two Scanned at 36, one Owner at 40. Read for: do the ≈ pairs make a ripple field across the block, and does the one on the accent read as a pond.</figcaption></figure>'
+  + '<figure>'+denseBlock(CANDS[3])+'<figcaption>H4: twelve dots at 32 (each 14px across), same Scanned and Owner. Read for: does the block get quieter, and do the dots still read as the same product as the pins.</figcaption></figure>';
+
+  document.getElementById('recbox').innerHTML =
+    '<p><b>H1: the teardrop, the white fill, the heavy ≈ drawn as a sign.</b> It keeps everything the ladder depends on (the kit’s teardrop, the one fill no other tier uses, the lightest mark on the map, the head-centre halo and the tip anchor) and answers the owner’s question with the glyph that literally means approximately, drawn so it cannot be water: one period per line, a bent bar rather than a ripple, the pair stacked at 2.75 stroke widths and spanning 60% of the head, at the outline’s own weight. Its worst figures are the map’s floor for any sky700 outline, 3.08:1 on the place accent and 6.24 on its own fill, and its one real risk, flattening to = on a 1x display at 32, is a risk only where the app does not run. H2 is the fallback if 32px testing still says water; H3 fails distinctness by measurement (sky700 against Owner’s violet600 is 1.18:1, two dark filled teardrops at 32) and inverts the reading order; H4 gives up the tail, and with it the door’s anchor and the family.</p>';
+}
+document.getElementById('lift').addEventListener('change', render);
+render();
+</script>
+</body>
+</html>

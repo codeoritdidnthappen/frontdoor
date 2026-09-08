@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Estimated mark gallery 4 — doorway glyph</title>
+<style>
+  :root{
+    --indigo900:#1E1142; --indigo800:#28165A; --violet600:#4F34DB; --violet800:#38239B;
+    --sky400:#76BCFD; --sky700:#1B6599; --marigold400:#FDB327; --amber700:#8C5400;
+    --lavender-path:#CFBCEE; --lavender100:#F5F2FC; --lavender200:#E8E1F7; --white:#FFFFFF;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--white);color:var(--indigo900);
+       font:15px/1.5 "Atkinson Hyperlegible",Aptos,Arial,sans-serif}
+  main{max-width:1180px;margin:0 auto;padding:32px 24px 96px}
+  h1{font-size:28px;margin:0 0 4px}
+  h2{font-size:22px;margin:56px 0 4px;padding-top:24px;border-top:2px solid var(--lavender200)}
+  h3{font-size:15px;margin:28px 0 8px;letter-spacing:.02em;text-transform:uppercase;color:var(--violet800)}
+  p{max-width:78ch}
+  .lede{font-size:16px;color:var(--indigo800)}
+  .muted{color:var(--indigo800);opacity:.8}
+  code{font-family:Consolas,"Cascadia Mono",Menlo,monospace;font-size:.92em;background:var(--lavender100);padding:1px 5px;border-radius:4px}
+  pre{font-family:Consolas,"Cascadia Mono",Menlo,monospace;font-size:12.5px;line-height:1.45;
+      background:var(--lavender100);border:1px solid var(--lavender200);border-radius:8px;
+      padding:14px 16px;overflow-x:auto;white-space:pre-wrap;word-break:break-all;max-width:100%}
+  table{border-collapse:collapse;font-size:14px;margin:8px 0 0}
+  th,td{border:1px solid var(--lavender200);padding:6px 12px;text-align:left;vertical-align:top}
+  th{background:var(--lavender100);font-weight:700}
+  td.n{text-align:right;font-variant-numeric:tabular-nums}
+  td.fail{color:var(--amber700);font-weight:700}
+  td.ok{color:var(--indigo900)}
+  .sw{display:inline-block;width:14px;height:14px;border-radius:3px;vertical-align:-2px;margin-right:6px;border:1px solid var(--lavender-path)}
+  .row{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-start}
+  .ground{position:relative;display:inline-flex;align-items:flex-end;gap:22px;padding:18px 22px 14px;border-radius:10px;min-height:96px}
+  .ground .cap{position:absolute;left:10px;top:4px;font-size:11.5px;color:var(--indigo800);opacity:.85;white-space:nowrap}
+  .ground.land{background:var(--lavender100)}
+  .ground.block{background:var(--lavender200)}
+  .ground.edge{background:var(--lavender-path)}
+  .ground.white{background:var(--white);border:1px solid var(--lavender200)}
+  .ground.accent{background:var(--lavender200)}
+  .spot{position:relative;display:inline-flex;flex-direction:column;align-items:center;gap:6px}
+  .spot svg{position:relative}
+  .ground.accent{gap:36px;padding-top:30px}
+  .accent .spot::before{content:"";position:absolute;left:-9px;right:-9px;top:-8px;bottom:16px;background:var(--sky400);border-radius:50%}
+  .tw{overflow-x:auto;max-width:100%}
+  .spot small{font-size:11px;color:var(--indigo800);opacity:.85;position:relative}
+  .halo-row .ground{gap:34px;padding-top:24px}
+  .cand{margin-top:40px}
+  .cand-head{display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap}
+  .cand-head .hero{flex:0 0 auto;padding:22px 26px 16px;background:var(--lavender100);border-radius:12px;display:flex;gap:26px;align-items:flex-end;flex-wrap:wrap}
+  .cand-head .copy{flex:1 1 420px}
+  .case{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:100%}
+  .case p{max-width:none}
+  .case b{display:block;margin-bottom:4px}
+  .rec{background:var(--lavender100);border-left:6px solid var(--violet600);padding:16px 22px;border-radius:0 10px 10px 0;margin-top:20px}
+  .summary td:nth-child(2){max-width:38ch}
+  label.tog{display:inline-flex;align-items:center;gap:8px;margin:14px 0 0;font-size:14px;cursor:pointer}
+  /* zoom crops: the pin rasterised at exactly N device pixels, then shown 6x with no smoothing */
+  .zoomrow{display:flex;flex-wrap:wrap;gap:18px;align-items:flex-end}
+  .zoom{display:inline-flex;flex-direction:column;align-items:center;gap:6px}
+  .zoom canvas{image-rendering:pixelated;image-rendering:crisp-edges;border:1px solid var(--lavender-path);border-radius:4px;background:var(--lavender100)}
+  .zoom small{font-size:11px;color:var(--indigo800);opacity:.85}
+  /* dense block */
+  .dense{position:relative;width:640px;height:300px;background:var(--lavender200);border:4px solid var(--lavender-path);border-radius:14px;overflow:hidden}
+  .dense .street{position:absolute;left:0;right:0;top:150px;height:26px;background:var(--lavender100)}
+  .dense .accent{position:absolute;width:74px;height:74px;border-radius:50%;background:var(--sky400)}
+  .dense .pin{position:absolute}
+  .dense .pin svg{display:block}
+  .dense-wrap{overflow-x:auto;max-width:100%}
+  @media (max-width:760px){.case{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Estimated mark gallery 4 — the doorway glyph</h1>
+  <p class="lede">Fourth asset-drawing brief for the Estimated tier. The owner has specified the pin-head glyph: a minimal doorway outline with a dotted threshold, two rounded vertical posts and one short lintel, three small dots across the open threshold, no door leaf, storefront, checkmark, question mark or warning symbol. This page draws exactly that glyph in sky700 and renders it in four settings, J1 to J4, so the owner can choose the setting rather than the drawing.</p>
+  <p class="muted">Every colour on this page is one of the canonical twelve from <code>asset-library/tokens/variables.css</code>. Pins are composed the way <code>pinSVG</code> in the build composes a library asset: the asset drawing, under it the build's white lift strokes, and under those the match halo (r 50 on the head centre, with the lavender disc that appears only in a match state). The copyable source under each setting is the asset alone, in the library's own 96 × 104 frame. No confidence dots are drawn above any head: the owner removed them as clutter, and the only three dots on this page are the ones in the threshold.</p>
+  <label class="tog"><input type="checkbox" id="lift" checked> Draw the build's white lift strokes (uncheck to see the outline on the raw ground)</label>
+
+  <h2>The glyph on its own</h2>
+  <p>Posts at x 32 and 64, from y 22 to 60, round caps; lintel across the top at y 22, round joins into the posts; three dots of r 2.2 at x 40, 48, 56 on the threshold line (y 60) between the posts. Stroke 4, the library's pin outline weight, so at 32px the glyph line and the pin outline are the same 1.35 px. The bounding box is 36 × 42 including stroke, centred on the head centre (48, 41.3). One honest caveat from the 1× crops: the round caps on the post feet have a radius of 0.67 px at 32 and 0.84 px at 40, so a 1× pixel grid squares them off; the caps read as round from 52 up and on any 2× or 3× screen. What survives at 32 is that the posts and the lintel are three distinct strokes with an open threshold, which is the doorway.</p>
+  <div class="row" id="glyphrow"></div>
+
+  <h2>Summary</h2>
+  <div id="summary"></div>
+
+  <div id="gallery"></div>
+
+  <h2 id="recommend">Recommendation</h2>
+  <div id="recbox" class="rec"></div>
+</main>
+
+<script>
+/* ---------- palette: the canonical twelve, nothing else ---------- */
+const P = {
+  indigo900:'#1E1142', indigo800:'#28165A', violet600:'#4F34DB', violet800:'#38239B',
+  sky400:'#76BCFD', sky700:'#1B6599', marigold400:'#FDB327', amber700:'#8C5400',
+  lavenderPath:'#CFBCEE', lavender100:'#F5F2FC', lavender200:'#E8E1F7', white:'#FFFFFF'
+};
+const GROUNDS = [
+  {key:'land',   name:'Land',        hex:P.lavender100},
+  {key:'block',  name:'Block',       hex:P.lavender200},
+  {key:'edge',   name:'Block edge',  hex:P.lavenderPath},
+  {key:'accent', name:'Place accent',hex:P.sky400},
+  {key:'white',  name:'White',       hex:P.white}
+];
+
+/* ---------- geometry shared with the build ---------- */
+const TEAR = 'M48 6c-21 0-36 15.7-36 35.3 0 25.1 24.3 45.8 33.5 52.8a4 4 0 0 0 5 0C59.7 87.1 84 66.4 84 41.3 84 21.7 69 6 48 6Z';
+const HEAD = {x:48, y:41.3};
+const VB = '-8 1 112 95.1', AR = 112/95.1;
+const SW = 4;                 /* library pin outline weight; the glyph uses the same */
+const DOT_R = 22;             /* J4 disc radius: 0.61 x the teardrop head radius (36) */
+
+/* ---------- the owner's glyph ---------- */
+/* posts + lintel as one open path (round caps, round joins); threshold dots as three circles */
+const DOOR_FRAME = '<path d="M32 60V22h32v38" fill="none" stroke="'+P.sky700+'" stroke-width="'+SW+'" stroke-linecap="round" stroke-linejoin="round"/>';
+const DOOR_DOTS  = '<circle cx="40" cy="60" r="2.2" fill="'+P.sky700+'"/><circle cx="48" cy="60" r="2.2" fill="'+P.sky700+'"/><circle cx="56" cy="60" r="2.2" fill="'+P.sky700+'"/>';
+const DOOR = DOOR_FRAME + DOOR_DOTS;
+/* the same glyph scaled to sit inside the J4 disc. The frame stroke is compensated so it still
+   renders at weight 4; the dots scale with the door (at r 2.2 rendered they would touch each other). */
+const J4_SCALE = 0.65;
+function doorScaled(s){
+  const sw = (SW/s).toFixed(2);
+  const frame = '<path d="M32 60V22h32v38" fill="none" stroke="'+P.sky700+'" stroke-width="'+sw+'" stroke-linecap="round" stroke-linejoin="round"/>';
+  return '<g transform="translate('+HEAD.x+' '+HEAD.y+') scale('+s+') translate('+(-HEAD.x)+' -41)">'+frame+DOOR_DOTS+'</g>';
+}
+
+/* the build's lift: three white strokes along the outline, widest most transparent */
+function lift(shapes){
+  if(!document.getElementById('lift').checked) return '';
+  const passes = [[15.7,.28],[10.2,.62],[5.9,1]];
+  return shapes.map(s => passes.map(([w,o]) =>
+    s.tag==='circle'
+      ? '<circle cx="'+s.cx+'" cy="'+s.cy+'" r="'+s.r+'" fill="none" stroke="#fff" stroke-opacity="'+o+'" stroke-width="'+(s.sw+w)+'"/>'
+      : '<path d="'+s.d+'" fill="none" stroke="#fff" stroke-opacity="'+o+'" stroke-width="'+(s.sw+w)+'" stroke-linejoin="round"/>'
+  ).join('')).join('');
+}
+function halo(state){
+  const cx=HEAD.x, cy=HEAD.y;
+  if(!state) return '';
+  let h = '<circle cx="'+cx+'" cy="'+cy+'" r="47" fill="'+P.lavenderPath+'" opacity=".55"/>';
+  if(state==='good')    h += '<circle cx="'+cx+'" cy="'+cy+'" r="50" fill="none" stroke="'+P.indigo900+'" stroke-width="6"/><circle cx="'+cx+'" cy="'+cy+'" r="38" fill="none" stroke="'+P.sky400+'" stroke-width="2.4" opacity=".65"/>';
+  if(state==='partial') h += '<circle cx="'+cx+'" cy="'+cy+'" r="50" fill="none" stroke="'+P.violet600+'" stroke-width="6" stroke-dasharray="17.9 10.7" transform="rotate(-90 '+cx+' '+cy+')"/>';
+  if(state==='unknown') h += '<circle cx="'+cx+'" cy="'+cy+'" r="50" fill="none" stroke="'+P.sky700+'" stroke-width="6" stroke-linecap="round" stroke-dasharray="1.2 13.1"/>';
+  return h;
+}
+function wrap(inner, h, opts){
+  const w = Math.round(h*AR*100)/100;
+  const ov = (opts && opts.clip) ? 'hidden' : 'visible';
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'" viewBox="'+VB+'" fill="none" aria-hidden="true" style="overflow:'+ov+';display:block">'+inner+'</svg>';
+}
+/* the other two rungs, as the build draws them (no confidence dots, per the owner) */
+const SCAN_BODY = '<path d="'+TEAR+'" fill="'+P.marigold400+'" stroke="'+P.indigo900+'" stroke-width="4" stroke-linejoin="round"/>'
+  + '<g fill="none" stroke="'+P.indigo900+'" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><circle cx="48" cy="34" r="9"/><path d="M30 69c1-15 8-23 18-23s17 8 18 23Z"/></g>';
+const OWNER_BODY = '<path d="'+TEAR+'" fill="'+P.violet600+'" stroke="#FFFFFF" stroke-width="4"/>'
+  + '<g fill="none" stroke="#FFFFFF" stroke-width="3.8" stroke-linecap="round" stroke-linejoin="round"><path d="M28 38h40l-4-12H32Z"/><path d="M30 38v30h36V38M42 68V51h13v17"/><path d="M28 38c0 5 6 7 10 3 4 4 9 4 13 0 4 4 9 4 13 0 4 4 10 2 10-3"/></g>'
+  + '<circle cx="88" cy="28" r="14" fill="#FFFFFF" stroke="'+P.violet800+'" stroke-width="3"/><path d="m81 28 5 5 9-11" fill="none" stroke="'+P.violet800+'" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>';
+const TEAR_LIFT = [{tag:'path', d:TEAR, sw:0}];
+const DISC_LIFT = [{tag:'circle', cx:HEAD.x, cy:HEAD.y, r:DOT_R, sw:SW}];
+
+function scanPin(h, match){ return wrap(halo(match)+lift(TEAR_LIFT)+SCAN_BODY, h); }
+function ownerPin(h, match){ return wrap(halo(match)+lift(TEAR_LIFT)+OWNER_BODY, h); }
+
+/* ---------- the four settings ---------- */
+const SOLID_TEAR  = '<path d="'+TEAR+'" fill="'+P.white+'" stroke="'+P.sky700+'" stroke-width="'+SW+'"/>';
+const DASHED_TEAR = '<path d="'+TEAR+'" fill="'+P.white+'" stroke="'+P.sky700+'" stroke-width="'+SW+'" stroke-dasharray="7 6"/>';
+const DISC        = '<circle cx="'+HEAD.x+'" cy="'+HEAD.y+'" r="'+DOT_R+'" fill="'+P.white+'" stroke="'+P.sky700+'" stroke-width="'+SW+'"/>';
+
+const CANDS = [
+  {
+    id:'J1', name:'Solid sky pin, doorway with dotted threshold',
+    line:'The teardrop with a solid sky700 outline at the library weight (4), white fill, and the owner’s glyph complete: posts, lintel, three threshold dots. This is the settled rule (no dash on the mark; dashes belong to the partial-match halo) with the specified glyph dropped in.',
+    silhouette:'teardrop', outlineStyle:'solid', glyphName:'doorway + 3 threshold dots', fill:P.white, fillName:'white',
+    outline:TEAR_LIFT,
+    body(){ return SOLID_TEAR + DOOR; },
+    pro:'It is the owner’s glyph, drawn as specified, inside the rule the last three galleries settled: the mark is solid and the halo is the only dashed thing on the map. The doorway says what the tier is about (an entrance) rather than what the map is (an information point), which is the reading the italic i could not escape, and the dotted threshold says “estimated” in the map’s own vocabulary, since a dotted line is the cartographic convention for an uncertain boundary. The line weight matches the outline, so at 40 and 52 the glyph and the pin read as one drawing, and the posts and the lintel are distinct at every size on the page (the round caps themselves show from 52 up; at 32 and 40 on a 1× screen the pixel grid squares them off, which costs nothing to the doorway reading). Outline contrast is unchanged from gallery 1: 5.64 on land, 4.91 on block, 3.59 on the block edge, 3.08 on the place accent, 6.24 on its own fill.',
+    con:'The threshold dots are 1.5 px wide with 1.2 px gaps at 32, which is the same arithmetic that made the owner remove three confidence dots as clutter; in the 1× zoom crop below they survive as three faint one-pixel blobs, countable at 6× but a stipple at actual size, so at the smallest ladder size the glyph is carried by the frame and the dots are texture; they are a clean three from 40 up. The glyph is also the widest change this tier has had (every legend row, onboarding tile, ladder sheet, card badge and welcome tile that shows the Estimated mark changes artwork), and a doorway frame is a cousin of the Owner pin’s storefront, so tier separation leans on the fill (white against violet) more than on the glyph.'
+  },
+  {
+    id:'J2', name:'Dashed sky pin (library 7 6), doorway with dotted threshold',
+    line:'The library asset’s own outline, stroke-dasharray 7 6 in sky700, white fill, the same glyph. Shown because the owner’s text says the hollow dashed sky pin remains unchanged; rendered beside the dashed partial-match halo so the collision that gallery 1 opened on is visible next to the new glyph.',
+    silhouette:'teardrop', outlineStyle:'dashed 7 6', glyphName:'doorway + 3 threshold dots', fill:P.white, fillName:'white',
+    outline:TEAR_LIFT,
+    body(){ return DASHED_TEAR + DOOR; },
+    pro:'It is the asset already in the library, so nothing but the glyph changes and every screen that composes <code>pins/estimated.svg</code> keeps its outline. The dash carried the provisional feel the board asked for, and with a dotted threshold inside it the mark is “uncertain” twice over, which some readers will find louder and clearer. If the owner’s “remains unchanged” is a hard instruction rather than a description, this is the only setting on the page that honours it.',
+    con:'Three broken lines at three scales: the outline is dashed 7 6, the threshold is dotted, and the partial-match halo around it is dashed 17.9 10.7. In the hero and the halo row the mark with a partial halo is concentric broken rings, which is the collision gallery 1 was raised to remove, and the settled rule since is that a dash means partial match and nothing else. At 32 the 7 6 dash renders as 2.4 px on, 2 px off, which fights the 1.5 px threshold dots for the eye; the two dotted things blur into one texture. It has the same outline contrast as J1, so the dash buys nothing measurable.'
+  },
+  {
+    id:'J3', name:'Solid sky pin, doorway frame only (no threshold dots)',
+    line:'As J1 with the three threshold dots removed: two rounded posts and a short lintel, the threshold left open. Drawn because the owner separately removed three confidence dots from the pin head as clutter, and the threshold dots are three dots again at 32; the comparison is the point.',
+    silhouette:'teardrop', outlineStyle:'solid', glyphName:'doorway frame only', fill:P.white, fillName:'white',
+    outline:TEAR_LIFT,
+    body(){ return SOLID_TEAR + DOOR_FRAME; },
+    pro:'The cleanest mark on the page at 32: three strokes of equal weight, nothing under a pixel and a half, and the zoom crops show the posts’ feet and the lintel corners distinct at both sizes (the feet are square on a 1× grid below 52, as they are in J1). It is consistent with the owner’s own clutter call on the confidence dots, and it keeps the doorway reading (posts and lintel are the whole idea; the open threshold is what makes it a doorway rather than a box). It shares outline, fill and silhouette with J1, so the choice between them is a single attribute and can be reversed later without moving anything else.',
+    con:'It drops the one element the owner specified as the “estimated” signal: without the dotted threshold the glyph is a doorway, full stop, and would read the same on a Scanned or Owner pin; the tier then rests entirely on the white fill and sky outline. An open frame with no threshold is also the shape of a Π, a gate or a tunnel mouth at 52, and on the place accent (3.08:1) the interior is empty enough that the frame can read as a bracket around nothing. The owner did not ask for this glyph; it is a fallback if the dots fail at 32, not a first choice.'
+  },
+  {
+    id:'J4', name:'Tail-less dot marker, doorway inside the disc',
+    line:'A white disc of r 22 (0.61 × the teardrop head radius) with a sky700 ring at weight 4, no tail, centred on the head centre, with the glyph scaled to 0.65 to clear the ring (frame stroke compensated so it still renders at weight 4; the dots scale with the door). Confidence dots have nowhere to sit, and are not drawn.',
+    silhouette:'disc, no tail', outlineStyle:'solid ring', glyphName:'doorway + 3 threshold dots, scaled 0.65', fill:P.white, fillName:'white',
+    outline:DISC_LIFT,
+    body(){ return DISC + doorScaled(J4_SCALE); },
+    pro:'The lightest mark on the map by a distance, which is the reading order §10 wants for the weakest evidence: a small white dot with a hint of a doorway, clearly below the two teardrops in visual weight. No tail means no false precision about where the entrance sits, which is an honest thing for an estimate to say. The ring is the same weight as the pin outlines, so the family shares a line even though it does not share a silhouette.',
+    con:'A dot marker is a different kind of object, not a weaker rung: on consumer maps a tail-less dot is a cluster, a POI category or “you are here”, and beside two teardrops it reads as a second layer rather than a third tier. The disc is 14.8 px wide at the 32 size, so the doorway inside it is 7 px wide and the threshold dots are under a pixel; in the zoom crop the glyph is a smudge and the dots are gone at both 32 and 40. The ring is a ring, and every match halo is a ring: with the good-match halo it becomes concentric solid circles, which is the collision gallery 1 rejected in candidate D. No tail also moves the anchor from the tip to the centre, which changes the map’s collision and label geometry for one tier only.'
+  }
+];
+function candPin(c, h, match, opts){ return wrap(halo(match)+lift(c.outline)+c.body(), h, opts); }
+function assetSource(c){
+  return '<?xml version="1.0" encoding="UTF-8"?>\n'
+   + '<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 96 104" role="img" aria-labelledby="title desc">\n'
+   + '  <title id="title">Estimated entrance pin</title><desc id="desc">EntryMap Estimated entrance pin, setting '+c.id+': '+c.name+'. Doorway glyph: two rounded posts, one lintel'+(c.id==='J3'?'':', three dots across the open threshold')+'.</desc>\n'
+   + '  ' + c.body().replace(/></g, '>\n  <') + '\n'
+   + '</svg>';
+}
+
+/* ---------- contrast, WCAG 2.x relative luminance ---------- */
+function lum(hex){
+  const c = hex.replace('#','').match(/.{2}/g).map(h => parseInt(h,16)/255)
+    .map(v => v <= 0.03928 ? v/12.92 : Math.pow((v+0.055)/1.055, 2.4));
+  return 0.2126*c[0] + 0.7152*c[1] + 0.0722*c[2];
+}
+function ratio(a,b){ const la=lum(a), lb=lum(b); return (Math.max(la,lb)+0.05)/(Math.min(la,lb)+0.05); }
+function cell(r){ return '<td class="n '+(r<3?'fail':'ok')+'">'+r.toFixed(2)+':1</td>'; }
+function sw(hex){ return '<span class="sw" style="background:'+hex+'"></span>'; }
+
+function contrastTable(c){
+  const outlineLabel = c.id==='J4' ? 'Ring sky700' : 'Outline sky700'+(c.id==='J2' ? ' (dashed)' : '');
+  let t = '<div class="tw"><table><tr><th>Pair</th>'+GROUNDS.map(g=>'<th>'+sw(g.hex)+g.name+'<br><span class="muted">'+g.hex+'</span></th>').join('')+'<th>Own fill</th></tr>';
+  t += '<tr><td>'+sw(P.sky700)+outlineLabel+'</td>'+GROUNDS.map(g=>cell(ratio(P.sky700,g.hex))).join('')+cell(ratio(P.sky700,c.fill))+'</tr>';
+  t += '<tr><td>'+sw(c.fill)+'Fill '+c.fillName+'</td>'+GROUNDS.map(g=>cell(ratio(c.fill,g.hex))).join('')+'<td class="muted">—</td></tr>';
+  t += '<tr><td>'+sw(P.sky700)+'Glyph sky700 vs fill</td><td colspan="5" class="muted">glyph sits on the fill only</td>'+cell(ratio(P.sky700,c.fill))+'</tr>';
+  t += '</table></div>';
+  const worstOutline = Math.min(...GROUNDS.map(g=>ratio(P.sky700,g.hex)), ratio(P.sky700,c.fill));
+  const worstFill = Math.min(...GROUNDS.map(g=>ratio(c.fill,g.hex)));
+  return {html:t, worstOutline, worstFill, glyph:ratio(P.sky700,c.fill)};
+}
+
+/* ---------- zoom crops: rasterise at exactly N px (1x DPR, worst case), show 6x pixelated ---------- */
+let zoomSeq = 0;
+function zoomCrop(c, h, label){
+  const id = 'z-'+c.id+'-'+h+'-'+(zoomSeq++);
+  const svg = candPin(c, h, null, {clip:true});
+  const w = Math.round(h*AR*100)/100;
+  queueMicrotask(() => {
+    const cv = document.getElementById(id); if(!cv) return;
+    const cw = Math.ceil(w), ch = h;
+    cv.width = cw; cv.height = ch;
+    cv.style.width = (cw*6)+'px'; cv.style.height = (ch*6)+'px';
+    const ctx = cv.getContext('2d');
+    ctx.fillStyle = P.lavender100; ctx.fillRect(0,0,cw,ch);
+    const img = new Image();
+    img.onload = () => { ctx.drawImage(img, 0, 0, w, h); };
+    img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+  });
+  return '<span class="zoom"><canvas id="'+id+'"></canvas><small>'+label+'</small></span>';
+}
+
+/* ---------- dense block: a dozen Estimated marks beside three Scanned/Owner pins ---------- */
+function densePin(svg, x, y, h){
+  const w = Math.round(h*AR*100)/100;
+  return '<span class="pin" style="left:'+(x-w/2)+'px;top:'+(y-h)+'px">'+svg+'</span>';
+}
+function denseBlock(c){
+  const est = [
+    [52,96,32],[96,74,32],[142,102,40],[188,70,32],[236,110,32],[288,86,40],
+    [60,258,32],[112,236,40],[170,272,32],[228,240,32],[284,268,40],[340,250,32]
+  ];
+  let d = '<div class="dense"><div class="street"></div><div class="accent" style="left:456px;top:36px"></div><div class="accent" style="left:520px;top:190px"></div>';
+  est.forEach(([x,y,h]) => { d += densePin(candPin(c,h), x, y, h); });
+  d += densePin(scanPin(44,'good'), 494, 112, 44);
+  d += densePin(ownerPin(48), 420, 262, 48);
+  d += densePin(scanPin(36,'partial'), 560, 262, 36);
+  return '<div class="dense-wrap">'+d+'</div></div>';
+}
+
+/* ---------- render ---------- */
+function groundTile(g, pins){
+  return '<div class="ground '+g.key+'"><span class="cap">'+g.name+' '+g.hex+(g.key==='accent'?' over block':'')+'</span>'+pins+'</div>';
+}
+function spot(svg, label){ return '<span class="spot">'+svg+'<small>'+label+'</small></span>'; }
+
+function glyphOnly(h){
+  const w = Math.round(h*AR*100)/100;
+  return '<svg xmlns="http://www.w3.org/2000/svg" width="'+w+'" height="'+h+'" viewBox="'+VB+'" fill="none" aria-hidden="true" style="overflow:visible;display:block">'+DOOR+'</svg>';
+}
+const GLYPH_ONLY = {id:'G', outline:[], body:()=>DOOR};
+
+function render(){
+  document.getElementById('glyphrow').innerHTML =
+    groundTile(GROUNDS[4], spot(glyphOnly(120),'glyph alone, 120')+spot(glyphOnly(52),'52')+spot(glyphOnly(40),'40')+spot(glyphOnly(32),'32'))
+    + '<div class="ground white"><span class="cap">1× raster, shown 6×</span>'+zoomCrop(GLYPH_ONLY, 32, 'glyph alone at 32')+zoomCrop(GLYPH_ONLY, 40, 'glyph alone at 40')+'</div>';
+
+  const worst = {};
+  let g = '';
+  CANDS.forEach(c => {
+    const ct = contrastTable(c);
+    worst[c.id] = ct;
+    let hero = spot(candPin(c,52),'52')+spot(candPin(c,40),'40')+spot(candPin(c,32),'32');
+    if(c.id==='J2') hero += spot(candPin(c,40,'partial'),'+ partial halo, 40')+spot(candPin(c,52,'partial'),'+ partial, 52')+spot(scanPin(44,'partial'),'Scanned + partial');
+    g += '<section class="cand" id="cand-'+c.id+'">'
+      + '<h2>Setting '+c.id+' — '+c.name+'</h2>'
+      + '<div class="cand-head"><div class="hero">'+hero+'</div>'
+      + '<div class="copy"><p>'+c.line+'</p><p class="muted">Silhouette: '+c.silhouette+'. Outline: sky700 '+P.sky700+', '+c.outlineStyle+', weight '+SW+'. Fill: '+c.fillName+'. Glyph: '+c.glyphName+', sky700, weight '+SW+'. Confidence dots: none.</p></div></div>'
+
+      + '<h3>Zoom crops, rasterised at 1× device pixel ratio and shown 6×</h3><div class="zoomrow">'
+      + zoomCrop(c, 32, '32 px') + zoomCrop(c, 40, '40 px')
+      + '</div><p class="muted">The canvas is exactly 32 or 40 device pixels tall and is scaled up without smoothing, so what you see is what a 1× display draws. A 2× or 3× phone screen is kinder than this.</p>'
+
+      + '<h3>On every ground, 32 / 40 / 52</h3><div class="row">'
+      + GROUNDS.map(gr => groundTile(gr, spot(candPin(c,32),'32')+spot(candPin(c,40),'40')+spot(candPin(c,52),'52'))).join('')
+      + '</div>'
+
+      + '<h3>Beside the other two rungs, at the kit’s sizes</h3><div class="row">'
+      + groundTile(GROUNDS[0], spot(candPin(c,32),'Est 32')+spot(scanPin(36),'Scan 36')+spot(ownerPin(40),'Owner 40'))
+      + groundTile(GROUNDS[1], spot(candPin(c,40),'Est 40')+spot(scanPin(44),'Scan 44')+spot(ownerPin(48),'Owner 48'))
+      + groundTile(GROUNDS[2], spot(candPin(c,52),'Est 52')+spot(scanPin(56),'Scan 56')+spot(ownerPin(60),'Owner 60'))
+      + '</div>'
+
+      + '<h3>With each match halo</h3><div class="row halo-row">'
+      + groundTile(GROUNDS[0], spot(candPin(c,40,'good'),'good, solid')+spot(candPin(c,40,'partial'),'partial, dashed')+spot(candPin(c,40,'unknown'),'unknown, dotted'))
+      + groundTile(GROUNDS[1], spot(candPin(c,52,'good'),'good, 52')+spot(candPin(c,52,'partial'),'partial, 52')+spot(candPin(c,52,'unknown'),'unknown, 52'))
+      + '</div>'
+
+      + '<h3>Dense block: twelve Estimated marks beside three Scanned / Owner pins</h3>'
+      + denseBlock(c)
+      + '<p class="muted">Block tone with a land-tone street and two place accents; sizes 32 and 40 for the Estimated marks, Scanned 44 with a good halo, Owner 48, Scanned 36 with a partial halo.</p>'
+
+      + '<h3>Measured contrast</h3>' + ct.html
+      + '<p class="muted">Below 3:1 is marked. Ratios are outline or fill against the raw ground tone; with the lift strokes on, the outline borders white (6.24:1) on every ground, which is the build’s mitigation and why the raw figure is still printed. The glyph only ever sits on the white fill.</p>'
+
+      + '<h3>The case</h3><div class="case"><p><b>For</b>'+c.pro+'</p><p><b>Against</b>'+c.con+'</p></div>'
+
+      + '<h3>Asset source (library frame, 96 × 104)</h3><pre>'+assetSource(c).replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</pre>'
+      + '</section>';
+  });
+  document.getElementById('gallery').innerHTML = g;
+
+  /* summary */
+  const survives = {J1:'frame yes; dots three faint blobs at 1×, a stipple at actual size, clean from 40', J2:'frame yes; dash and dots compete', J3:'yes, cleanly (caps square off below 52)', J4:'no: 7 px door, dots gone'};
+  let s = '<div class="tw"><table class="summary"><tr><th>Setting</th><th>In one line</th><th>Silhouette</th><th>Outline</th><th>Glyph</th><th>Worst outline contrast</th><th>Glyph vs fill</th><th>Survives at 32?</th></tr>';
+  CANDS.forEach(c => {
+    const w = worst[c.id];
+    s += '<tr><td><a href="#cand-'+c.id+'">'+c.id+'</a>'+(c.id==='J1'?' <b>(recommended)</b>':'')+'</td><td>'+c.name+'</td><td>'+c.silhouette+'</td><td>'+c.outlineStyle+'</td><td>'+c.glyphName+'</td>'
+       + cell(w.worstOutline) + cell(w.glyph) + '<td>'+survives[c.id]+'</td></tr>';
+  });
+  s += '</table></div><p class="muted">Worst outline contrast is the same for all four because the outline colour and the fill are fixed by the brief; the place accent (sky700 on sky400, 3.08:1) is the floor everywhere, and the glyph on its white fill is 6.24:1 in every setting. The settings differ in line style, silhouette and what survives at 32, not in colour.</p>';
+  document.getElementById('summary').innerHTML = s;
+
+  document.getElementById('recbox').innerHTML =
+    '<p><b>J1: the solid sky pin with the full doorway glyph, threshold dots included.</b> It is the owner’s glyph as specified inside the rule the last three galleries settled, and the zoom crops show the posts and the lintel distinct at 32 and 40 (the round caps only show from 52 up on a 1× screen) while the threshold dots read as three from 40 up and as three faint blobs at 32, which is still a broken threshold and still says estimated. J2 puts three broken lines inside one another the moment a partial halo lands, J4 shrinks the glyph to a 7 px smudge at the smallest size, and J3 is the fallback if the owner judges the 32 px stipple to be the same clutter the confidence dots were: same pin, one attribute removed, nothing else moves.</p>';
+}
+document.getElementById('lift').addEventListener('change', render);
+render();
+</script>
+</body>
+</html>

@@ -21,6 +21,25 @@ ever red, should be able to find the answer without asking anyone.
 | `interaction-audit-r7.md` | The build measured against the interaction and motion specification. Durations, pin geometry, sheet stops. |
 | `qa-report-r7.md` | Adversarial functional QA, plus what rapid successive rounds broke. |
 | `package-defects.md` | Verified defects in the supplied handoff package, for whoever maintains its generator. |
+| **`prototype.html`** | **The reference build.** 26 screens, every state, nine rounds of work, self-contained — open it in a browser, no server needed. When a document and this file disagree about what something looks like, this file is what was measured. Start here. |
+| `design-systems-spec.md` | The scales: type, spacing, elevation, motion, with a mapping from every value the build used before them. What to implement against when building a screen from scratch. |
+| `ui-reference-spec.md` | Screen-by-screen reference for the surfaces the prototype covers. |
+| `graphic-critique.md` | A designer's judgement against the targets, as distinct from conformance. Where the build reads unfinished and why. |
+| `incentives-audit.md` | Who benefits from misrepresenting this product, and how its rules can be gamed. The angle no design or code review covers. |
+| `galleries/` | Options drawn and measured before a choice was made, kept because the reasoning is in them. `estimated-mark-4-chosen.html` holds the mark that shipped, with its contrast measured on every ground tone in both contrast modes. `tagline.html` records why colour is unavailable on the welcome headline. |
+| `rounds/` | The briefs for rounds 8 and 9 — what each round was asked to do, and the constraints it had to hold. Useful when a decision looks arbitrary. |
+
+## If you are implementing a screen
+
+Open `prototype.html` in a browser and drive the screen you are building. It is the only
+artefact where the states, the transitions, the empty cases and the accessible names all
+exist together. Then read `design-systems-spec.md` for the scales and `visual-language.md`
+for the rules below.
+
+A note for the native app specifically: the prototype is a web build, so its layout is a
+reference for hierarchy, spacing rhythm, state coverage and copy — not a pixel target to
+match. Where SwiftUI's own idiom disagrees with a web layout, the idiom wins and the
+tokens stay.
 
 ## The rules that are not negotiable
 
