@@ -19,7 +19,7 @@ from frontdoor.claims import (
     load_claims,
     submit_claim,
 )
-from frontdoor.map_states import STATE_NEUTRAL, STATE_VERIFIED, STATES, pin_for_row
+from frontdoor.map_states import STATE_NEUTRAL, STATE_SCANNED, STATES, pin_for_row
 from frontdoor.scan_records import load_scan_records, merge_scans, new_scan_record
 from frontdoor_server import claim_view
 from frontdoor_server.app import create_app
@@ -380,7 +380,7 @@ def test_owner_attested_scan_sets_owner_confirmed_without_a_third_stamp_state():
     assert row["status"] == "verified"
     assert row["owner_confirmed"] is True
     pin = pin_for_row(PLACE, row)
-    assert pin["state"] == STATE_VERIFIED
+    assert pin["state"] == STATE_SCANNED
     assert pin["state"] in STATES
     assert pin["owner_confirmed"] is True
 
@@ -397,7 +397,7 @@ def test_community_scan_does_not_set_owner_confirmed():
         image_keys=[],
     )])
     pin = pin_for_row(PLACE, merged[PLACE])
-    assert pin["state"] == STATE_VERIFIED
+    assert pin["state"] == STATE_SCANNED
     assert pin["owner_confirmed"] is False
 
 
@@ -455,7 +455,7 @@ def test_in_app_attested_publish_requires_an_approved_claim(env):
     assert published.get_json()["published"] is True
     pin = pin_state(http)
     assert pin["owner_confirmed"] is True
-    assert pin["state"] == STATE_VERIFIED
+    assert pin["state"] == STATE_SCANNED
 
 
 def test_an_approved_claim_does_not_let_an_anonymous_client_attest(env):
@@ -516,7 +516,7 @@ def test_in_app_without_attestation_stays_community_scanned(env):
     body = post_publish(http, [image_part("door.jpg")], form=form).get_json()
     assert body["published"] is True
     pin = pin_state(http)
-    assert pin["state"] == STATE_VERIFIED
+    assert pin["state"] == STATE_SCANNED
     assert pin["owner_confirmed"] is False
 
 

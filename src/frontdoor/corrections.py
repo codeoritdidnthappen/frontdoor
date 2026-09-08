@@ -78,7 +78,7 @@ import uuid
 from dataclasses import replace
 from datetime import datetime, timezone
 
-from frontdoor.map_states import STATE_VERIFIED, state_for_row
+from frontdoor.map_states import STATE_SCANNED, state_for_row
 
 # The append discipline and the store reader are the scan store's, imported
 # rather than re-implemented: append_scan recovers a torn last line and
@@ -221,7 +221,7 @@ def place_tier(row):
     """
     if isinstance(row, dict) and row.get("owner_confirmed") is True:
         return TIER_OWNER_CONFIRMED
-    if state_for_row(row) == STATE_VERIFIED:
+    if state_for_row(row) == STATE_SCANNED:
         return TIER_SCANNED
     return TIER_ESTIMATED
 

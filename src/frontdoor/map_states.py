@@ -1,11 +1,22 @@
 """Public map stamp states: the Green-or-Gray rule (TICK-247, #169).
 
-The public map has exactly two stamp states — "Verified Accessible" (green)
-and "Not Yet Checked" (neutral) — and this module is the single place that
+The public map has exactly two stamp states — "Scanned on-site" (green) and
+"Not Yet Checked" (neutral) — and this module is the single place that
 decides which one a dataset row gets. The rule is the legal and backlash
 shield for putting real businesses on a public map: the map only ever
 celebrates or stays silent, and nothing a screen finds is ever published as
 a negative verdict against a named business.
+
+**Both states say how the evidence was collected, and neither is a
+conclusion about whether a person can get in (TICK-461, #461).** The green
+state used to be published as "Verified Accessible", which read as a
+compliance finding and was served as one: a place whose four criteria were
+all ``not_visible`` — the photographs showed nothing — carried it, because
+the state is earned by a human standing at the door with a camera, not by
+anything the photographs contained. The tier is provenance. "Scanned
+on-site" is what it means, it is the phrase the app already renders, and it
+is a claim the evidence can carry. There is no rung above it: the next one
+would be a compliance claim that cannot be made from photographs.
 
 Enforcement, not convention:
 - ``state_for_row`` is total and default-neutral. Green requires a row whose
@@ -19,23 +30,29 @@ Enforcement, not convention:
   visible / not visible in photos / not assessed — so a screening "absent"
   verdict is published as an observation ("not visible in photos"), never as
   a negative claim.
+- No public state token or stamp label contains an accessibility or
+  compliance word (test_public_map_claims holds that census, over the served
+  payload as well as over the constants).
 
 Rows are the TICK-248 pre-catalogue shape (place_id-keyed, per-criterion
 verdicts, ``status``/``source``/``imagery_date``). This is a data-shape
 dependency only; nothing here imports the screening or pre-catalogue code.
 """
 
-STATE_VERIFIED = "verified_accessible"
+STATE_SCANNED = "scanned_on_site"
 STATE_NEUTRAL = "not_yet_checked"
-STATES = frozenset((STATE_VERIFIED, STATE_NEUTRAL))
+STATES = frozenset((STATE_SCANNED, STATE_NEUTRAL))
 
 STAMP_LABELS = {
-    STATE_VERIFIED: "Verified Accessible",
+    STATE_SCANNED: "Scanned on-site",
     STATE_NEUTRAL: "Not Yet Checked",
 }
 
 # The only status that can ever produce a green stamp, and the imagery-only
-# sources that can never produce one regardless of status.
+# sources that can never produce one regardless of status. The status token is
+# the DATA's word for human confirmation and is deliberately unchanged by
+# TICK-461: what the row records is that a person confirmed it, and what the
+# map publishes is how. Only the public state and label are renamed.
 VERIFIED_STATUS = "verified"
 IMAGERY_ONLY_SOURCES = frozenset({"streetview"})
 
@@ -65,6 +82,25 @@ OBSERVATION_NOTE = (
     "are not measurements, compliance determinations, or legal conclusions."
 )
 
+# The one scale every public ``confidence`` is on (TICK-462, #462): a
+# percentage from 0 through 100. It is the scale the screening engine answers
+# on (frontdoor.screening refuses anything outside 0..100) and the scale the
+# pre-catalogue aggregates on, so it is the scale the data is produced on and
+# nothing between the engine and here rescales it.
+#
+# One scale because a viewer cannot tell which scale a value is on from the
+# value alone: 0.85 is a plausible reading on either. The map merge used to
+# divide the scan path's confidences by 100, so a single pin could carry
+# 20.0 beside 0.85 and the 0.85 — the observation the model was SUREST of —
+# rendered as 1%. The fix was to stop the one producer that rescaled, not to
+# teach readers to cope, and CONFIDENCE_SCALE goes out on the payload so a
+# reader never has to guess.
+CONFIDENCE_SCALE = "percent_0_100"
+CONFIDENCE_NOTE = (
+    "Confidence is a percentage from 0 through 100, on one scale for every "
+    "observation, whatever the evidence it came from."
+)
+
 AI_ESTIMATED_LABEL = "AI-estimated"
 
 
@@ -81,7 +117,7 @@ def state_for_row(row):
         and row.get("status") == VERIFIED_STATUS
         and row.get("source") not in IMAGERY_ONLY_SOURCES
     ):
-        return STATE_VERIFIED
+        return STATE_SCANNED
     return STATE_NEUTRAL
 
 
@@ -100,6 +136,13 @@ def checklist_for_row(row):
 
     Every entry's ``observation`` is one of the three public vocabulary
     values; confidence is passed through only when it is a number.
+
+    ``confidence`` is where the public field is defined, so this is where its
+    scale is stated: CONFIDENCE_SCALE — a percentage from 0 through 100. It
+    is passed through unrescaled and unclamped on purpose. A clamp here would
+    make a number that arrived on the wrong scale RENDER correctly while
+    still being wrong; the invariant is kept by every producer writing the
+    one scale, and tested on what /map/data actually serves.
     """
     criteria = row.get("criteria") if isinstance(row, dict) else None
     if not isinstance(criteria, dict):
@@ -175,4 +218,11 @@ def prepare_map_payload(dataset):
             pin = pin_for_row(place_id, dataset[place_id])
             if pin is not None:
                 pins.append(pin)
-    return {"note": OBSERVATION_NOTE, "pins": pins}
+    return {
+        "note": OBSERVATION_NOTE,
+        # The payload says its own confidence scale so a reader never has to
+        # infer it from the values (TICK-462).
+        "confidence_note": CONFIDENCE_NOTE,
+        "confidence_scale": CONFIDENCE_SCALE,
+        "pins": pins,
+    }

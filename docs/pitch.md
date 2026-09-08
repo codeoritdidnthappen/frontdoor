@@ -37,8 +37,8 @@ Everything above, then:
 >
 > **Every place on our map carries how we know: estimated from street imagery, scanned on site, or
 > confirmed by the business. It never goes backwards, and we never publish a negative — a place is
-> either verified accessible or not yet checked. We're not in the business of telling the internet
-> that someone's shop is bad.**
+> either scanned on-site or not yet checked. Both of those say how we know, not what we concluded.
+> We're not in the business of telling the internet that someone's shop is bad.**
 >
 > **Owners can claim their door and confirm what's there. Anyone can flag something wrong, and it
 > reaches a person, not a form.**
@@ -82,9 +82,16 @@ single unrepeated run. Until a human-labelled sample exists, no accuracy number 
 It is not a measurement and not a legal determination, and one sentence claiming otherwise makes
 the whole product a liability.
 
-**Never say a place is inaccessible.** The map has two public states — verified accessible, or not
-yet checked. That is a rule, not a limitation, and it is the answer to "aren't you going to get
-sued?"
+**Never say a place is inaccessible.** The map has two public states — scanned on-site, or not yet
+checked. That is a rule, not a limitation, and it is the answer to "aren't you going to get sued?"
+
+**Never say a place is accessible either, and that includes the map's own labels (#461).** Both
+public states describe how the evidence was collected, and neither concludes anything about
+whether a person can get in. The green state used to be published as "Verified Accessible", and
+production served it for a place whose four criteria all read `not_visible` — the photographs
+showed nothing and the API said verified. The tier is provenance: somebody stood at that door with
+a camera. There is no rung above it, because the next one would be the compliance claim the line
+above forbids.
 
 **Never say "step-free entry" is one of the things it checks.** The interface names it; the engine
 does not assess it yet (#368). Four criteria: ramp or bevel, handrails, accessible door hardware,

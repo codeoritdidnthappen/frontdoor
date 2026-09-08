@@ -525,7 +525,7 @@ def test_a_published_scan_upgrades_its_pin_on_map_data(
     (pin,) = payload["pins"]
     assert pin["place_id"] == "ChIJexample"
     # Scanned tier: the merged row passed the same Green-or-Gray gate.
-    assert pin["state"] == "verified_accessible"
+    assert pin["state"] == "scanned_on_site"
     assert pin["ai_estimated"] is False
     # Freshness from the newest scan.
     assert pin["imagery_date"] == publish["created_at"][:10]
@@ -537,7 +537,10 @@ def test_a_published_scan_upgrades_its_pin_on_map_data(
     # The scan's criteria raised the checklist.
     checklist = {item["key"]: item for item in pin["checklist"]}
     assert checklist["ramp_or_bevel"]["observation"] == "visible"
-    assert checklist["ramp_or_bevel"]["confidence"] == 0.8
+    # On the one public scale the payload states (TICK-462): the engine's
+    # 0-100 percentage, unrescaled between the scan record and the pin.
+    assert checklist["ramp_or_bevel"]["confidence"] == 80
+    assert payload["confidence_scale"] == "percent_0_100"
 
 
 def test_the_receipt_photo_round_trip_from_map_record_to_bytes(
@@ -576,7 +579,7 @@ def test_a_scan_for_an_uncatalogued_place_adds_its_own_pin(
     pins = {pin["name"]: pin for pin in payload["pins"]}
     assert pins["Example Cafe"]["state"] == "not_yet_checked"  # untouched
     new_pin = pins["Brand New Bakery"]
-    assert new_pin["state"] == "verified_accessible"
+    assert new_pin["state"] == "scanned_on_site"
     assert new_pin["location"] == {"lat": 41.0, "lng": -76.0}
     assert new_pin["provenance"][0]["source"] == "community_scan"
 

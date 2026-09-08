@@ -60,7 +60,7 @@ from frontdoor.map_states import (
     OBSERVATION_NOT_ASSESSED,
     OBSERVATION_NOT_VISIBLE,
     OBSERVATION_VISIBLE,
-    STATE_VERIFIED,
+    STATE_SCANNED,
     _observation,
     _valid_location,
     state_for_row,
@@ -370,8 +370,19 @@ def _rank(entry):
 def _scan_criteria(scan):
     """The scan's verdicts as pre-catalogue-shaped criterion entries.
 
-    Confidences arrive on the engine's 0-100 scale; the map reads 0-1, so
-    values above 1 are scaled down. Non-numbers pass through as None.
+    Confidences arrive on the engine's 0-100 scale and STAY on it — the same
+    scale map_states.CONFIDENCE_SCALE states publicly, and the same scale the
+    pre-catalogue rows this merges into are already on. Non-numbers pass
+    through as None.
+
+    TICK-462, #462: this used to divide anything above 1 by 100, and it was
+    the only producer on the endpoint that rescaled. Because the merge
+    replaces a criterion entry only when the scan RAISES the observation, the
+    rescaled values landed precisely on the observations the model was surest
+    of: one pin served 20.0 beside 0.85, and anything rendering the field as
+    a percentage showed that 0.85 as 1%. The producer is fixed here rather
+    than at the edge, because a clamp at the edge makes a wrong number render
+    correctly and leaves it wrong.
     """
     verdicts = scan.get("verdicts")
     confidences = scan.get("confidences")
@@ -385,8 +396,6 @@ def _scan_criteria(scan):
         confidence = confidences.get(key)
         if isinstance(confidence, bool) or not isinstance(confidence, (int, float)):
             confidence = None
-        elif confidence > 1:
-            confidence = confidence / 100.0
         entries[key] = {"verdict": verdict, "confidence": confidence}
     return entries
 
@@ -422,7 +431,7 @@ def _upgrade_row(base, scan):
     # can set it — a later community scan cannot clear it.
     if is_owner_attested(scan):
         row["owner_confirmed"] = True
-    if state_for_row(row) != STATE_VERIFIED:
+    if state_for_row(row) != STATE_SCANNED:
         row["status"] = "verified"
         row["source"] = OWNER_SCAN_SOURCE if is_owner_attested(scan) else SCAN_SOURCE
 

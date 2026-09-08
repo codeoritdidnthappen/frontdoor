@@ -803,10 +803,10 @@ def test_a_dispute_never_turns_a_green_pin_neutral(client, store_paths):
         {"ChIJexample": dataset_row(status="verified", source="community_scan")},
     )
     before = _map_payload(client)["ChIJexample"]
-    assert before["state"] == "verified_accessible"
+    assert before["state"] == "scanned_on_site"
     _corroborate(client)
     after = _map_payload(client)["ChIJexample"]
-    assert after["state"] == "verified_accessible"
+    assert after["state"] == "scanned_on_site"
     assert after["label"] == before["label"]
     assert after["checklist"] == before["checklist"]
     assert after["needs_relook"] is True
