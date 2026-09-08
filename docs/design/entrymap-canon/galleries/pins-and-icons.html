@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>EntryMap — pins &amp; icons</title>
+<style>
+/* ============================================================
+   EntryMap pin + icon set — standalone gallery.
+   Everything here is pure inline SVG: no libraries, no data
+   URIs, no external references, no webfonts.
+   Tokens mirror design/phone-app-prototype.html so the snippets
+   drop straight in.
+   ============================================================ */
+:root{
+  --ground:#EDEBFA;          /* pale lavender map canvas */
+  --ground-deep:#E2DFF6;
+  --card:#FFFFFF;
+  --ink:#241F3A;
+  --sub:#4A4463;
+  --blue:#5B8DEF;
+  --blue-ink:#1E3A8A;
+  --blue-edge:#2C63C9;       /* estimated pin outline */
+  --marigold:#F0A32F;
+  --marigold-ink:#6E4A00;
+  --marigold-edge:#8A5A00;   /* dark rim that carries marigold to 3:1 */
+  --purple:#7053C5;
+  --purple-ink:#4B2E9E;
+  --purple-wash:#F0EBFC;
+  --edge:#8E88A8;
+  --line:#E7E3F5;
+  --shadow:0 10px 30px rgba(36,31,58,.13);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:#F6F5FB;color:var(--ink);
+  font:15px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  -webkit-font-smoothing:antialiased}
+body{padding:32px 20px 90px}
+.wrap{max-width:1080px;margin:0 auto}
+
+h1{font-size:30px;letter-spacing:-.02em;line-height:1.15}
+h2{font-size:19px;letter-spacing:-.01em;margin:0 0 4px}
+h3{font-size:13px;text-transform:uppercase;letter-spacing:.09em;color:var(--sub);margin:0 0 10px}
+p{color:var(--sub);max-width:64ch}
+a{color:var(--purple-ink)}
+code,kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.88em;
+  background:var(--purple-wash);color:var(--purple-ink);padding:1px 5px;border-radius:5px}
+
+header{margin-bottom:26px}
+header .lede{margin-top:8px}
+.meta{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px}
+.tag{font-size:12px;font-weight:700;background:#fff;border:1px solid var(--line);
+  border-radius:999px;padding:5px 11px;color:var(--sub)}
+
+section{background:#fff;border:1px solid var(--line);border-radius:18px;
+  padding:22px 22px 26px;margin:18px 0;box-shadow:var(--shadow)}
+section > p{margin-bottom:16px}
+
+/* surfaces the pins are judged against */
+.ground{background:var(--ground);border-radius:14px;padding:26px 18px;
+  border:1px solid #DEDAF2}
+.white{background:var(--card);border-radius:14px;padding:26px 18px;border:1px solid var(--line)}
+
+.row{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;justify-content:center}
+.cell{display:flex;flex-direction:column;align-items:center;gap:10px;
+  min-width:150px;padding:14px 10px 12px;border-radius:12px}
+.cell .stage{display:flex;align-items:flex-end;justify-content:center;min-height:84px}
+/* the match halo bleeds ~25 units past the body, so its row needs real air */
+#halos .cell{min-width:172px;padding-top:34px}
+#halos .cell .stage{min-height:104px}
+.cap{font-size:12.5px;font-weight:800;text-align:center;line-height:1.35}
+.cap small{display:block;font-weight:600;color:var(--sub);font-size:11.5px;margin-top:2px}
+.ratio{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:11.5px;font-weight:700;border-radius:999px;padding:3px 9px;white-space:nowrap}
+.ratio.pass{background:#DFF3E6;color:#0F5228}
+.ratio.fail{background:#FBE3E3;color:#7A1414}
+
+/* the map-scale strip: pins sitting on their true anchor points */
+.anchorbar{position:relative;height:130px;border-radius:14px;background:var(--ground);
+  border:1px solid #DEDAF2;overflow:hidden;margin-top:8px}
+.anchorbar .baseline{position:absolute;left:0;right:0;top:96px;height:0;
+  border-top:1.5px dashed #9A93BE}
+.anchorbar .lbl{position:absolute;left:12px;top:100px;font-size:11px;color:var(--sub);font-weight:700}
+.anchorbar .drop{position:absolute;transform:translate(-50%,-100%);top:96px}
+
+.icons{display:grid;grid-template-columns:repeat(auto-fill,minmax(104px,1fr));gap:2px;
+  background:var(--line);border:1px solid var(--line);border-radius:14px;overflow:hidden}
+.ic{background:#fff;display:flex;flex-direction:column;align-items:center;gap:8px;
+  padding:16px 6px 12px;color:var(--ink)}
+.ic .box{width:24px;height:24px;display:grid;place-items:center}
+.ic .nm{font-size:11px;color:var(--sub);font-weight:700;text-align:center;word-break:break-word}
+.gridtoggle{display:flex;gap:14px;align-items:center;margin-bottom:12px;flex-wrap:wrap}
+.gridtoggle label{font-size:13px;font-weight:700;display:flex;gap:6px;align-items:center;cursor:pointer}
+body.showgrid .ic .box{
+  background-image:linear-gradient(to right,#E9E5F6 1px,transparent 1px),
+                   linear-gradient(to bottom,#E9E5F6 1px,transparent 1px);
+  background-size:4px 4px;outline:1px solid #D9D2EE}
+
+/* icon colour demo strip */
+.tones{display:flex;flex-wrap:wrap;gap:10px}
+.tone{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700;
+  border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:#fff}
+
+pre{background:#1D1930;color:#E8E4F5;border-radius:14px;padding:16px 18px;
+  overflow:auto;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-size:12px;line-height:1.6;max-height:460px}
+pre b{color:#FFC978;font-weight:600}
+.srchead{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:8px}
+button.copy{font:inherit;font-size:12.5px;font-weight:800;cursor:pointer;
+  background:var(--purple);color:#fff;border:0;border-radius:10px;padding:9px 14px;min-height:38px}
+button.copy:hover{background:var(--purple-ink)}
+button.copy:focus-visible{outline:3px solid var(--purple-ink);outline-offset:2px}
+
+table{border-collapse:collapse;width:100%;font-size:13.5px;margin-top:6px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:11.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--sub)}
+td.n{font-family:ui-monospace,Menlo,Consolas,monospace;white-space:nowrap}
+ul{margin:8px 0 0 18px;color:var(--sub)}li{margin:5px 0}
+.note{background:var(--purple-wash);border:1px solid #DDD3F6;border-radius:12px;
+  padding:12px 14px;font-size:13.5px;color:var(--purple-ink);font-weight:600;margin-top:14px}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>EntryMap — pins &amp; icons</h1>
+  <p class="lede">The three evidence-tier pins and the app icon set, rebuilt as standalone inline SVG
+  against <code>board-refs/…/02-map-filters-and-evidence.png</code> and
+  <code>03-community-scan-flow.png</code>. Every mark below is drawn by the two functions at the
+  bottom of this page — the gallery renders from the same source it hands you, so what you see is
+  what you paste.</p>
+  <div class="meta">
+    <span class="tag">Pins on a 42×52 body inside a −9 0 60 52 viewBox</span>
+    <span class="tag">Icons on one 24px grid, stroke-width 2</span>
+    <span class="tag">round caps + joins</span>
+    <span class="tag">aria-hidden, focusable=false</span>
+    <span class="tag">no libraries · no data URIs · no external refs</span>
+  </div>
+</header>
+
+<!-- ============================================================ 1 -->
+<section>
+  <h2>1 · The three tiers on the map ground</h2>
+  <p>Map size is 28&nbsp;px tall; legends and empty states use 64&nbsp;px. Distinguishable by
+  <strong>shape alone</strong>: dashed open outline / solid teardrop with a segmented ring /
+  solid teardrop with a detached tick badge. Colour is confirmation, never the carrier.
+  Ratios are computed live from the drawn colours against the ground
+  <code id="gcode">#EDEBFA</code>.</p>
+
+  <div class="ground">
+    <div class="row" id="tier-28"></div>
+  </div>
+  <div class="ground" style="margin-top:14px">
+    <div class="row" id="tier-64"></div>
+  </div>
+
+  <h3 style="margin-top:22px">Measured non-text contrast (WCAG 1.4.11 · 3:1)</h3>
+  <table id="ratio-table">
+    <thead><tr><th>Pin</th><th>Identifying boundary</th><th class="n">vs ground #EDEBFA</th>
+    <th class="n">vs card #FFFFFF</th><th>Verdict</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div class="note" id="marigold-note"></div>
+</section>
+
+<!-- ============================================================ 2 -->
+<section>
+  <h2>2 · The anchor is the tip</h2>
+  <p>The teardrop tip sits at exactly <code>(21, 52)</code> — bottom centre of the viewBox — so the
+  app positions a pin by its point:
+  <code>left: x − width/2; top: y − height;</code> with no per-tier fudge. The halo is allowed to
+  bleed past the box via <code>overflow:visible</code>, which keeps the geometry honest without
+  clipping the glow. The dashed line below is the anchor latitude; all three tips rest on it at
+  both sizes.</p>
+  <div class="anchorbar" id="anchorbar">
+    <div class="baseline"></div><div class="lbl">anchor y</div>
+  </div>
+</section>
+
+<!-- ============================================================ 3 -->
+<section>
+  <h2>3 · Needs-match halos</h2>
+  <p>A halo answers <em>“does this fit the needs you told us about?”</em> — never “is this place
+  good?”. Both states use the same neutral purple, so the difference is carried by
+  <strong>form</strong>: a <strong>continuous ring on a soft disc</strong> for a full match, an
+  <strong>open, broken ring with no disc</strong> for a partial one. Nothing green, nothing amber,
+  nothing red; no score, no stars. The adjacent label always says which needs, in words.</p>
+  <div class="ground"><div class="row" id="halos"></div></div>
+  <div class="note">The halo never changes the pin inside it. Evidence tier and needs-fit are two
+  independent axes, and merging them would make a pin look like a rating.</div>
+</section>
+
+<!-- ============================================================ 4 -->
+<section>
+  <h2>4 · Cluster</h2>
+  <p>Zoomed out, dense pins collapse to a count. The cluster is deliberately <em>not</em> a
+  teardrop — it is a disc, so it never reads as a fourth tier. Its dotted outer ring says
+  “several things here”. It anchors at its centre, not at a tip.</p>
+  <div class="ground"><div class="row" id="clusters"></div></div>
+  <div class="note">The digits are inside <code>aria-hidden</code> SVG, so the surrounding control
+  must carry the count in its accessible name — e.g.
+  <code>aria-label="12 entrances here, zoom in"</code>.</div>
+</section>
+
+<!-- ============================================================ 5 -->
+<section>
+  <h2>5 · Every pin again, on a white card</h2>
+  <p>Pins also appear inside sheets, list rows and legends. The white halo disappears on white —
+  which is correct; on white the tier colour itself is already past 3:1, so nothing is doing a job
+  it does not need to do.</p>
+  <div class="white"><div class="row" id="onwhite"></div></div>
+</section>
+
+<!-- ============================================================ 6 -->
+<section>
+  <h2>6 · The icon set</h2>
+  <p>One 24&nbsp;px grid, <strong>stroke-width 2 everywhere</strong>, round caps, round joins,
+  <code>fill="none"</code>, no filled counters. Colour arrives through
+  <code>currentColor</code>, so the surrounding CSS custom property drives it and one drawing
+  serves every tone. The build previously mixed 1.7 / 1.8 / 1.9 / 2 / 2.1 / 2.2 / 2.3 / 2.4 / 2.6
+  and drew several icons off-grid; all of that collapses here.</p>
+
+  <div class="gridtoggle">
+    <label><input type="checkbox" id="gridchk"> show the 24 px grid</label>
+    <span style="font-size:12.5px;color:var(--sub);font-weight:700" id="iccount"></span>
+  </div>
+  <div class="icons" id="iconwall"></div>
+
+  <h3 style="margin-top:24px">Colour comes from the token, not the drawing</h3>
+  <div class="tones" id="tones"></div>
+</section>
+
+<!-- ============================================================ 7 -->
+<section>
+  <h2>7 · Drop-in source</h2>
+  <p>Signatures match the prototype: <code>pinSVG(tier, size)</code> and
+  <code>iconSVG(name, size)</code>. Both take one <em>optional</em> trailing argument
+  (<code>opts</code> for pins — match halo and cluster count; <code>color</code> for icons) that
+  existing two-argument call sites never pass, so nothing at the call site has to change.</p>
+
+  <div class="srchead"><h3 style="margin:0">pinSVG — pins, halos, cluster</h3>
+    <button class="copy" data-copy="src-pins">Copy pin source</button></div>
+  <pre id="src-pins"></pre>
+
+  <div class="srchead" style="margin-top:22px"><h3 style="margin:0">iconSVG — the 24 px set</h3>
+    <button class="copy" data-copy="src-icons">Copy icon source</button></div>
+  <pre id="src-icons"></pre>
+
+  <h3 style="margin-top:22px">Migrating the existing call sites</h3>
+  <table>
+    <thead><tr><th>Today in the prototype</th><th>Becomes</th></tr></thead>
+    <tbody>
+      <tr><td class="n">iconSVG(GL.store,'var(--purple-ink)')</td><td class="n">iconSVG('store',20,'var(--purple-ink,#4B2E9E)')</td></tr>
+      <tr><td class="n">iconSVG(GL.camera,'var(--marigold-ink)')</td><td class="n">iconSVG('camera',20,'var(--marigold-ink,#6E4A00)')</td></tr>
+      <tr><td class="n">rcptIcon(PEOPLE_GL, c)</td><td class="n">iconSVG('people',17,c)</td></tr>
+      <tr><td class="n">rcptIcon(PERSON_GL, c)</td><td class="n">iconSVG('profile',17,c)</td></tr>
+      <tr><td class="n">…viewBox="0 0 24 24"&gt;${GL.clock}</td><td class="n">iconSVG('clock',13)</td></tr>
+      <tr><td class="n">…${GL.pencil}</td><td class="n">iconSVG('edit',16)</td></tr>
+      <tr><td class="n">saveIconHTML(on)</td><td class="n">iconSVG('bookmark',16) <em>(filled state stays a CSS/`fill` concern)</em></td></tr>
+      <tr><td class="n">recordIconSVG(color)</td><td class="n">iconSVG('document',17,color)</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ============================================================ 8 -->
+<section>
+  <h2>8 · Where this departs from the board, and why</h2>
+  <table>
+    <thead><tr><th>Board</th><th>Here</th><th>Reason</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Scanned pin is bright marigold with only a white keyline around it.</td>
+        <td>Same marigold, plus a <code>#8A5A00</code> rim inside the white halo.</td>
+        <td>Marigold alone measures <strong id="d-mari"></strong> against the lavender ground and
+            fails 1.4.11. White-on-lavender is 1.06:1, so the keyline carries nothing. The rim is
+            the smallest change that keeps the hue and passes.</td>
+      </tr>
+      <tr>
+        <td>Person glyph is dark ink, not white — visual-language §5 says “a white glyph inside”.</td>
+        <td>Dark ink <code>#241F3A</code>, following the board.</td>
+        <td>The board is right and the prose is wrong: white on marigold measures
+            <strong id="d-white"></strong>. Ink measures <strong id="d-ink"></strong>. The board's own
+            rule is “highest-contrast neutral against the tier fill”, which is why the owner
+            storefront <em>is</em> white on purple (<strong id="d-store"></strong>) and the scanned
+            person is not.</td>
+      </tr>
+      <tr>
+        <td>Legend pins carry a segmented ring <em>outside</em> the head; map pins carry it inside.</td>
+        <td>Always inside.</td>
+        <td>One drawing at both sizes. An outer ring at 28 px would collide with the halo and read
+            as a match halo, which means something else entirely.</td>
+      </tr>
+      <tr>
+        <td>The “i” is set in an italic serif face.</td>
+        <td>Drawn as geometry: a dot over a slanted stem.</td>
+        <td>No webfont is loadable inside a standalone SVG snippet, and a <code>&lt;text&gt;</code>
+            element would re-flow with the user's font settings at 28 px.</td>
+      </tr>
+      <tr>
+        <td>Halo is a blurred soft glow.</td>
+        <td>Three stacked white strokes at falling width and rising opacity.</td>
+        <td>Reads identically at 28–64 px and costs no filter, no <code>&lt;defs&gt;</code>, and no
+            per-instance id — which matters when the map renders a hundred of them through
+            <code>innerHTML</code>.</td>
+      </tr>
+      <tr>
+        <td>Texas flag tucked beside the scanned pin on the map.</td>
+        <td>Not reproduced.</td>
+        <td>Product doc 2026-09-04 and visual-language §9: the flag is provenance on a receipt row
+            only. It never touches a pin. Deliberately dropped.</td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+</div>
+
+<script>
+/* ================================================================
+   PINS
+   ================================================================ */
+
+/* One viewBox for all three tiers so `size` means the same thing
+   everywhere and the owner's detached tick badge has room to sit
+   outside the body without moving the anchor.
+     body      : 42 x 52, x from 0 to 42
+     head      : centre (21,18) r 15
+     tip/anchor: (21,52) — bottom centre of the viewBox
+     margins   : 9 units either side for the badge and the halo   */
+const PIN_VB = '-9 0 60 52';
+const PIN_AR = 60 / 52;
+
+/* teardrop: tangent lines from the tip to the head circle */
+const TEAR = 'M21 52 7.54 24.62A15 15 0 1 1 34.46 24.62Z';
+
+/* soft white halo — three stacked strokes, no filter, no defs */
+function pinHalo(d){
+  return '<path d="'+d+'" fill="none" stroke="#fff" stroke-opacity=".28" stroke-width="8.6" stroke-linejoin="round"/>'
+       + '<path d="'+d+'" fill="none" stroke="#fff" stroke-opacity=".62" stroke-width="5.6" stroke-linejoin="round"/>'
+       + '<path d="'+d+'" fill="none" stroke="#fff" stroke-width="3.2" stroke-linejoin="round"/>';
+}
+
+/* segmented ring inside the head — the board's "evidence" texture */
+function pinRing(){
+  return '<circle cx="21" cy="18" r="11.9" fill="none" stroke="#fff" stroke-opacity=".92"'
+       + ' stroke-width="1.9" stroke-linecap="round" stroke-dasharray="14 4.7"'
+       + ' transform="rotate(-58 21 18)"/>';
+}
+
+/* glyphs drawn on the shared 24 grid, then dropped into the head */
+function inHead(g, k){
+  k = k || .82;
+  return '<g transform="translate(21 18) scale('+k+') translate(-12 -12)">'+g+'</g>';
+}
+const PIN_GLYPH = {
+  /* information mark — dot over a slanted stem (no font dependency) */
+  info: '<circle cx="13.3" cy="6.6" r="2.15" fill="var(--blue-ink,#1E3A8A)"/>'
+      + '<path d="M13.6 10.6 11.5 18.6" fill="none" stroke="var(--blue-ink,#1E3A8A)"'
+      + ' stroke-width="3.3" stroke-linecap="round"/>',
+  /* person — ink, not white: see §8 */
+  person: '<circle cx="12" cy="8.1" r="4.2" fill="var(--ink,#241F3A)"/>'
+        + '<path d="M5.2 19.6c1-4.5 3.5-6.7 6.8-6.7s5.8 2.2 6.8 6.7" fill="none"'
+        + ' stroke="var(--ink,#241F3A)" stroke-width="3" stroke-linecap="round"/>',
+  /* storefront — white on purple */
+  store: '<path d="M4 9.4h16M5.9 9.4v9.4h12.2V9.4M5.7 9.4 7.4 5.2h9.2l1.7 4.2'
+       + 'M9.9 18.8v-4.6h4.2v4.6" fill="none" stroke="#fff" stroke-width="2"'
+       + ' stroke-linecap="round" stroke-linejoin="round"/>'
+};
+
+/* needs-match halo. Form carries the state, not colour:
+   good    = continuous ring on a soft disc
+   partial = broken ring, no disc
+   Neither implies a rating; the label beside it names the needs. */
+function matchHalo(state){
+  var P = 'var(--purple,#7053C5)';
+  if(state === 'good'){
+    return '<circle cx="21" cy="21" r="25" fill="'+P+'" fill-opacity=".15"/>'
+         + '<circle cx="21" cy="21" r="25" fill="none" stroke="'+P+'" stroke-width="2.6"/>';
+  }
+  if(state === 'partial'){
+    return '<circle cx="21" cy="21" r="25" fill="none" stroke="'+P+'" stroke-width="2.6"'
+         + ' stroke-linecap="round" stroke-dasharray="9.4 8.05" transform="rotate(-90 21 21)"/>';
+  }
+  return '';
+}
+
+/* pinSVG(tier, size) — tier: 'est' | 'scan' | 'owner' | 'cluster'
+   optional opts: {match:'good'|'partial', count:Number}
+   Existing two-argument call sites are unaffected. */
+function pinSVG(tier, size, opts){
+  opts = opts || {};
+  if(tier === 'cluster'){
+    var cs = size || 44;
+    return '<svg width="'+cs+'" height="'+cs+'" viewBox="0 0 48 48" fill="none"'
+      + ' aria-hidden="true" focusable="false" style="overflow:visible;display:block">'
+      + '<circle cx="24" cy="24" r="17" fill="#fff" stroke="#fff" stroke-opacity=".55" stroke-width="8"/>'
+      + '<circle cx="24" cy="24" r="22.4" fill="none" stroke="var(--purple,#7053C5)"'
+      +   ' stroke-width="2.2" stroke-linecap="round" stroke-dasharray="2.4 6"/>'
+      + '<circle cx="24" cy="24" r="17" fill="var(--card,#FFFFFF)"'
+      +   ' stroke="var(--purple-ink,#4B2E9E)" stroke-width="2.8"/>'
+      + '<text x="24" y="24" text-anchor="middle" dominant-baseline="central"'
+      +   ' fill="var(--purple-ink,#4B2E9E)" stroke="none"'
+      +   ' font-family="system-ui,-apple-system,Segoe UI,Roboto,sans-serif"'
+      +   ' font-size="17" font-weight="800">' + (opts.count == null ? 8 : opts.count) + '</text>'
+      + '</svg>';
+  }
+
+  var h = size || 28;
+  var w = Math.round(h * PIN_AR * 100) / 100;
+  var s = '<svg width="'+w+'" height="'+h+'" viewBox="'+PIN_VB+'" fill="none"'
+        + ' aria-hidden="true" focusable="false" style="overflow:visible;display:block">'
+        + matchHalo(opts.match)
+        + pinHalo(TEAR);
+
+  if(tier === 'est'){
+    /* dashed outline, no fill — provisional at a glance.
+       The blue dashed edge is the identifying boundary: 4.78:1 on the ground. */
+    s += '<path d="'+TEAR+'" fill="var(--card,#FFFFFF)" stroke="var(--blue-edge,#2C63C9)"'
+       + ' stroke-width="3" stroke-linejoin="round" stroke-linecap="round"'
+       + ' stroke-dasharray="4.7 3.7"/>'
+       + inHead(PIN_GLYPH.info, .88);
+  } else if(tier === 'scan'){
+    /* filled marigold + dark rim. The rim, not the fill, carries 1.4.11. */
+    s += '<path d="'+TEAR+'" fill="var(--marigold,#F0A32F)" stroke="var(--marigold-edge,#8A5A00)"'
+       + ' stroke-width="3.2" stroke-linejoin="round"/>'
+       + pinRing()
+       + inHead(PIN_GLYPH.person, .82);
+  } else {
+    /* owner — filled purple, plus a SEPARATE outlined tick badge at upper right,
+       as on the board: its own mark beside the pin, never merged into it. */
+    s += '<path d="'+TEAR+'" fill="var(--purple,#7053C5)" stroke="var(--purple-ink,#4B2E9E)"'
+       + ' stroke-width="2.4" stroke-linejoin="round"/>'
+       + pinRing()
+       + inHead(PIN_GLYPH.store, .79)
+       + '<circle cx="42.6" cy="6.2" r="6.5" fill="none" stroke="#fff" stroke-opacity=".55" stroke-width="6.4"/>'
+       + '<circle cx="42.6" cy="6.2" r="6.5" fill="var(--card,#FFFFFF)"'
+       +   ' stroke="var(--purple,#7053C5)" stroke-width="2.2"/>'
+       + '<path d="m39.4 6.3 2.3 2.3 4.2-4.6" fill="none" stroke="var(--purple-ink,#4B2E9E)"'
+       +   ' stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/>';
+  }
+  return s + '</svg>';
+}
+
+/* ================================================================
+   ICONS — one 24 grid, one stroke width, round caps and joins
+   ================================================================ */
+const ICONS = {
+map:'<path d="M9 4.8 3.5 7.4v11.8L9 16.6l6 2.6 5.5-2.6V4.8L15 7.4 9 4.8Z"/><path d="M9 4.8v11.8M15 7.4v11.8"/>',
+camera:'<path d="M4 8.6a2.2 2.2 0 0 1 2.2-2.2h1.6l1.2-2a1.4 1.4 0 0 1 1.2-.7h3.6a1.4 1.4 0 0 1 1.2.7l1.2 2h1.6A2.2 2.2 0 0 1 20 8.6v8.6a2.2 2.2 0 0 1-2.2 2.2H6.2A2.2 2.2 0 0 1 4 17.2Z"/><circle cx="12" cy="12.6" r="3.5"/>',
+profile:'<circle cx="12" cy="8.4" r="3.7"/><path d="M4.6 20c1.2-3.7 4-5.6 7.4-5.6s6.2 1.9 7.4 5.6"/>',
+people:'<circle cx="9.3" cy="8.4" r="3.2"/><path d="M3.2 19.4c.9-3.3 3.1-5 6.1-5s5.2 1.7 6.1 5"/><circle cx="17.2" cy="9" r="2.5"/><path d="M16.2 14.6c2.3.2 3.9 1.8 4.7 4.6"/>',
+store:'<path d="M4 9.4h16M5.9 9.4v9.4h12.2V9.4M5.7 9.4 7.4 5.2h9.2l1.7 4.2M9.9 18.8v-4.6h4.2v4.6"/>',
+search:'<circle cx="10.8" cy="10.8" r="6.3"/><path d="m15.4 15.4 4.4 4.4"/>',
+filter:'<path d="M4 7.4h4.1M12.4 7.4h7.6M4 16.6h7.6M15.9 16.6h4.1"/><circle cx="10.2" cy="7.4" r="2.2"/><circle cx="13.8" cy="16.6" r="2.2"/>',
+list:'<path d="M9 6.6h11M9 12h11M9 17.4h11"/><circle cx="4.6" cy="6.6" r="1.1"/><circle cx="4.6" cy="12" r="1.1"/><circle cx="4.6" cy="17.4" r="1.1"/>',
+'zoom-in':'<circle cx="10.8" cy="10.8" r="6.3"/><path d="m15.4 15.4 4.4 4.4M8.4 10.8h4.8M10.8 8.4v4.8"/>',
+'zoom-out':'<circle cx="10.8" cy="10.8" r="6.3"/><path d="m15.4 15.4 4.4 4.4M8.4 10.8h4.8"/>',
+locate:'<circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="1.5"/><path d="M12 2.6v3.1M12 18.3v3.1M2.6 12h3.1M18.3 12h3.1"/>',
+chevron:'<path d="m9.5 5.6 6.6 6.4-6.6 6.4"/>',
+back:'<path d="M19.6 12H4.8m0 0 6.2-6.2M4.8 12l6.2 6.2"/>',
+close:'<path d="m6.2 6.2 11.6 11.6M17.8 6.2 6.2 17.8"/>',
+check:'<path d="m5 12.6 4.8 4.8L19 6.6"/>',
+bookmark:'<path d="M6.4 4.6h11.2v15L12 15.7 6.4 19.6Z"/>',
+share:'<circle cx="17.4" cy="6" r="2.8"/><circle cx="6.6" cy="12" r="2.8"/><circle cx="17.4" cy="18" r="2.8"/><path d="m9.1 10.6 5.8-3.2m0 9.2-5.8-3.2"/>',
+edit:'<path d="M4 20.1 5 15.8 16.4 4.4a2.25 2.25 0 0 1 3.2 3.2L8.2 19Z"/><path d="m14.5 6.3 3.2 3.2"/>',
+photo:'<rect x="3.5" y="5" width="17" height="14" rx="2.6"/><circle cx="8.8" cy="10.1" r="1.7"/><path d="m4.2 17.6 4.7-4.3 3.3 3 3.3-2.7 4.3 3.8"/>',
+document:'<path d="M6 3.6h7.4L18 8.2v12.2H6Z"/><path d="M13.3 3.7v4.5H18"/><path d="M9 12.6h6M9 16.3h4.4"/>',
+clock:'<circle cx="12" cy="12" r="8.4"/><path d="M12 7.2V12l3.2 2.1"/>',
+bars:'<path d="M5.6 19.6v-4.8M12 19.6V9.2M18.4 19.6V4.6"/>',
+lock:'<rect x="4.6" y="10.4" width="14.8" height="9.6" rx="2.4"/><path d="M8.2 10.4V7.9a3.8 3.8 0 0 1 7.6 0v2.5"/><path d="M12 14.2v1.9"/>',
+bell:'<path d="M6.4 16.4V11a5.6 5.6 0 0 1 11.2 0v5.4l1.6 2.2H4.8Z"/><path d="M10 19.7a2.2 2.2 0 0 0 4 0"/>',
+eye:'<path d="M2.7 12S6.2 5.9 12 5.9 21.3 12 21.3 12 17.8 18.1 12 18.1 2.7 12 2.7 12Z"/><circle cx="12" cy="12" r="2.9"/>',
+hand:'<path d="M8.6 12.4V6a1.7 1.7 0 0 1 3.4 0v5.2"/><path d="M12 11.2V4.7a1.7 1.7 0 0 1 3.4 0v6.5"/><path d="M15.4 11.4V6.6a1.7 1.7 0 0 1 3.4 0v8.2c0 3.3-2.6 5.9-5.9 5.9-2.1 0-3.7-.9-4.8-2.5l-2.7-4a1.7 1.7 0 0 1 2.7-2l1.5 1.9"/>',
+wheelchair:'<circle cx="12.9" cy="4.3" r="2.1"/><path d="M11 7.9v5.8h5.4l2.4 5.7M16.5 19.6h4.3"/><path d="M9.4 9.7A6 6 0 1 0 17.4 14.3"/>',
+stroller:'<path d="M3.6 4h2.2l2.4 8.4h9.2a7.4 7.4 0 0 0 3-6.4"/><path d="M8.2 12.4 6.4 17.2h11"/><circle cx="8.6" cy="19.6" r="1.9"/><circle cx="16.4" cy="19.6" r="1.9"/>',
+cane:'<circle cx="9.8" cy="4.4" r="2.1"/><path d="M9.8 7.4 8.7 14.2l2.2 6.6"/><path d="m9.8 9.6 5 2 1.6 9.2"/><path d="M14.8 11.4a3.6 3.6 0 0 0 3.6-3.6"/>',
+info:'<circle cx="12" cy="12" r="8.5"/><path d="M12 11.4v5"/><circle cx="12" cy="7.9" r="1"/>',
+sparkle:'<path d="M12 3.2c.9 4.9 3.9 7.9 8.8 8.8-4.9.9-7.9 3.9-8.8 8.8-.9-4.9-3.9-7.9-8.8-8.8 4.9-.9 7.9-3.9 8.8-8.8Z"/>',
+warning:'<path d="M12 4.4 21 19.6H3Z"/><path d="M12 10.2v4.1"/><circle cx="12" cy="17.2" r="1"/>',
+door:'<path d="M6.6 20.4V5.4a1 1 0 0 1 1-1h8.8a1 1 0 0 1 1 1v15"/><path d="M3.4 20.4h17.2"/><circle cx="14.3" cy="12.8" r="1.1"/>',
+'wide-door':'<path d="M8.2 20.4V7.4a1 1 0 0 1 1-1h5.6a1 1 0 0 1 1 1v13"/><path d="M3.4 20.4h17.2"/><path d="M6.3 13.4H3.1m0 0 1.8-1.8M3.1 13.4l1.8 1.8M17.7 13.4h3.2m0 0-1.8-1.8m1.8 1.8-1.8 1.8"/>',
+plus:'<path d="M12 5.2v13.6M5.2 12h13.6"/>',
+minus:'<path d="M5.2 12h13.6"/>'
+};
+
+/* iconSVG(name, size) — colour defaults to currentColor so the surrounding
+   CSS custom property drives it; pass a third argument to force one. */
+function iconSVG(name, size, color){
+  var d = ICONS[name];
+  if(!d) return '';
+  var s = size || 24;
+  return '<svg width="'+s+'" height="'+s+'" viewBox="0 0 24 24" fill="none"'
+    + ' stroke="'+(color || 'currentColor')+'" stroke-width="2" stroke-linecap="round"'
+    + ' stroke-linejoin="round" aria-hidden="true" focusable="false" style="display:block">'
+    + d + '</svg>';
+}
+
+/* ================================================================
+   gallery scaffolding below — not part of the drop-in source
+   ================================================================ */
+const GROUND = '#EDEBFA', WHITE = '#FFFFFF';
+function lum(hex){
+  var n = parseInt(hex.slice(1), 16);
+  var c = [(n>>16)&255, (n>>8)&255, n&255].map(function(v){
+    v /= 255; return v <= .04045 ? v/12.92 : Math.pow((v+.055)/1.055, 2.4);
+  });
+  return .2126*c[0] + .7152*c[1] + .0722*c[2];
+}
+function ratio(a, b){
+  var l1 = lum(a), l2 = lum(b);
+  if(l2 > l1){ var t = l1; l1 = l2; l2 = t; }
+  return (l1 + .05) / (l2 + .05);
+}
+const r2 = function(a,b){ return Math.round(ratio(a,b)*100)/100; };
+const fmt = function(v){ return v.toFixed(2) + ':1'; };
+
+const TIERS = [
+  {k:'est',   name:'Estimated',        sub:'dashed outline · information mark',
+   edge:'#2C63C9', edgeName:'dashed edge #2C63C9'},
+  {k:'scan',  name:'Scanned on-site',  sub:'marigold fill · person · dark rim',
+   edge:'#8A5A00', edgeName:'rim #8A5A00'},
+  {k:'owner', name:'Owner-confirmed',  sub:'purple fill · storefront · tick badge',
+   edge:'#7053C5', edgeName:'fill + edge #7053C5'}
+];
+
+function cell(html, cap, sub, ratioTxt, pass){
+  return '<div class="cell"><div class="stage">'+html+'</div>'
+    + '<div class="cap">'+cap+(sub ? '<small>'+sub+'</small>' : '')+'</div>'
+    + (ratioTxt ? '<span class="ratio '+(pass?'pass':'fail')+'">'+ratioTxt+'</span>' : '')
+    + '</div>';
+}
+
+/* 1 — tiers at 28 and 64 */
+document.getElementById('tier-28').innerHTML = TIERS.map(function(t){
+  var g = r2(t.edge, GROUND);
+  return cell(pinSVG(t.k, 28), t.name + ' · 28 px', t.sub, fmt(g) + ' on ground', g >= 3);
+}).join('');
+document.getElementById('tier-64').innerHTML = TIERS.map(function(t){
+  var g = r2(t.edge, GROUND);
+  return cell(pinSVG(t.k, 64), t.name + ' · 64 px', t.edgeName, fmt(g) + ' on ground', g >= 3);
+}).join('');
+
+/* ratio table */
+document.querySelector('#ratio-table tbody').innerHTML = TIERS.map(function(t){
+  var g = r2(t.edge, GROUND), w = r2(t.edge, WHITE);
+  return '<tr><td><strong>'+t.name+'</strong></td><td>'+t.edgeName+'</td>'
+    + '<td class="n">'+fmt(g)+'</td><td class="n">'+fmt(w)+'</td>'
+    + '<td><span class="ratio '+(g>=3?'pass':'fail')+'">'+(g>=3?'passes 3:1':'FAILS')+'</span></td></tr>';
+}).join('') +
+  '<tr><td>Owner tick badge</td><td>ring #7053C5 on white disc</td><td class="n">'
+  + fmt(r2('#7053C5', GROUND)) + '</td><td class="n">' + fmt(r2('#7053C5', WHITE))
+  + '</td><td><span class="ratio pass">passes 3:1</span></td></tr>'
++ '<tr><td>Cluster</td><td>ring #4B2E9E</td><td class="n">' + fmt(r2('#4B2E9E', GROUND))
+  + '</td><td class="n">' + fmt(r2('#4B2E9E', WHITE))
+  + '</td><td><span class="ratio pass">passes 3:1</span></td></tr>'
++ '<tr><td>Scanned <em>fill alone</em>, no rim — the state the build shipped</td>'
+  + '<td>marigold #F0A32F</td><td class="n">' + fmt(r2('#F0A32F', GROUND))
+  + '</td><td class="n">' + fmt(r2('#F0A32F', WHITE))
+  + '</td><td><span class="ratio fail">fails — why the rim exists</span></td></tr>';
+
+document.getElementById('marigold-note').innerHTML =
+  'Marigold stays the scanned hue. On its own it measures <strong>'
+  + fmt(r2('#F0A32F', GROUND)) + '</strong> against the lavender ground — the 1.79:1 failure in the '
+  + 'current build. A <code>#8A5A00</code> rim inside the white halo lifts the identifying boundary to <strong>'
+  + fmt(r2('#8A5A00', GROUND)) + '</strong> without shifting the hue, and reads as a confident ink '
+  + 'outline rather than a compliance patch.';
+
+/* 2 — anchor bar */
+(function(){
+  var bar = document.getElementById('anchorbar');
+  var picks = [['est',28,14],['scan',28,28],['owner',28,42],['est',64,62],['scan',64,76],['owner',64,90]];
+  picks.forEach(function(p){
+    var d = document.createElement('div');
+    d.className = 'drop';
+    d.style.left = p[2] + '%';
+    d.innerHTML = pinSVG(p[0], p[1]);
+    bar.appendChild(d);
+  });
+})();
+
+/* 3 — match halos */
+document.getElementById('halos').innerHTML =
+  cell(pinSVG('scan', 44), 'No needs selected', 'no halo at all', '', true)
++ cell(pinSVG('scan', 44, {match:'good'}), 'Matches your needs',
+       'continuous ring on a soft disc', '', true)
++ cell(pinSVG('scan', 44, {match:'partial'}), 'Matches some of your needs',
+       'broken ring, no disc', '', true)
++ cell(pinSVG('est', 44, {match:'partial'}), 'Partial · estimated',
+       'halo and tier stay independent', '', true)
++ cell(pinSVG('owner', 44, {match:'good'}), 'Full · owner-confirmed',
+       'halo and tier stay independent', '', true);
+
+/* 4 — clusters */
+document.getElementById('clusters').innerHTML =
+  cell(pinSVG('cluster', 34, {count:4}),  '4 here',  '34 px', '', true)
++ cell(pinSVG('cluster', 44, {count:12}), '12 here', '44 px · default', '', true)
++ cell(pinSVG('cluster', 44, {count:99}), '99 here', 'two digits hold', '', true)
++ cell(pinSVG('cluster', 64, {count:7}),  '7 here',  '64 px', '', true);
+
+/* 5 — on white */
+document.getElementById('onwhite').innerHTML = TIERS.map(function(t){
+  var w = r2(t.edge, WHITE);
+  return cell(pinSVG(t.k, 44), t.name, '44 px on card', fmt(w) + ' on white', w >= 3);
+}).join('') + cell(pinSVG('cluster', 44, {count:12}), 'Cluster', '44 px on card',
+                   fmt(r2('#4B2E9E', WHITE)) + ' on white', true);
+
+/* 6 — icon wall */
+(function(){
+  var names = Object.keys(ICONS);
+  document.getElementById('iconwall').innerHTML = names.map(function(n){
+    return '<div class="ic"><div class="box">' + iconSVG(n, 24) + '</div>'
+         + '<span class="nm">' + n + '</span></div>';
+  }).join('');
+  document.getElementById('iccount').textContent = names.length + ' icons, one grid, one stroke width';
+  document.getElementById('gridchk').addEventListener('change', function(e){
+    document.body.classList.toggle('showgrid', e.target.checked);
+  });
+  document.getElementById('tones').innerHTML = [
+    ['--ink','#241F3A','ink'], ['--sub','#4A4463','sub'],
+    ['--purple-ink','#4B2E9E','purple-ink'], ['--purple','#7053C5','purple'],
+    ['--marigold-ink','#6E4A00','marigold-ink'], ['--blue-ink','#1E3A8A','blue-ink']
+  ].map(function(t){
+    var c = 'var(' + t[0] + ',' + t[1] + ')';
+    return '<span class="tone" style="color:' + c + '">' + iconSVG('wheelchair', 22)
+      + iconSVG('clock', 22) + iconSVG('bars', 22) + iconSVG('sparkle', 22)
+      + '<span>' + t[2] + '</span></span>';
+  }).join('');
+})();
+
+/* 7 — source dumps, generated from the live definitions */
+(function(){
+  function esc(s){ return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  var pinSrc =
+    "/* ---- EntryMap pins — drop into phone-app-prototype.html ---- */\n"
+    + "const PIN_VB = " + JSON.stringify(PIN_VB) + ";\n"
+    + "const PIN_AR = 60 / 52;\n"
+    + "const TEAR = " + JSON.stringify(TEAR) + ";\n"
+    + "const PIN_GLYPH = " + JSON.stringify(PIN_GLYPH, null, 2) + ";\n\n"
+    + pinHalo.toString() + "\n\n" + pinRing.toString() + "\n\n"
+    + inHead.toString() + "\n\n" + matchHalo.toString() + "\n\n" + pinSVG.toString() + "\n";
+  var iconSrc =
+    "/* ---- EntryMap icons — one 24 grid, stroke-width 2 ---- */\n"
+    + "const ICONS = " + JSON.stringify(ICONS, null, 2) + ";\n\n"
+    + iconSVG.toString() + "\n";
+  document.getElementById('src-pins').textContent = pinSrc;
+  document.getElementById('src-icons').textContent = iconSrc;
+
+  document.querySelectorAll('button.copy').forEach(function(b){
+    b.addEventListener('click', function(){
+      var txt = document.getElementById(b.dataset.copy).textContent;
+      navigator.clipboard.writeText(txt).then(function(){
+        var was = b.textContent; b.textContent = 'Copied';
+        setTimeout(function(){ b.textContent = was; }, 1400);
+      });
+    });
+  });
+})();
+
+/* 8 — deviation figures, computed not typed */
+document.getElementById('d-mari').textContent  = fmt(r2('#F0A32F', GROUND));
+document.getElementById('d-white').textContent = fmt(r2('#FFFFFF', '#F0A32F'));
+document.getElementById('d-ink').textContent   = fmt(r2('#241F3A', '#F0A32F'));
+document.getElementById('d-store').textContent = fmt(r2('#FFFFFF', '#7053C5'));
+document.getElementById('gcode').textContent   = GROUND;
+</script>
+</body>
+</html>

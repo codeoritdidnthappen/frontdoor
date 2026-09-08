@@ -1,0 +1,846 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Curb Appeal — Map UI Directions</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,900;1,9..144,500&family=Karla:wght@400;500;700&family=Space+Grotesk:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500;600&family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=DM+Sans:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+/* ============ PAGE CHROME (neutral, so each direction reads as its own world) ============ */
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --chrome-bg:#17181c; --chrome-ink:#f2f0ec; --chrome-dim:#a7a49c;
+}
+html{scroll-behavior:smooth}
+body{background:var(--chrome-bg);color:var(--chrome-ink);font-family:"DM Sans",system-ui,sans-serif;line-height:1.5}
+a{color:inherit}
+img,svg{max-width:100%}
+button{font:inherit;cursor:pointer}
+:focus-visible{outline:3px solid #7fd7ff;outline-offset:2px}
+.masthead{max-width:1180px;margin:0 auto;padding:56px 28px 24px}
+.masthead .kicker{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--chrome-dim)}
+.masthead h1{font-family:"Fraunces",serif;font-weight:900;font-size:clamp(34px,5vw,58px);line-height:1.02;margin:10px 0 14px}
+.masthead p{max-width:70ch;color:var(--chrome-dim);font-size:16px}
+.jumpnav{display:flex;flex-wrap:wrap;gap:10px;margin:22px 0 8px}
+.jumpnav a{text-decoration:none;font-family:"IBM Plex Mono",monospace;font-size:13px;padding:9px 16px;border:1px solid #35363c;border-radius:999px;color:var(--chrome-ink);transition:border-color .15s}
+.jumpnav a:hover{border-color:#7fd7ff}
+.ladder-note{max-width:1180px;margin:0 auto;padding:0 28px 40px;color:var(--chrome-dim);font-size:14px}
+.ladder-note code{font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:#cfe9d8}
+
+.direction{scroll-margin-top:20px}
+.dir-head{max-width:1180px;margin:0 auto;padding:64px 28px 26px}
+.dir-head .num{font-family:"IBM Plex Mono",monospace;font-size:13px;letter-spacing:.16em;color:var(--chrome-dim);text-transform:uppercase}
+.dir-head h2{font-size:clamp(28px,3.6vw,44px);line-height:1.05;margin:8px 0 12px}
+.dir-head .trust{max-width:74ch;font-size:16.5px;color:#d8d5cd}
+.dir-head .trust b{color:#fff}
+
+.stage{padding:44px 28px 52px}
+.stage-inner{max-width:1180px;margin:0 auto}
+.demo-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,1fr);gap:26px;align-items:start}
+@media(max-width:900px){.demo-grid{grid-template-columns:1fr}}
+.mapwrap{position:relative;border-radius:18px;overflow:hidden}
+.mapcanvas{position:relative;width:100%;aspect-ratio:600/430}
+.mapcanvas svg.streets{position:absolute;inset:0;width:100%;height:100%}
+.pin{position:absolute;transform:translate(-50%,-100%);display:flex;flex-direction:column;align-items:center;border:0;background:none;padding:0}
+.pin .mk{display:grid;place-items:center;border-radius:50%;position:relative;transition:transform .18s cubic-bezier(.34,1.56,.64,1)}
+.pin:hover .mk,.pin:focus-visible .mk{transform:scale(1.12)}
+.pin .stem{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent}
+.pin .plabel{margin-top:4px;font-size:11px;font-weight:700;letter-spacing:.02em;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.mapbar{display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;margin-bottom:14px}
+.needs-toggle{display:inline-flex;align-items:center;gap:10px;border-radius:999px;padding:6px;border:1px solid transparent}
+.needs-toggle button{border:0;border-radius:999px;padding:8px 16px;font-weight:700;font-size:13.5px;background:transparent;transition:background .15s,color .15s}
+.legend{display:flex;flex-wrap:wrap;gap:14px 18px;margin-top:16px;font-size:12.5px}
+.legend .li{display:flex;align-items:center;gap:8px}
+.legend .sw{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;flex:none}
+.card{border-radius:18px;overflow:hidden}
+.chips{display:flex;flex-direction:column;gap:8px}
+.chip{display:grid;grid-template-columns:auto 1fr auto;gap:4px 12px;align-items:center;border-radius:12px;padding:10px 14px;transition:box-shadow .15s,opacity .2s,transform .15s}
+.chip .cname{font-weight:700;font-size:14.5px}
+.chip .cmeta{grid-column:2;font-size:12px}
+.chip .cconf{grid-column:3;grid-row:1/3;text-align:right;font-size:11.5px;line-height:1.3}
+.chip .cicon{grid-row:1/3;width:30px;height:30px;border-radius:9px;display:grid;place-items:center;flex:none}
+.spec{padding:34px 28px 78px}
+.spec-inner{max-width:1180px;margin:0 auto;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:24px}
+.spec h3{font-size:13px;letter-spacing:.14em;text-transform:uppercase;margin-bottom:14px;font-family:"IBM Plex Mono",monospace}
+.swatches{display:flex;flex-wrap:wrap;gap:10px}
+.swatch{width:104px;border-radius:10px;overflow:hidden;font-size:11px}
+.swatch .col{height:52px}
+.swatch .lab{padding:6px 8px;font-family:"IBM Plex Mono",monospace}
+.spec ul{list-style:none;font-size:13.5px}
+.spec li{padding:5px 0;border-bottom:1px dashed transparent}
+.typerow{font-size:15px;line-height:1.6}
+
+.match-halo{position:absolute;inset:-7px;border-radius:50%;pointer-events:none;opacity:0;transition:opacity .25s,transform .25s;transform:scale(.8)}
+.needs-on .pin[data-match] .match-halo{opacity:1;transform:scale(1)}
+.needs-on .pin[data-match="unknown"]{opacity:.62}
+.matchtag{position:absolute;top:-10px;right:-12px;font-size:10px;font-weight:800;border-radius:999px;padding:2px 7px;opacity:0;transform:translateY(4px);transition:opacity .25s,transform .25s;pointer-events:none}
+.needs-on .pin .matchtag{opacity:1;transform:translateY(0)}
+.legend-needs{display:none}
+.needs-on ~ .legend .legend-tiers,.needs-on .legend-tiers{display:none}
+.needs-on .legend-needs{display:flex}
+.foryou{display:none;font-size:12.5px;font-weight:700;padding:8px 14px;border-radius:10px;margin-bottom:10px}
+.needs-on-card .foryou{display:block}
+.needs-on-card .chip[data-need="0"]{opacity:.45}
+footer.page-foot{max-width:1180px;margin:0 auto;padding:60px 28px 80px;color:var(--chrome-dim);font-size:14px;border-top:1px solid #2a2b30}
+footer.page-foot h2{color:var(--chrome-ink);font-size:18px;margin-bottom:10px}
+footer.page-foot ul{margin:10px 0 0 18px}
+
+/* ================= DIRECTION A — FIELD NOTES ================= */
+.dA{background:#FBF7EF;color:#2C241B}
+.dA .dir-head .num,.dA .dir-head .trust{color:#6B5D4C}
+.dA .dir-head .trust b{color:#2C241B}
+.dA .dir-head h2{font-family:"Fraunces",serif;font-weight:900}
+.dA .dir-head h2 em{font-style:italic;font-weight:500;color:#8C5A28}
+.dA{font-family:"Karla",sans-serif}
+.dA .mapwrap{border:1.5px solid #2C241B;box-shadow:6px 6px 0 #2C241B14}
+.dA .mapcanvas{background:#F1E8D8}
+.dA .plabel{background:#FBF7EF;border:1px solid #2C241B33;color:#2C241B}
+.dA .needs-toggle{background:#F1E8D8;border-color:#2C241B26}
+.dA .needs-toggle button{color:#6B5D4C}
+.dA .needs-toggle button[aria-pressed="true"]{background:#2C241B;color:#FBF7EF}
+.dA .mapbar .maptitle{font-family:"Fraunces",serif;font-style:italic;font-size:17px;color:#6B5D4C}
+/* tier marks: wax-seal circles */
+.dA .pin .mk{width:42px;height:42px;color:#FBF7EF;box-shadow:0 2px 0 #2C241B22}
+.dA .pin.t1 .mk{width:38px;height:38px;background:#EAF1F6;border:2.5px dotted #5E8FB4;color:#3D6B8E;font-family:"Fraunces",serif;font-style:italic;font-weight:600;font-size:17px}
+.dA .pin.t2 .mk{background:#C68214;border:2.5px solid #FBF7EF;outline:1.5px solid #C68214}
+.dA .pin.t3 .mk{background:#FBF7EF;border:2.5px solid #8C5A28;color:#8C5A28}
+.dA .pin.t4 .mk{background:#476A45;border:2.5px solid #FBF7EF;outline:1.5px solid #476A45}
+.dA .pin.t1 .stem{border-top:8px solid #5E8FB4}
+.dA .pin.t2 .stem{border-top:8px solid #C68214}
+.dA .pin.t3 .stem{border-top:8px solid #8C5A28}
+.dA .pin.t4 .stem{border-top:8px solid #476A45}
+.dA .match-halo{border:3px solid #476A45}
+.dA .pin[data-match="partial"] .match-halo{border-style:dashed;border-color:#C68214}
+.dA .pin[data-match="unknown"] .match-halo{border-style:dotted;border-color:#5E8FB4}
+.dA .matchtag{background:#476A45;color:#FBF7EF}
+.dA .pin[data-match="partial"] .matchtag{background:#C68214;color:#2C241B}
+.dA .pin[data-match="unknown"] .matchtag{background:#5E8FB4;color:#FBF7EF}
+.dA .legend{color:#6B5D4C}
+.dA .card{background:#FFFDF8;border:1.5px solid #2C241B;box-shadow:6px 6px 0 #2C241B14;padding:22px}
+.dA .card .cat{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#6B5D4C}
+.dA .card h3{font-family:"Fraunces",serif;font-weight:900;font-size:26px;margin:4px 0 2px}
+.dA .card .tierline{display:flex;align-items:center;gap:8px;margin:8px 0 4px;color:#8C5A28;font-weight:700;font-size:13.5px}
+.dA .card .tierline .sw{width:22px;height:22px;border-radius:50%;background:#FBF7EF;border:2px solid #8C5A28;color:#8C5A28;display:grid;place-items:center}
+.dA .witness{font-family:"Fraunces",serif;font-style:italic;font-size:14.5px;color:#6B5D4C;border-left:3px solid #C68214;padding:6px 0 6px 12px;margin:10px 0 16px}
+.dA .chip{background:#FBF7EF;border:1px solid #2C241B26}
+.dA .chip .cicon{background:#F1E8D8;color:#476A45}
+.dA .chip.unk .cicon{color:#3D6B8E}
+.dA .chip .cmeta{color:#6B5D4C}
+.dA .chip .cconf{color:#8C5A28;letter-spacing:2px}
+.dA .chip.unk{border-style:dotted;border-color:#5E8FB4}
+.dA .chip.unk .cconf{color:#3D6B8E;letter-spacing:0}
+.dA .foryou{background:#476A45;color:#FBF7EF}
+.dA .needs-on-card .chip[data-need="1"]{box-shadow:0 0 0 2px #476A45}
+.dA .spec{background:#F1E8D8;color:#2C241B}
+.dA .spec li{border-color:#2C241B33;}
+.dA .swatch{border:1px solid #2C241B26;background:#FBF7EF}
+.dA .spec .typerow .disp{font-family:"Fraunces",serif;font-weight:900;font-size:24px}
+.dA .spec h3{color:#6B5D4C}
+
+/* ================= DIRECTION B — PROVENANCE ================= */
+.dB{background:#0B1220;color:#E7EFF8;font-family:"Space Grotesk",sans-serif}
+.dB .dir-head .num{color:#7FE8D2}
+.dB .dir-head .trust{color:#93A5BC}
+.dB .dir-head .trust b{color:#E7EFF8}
+.dB .dir-head h2{font-weight:700;letter-spacing:-.01em}
+.dB .dir-head h2 .mono{font-family:"IBM Plex Mono",monospace;color:#7FE8D2;font-weight:500}
+.dB .mapwrap{border:1px solid #24344E;background:#0E1728}
+.dB .mapcanvas{background:#0E1728}
+.dB .plabel{background:#0B1220CC;border:1px solid #24344E;color:#C7D6E8;font-family:"IBM Plex Mono",monospace;font-weight:500}
+.dB .needs-toggle{background:#111C2E;border-color:#24344E}
+.dB .needs-toggle button{color:#93A5BC}
+.dB .needs-toggle button[aria-pressed="true"]{background:#7FE8D2;color:#0B1220}
+.dB .mapbar .maptitle{font-family:"IBM Plex Mono",monospace;font-size:13px;color:#93A5BC;letter-spacing:.08em}
+/* tier marks: rounded-square nodes, luminance ladder */
+.dB .pin .mk{width:40px;height:40px;border-radius:12px}
+.dB .pin .conf-readout{font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:#93A5BC;margin-top:3px}
+.dB .pin.t1 .mk{background:#13233A;border:2px dashed #4E7396;color:#8FB4D8;font-family:"IBM Plex Mono",monospace;font-style:italic;font-size:16px}
+.dB .pin.t2 .mk{background:#123B34;border:2px solid #2FA08C;color:#2FA08C}
+.dB .pin.t3 .mk{background:#0E1728;border:2px solid #4FC6AE;color:#4FC6AE}
+.dB .pin.t4 .mk{background:#7FE8D2;border:2px solid #7FE8D2;color:#0B1220;box-shadow:0 0 18px #7FE8D24D}
+.dB .pin.t4 .seal{position:absolute;top:-7px;right:-7px;width:16px;height:16px;border-radius:50%;background:#E5C15C;color:#0B1220;display:grid;place-items:center;font-size:9px;font-weight:700;font-family:"IBM Plex Mono",monospace}
+.dB .pin .stem{border-top:8px solid #24344E}
+.dB .pin.t4 .stem{border-top:8px solid #7FE8D2}
+.dB .match-halo{border-radius:16px;border:2.5px solid #7FE8D2;box-shadow:0 0 14px #7FE8D24D}
+.dB .pin[data-match="partial"] .match-halo{border-style:dashed;border-color:#E5C15C;box-shadow:none}
+.dB .pin[data-match="unknown"] .match-halo{border-style:dotted;border-color:#4E7396;box-shadow:none}
+.dB .matchtag{background:#7FE8D2;color:#0B1220;font-family:"IBM Plex Mono",monospace}
+.dB .pin[data-match="partial"] .matchtag{background:#E5C15C;color:#0B1220}
+.dB .pin[data-match="unknown"] .matchtag{background:#4E7396;color:#E7EFF8}
+.dB .legend{color:#93A5BC;font-family:"IBM Plex Mono",monospace;font-size:11.5px}
+.dB .legend .sw{border-radius:8px}
+.dB .card{background:#111C2E;border:1px solid #24344E;padding:22px}
+.dB .card .cat{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.12em;color:#7FE8D2;text-transform:uppercase}
+.dB .card h3{font-size:24px;margin:4px 0 2px;font-weight:700}
+.dB .provchain{display:flex;align-items:center;gap:0;margin:12px 0 4px;font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:#93A5BC;flex-wrap:wrap}
+.dB .provchain .node{display:flex;align-items:center;gap:5px;padding:4px 8px;border:1px solid #24344E;border-radius:6px;white-space:nowrap}
+.dB .provchain .node.done{border-color:#2FA08C;color:#7FE8D2}
+.dB .provchain .arrow{color:#4E7396;padding:0 4px}
+.dB .auditline{font-family:"IBM Plex Mono",monospace;font-size:12px;color:#E5C15C;margin:10px 0 16px}
+.dB .chip{background:#0E1728;border:1px solid #24344E}
+.dB .chip .cicon{background:#123B34;color:#4FC6AE;border-radius:8px}
+.dB .chip .cname{font-size:14px}
+.dB .chip .cmeta{color:#93A5BC;font-family:"IBM Plex Mono",monospace;font-size:11px}
+.dB .chip .cconf{font-family:"IBM Plex Mono",monospace;color:#7FE8D2}
+.dB .chip .bar{display:block;width:64px;height:4px;background:#24344E;border-radius:2px;margin-top:4px;overflow:hidden}
+.dB .chip .bar i{display:block;height:100%;background:#4FC6AE;border-radius:2px}
+.dB .chip.unk{border-style:dashed;border-color:#4E7396}
+.dB .chip.unk .cicon{background:#13233A;color:#8FB4D8}
+.dB .chip.unk .cconf{color:#8FB4D8}
+.dB .foryou{background:#7FE8D2;color:#0B1220}
+.dB .needs-on-card .chip[data-need="1"]{box-shadow:0 0 0 1.5px #7FE8D2}
+.dB .spec{background:#0E1728;border-top:1px solid #24344E}
+.dB .spec h3{color:#7FE8D2}
+.dB .spec li{border-color:#24344E}
+.dB .swatch{background:#111C2E;border:1px solid #24344E}
+.dB .spec .typerow .disp{font-weight:700;font-size:24px}
+.dB .spec .typerow .mono{font-family:"IBM Plex Mono",monospace;color:#93A5BC}
+
+/* --- B: scan console --- */
+.scanpanel{margin-top:30px;border:1px solid #24344E;border-radius:18px;background:#0E1728;padding:24px;display:grid;grid-template-columns:minmax(260px,340px) minmax(0,1fr);gap:26px}
+@media(max-width:860px){.scanpanel{grid-template-columns:1fr}}
+.scanpanel h3{font-size:19px;margin-bottom:4px}
+.scanpanel .sub{color:#93A5BC;font-size:13.5px;margin-bottom:16px}
+.scan-phone{background:#0B1220;border:1px solid #24344E;border-radius:22px;padding:14px;position:relative}
+.scan-view{position:relative;border-radius:14px;overflow:hidden;background:#13233A;aspect-ratio:4/5}
+.scan-view svg.door{position:absolute;inset:0;width:100%;height:100%}
+.scan-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none}
+.scanning .scan-flash{animation:flash .35s ease-out}
+@keyframes flash{0%{opacity:.95}100%{opacity:0}}
+.scan-beam{position:absolute;left:0;right:0;height:3px;background:linear-gradient(90deg,transparent,#7FE8D2,transparent);box-shadow:0 0 12px #7FE8D2;top:-4px;opacity:0}
+.scanning .scan-beam{opacity:1;animation:beam 1.1s cubic-bezier(.4,0,.6,1) .3s 3}
+@keyframes beam{0%{top:-2%}50%{top:100%}100%{top:-2%}}
+.scan-ring{position:absolute;inset:0;display:grid;place-items:center;opacity:0;transition:opacity .2s}
+.scanning .scan-ring{opacity:1}
+.scan-ring svg{width:88px;height:88px}
+.scan-ring circle.track{fill:none;stroke:#24344E;stroke-width:5}
+.scan-ring circle.prog{fill:none;stroke:#7FE8D2;stroke-width:5;stroke-linecap:round;stroke-dasharray:226;stroke-dashoffset:226;transform:rotate(-90deg);transform-origin:center}
+.scanning .scan-ring circle.prog{animation:ringfill 3.6s linear .25s forwards}
+@keyframes ringfill{to{stroke-dashoffset:0}}
+.scan-ring .pct{position:absolute;font-family:"IBM Plex Mono",monospace;font-weight:600;font-size:15px;color:#7FE8D2}
+.scan-btn{width:100%;margin-top:14px;background:#7FE8D2;color:#0B1220;border:0;border-radius:12px;padding:13px;font-weight:700;font-size:15px;font-family:"Space Grotesk",sans-serif;transition:opacity .15s}
+.scan-btn:disabled{opacity:.5;cursor:default}
+.scan-right{display:flex;flex-direction:column;gap:14px;min-width:0}
+.scanlog{background:#0B1220;border:1px solid #24344E;border-radius:12px;padding:14px;font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:#93A5BC;min-height:118px}
+.scanlog div{opacity:0;transform:translateY(3px);transition:opacity .3s,transform .3s}
+.scanlog div.on{opacity:1;transform:none}
+.scanlog .ok{color:#4FC6AE}
+.scan-checks{display:flex;flex-direction:column;gap:6px}
+.scan-checks .sc{display:flex;align-items:center;gap:10px;font-size:13.5px;color:#93A5BC;opacity:.35;transition:opacity .3s,color .3s}
+.scan-checks .sc .tick{width:20px;height:20px;border-radius:6px;border:1.5px solid #24344E;display:grid;place-items:center;color:transparent;transition:all .25s;flex:none}
+.scan-checks .sc.on{opacity:1;color:#E7EFF8}
+.scan-checks .sc.on .tick{background:#123B34;border-color:#2FA08C;color:#4FC6AE;animation:tickpop .3s cubic-bezier(.34,1.56,.64,1)}
+@keyframes tickpop{0%{transform:scale(.5)}100%{transform:scale(1)}}
+.scan-map{position:relative;background:#0E1728;border:1px solid #24344E;border-radius:12px;height:150px;overflow:hidden}
+.scan-map svg{position:absolute;inset:0;width:100%;height:100%}
+.scan-pin{position:absolute;left:58%;top:52%;transform:translate(-50%,-100%);opacity:0}
+.scan-pin .mk{width:36px;height:36px;border-radius:11px;background:#123B34;border:2px solid #2FA08C;color:#2FA08C;display:grid;place-items:center}
+.scan-pin .stem{width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:7px solid #2FA08C;margin:0 auto}
+.dropped .scan-pin{opacity:1;animation:pindrop .65s cubic-bezier(.34,1.56,.64,1)}
+@keyframes pindrop{0%{transform:translate(-50%,-260%);opacity:0}55%{transform:translate(-50%,-92%);opacity:1}75%{transform:translate(-50%,-104%)}100%{transform:translate(-50%,-100%)}}
+.scan-ripple{position:absolute;left:58%;top:52%;width:14px;height:14px;border-radius:50%;border:2px solid #2FA08C;transform:translate(-50%,-50%);opacity:0;pointer-events:none}
+.dropped .scan-ripple{animation:ripple 1.2s ease-out .5s 2}
+@keyframes ripple{0%{opacity:.9;width:14px;height:14px}100%{opacity:0;width:120px;height:120px}}
+.scan-status{font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:#4E7396}
+.dropped .scan-status{color:#4FC6AE}
+.kf-notes{margin-top:18px;font-size:12.5px;color:#93A5BC;font-family:"IBM Plex Mono",monospace;line-height:1.7}
+.kf-notes b{color:#7FE8D2;font-weight:600}
+
+/* ================= DIRECTION C — OPEN DOORS ================= */
+.dC{background:#F2F6FF;color:#14204A;font-family:"DM Sans",sans-serif}
+.dC .dir-head .num{color:#8236E8}
+.dC .dir-head .trust{color:#46538A}
+.dC .dir-head .trust b{color:#14204A}
+.dC .dir-head h2{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;letter-spacing:-.02em}
+.dC .dir-head h2 .pop{color:#2743D6}
+.dC .mapwrap{border:3px solid #14204A;border-radius:26px;box-shadow:0 8px 0 #14204A1F}
+.dC .mapcanvas{background:#E4ECFF}
+.dC .plabel{background:#fff;border:2px solid #14204A;color:#14204A;box-shadow:0 2px 0 #14204A2E}
+.dC .needs-toggle{background:#fff;border:2px solid #14204A}
+.dC .needs-toggle button{color:#46538A}
+.dC .needs-toggle button[aria-pressed="true"]{background:#2743D6;color:#fff}
+.dC .mapbar .maptitle{font-family:"Bricolage Grotesque",sans-serif;font-weight:700;font-size:17px}
+/* tier marks: sticker balloons that GROW with tier */
+.dC .pin .mk{border:3px solid #fff;box-shadow:0 3px 0 #14204A33;color:#fff}
+.dC .pin.t1 .mk{width:34px;height:34px;background:#fff;border:3px dotted #4D9DE0;color:#2270AE;box-shadow:0 3px 0 #14204A1F;font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:15px}
+.dC .pin.t2 .mk{width:44px;height:44px;background:#F5A300;color:#14204A}
+.dC .pin.t3 .mk{width:52px;height:52px;background:#fff;border-color:#8236E8;color:#8236E8}
+.dC .pin.t4 .mk{width:60px;height:60px;background:#2743D6;color:#fff}
+.dC .pin.t4 .mk::after{content:"AUDITED";position:absolute;bottom:-9px;left:50%;transform:translateX(-50%);background:#14204A;color:#fff;font-size:8px;font-weight:900;letter-spacing:.08em;padding:2px 6px;border-radius:999px}
+.dC .pin.t1 .stem{border-top:8px solid #4D9DE0}
+.dC .pin.t2 .stem{border-top:9px solid #F5A300}
+.dC .pin.t3 .stem{border-top:9px solid #8236E8}
+.dC .pin.t4 .stem{border-top:10px solid #2743D6}
+.dC .pin:hover .mk{transform:scale(1.1) rotate(-4deg)}
+.dC .match-halo{border:4px solid #14B87E}
+.dC .pin[data-match="partial"] .match-halo{border-style:dashed;border-color:#F5A300}
+.dC .pin[data-match="unknown"] .match-halo{border-style:dotted;border-color:#4D9DE0}
+.dC .matchtag{background:#14B87E;color:#fff}
+.dC .pin[data-match="partial"] .matchtag{background:#F5A300;color:#14204A}
+.dC .pin[data-match="unknown"] .matchtag{background:#4D9DE0;color:#fff}
+.dC .legend{color:#46538A;font-weight:500}
+.dC .legend .sw{border:2px solid #fff;box-shadow:0 1px 0 #14204A33}
+.dC .card{background:#fff;border:3px solid #14204A;border-radius:26px;box-shadow:0 8px 0 #14204A1F;padding:24px}
+.dC .card .cat{font-size:12px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;color:#8236E8}
+.dC .card h3{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:26px;margin:4px 0 2px}
+.dC .crowdline{display:inline-flex;align-items:center;gap:8px;background:#E4ECFF;border-radius:999px;padding:6px 14px;font-size:13px;font-weight:700;color:#2743D6;margin:10px 0 16px}
+.dC .chip{background:#F2F6FF;border:2px solid #14204A;border-radius:16px}
+.dC .chip .cicon{background:#14B87E;color:#fff;border-radius:10px;border:2px solid #fff;box-shadow:0 1px 0 #14204A33}
+.dC .chip .cmeta{color:#46538A;font-weight:500}
+.dC .chip .cconf .ringconf{display:inline-block;width:22px;height:22px;border-radius:50%;vertical-align:middle}
+.dC .chip.unk{border-style:dotted;border-color:#4D9DE0;background:#fff}
+.dC .chip.unk .cicon{background:#fff;border-color:#4D9DE0;color:#2270AE}
+.dC .chip .cconf{color:#14204A;font-weight:700}
+.dC .chip.unk .cconf{color:#2270AE}
+.dC .foryou{background:#14B87E;color:#fff;border-radius:999px}
+.dC .needs-on-card .chip[data-need="1"]{box-shadow:0 0 0 3px #14B87E}
+.dC .spec{background:#E4ECFF}
+.dC .spec h3{color:#2743D6}
+.dC .spec li{border-color:#14204A33}
+.dC .swatch{background:#fff;border:2px solid #14204A22}
+.dC .spec .typerow .disp{font-family:"Bricolage Grotesque",sans-serif;font-weight:800;font-size:24px}
+
+/* park + plaza fills handled inline in svg */
+
+@media (prefers-reduced-motion: reduce){
+  *,*::before,*::after{animation-duration:.001s!important;animation-iteration-count:1!important;transition-duration:.001s!important}
+  html{scroll-behavior:auto}
+}
+</style>
+</head>
+<body>
+
+<!-- shared SVG marks -->
+<svg style="display:none" aria-hidden="true">
+  <symbol id="m-cam" viewBox="0 0 24 24"><path d="M4 8h3.2L9 5.8h6L16.8 8H20a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><circle cx="12" cy="13" r="3.1" fill="none" stroke="currentColor" stroke-width="1.9"/></symbol>
+  <symbol id="m-check" viewBox="0 0 24 24"><path d="M5 12.5l4.4 4.4L19 7.4" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  <symbol id="m-shield" viewBox="0 0 24 24"><path d="M12 2.6l7 2.8v5.8c0 4.9-3.3 7.9-7 9.2-3.7-1.3-7-4.3-7-9.2V5.4z" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"/><path d="M8.6 12l2.4 2.4 4.4-4.8" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+</svg>
+
+<header class="masthead">
+  <div class="kicker">Curb Appeal · design exploration · demo-day edition</div>
+  <h1>Three ways to make a stranger<br>trust a map pin.</h1>
+  <p>An accessibility map lives or dies on one bet: a disabled person spends their afternoon on the strength of a pin. Every direction below encodes the same fixed product model — a four-rung trust ladder that only climbs, feature chips that name what a photo shows (never a legal claim), and a "my needs" lens — but argues for trust with a completely different voice.</p>
+  <nav class="jumpnav" aria-label="Directions">
+    <a href="#dir-a">01 · Field Notes</a>
+    <a href="#dir-b">02 · Provenance</a>
+    <a href="#dir-c">03 · Open Doors</a>
+  </nav>
+</header>
+<p class="ladder-note">Fixed trust ladder in all directions — <code>AI-estimated → community-scanned → owner-verified → auditor-verified</code>. Pins only ever go up. The lowest rung reads as <em>informational</em> (soft blue, dotted, italic "i"), never as a bad grade. Every tier is double-encoded: shape + mark + color, so it survives every kind of colorblindness and a grayscale projector.</p>
+
+<!-- ============================================================
+     DIRECTION A — FIELD NOTES
+============================================================ -->
+<section class="direction dA" id="dir-a" aria-labelledby="dir-a-h">
+  <div class="dir-head">
+    <div class="num">Direction 01 · Editorial / warm-human</div>
+    <h2 id="dir-a-h">Field Notes — <em>trust because a person stood here</em></h2>
+    <p class="trust"><b>The trust argument:</b> strangers trust witnesses, not databases. This direction styles every data point as a first-hand observation from someone who physically stood at the door — the card reads like a naturalist's log ("Ramp visible — seen Tuesday by 4 neighbors"), the pins look like ink stamps pressed by a hand, and the auditor's mark sits at the top like a signature on a letter. The warmth is the argument: cold data can be wrong at you; a neighbor's note feels accountable.</p>
+  </div>
+
+  <div class="stage"><div class="stage-inner">
+    <div class="mapbar">
+      <span class="maptitle">Willow &amp; 5th, storefront entrances</span>
+      <div class="needs-toggle" role="group" aria-label="Map lens">
+        <button type="button" aria-pressed="true" data-mode="all">All entrances</button>
+        <button type="button" aria-pressed="false" data-mode="me">My needs · wheelchair</button>
+      </div>
+    </div>
+
+    <div class="demo-grid">
+      <div>
+        <div class="mapwrap demo-root">
+          <div class="mapcanvas">
+            <svg class="streets" viewBox="0 0 600 430" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+              <rect width="600" height="430" fill="#E7DCC6"/>
+              <g fill="#F1E8D8" stroke="#2C241B" stroke-opacity=".18" stroke-width="1.5">
+                <rect x="18" y="18" width="160" height="150" rx="8"/>
+                <rect x="208" y="18" width="220" height="150" rx="8"/>
+                <rect x="458" y="18" width="124" height="150" rx="8"/>
+                <rect x="18" y="198" width="160" height="214" rx="8"/>
+                <rect x="208" y="198" width="220" height="98" rx="8"/>
+                <rect x="208" y="326" width="220" height="86" rx="8"/>
+                <rect x="458" y="198" width="124" height="214" rx="8"/>
+              </g>
+              <rect x="228" y="216" width="180" height="62" rx="8" fill="#D8DFC2" stroke="#476A45" stroke-opacity=".4" stroke-width="1.5"/>
+              <text x="318" y="252" text-anchor="middle" font-family="Fraunces,serif" font-style="italic" font-size="13" fill="#476A45">Willow Green</text>
+              <g font-family="Karla,sans-serif" font-size="10" fill="#6B5D4C" opacity=".85">
+                <text x="192" y="110" transform="rotate(90 192 110)" text-anchor="middle">5th Ave</text>
+                <text x="300" y="186" text-anchor="middle">Willow St</text>
+              </g>
+            </svg>
+
+            <button class="pin t1" style="left:14%;top:30%" data-match="unknown" aria-label="Corner Grocer, AI-estimated, unknown match for your needs">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">?</span>i</span><span class="stem"></span>
+              <span class="plabel">Corner Grocer</span>
+            </button>
+            <button class="pin t2" style="left:47%;top:22%" data-match="partial" aria-label="Print Shop, community-scanned, partial match">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">~</span><svg width="20" height="20"><use href="#m-cam"/></svg></span><span class="stem"></span>
+              <span class="plabel">Print Shop</span>
+            </button>
+            <button class="pin t3" style="left:74%;top:56%" data-match="good" aria-label="Marigold Café, owner-verified, good match" aria-expanded="true">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">✓</span><svg width="20" height="20"><use href="#m-check"/></svg></span><span class="stem"></span>
+              <span class="plabel">Marigold Café</span>
+            </button>
+            <button class="pin t4" style="left:32%;top:78%" data-match="good" aria-label="Public Library, auditor-verified, good match">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">✓</span><svg width="22" height="22"><use href="#m-shield"/></svg></span><span class="stem"></span>
+              <span class="plabel">Public Library</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="legend legend-tiers" aria-label="Tier legend">
+          <span class="li"><span class="sw" style="background:#EAF1F6;border:2px dotted #5E8FB4;color:#3D6B8E;font-family:Fraunces,serif;font-style:italic">i</span> AI-estimated — early info</span>
+          <span class="li"><span class="sw" style="background:#C68214;color:#FBF7EF"><svg width="12" height="12"><use href="#m-cam"/></svg></span> Community-scanned</span>
+          <span class="li"><span class="sw" style="background:#FBF7EF;border:2px solid #8C5A28;color:#8C5A28"><svg width="12" height="12"><use href="#m-check"/></svg></span> Owner-verified</span>
+          <span class="li"><span class="sw" style="background:#476A45;color:#FBF7EF"><svg width="13" height="13"><use href="#m-shield"/></svg></span> Auditor-verified</span>
+        </div>
+        <div class="legend legend-needs" aria-label="Match legend">
+          <span class="li"><span class="sw" style="border:3px solid #476A45"></span> Good match for you</span>
+          <span class="li"><span class="sw" style="border:3px dashed #C68214"></span> Partial — check details</span>
+          <span class="li"><span class="sw" style="border:3px dotted #5E8FB4"></span> Not yet observed</span>
+        </div>
+      </div>
+
+      <article class="card demo-card" aria-label="Marigold Café details">
+        <div class="cat">Café · 212 Willow St</div>
+        <h3>Marigold Café</h3>
+        <div class="tierline"><span class="sw"><svg width="12" height="12"><use href="#m-check"/></svg></span> Owner-verified · climbing since March</div>
+        <p class="witness">"Photographed the entrance Tuesday morning — ramp on the left of the door, button works." — 4 neighbors, 1 owner</p>
+        <div class="foryou">Matched to your needs: wheelchair</div>
+        <div class="chips">
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Step-free entry</span><span class="cmeta">seen 3 days ago · 4 photos</span><span class="cconf" aria-label="high confidence">●●●</span></div>
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Ramp visible</span><span class="cmeta">seen 3 days ago · 4 photos</span><span class="cconf" aria-label="high confidence">●●●</span></div>
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Auto door button</span><span class="cmeta">seen 3 days ago · owner photo</span><span class="cconf" aria-label="medium confidence">●●○</span></div>
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Wide door</span><span class="cmeta">seen 6 weeks ago · 2 photos</span><span class="cconf" aria-label="medium confidence">●●○</span></div>
+          <div class="chip" data-need="0"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Accessibility signage</span><span class="cmeta">seen 3 days ago</span><span class="cconf" aria-label="high confidence">●●●</span></div>
+          <div class="chip unk" data-need="0"><span class="cicon" style="font-family:Fraunces,serif;font-style:italic;font-weight:600">i</span><span class="cname">Easy-grip hardware</span><span class="cmeta">not yet photographed</span><span class="cconf">be the first to scan</span></div>
+        </div>
+      </article>
+    </div>
+  </div></div>
+
+  <div class="spec"><div class="spec-inner">
+    <div>
+      <h3>Palette — ledger inks on linen</h3>
+      <div class="swatches">
+        <div class="swatch"><div class="col" style="background:#FBF7EF"></div><div class="lab">#FBF7EF linen</div></div>
+        <div class="swatch"><div class="col" style="background:#2C241B"></div><div class="lab">#2C241B espresso</div></div>
+        <div class="swatch"><div class="col" style="background:#5E8FB4"></div><div class="lab">#5E8FB4 est. blue</div></div>
+        <div class="swatch"><div class="col" style="background:#C68214"></div><div class="lab">#C68214 ochre</div></div>
+        <div class="swatch"><div class="col" style="background:#8C5A28"></div><div class="lab">#8C5A28 bronze</div></div>
+        <div class="swatch"><div class="col" style="background:#476A45"></div><div class="lab">#476A45 forest</div></div>
+      </div>
+    </div>
+    <div>
+      <h3>Type</h3>
+      <p class="typerow"><span class="disp">Fraunces 900</span> for names &amp; witness quotes (italic 500) · <b>Karla</b> for UI · Plex Mono for eyebrows. Body espresso-on-linen ≈ 12.9:1.</p>
+    </div>
+    <div>
+      <h3>Motion notes</h3>
+      <ul>
+        <li>Pins press in like a stamp: scale 0→1.06→1 with a soft 60ms ink-blot shadow.</li>
+        <li>Card opens with a paper-unfold: 8° rotateX, 280ms, ease-out.</li>
+        <li>Tier upgrade: the old mark is over-stamped by the new one — a beat of both, then the old fades. History, not replacement.</li>
+        <li>Live scan (described): shutter → 7s "developing photograph" sepia-to-color reveal → checklist lines handwritten in → stamp thumps onto map.</li>
+      </ul>
+    </div>
+  </div></div>
+</section>
+
+<!-- ============================================================
+     DIRECTION B — PROVENANCE
+============================================================ -->
+<section class="direction dB" id="dir-b" aria-labelledby="dir-b-h">
+  <div class="dir-head">
+    <div class="num">Direction 02 · Precise / clinical trust</div>
+    <h2 id="dir-b-h">Provenance — <span class="mono">trust because you can audit it</span></h2>
+    <p class="trust"><b>The trust argument:</b> strangers trust systems that show their work. Every claim here carries its evidence chain — who observed it, when, at what confidence — rendered like a security product's certificate view. The tier ladder is a <b>luminance ladder</b>: more verification literally means more light, so the hierarchy survives grayscale, every colorblindness, and a washed-out projector. Nothing decorates; everything testifies.</p>
+  </div>
+
+  <div class="stage"><div class="stage-inner">
+    <div class="mapbar">
+      <span class="maptitle">GRID 04 · WILLOW &amp; 5TH · 4 ENTRANCES INDEXED</span>
+      <div class="needs-toggle" role="group" aria-label="Map lens">
+        <button type="button" aria-pressed="true" data-mode="all">All features</button>
+        <button type="button" aria-pressed="false" data-mode="me">My needs · low grip + wheelchair</button>
+      </div>
+    </div>
+
+    <div class="demo-grid">
+      <div>
+        <div class="mapwrap demo-root">
+          <div class="mapcanvas">
+            <svg class="streets" viewBox="0 0 600 430" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+              <rect width="600" height="430" fill="#0E1728"/>
+              <g fill="none" stroke="#24344E" stroke-width="1">
+                <path d="M0 60H600M0 180H600M0 300H600M0 400H600M80 0V430M200 0V430M340 0V430M480 0V430"/>
+              </g>
+              <g fill="#13233A" stroke="#2E4568" stroke-width="1.2">
+                <rect x="92" y="72" width="96" height="96" rx="3"/>
+                <rect x="212" y="72" width="116" height="96" rx="3"/>
+                <rect x="352" y="72" width="116" height="96" rx="3"/>
+                <rect x="92" y="192" width="96" height="96" rx="3"/>
+                <rect x="212" y="192" width="116" height="96" rx="3"/>
+                <rect x="352" y="192" width="116" height="96" rx="3"/>
+                <rect x="212" y="312" width="256" height="76" rx="3"/>
+              </g>
+              <g font-family="'IBM Plex Mono',monospace" font-size="9" fill="#4E7396">
+                <text x="96" y="66">BLK-11</text><text x="216" y="66">BLK-12</text><text x="356" y="66">BLK-13</text>
+                <text x="216" y="306">BLK-22 · TRANSIT</text>
+              </g>
+            </svg>
+
+            <button class="pin t1" style="left:22%;top:32%" data-match="unknown" aria-label="Unit 11-A, AI-estimated">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">?</span>i</span><span class="stem"></span>
+              <span class="plabel">11-A</span><span class="conf-readout">est · 0.55</span>
+            </button>
+            <button class="pin t2" style="left:49%;top:26%" data-match="partial" aria-label="Unit 12-C, community-scanned">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">~</span><svg width="19" height="19"><use href="#m-cam"/></svg></span><span class="stem"></span>
+              <span class="plabel">12-C</span><span class="conf-readout">scan ×3 · 0.81</span>
+            </button>
+            <button class="pin t3" style="left:73%;top:33%" data-match="good" aria-label="Unit 13-B, owner-verified">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">✓</span><svg width="19" height="19"><use href="#m-check"/></svg></span><span class="stem"></span>
+              <span class="plabel">13-B</span><span class="conf-readout">owner · 0.90</span>
+            </button>
+            <button class="pin t4" style="left:44%;top:70%" data-match="good" aria-label="Ridgeline Pharmacy, auditor-verified" aria-expanded="true">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">✓</span><span class="seal">A</span><svg width="21" height="21"><use href="#m-shield"/></svg></span><span class="stem"></span>
+              <span class="plabel">Ridgeline Pharmacy</span><span class="conf-readout">audited · 0.98</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="legend legend-tiers" aria-label="Tier legend">
+          <span class="li"><span class="sw" style="background:#13233A;border:2px dashed #4E7396;color:#8FB4D8;font-style:italic">i</span> AI-ESTIMATED</span>
+          <span class="li"><span class="sw" style="background:#123B34;border:2px solid #2FA08C;color:#2FA08C"><svg width="12" height="12"><use href="#m-cam"/></svg></span> COMMUNITY</span>
+          <span class="li"><span class="sw" style="background:#0E1728;border:2px solid #4FC6AE;color:#4FC6AE"><svg width="12" height="12"><use href="#m-check"/></svg></span> OWNER</span>
+          <span class="li"><span class="sw" style="background:#7FE8D2;color:#0B1220"><svg width="13" height="13"><use href="#m-shield"/></svg></span> AUDITOR</span>
+        </div>
+        <div class="legend legend-needs" aria-label="Match legend">
+          <span class="li"><span class="sw" style="border:2.5px solid #7FE8D2"></span> MATCH: GOOD</span>
+          <span class="li"><span class="sw" style="border:2.5px dashed #E5C15C"></span> MATCH: PARTIAL</span>
+          <span class="li"><span class="sw" style="border:2.5px dotted #4E7396"></span> NOT YET OBSERVED</span>
+        </div>
+      </div>
+
+      <article class="card demo-card" aria-label="Ridgeline Pharmacy details">
+        <div class="cat">Pharmacy · 44 5th Ave · Entrance N</div>
+        <h3>Ridgeline Pharmacy</h3>
+        <div class="provchain" aria-label="Verification chain">
+          <span class="node done">AI est.</span><span class="arrow">→</span>
+          <span class="node done">3 scans</span><span class="arrow">→</span>
+          <span class="node done">owner</span><span class="arrow">→</span>
+          <span class="node done">auditor</span>
+        </div>
+        <div class="auditline">◈ Independent audit · CivicAccess Labs · 2026-08-21 · report #4417</div>
+        <div class="foryou">MATCHED: LOW GRIP + WHEELCHAIR</div>
+        <div class="chips">
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Step-free entry</span><span class="cmeta">seen 2 days ago · 6 obs</span><span class="cconf">0.98<span class="bar"><i style="width:98%"></i></span></span></div>
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Auto door button</span><span class="cmeta">seen 2 days ago · audited</span><span class="cconf">0.97<span class="bar"><i style="width:97%"></i></span></span></div>
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Easy-grip hardware</span><span class="cmeta">seen 2 days ago · audited</span><span class="cconf">0.95<span class="bar"><i style="width:95%"></i></span></span></div>
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Wide door</span><span class="cmeta">seen 5 weeks ago · 2 obs</span><span class="cconf">0.84<span class="bar"><i style="width:84%"></i></span></span></div>
+          <div class="chip" data-need="0"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Clear approach</span><span class="cmeta">seen 2 days ago · 4 obs</span><span class="cconf">0.92<span class="bar"><i style="width:92%"></i></span></span></div>
+          <div class="chip unk" data-need="0"><span class="cicon" style="font-style:italic">i</span><span class="cname">Accessibility signage</span><span class="cmeta">no observation on file</span><span class="cconf">—<span class="bar"><i style="width:0%"></i></span></span></div>
+        </div>
+      </article>
+    </div>
+
+    <!-- LIVE SCAN CONSOLE -->
+    <div class="scanpanel demo-scan">
+      <div>
+        <h3>The demo moment — live scan console</h3>
+        <p class="sub">On stage: photograph a door, ~7 s of visible reasoning, then the pin drops and the ladder climbs. Compressed here to ~4.5 s.</p>
+        <div class="scan-phone">
+          <div class="scan-view">
+            <svg class="door" viewBox="0 0 200 250" aria-hidden="true">
+              <rect width="200" height="250" fill="#13233A"/>
+              <rect x="20" y="20" width="160" height="40" rx="4" fill="#1B3050"/>
+              <text x="100" y="45" text-anchor="middle" font-family="'Space Grotesk',sans-serif" font-size="14" fill="#8FB4D8">RIDGELINE</text>
+              <rect x="55" y="80" width="90" height="150" rx="3" fill="#1B3050" stroke="#4E7396" stroke-width="2"/>
+              <rect x="65" y="92" width="70" height="80" rx="2" fill="#24446B"/>
+              <rect x="128" y="150" width="8" height="26" rx="3" fill="#8FB4D8"/>
+              <circle cx="36" cy="160" r="9" fill="#123B34" stroke="#2FA08C" stroke-width="2"/>
+              <path d="M20 230 L55 230 L45 218" fill="none" stroke="#4E7396" stroke-width="2"/>
+            </svg>
+            <div class="scan-beam"></div>
+            <div class="scan-flash"></div>
+            <div class="scan-ring"><svg viewBox="0 0 80 80"><circle class="track" cx="40" cy="40" r="36"/><circle class="prog" cx="40" cy="40" r="36"/></svg><span class="pct">0%</span></div>
+          </div>
+          <button class="scan-btn" type="button">▸ Run live scan</button>
+        </div>
+      </div>
+      <div class="scan-right">
+        <div class="scanlog" aria-live="polite">
+          <div data-t="400">&gt; frame captured · 4032×3024</div>
+          <div data-t="1100">&gt; entrance geometry… <span class="ok">door edges locked</span></div>
+          <div data-t="1900">&gt; threshold height… <span class="ok">no step detected</span></div>
+          <div data-t="2600">&gt; hardware class… <span class="ok">lever handle</span></div>
+          <div data-t="3300">&gt; push-plate button… <span class="ok">found, left post</span></div>
+          <div data-t="3900">&gt; confidence model… <span class="ok">0.83 · publishing</span></div>
+        </div>
+        <div class="scan-checks">
+          <div class="sc" data-t="1900"><span class="tick"><svg width="12" height="12"><use href="#m-check"/></svg></span>Step-free entry · 0.86</div>
+          <div class="sc" data-t="2600"><span class="tick"><svg width="12" height="12"><use href="#m-check"/></svg></span>Easy-grip hardware · 0.79</div>
+          <div class="sc" data-t="3300"><span class="tick"><svg width="12" height="12"><use href="#m-check"/></svg></span>Auto door button · 0.84</div>
+          <div class="sc" data-t="3700"><span class="tick"><svg width="12" height="12"><use href="#m-check"/></svg></span>Wide door · 0.82</div>
+        </div>
+        <div class="scan-map">
+          <svg viewBox="0 0 400 150" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+            <rect width="400" height="150" fill="#0E1728"/>
+            <path d="M0 40H400M0 100H400M100 0V150M230 0V150M330 0V150" stroke="#24344E" fill="none"/>
+            <rect x="110" y="50" width="110" height="42" rx="3" fill="#13233A" stroke="#2E4568"/>
+            <rect x="240" y="50" width="80" height="42" rx="3" fill="#13233A" stroke="#2E4568"/>
+          </svg>
+          <span class="scan-ripple"></span>
+          <div class="scan-pin"><span class="mk"><svg width="18" height="18"><use href="#m-cam"/></svg></span><span class="stem"></span></div>
+        </div>
+        <div class="scan-status">STATUS: AWAITING FRAME</div>
+        <p class="kf-notes"><b>Production keyframes (7 s):</b> 0.0s shutter flash 120ms → 0.3–5.8s scan beam sweeps ×3 while progress ring fills and the reasoning log streams (the AI shows its work — this IS the trust pitch) → 4.0–6.2s checklist ticks pop in, staggered 300ms, spring 1.56 overshoot → 6.3s pin free-falls 260% of its height, lands with a single 8% bounce → 6.5–8.9s two sonar ripples expand from the landing → badge crossfades dashed-blue "estimated" → solid-teal "community-scanned". No confetti; the payoff is the ladder visibly climbing.</p>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="spec"><div class="spec-inner">
+    <div>
+      <h3>Palette — luminance ladder</h3>
+      <div class="swatches">
+        <div class="swatch"><div class="col" style="background:#0B1220"></div><div class="lab">#0B1220 ink</div></div>
+        <div class="swatch"><div class="col" style="background:#4E7396"></div><div class="lab">#4E7396 est. blue</div></div>
+        <div class="swatch"><div class="col" style="background:#2FA08C"></div><div class="lab">#2FA08C community</div></div>
+        <div class="swatch"><div class="col" style="background:#4FC6AE"></div><div class="lab">#4FC6AE owner</div></div>
+        <div class="swatch"><div class="col" style="background:#7FE8D2"></div><div class="lab">#7FE8D2 auditor</div></div>
+        <div class="swatch"><div class="col" style="background:#E5C15C"></div><div class="lab">#E5C15C audit seal</div></div>
+      </div>
+    </div>
+    <div>
+      <h3>Type</h3>
+      <p class="typerow"><span class="disp">Space Grotesk 700</span> for names · <span class="mono">IBM Plex Mono</span> for every number, timestamp, and confidence — data never wears the display face. Text #E7EFF8 on #0B1220 ≈ 15.4:1.</p>
+    </div>
+    <div>
+      <h3>Motion notes</h3>
+      <ul>
+        <li>Everything moves like an instrument: linear or ease-in-out, 150–300ms, no bounce except the single pin-drop landing.</li>
+        <li>Tier upgrade = brightness animates upward (background luminance tween, 600ms) + seal stamps on at 90% with a 1-frame flash.</li>
+        <li>Hovering any confidence number reveals its chain-of-custody strip (who/when/how many observations).</li>
+        <li>The scan console above is live — press "Run live scan".</li>
+      </ul>
+    </div>
+  </div></div>
+</section>
+
+<!-- ============================================================
+     DIRECTION C — OPEN DOORS
+============================================================ -->
+<section class="direction dC" id="dir-c" aria-labelledby="dir-c-h">
+  <div class="dir-head">
+    <div class="num">Direction 03 · Playful / vibrant civic-tech</div>
+    <h2 id="dir-c-h">Open Doors — <span class="pop">trust because everyone can see everyone helping</span></h2>
+    <p class="trust"><b>The trust argument:</b> strangers trust crowds they can see. This direction makes verification a visible public act — pins physically <b>grow</b> as more people confirm them, so the map itself is a live scoreboard of neighborly effort ("1,204 scans on this block"). The lowest tier is a small friendly balloon, not a warning; the audited tier is the biggest sticker on the board. Energy is the argument: a map this alive is clearly being tended.</p>
+  </div>
+
+  <div class="stage"><div class="stage-inner">
+    <div class="mapbar">
+      <span class="maptitle">Willow &amp; 5th · 1,204 scans this month 🎈</span>
+      <div class="needs-toggle" role="group" aria-label="Map lens">
+        <button type="button" aria-pressed="true" data-mode="all">Everyone</button>
+        <button type="button" aria-pressed="false" data-mode="me">For me · stroller + low vision</button>
+      </div>
+    </div>
+
+    <div class="demo-grid">
+      <div>
+        <div class="mapwrap demo-root">
+          <div class="mapcanvas">
+            <svg class="streets" viewBox="0 0 600 430" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+              <rect width="600" height="430" fill="#CBD9F8"/>
+              <g fill="#E4ECFF" stroke="#14204A" stroke-opacity=".25" stroke-width="2.5">
+                <rect x="16" y="16" width="170" height="160" rx="18"/>
+                <rect x="214" y="16" width="230" height="160" rx="18"/>
+                <rect x="472" y="16" width="112" height="160" rx="18"/>
+                <rect x="16" y="206" width="170" height="208" rx="18"/>
+                <rect x="214" y="206" width="230" height="208" rx="18"/>
+                <rect x="472" y="206" width="112" height="208" rx="18"/>
+              </g>
+              <circle cx="329" cy="310" r="52" fill="#BFE8D4" stroke="#14B87E" stroke-opacity=".5" stroke-width="2.5"/>
+              <text x="329" y="315" text-anchor="middle" font-family="'Bricolage Grotesque',sans-serif" font-weight="700" font-size="13" fill="#0E7A54">the green</text>
+              <g font-family="'DM Sans',sans-serif" font-weight="700" font-size="11" fill="#46538A">
+                <text x="300" y="196" text-anchor="middle">WILLOW ST</text>
+                <text x="200 " y="215" transform="rotate(90 200 215)" text-anchor="middle">5TH AVE</text>
+              </g>
+            </svg>
+
+            <button class="pin t1" style="left:15%;top:34%" data-match="unknown" aria-label="Corner Grocer, AI-estimated">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">?</span>i</span><span class="stem"></span>
+              <span class="plabel">Corner Grocer</span>
+            </button>
+            <button class="pin t2" style="left:52%;top:24%" data-match="good" aria-label="Page &amp; Spine Books, community-scanned" aria-expanded="true">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">✓</span><svg width="22" height="22"><use href="#m-cam"/></svg></span><span class="stem"></span>
+              <span class="plabel">Page &amp; Spine</span>
+            </button>
+            <button class="pin t3" style="left:82%;top:56%" data-match="partial" aria-label="Sunny Laundromat, owner-verified">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">~</span><svg width="24" height="24"><use href="#m-check"/></svg></span><span class="stem"></span>
+              <span class="plabel">Sunny Laundromat</span>
+            </button>
+            <button class="pin t4" style="left:30%;top:80%" data-match="good" aria-label="Community Center, auditor-verified">
+              <span class="mk"><span class="match-halo"></span><span class="matchtag">✓</span><svg width="28" height="28"><use href="#m-shield"/></svg></span><span class="stem"></span>
+              <span class="plabel">Community Center</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="legend legend-tiers" aria-label="Tier legend">
+          <span class="li"><span class="sw" style="width:16px;height:16px;background:#fff;border:2.5px dotted #4D9DE0;color:#2270AE;font-weight:800">i</span> New — AI estimate</span>
+          <span class="li"><span class="sw" style="width:20px;height:20px;background:#F5A300;color:#14204A"><svg width="11" height="11"><use href="#m-cam"/></svg></span> Neighbors scanned it</span>
+          <span class="li"><span class="sw" style="width:24px;height:24px;background:#fff;border-color:#8236E8;color:#8236E8"><svg width="13" height="13"><use href="#m-check"/></svg></span> Owner verified</span>
+          <span class="li"><span class="sw" style="width:28px;height:28px;background:#2743D6;color:#fff"><svg width="15" height="15"><use href="#m-shield"/></svg></span> Independently audited</span>
+        </div>
+        <div class="legend legend-needs" aria-label="Match legend">
+          <span class="li"><span class="sw" style="border:4px solid #14B87E"></span> Great for you</span>
+          <span class="li"><span class="sw" style="border:4px dashed #F5A300"></span> Partly — peek first</span>
+          <span class="li"><span class="sw" style="border:4px dotted #4D9DE0"></span> Nobody's checked yet</span>
+        </div>
+      </div>
+
+      <article class="card demo-card" aria-label="Page and Spine Books details">
+        <div class="cat">Bookshop · 508 Willow St</div>
+        <h3>Page &amp; Spine Books</h3>
+        <div class="crowdline">📸 Scanned by 7 neighbors · newest 2 days ago</div>
+        <div class="foryou">Great for you: stroller + low vision</div>
+        <div class="chips">
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Step-free entry</span><span class="cmeta">seen 2 days ago · 7 scans</span><span class="cconf"><span class="ringconf" style="background:conic-gradient(#14B87E 0 94%,#CBD9F8 94% 100%)" aria-label="94 percent confidence"></span> 94%</span></div>
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Wide door</span><span class="cmeta">seen 2 days ago · 5 scans</span><span class="cconf"><span class="ringconf" style="background:conic-gradient(#14B87E 0 88%,#CBD9F8 88% 100%)" aria-label="88 percent confidence"></span> 88%</span></div>
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Accessibility signage</span><span class="cmeta">seen 1 week ago · 3 scans</span><span class="cconf"><span class="ringconf" style="background:conic-gradient(#14B87E 0 77%,#CBD9F8 77% 100%)" aria-label="77 percent confidence"></span> 77%</span></div>
+          <div class="chip" data-need="1"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Clear approach</span><span class="cmeta">seen 2 days ago · 6 scans</span><span class="cconf"><span class="ringconf" style="background:conic-gradient(#14B87E 0 91%,#CBD9F8 91% 100%)" aria-label="91 percent confidence"></span> 91%</span></div>
+          <div class="chip" data-need="0"><span class="cicon"><svg width="16" height="16"><use href="#m-check"/></svg></span><span class="cname">Ramp visible</span><span class="cmeta">seen 3 weeks ago · 2 scans</span><span class="cconf"><span class="ringconf" style="background:conic-gradient(#14B87E 0 71%,#CBD9F8 71% 100%)" aria-label="71 percent confidence"></span> 71%</span></div>
+          <div class="chip unk" data-need="0"><span class="cicon" style="font-weight:800">i</span><span class="cname">Auto door button</span><span class="cmeta">nobody's checked yet</span><span class="cconf">scan it → 🎈</span></div>
+        </div>
+      </article>
+    </div>
+  </div></div>
+
+  <div class="spec"><div class="spec-inner">
+    <div>
+      <h3>Palette — street-festival civic</h3>
+      <div class="swatches">
+        <div class="swatch"><div class="col" style="background:#F2F6FF"></div><div class="lab">#F2F6FF sky paper</div></div>
+        <div class="swatch"><div class="col" style="background:#14204A"></div><div class="lab">#14204A navy ink</div></div>
+        <div class="swatch"><div class="col" style="background:#4D9DE0"></div><div class="lab">#4D9DE0 est. sky</div></div>
+        <div class="swatch"><div class="col" style="background:#F5A300"></div><div class="lab">#F5A300 marigold</div></div>
+        <div class="swatch"><div class="col" style="background:#8236E8"></div><div class="lab">#8236E8 violet</div></div>
+        <div class="swatch"><div class="col" style="background:#2743D6"></div><div class="lab">#2743D6 cobalt</div></div>
+        <div class="swatch"><div class="col" style="background:#14B87E"></div><div class="lab">#14B87E match green</div></div>
+      </div>
+    </div>
+    <div>
+      <h3>Type</h3>
+      <p class="typerow"><span class="disp">Bricolage Grotesque 800</span> for names &amp; numbers that celebrate · <b>DM Sans</b> for everything functional. Navy-on-sky-paper ≈ 13.8:1; size is the tier channel, so color never works alone.</p>
+    </div>
+    <div>
+      <h3>Motion notes</h3>
+      <ul>
+        <li>Pins bob idle ±2px (3s sine, staggered) — the map breathes. Disabled under reduced-motion.</li>
+        <li>Tier upgrade: balloon inflates to the next size with a squash-and-stretch pop + one ring burst — a tiny public celebration.</li>
+        <li>Live scan (described): shutter → 7s balloon inflating with the % → checklist stickers slap on → pin bounces onto the map twice, block counter ticks +1.</li>
+        <li>Confidence rings sweep from 0 on card open, 500ms staggered.</li>
+      </ul>
+    </div>
+  </div></div>
+</section>
+
+<footer class="page-foot">
+  <h2>Self-audit (all three directions)</h2>
+  <ul>
+    <li><b>Projector test:</b> tier marks ≥34px with heavy silhouettes; B's ladder is luminance-based and C's is size-based, so both survive a washed-out projector; A's stamps rely on shape contrast on pale linen.</li>
+    <li><b>Trust smell test:</b> every chip states what was seen, when, by whom, at what confidence — never a legal claim; the unknown state invites ("be the first to scan") instead of grading.</li>
+    <li><b>Accessibility of the palettes themselves:</b> body text 12.9–15.4:1; every tier and match state is double-encoded (shape + mark + line-style + color, plus size in C and luminance in B), so deutan/protan/tritan and grayscale all keep the hierarchy. Halos use solid/dashed/dotted line styles, not color alone.</li>
+    <li><b>Reduced motion:</b> all animation collapses to end-states under <code>prefers-reduced-motion</code>.</li>
+  </ul>
+</footer>
+
+<script>
+(function(){
+  "use strict";
+  // ---- My-needs lens toggles (per direction) ----
+  document.querySelectorAll(".needs-toggle").forEach(function(tg){
+    var section = tg.closest(".direction");
+    var root = section.querySelector(".demo-root");
+    var card = section.querySelector(".demo-card");
+    var legendWrap = root.parentElement; // holds both legends
+    tg.querySelectorAll("button").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        tg.querySelectorAll("button").forEach(function(b){ b.setAttribute("aria-pressed", String(b===btn)); });
+        var me = btn.dataset.mode === "me";
+        root.classList.toggle("needs-on", me);
+        legendWrap.classList.toggle("needs-on", me);
+        if(card) card.classList.toggle("needs-on-card", me);
+      });
+    });
+  });
+
+  // ---- Direction B: live scan console ----
+  var panel = document.querySelector(".demo-scan");
+  if(!panel) return;
+  var btn = panel.querySelector(".scan-btn");
+  var phone = panel.querySelector(".scan-phone");
+  var pct = panel.querySelector(".scan-ring .pct");
+  var logLines = panel.querySelectorAll(".scanlog div");
+  var checks = panel.querySelectorAll(".scan-checks .sc");
+  var mapEl = panel.querySelector(".scan-map");
+  var status = panel.querySelector(".scan-status");
+  var timers = [];
+  var reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function reset(){
+    timers.forEach(clearTimeout); timers = [];
+    phone.classList.remove("scanning");
+    mapEl.classList.remove("dropped");
+    logLines.forEach(function(l){ l.classList.remove("on"); });
+    checks.forEach(function(c){ c.classList.remove("on"); });
+    pct.textContent = "0%";
+    status.textContent = "STATUS: AWAITING FRAME";
+  }
+
+  btn.addEventListener("click", function(){
+    reset();
+    btn.disabled = true;
+    if(reduced){ // jump to end state
+      logLines.forEach(function(l){ l.classList.add("on"); });
+      checks.forEach(function(c){ c.classList.add("on"); });
+      mapEl.classList.add("dropped");
+      pct.textContent = "100%";
+      status.textContent = "STATUS: PIN PUBLISHED · COMMUNITY-SCANNED · 0.83";
+      btn.disabled = false;
+      return;
+    }
+    phone.classList.add("scanning");
+    status.textContent = "STATUS: ANALYZING FRAME…";
+    // percent counter synced to 3.6s ring fill (starts at .25s)
+    var t0 = performance.now() + 250, DUR = 3600;
+    (function tick(){
+      var p = Math.min(1, Math.max(0, (performance.now() - t0) / DUR));
+      pct.textContent = Math.round(p*100) + "%";
+      if(p < 1 && phone.classList.contains("scanning")) requestAnimationFrame(tick);
+    })();
+    logLines.forEach(function(l){
+      timers.push(setTimeout(function(){ l.classList.add("on"); }, +l.dataset.t));
+    });
+    checks.forEach(function(c){
+      timers.push(setTimeout(function(){ c.classList.add("on"); }, +c.dataset.t));
+    });
+    timers.push(setTimeout(function(){
+      mapEl.classList.add("dropped");
+      status.textContent = "STATUS: PIN PUBLISHED · COMMUNITY-SCANNED · 0.83";
+    }, 4200));
+    timers.push(setTimeout(function(){
+      phone.classList.remove("scanning");
+      btn.disabled = false;
+      btn.textContent = "↻ Run it again";
+    }, 5200));
+  });
+})();
+</script>
+</body>
+</html>
