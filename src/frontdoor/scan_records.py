@@ -170,7 +170,8 @@ def new_scan_record(*, place_ref, created_at, verdicts, confidences,
                     faces_blurred, quarantined_count, image_keys,
                     contributor=None, entrance_id=None,
                     capture_kind=None, attested=False, blur_regions=None,
-                    verdict_failures=None, assessment_ref=None):
+                    verdict_failures=None, assessment_ref=None,
+                    evidence_boxes=None, evidence_boxes_searched=False):
     """One scan record, with a fresh scan_id.
 
     blur_regions, when given, is one list per uploaded frame (upload order)
@@ -189,6 +190,31 @@ def new_scan_record(*, place_ref, created_at, verdicts, confidences,
     was thrown away; a null verdict with no entry is a feature nobody could
     see. Also additive, and omitted entirely when nothing was refused, so a
     clean record is byte-identical to one written before this existed.
+
+    evidence_boxes maps a criterion to the one rectangle a person can be
+    pointed at for it (TICK-467): {"frame", "x", "y", "w", "h", "label",
+    "score"}, with the geometry in the same frame blur_regions uses -- the
+    pixels of the stored image, orientation applied and decode capped -- and
+    "frame" the index into image_keys of the photograph it is on. Also
+    additive and also omitted when empty.
+
+    A criterion with nothing to point at is SIMPLY NOT IN THE MAPPING. It is
+    never a null, never an empty box and never a zero score, because each of
+    those is a shape a reader could mistake for a finding, and a missing box
+    is not an absent feature -- it is a feature nothing could be pointed at.
+    Verdicts are not consulted when these are produced and are not affected by
+    them; see frontdoor.evidence_boxes.
+
+    evidence_boxes_searched says the detector RAN on this entrance, and it is
+    the only reason the sentence above can be said out loud. Every criterion
+    is looked for on every entrance, so this one boolean carries the whole
+    difference between "we looked here and could not point at one" and
+    "nobody looked" -- a person at a door would hear those very differently,
+    and the mapping alone says neither. Deliberately per record and not per
+    criterion: a per-criterion "searched but empty" value would be exactly the
+    shape that made this detector worse than useless as a scorer. Written only
+    when true, so a record from a run with no detector is byte-identical to
+    one written before any of this existed.
     """
     record = {
         "scan_id": uuid.uuid4().hex,
@@ -212,6 +238,12 @@ def new_scan_record(*, place_ref, created_at, verdicts, confidences,
         record["verdict_failures"] = dict(verdict_failures)
     if assessment_ref:
         record["assessment_ref"] = dict(assessment_ref)
+    if evidence_boxes:
+        record["evidence_boxes"] = {
+            key: dict(box) for key, box in evidence_boxes.items()
+        }
+    if evidence_boxes_searched:
+        record["evidence_boxes_searched"] = True
     return record
 
 
