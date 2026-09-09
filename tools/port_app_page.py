@@ -522,6 +522,20 @@ WIRING_FORBIDDEN: list[str] = [
     # form (no request); the port enforces the absolute one.
     "fonts.googleapis.com",
     "fonts.gstatic.com",
+    # TICK-474. The engine assesses four criteria (frontdoor.screening,
+    # CRITERIA_KEYS). The design source carried eight entrance features and
+    # rendered all eight identically -- chip, confidence dots, sr-only
+    # "confidence high", pin accessible name, list row, owner workspace,
+    # public-listing preview -- so four of them published findings nothing had
+    # produced, on named real businesses. tests/test_app_page.py pins the built
+    # page's structures; these four forms are the exact lines a refresh from a
+    # new design round would put back, and they fail the build rather than the
+    # review. They are code, never prose, so a comment explaining the fix is
+    # still allowed to name the feature it removed.
+    "step_free_entry:'step_free'",
+    "p.f.step_free",
+    "['step_free','Step-free']",
+    "crit:['step_free'",
 ]
 
 

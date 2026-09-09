@@ -99,9 +99,12 @@ showed nothing and the API said verified. The tier is provenance: somebody stood
 a camera. There is no rung above it, because the next one would be the compliance claim the line
 above forbids.
 
-**Never say "step-free entry" is one of the things it checks.** The interface names it; the engine
-does not assess it yet (#368). Four criteria: ramp or bevel, handrails, accessible door hardware,
-accessibility signage.
+**Never say "step-free entry" is one of the things it checks.** The engine does not assess it yet
+(#368). Four criteria: ramp or bevel, handrails, accessible door hardware, accessibility signage.
+The interface used to name it anyway — on the card, in every pin's accessible name, in the
+Filters sheet, in three of the five needs personas, and in a match rule that let it satisfy the
+ramp need — and #474 took the whole feature vocabulary down to those four. If somebody asks why
+needs-matching looks thin, that is the answer, and it is the right way round.
 
 **Don't oversell the map's size.** Read the live count off the map on the day rather than quoting a
 number from a document.
