@@ -20,7 +20,7 @@ does not get invented under pressure.
 >
 > **Right now the way you find out whether you can get into a shop is to go there.**
 >
-> **EntryMap is a map of front doors. Take a photo of an entrance and in about seven seconds you
+> **EntryMap is a map of front doors. Take a photo of an entrance and in under half a minute you
 > get what the photograph shows: a ramp, a handrail, a handle you can work with a closed fist,
 > accessible signage. It runs in a browser on any phone — no app store, no special hardware.**
 >
@@ -76,7 +76,13 @@ it stops surviving.
 **Never say "97% accurate."** The figure is real but it is **agreement** with a reference a model
 produced from the same photographs, so both readings share their blind spots (#437). It is also a
 single unrepeated run. Until a human-labelled sample exists, no accuracy number gets said out loud.
-"About seven seconds" is safe; it is a latency measurement, not a claim about correctness.
+**Never say a live scan takes "about seven seconds."** Seven is the model call and nothing
+else. Measured against production on 2026-09-08, at the size the app actually uploads (long
+side 1280, JPEG q0.85, 245-307 KB), the model returned in 7.9 / 8.5 / 7.9 seconds while the
+round trip a person watches took **18.6 / 19.4 / 21.2 seconds** -- median **19.4s**, and that
+was on a desk connection, not the venue's. The eleven-second gap is upload, face blur, decode
+and the store. Say **"under half a minute"**, or say nothing and let the screen show it. A
+number that is eleven seconds optimistic is a number the room watches you be wrong about.
 
 **Never say "compliant", "ADA-compliant", or "meets code."** This screens what a photograph shows.
 It is not a measurement and not a legal determination, and one sentence claiming otherwise makes
