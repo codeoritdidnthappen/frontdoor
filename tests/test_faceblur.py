@@ -403,11 +403,24 @@ def test_lettering_alone_produces_no_blur_regions():
 
 
 def test_the_lettering_fixture_is_one_the_cascades_react_to(monkeypatch):
-    # Guards the test above against an inert fixture: with corroboration
-    # waved through, the cascades DO box this lettering, so zero regions
-    # above is the gate's doing and not the cascades' silence.
+    # Guards the test above against an inert fixture: with the gates on the
+    # supplementary pass waved through, the cascades DO box this lettering, so
+    # zero regions above is the gates' doing and not the cascades' silence.
+    #
+    # There are two gates since TICK-472, and each has to be opened by hand.
+    # The cascades now only READ padded neighbourhoods of a YuNet box, so
+    # YuNet is made to assert one and the neighbourhood widened to the whole
+    # frame; a box they return then still needs corroboration. The asserted
+    # box comes back in the result like any other, so it is discounted here.
+    token = (0, 0, 1, 1)
+    monkeypatch.setattr(faceblur, "_detect_yunet", lambda small: [token])
+    monkeypatch.setattr(
+        faceblur, "_haar_scan_regions",
+        lambda boxes, shape, *rest: [(0, 0, shape[1], shape[0])],
+    )
     monkeypatch.setattr(faceblur, "_corroborated", lambda box, yunet_boxes: True)
-    assert detect_faces(encode(signboard())), "the cascades found nothing to gate"
+    boxes = [box for box in detect_faces(encode(signboard())) if box != token]
+    assert boxes, "the cascades found nothing to gate"
 
 
 def test_the_face_fixture_still_produces_a_blur_region_that_covers_it():

@@ -171,6 +171,68 @@ YUNET_MODEL = "models/face_detection_yunet_2023mar.onnx"
 #: YuNet itself asserted.
 HAAR_CORROBORATION_IOU = 0.10
 
+#: The cascades read a frame with everything outside padded neighbourhoods of
+#: the YuNet boxes blacked out (TICK-472). These are the two slacks on those
+#: neighbourhoods; the padding itself is DERIVED, in _haar_scan_regions.
+#:
+#: Why that returns the same accepted set: since #350 a cascade box survives
+#: only when _corroborated() finds a YuNet box it overlaps at
+#: HAAR_CORROBORATION_IOU or better, both taken with BOX_MARGIN. A cascade box
+#: far from every YuNet box therefore cannot be kept, by construction -- so
+#: the rest of the frame was being searched for boxes that would all be thrown
+#: away. Not searching it is the same proof, not a recall trade. Measured over
+#: the 62 photographs of the pilot capture set at the app's own upload size
+#: (long side 1280, JPEG q0.85, what captureFrame sends): the six cascade
+#: passes cost 3.80s a photograph against YuNet's 0.20s -- 95% of detection --
+#: and the mask takes them to 1.91s, detection as a whole from 4.00s to 2.11s.
+#: The saving is not proportional to the area blacked out and cannot be: the
+#: cascade still resizes and integrates the whole frame at every scale of its
+#: pyramid, and only the windows it would have looked at HARDER are the ones
+#: that go away. Where a photograph carries a large YuNet box the regions
+#: reach the frame edges legitimately -- a cascade box 3x its side, displaced,
+#: really could still corroborate -- and those photographs save nothing.
+#:
+#: MASKED, NOT CROPPED, and that distinction is the whole design. Cropping is
+#: the obvious implementation and it is not equivalent: detectMultiScale
+#: builds its own scale pyramid by resizing the image it was handed, so the
+#: pyramid of a crop is not the crop of a pyramid, every pixel the cascade
+#: reads shifts slightly, and detections near a threshold flip. Measured over
+#: the 62: cropping changed the accepted set on 13 photographs and LOST 44093
+#: pixels of blur, two of them on the pilot's face-bearing photographs.
+#: Blacking out keeps the frame's dimensions, so every scale of the pyramid is
+#: resized on the same grid as before and the pixels inside a region come out
+#: bit-identical; the sums the cascade takes over a window are sums of those
+#: same pixels, so a window that lies inside a region is scored exactly as the
+#: whole-frame pass scored it. It is also barely slower than cropping, because
+#: a flat black window is rejected in the cascade's first stage.
+#:
+#: Two places the arithmetic is not exact, and is padded rather than trusted:
+#:
+#: * GROUP_SLACK. detectMultiScale does not return the windows it fired on;
+#:   it returns groupRectangles' AVERAGE over each cluster, and two windows
+#:   cluster when their positions differ by at most eps (0.2, the default for
+#:   this call) of the smaller side and their sizes by at most the same
+#:   fraction. A member of an acceptable box's cluster can therefore sit up
+#:   to ~0.2 of a side outside that box, and a region that cut the member off
+#:   would move the average -- which is the box corroboration actually tests.
+#:   1 + 2*eps covers a member displaced by eps and oversized by eps at once.
+#:   It also carries the resize's own reach: an output pixel of a pyramid
+#:   level is interpolated from a 2x2 source neighbourhood, so the black
+#:   bleeds about one source pixel into the region, far inside this margin.
+#: * SLACK_PX. Boxes cross between the cascade copy's coordinates and
+#:   full-image coordinates through round(), which can move an edge by half a
+#:   pixel per corner and a pixel for a scaled width. Two pixels of flat
+#:   margin, applied after the scale conversion, absorbs that and the float
+#:   error in the conversion itself.
+#:
+#: The one thing no argument here settles is whether the black itself can fire
+#: a cascade at a region's edge and add a box the whole-frame pass never had.
+#: That is measured, not assumed: tests/test_faceblur_haar_regions.py
+#: recomputes the whole-frame path for every photograph of the capture set and
+#: compares the accepted sets box for box.
+HAAR_REGION_GROUP_SLACK = 1.4
+HAAR_REGION_SLACK_PX = 2
+
 _cascades = None
 _yunet = None
 #: FaceDetectorYN is stateful (setInputSize before each detect), so the shared
@@ -530,11 +592,138 @@ def _corroborated(box, yunet_boxes):
     )
 
 
+def _cascade_window_aspect(cascades):
+    """(widest, narrowest) width/height ratio the cascades' windows can emit.
+
+    detectMultiScale returns rectangles whose size is the original detection
+    window scaled, so every box a cascade emits carries the window's aspect
+    ratio; groupRectangles averages a cluster of them and keeps it. That ratio
+    is what lets _haar_scan_regions turn an AREA bound into a per-side one, so
+    it is read off the loaded classifiers rather than assumed: OpenCV's two
+    files are 24x24 and 20x20 today, and a cascade with a different window
+    would widen the regions instead of silently escaping them.
+
+    A detector that will not say -- a stand-in in a test, a future backend
+    that is not a cascade at all -- gets (inf, 0), which is not a default
+    guess but a refusal to use one: _haar_scan_regions then falls back to the
+    per-side bound, which holds for a box of ANY shape.
+    """
+    ratios = []
+    for cascade in cascades:
+        size = getattr(cascade, "getOriginalWindowSize", None)
+        window = size() if callable(size) else None
+        if not window or window[0] <= 0 or window[1] <= 0:
+            return math.inf, 0.0
+        ratios.append(window[0] / window[1])
+    return max(ratios), min(ratios)
+
+
+def _haar_scan_regions(yunet_boxes, shape, scale=1.0, widest=1.0, narrowest=1.0):
+    """Rectangles the cascades must sweep, as (x, y, w, h) in the copy they
+    read -- `shape` is that copy's shape and `scale` the factor the YuNet
+    boxes, which arrive in full-image coordinates, are taken back by.
+
+    THE DERIVATION. Write m = BOX_MARGIN, t = HAAR_CORROBORATION_IOU. For a
+    box b, _expanded(b) is b grown by m on every side, so its sides are
+    (1+2m) times b's. Let Y be a YuNet box with sides (wy, hy) and C a cascade
+    box with sides (wc, hc); F_Y and F_C are their expansions, with sides
+    (A, B) = (1+2m)(wy, hy) and (a, b) = (1+2m)(wc, hc). _corroborated keeps C
+    only when IoU(F_C, F_Y) >= t. Two consequences, both exact:
+
+    1. SIZE. The intersection is at most min(a, A) * min(b, B) and the union
+       at least a*b, so IoU >= t forces min(a,A)*min(b,B) >= t*a*b. Reading
+       that per side gives a <= A/t and b <= B/t; reading it as an area, since
+       min(a,A)*min(b,B) <= A*B, gives a*b <= A*B/t. The area bound is the
+       sharp one, and it becomes a bound on each SIDE because a/b is the
+       cascade window's aspect ratio r (see _cascade_window_aspect): a*b <=
+       A*B/t with a = r*b gives a <= sqrt(r*A*B/t). Whichever of the two
+       bounds is smaller holds, so both are taken and the smaller used.
+    2. POSITION. t > 0, so F_C and F_Y must actually overlap: F_C.x0 < F_Y.x1
+       and F_C.x1 > F_Y.x0. With C sitting inside F_C, inset by m*wc on each
+       side, C's left edge is at worst F_Y.x0 - a + m*wc = F_Y.x0 -
+       a*(1+m)/(1+2m), and symmetrically on the right.
+
+    Putting them together, every acceptable C lies inside Y grown by
+
+        pad_x = m*wy + (1+m) * min(wy/t, sqrt(r * wy*hy / t))
+        pad_y = m*hy + (1+m) * min(hy/t, sqrt(wy*hy / (r*t)))
+
+    -- the m*wy term being F_Y's own margin. For the square windows OpenCV
+    ships (r = 1) and a roughly square YuNet box of side s that is 0.3s +
+    1.3*s/sqrt(0.1) ~ 4.4s: the sqrt is what the constant's own comment means
+    by "a cascade box up to ~3x the side of the YuNet box it agrees with".
+    The per-side bound wy/t only wins for a YuNet box more than 1/t elongated.
+
+    Anything outside the union of those rectangles cannot clear t against any
+    YuNet box, so it cannot be blurred, so it does not need to be looked for.
+    HAAR_REGION_GROUP_SLACK and HAAR_REGION_SLACK_PX widen the result where
+    the arithmetic above stops being exact; see their comment.
+
+    No YuNet boxes means no rectangles, and the cascades then do not run at
+    all -- the same proof, not a shortcut: with nothing to corroborate
+    against, _corroborated rejects every cascade box there could be.
+
+    THE SCALES. YuNet reads a copy capped at YUNET_MAX_SIDE and the cascades
+    one capped at DETECT_MAX_SIDE, so the two passes are not in the same
+    coordinates and the boxes above have already been taken back to the full
+    image. The padding is therefore derived in FULL-image coordinates -- the
+    space _corroborated compares in, and the only space in which the geometry
+    above means anything -- and only then multiplied by `scale` into the
+    cascade copy's. A region is widened by a pixel on every side before that
+    conversion is trusted, because the trip back out is through round(): a
+    cascade box at column xs comes back as round(xs / scale), which is inside
+    the region whenever xs > scale * (x0 - 0.5), and its right edge
+    round(xs/scale) + round(ws/scale) can understate (xs + ws)/scale by one.
+
+    Rectangles may overlap; they are painted, not walked, so their union is
+    what the cascades read and an overlap costs nothing but a repainted pixel.
+    """
+    height, width = shape[:2]
+    slack = 1 + HAAR_REGION_SLACK_PX
+    rects = []
+    for x, y, w, h in yunet_boxes:
+        area = HAAR_REGION_GROUP_SLACK ** 2 * w * h / HAAR_CORROBORATION_IOU
+        reach = 1.0 + BOX_MARGIN
+        # The per-side bound holds for a box of any shape; the area bound is
+        # sharper but needs the window's aspect ratio, so an unreadable ratio
+        # (inf, 0 out of _cascade_window_aspect) leaves only the first.
+        pad_x = BOX_MARGIN * w + reach * min(
+            HAAR_REGION_GROUP_SLACK * w / HAAR_CORROBORATION_IOU,
+            math.sqrt(widest * area) if math.isfinite(widest) else math.inf,
+        )
+        pad_y = BOX_MARGIN * h + reach * min(
+            HAAR_REGION_GROUP_SLACK * h / HAAR_CORROBORATION_IOU,
+            math.sqrt(area / narrowest) if narrowest > 0 else math.inf,
+        )
+        x0 = max(0, math.floor((x - pad_x) * scale) - slack)
+        y0 = max(0, math.floor((y - pad_y) * scale) - slack)
+        x1 = min(width, math.ceil((x + w + pad_x) * scale) + slack)
+        y1 = min(height, math.ceil((y + h + pad_y) * scale) + slack)
+        if x1 > x0 and y1 > y0:
+            rects.append((x0, y0, x1 - x0, y1 - y0))
+    return rects
+
+
+def _outside_regions_blacked(variant, regions):
+    """`variant` with every pixel outside `regions` set to zero.
+
+    The cascades see a frame of the same size, in the same place, with the
+    same pixels wherever a box could still be corroborated -- and nothing to
+    find anywhere else. See HAAR_REGION_GROUP_SLACK for why this is masked
+    rather than cropped.
+    """
+    masked = np.zeros_like(variant)
+    for x, y, w, h in regions:
+        masked[y:y + h, x:x + w] = variant[y:y + h, x:x + w]
+    return masked
+
+
 def _detect(img):
     """Detect faces in a BGR array; boxes as (x, y, w, h) in its coordinates.
 
     YuNet's boxes are returned as found. A cascade box is returned only when
-    YuNet agrees with it (_corroborated, HAAR_CORROBORATION_IOU).
+    YuNet agrees with it (_corroborated, HAAR_CORROBORATION_IOU), and the
+    cascades are only run where such a box could be -- see _haar_scan_regions.
     """
     # Primary pass: YuNet at a low threshold, on its own larger copy
     # (YUNET_MAX_SIDE) so the small through-glass faces keep enough pixels
@@ -550,18 +739,34 @@ def _detect(img):
 
     # Supplementary pass: the Haar union from the first cut. Its boxes only
     # widen the blur around a face YuNet already found; a cascade box with no
-    # YuNet box near it is not blurred (#350). The pass still has to RUN --
-    # an empty classifier is refused by _get_cascades, not waved through.
-    frontal, profile = _get_cascades()
+    # YuNet box near it is not blurred (#350). The pass still has to be SET UP
+    # -- an empty classifier is refused by _get_cascades, not waved through,
+    # and that refusal is a FaceDetectorError this path must keep raising on
+    # every image, including one YuNet found nothing in.
+    cascades = _get_cascades()
+    frontal, profile = cascades
+    if not yunet_boxes:
+        return yunet_boxes
+
     scale = min(1.0, DETECT_MAX_SIDE / max(img.shape[:2]))
     small = img if scale == 1.0 else cv2.resize(
         img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA
     )
+    regions = _haar_scan_regions(
+        yunet_boxes, small.shape, scale, *_cascade_window_aspect(cascades)
+    )
+    # Both variants are built from the WHOLE frame and masked afterwards, in
+    # that order. CLAHE is not a per-pixel function -- it equalises against a
+    # grid of tile histograms -- so a boost computed from an already-masked
+    # frame is a different picture from the one the whole-frame pass boosted,
+    # and it is the boosted variant that is credited with the
+    # ghosted-reflection recall.
     gray = cv2.cvtColor(small, cv2.COLOR_BGR2GRAY)
     boosted = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(gray)
 
     haar_boxes = []
-    for variant in (gray, boosted):
+    for variant in (_outside_regions_blacked(gray, regions),
+                    _outside_regions_blacked(boosted, regions)):
         width = variant.shape[1]
         mirrored = cv2.flip(variant, 1)
         # Recall-tuned: small scale step, few required neighbors, small floor.
@@ -579,8 +784,9 @@ def _detect(img):
     accepted = [box for box in candidates if _corroborated(box, yunet_boxes)]
     if len(accepted) < len(candidates):
         logger.debug(
-            "%d of %d cascade boxes had no YuNet detection near them and were "
-            "not blurred", len(candidates) - len(accepted), len(candidates),
+            "%d of %d cascade boxes found near a YuNet detection were still "
+            "too far from one to be blurred",
+            len(candidates) - len(accepted), len(candidates),
         )
     return yunet_boxes + accepted
 
