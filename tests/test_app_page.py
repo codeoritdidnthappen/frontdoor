@@ -790,3 +790,27 @@ def test_the_pages_own_prose_names_no_feature_the_engine_does_not_assess():
             f"the page's own markup says {word!r}; the engine assesses ramp or "
             "bevel, handrails, accessible door hardware and accessibility signage"
         )
+def test_the_staged_review_path_renders_its_abstention_line():
+    """Two confident chips and nothing else reads as a complete answer.
+
+    #471 removed step_free from STAGED and added a "Not seen this time" line -- but
+    only to the design source's copy of `reviewChipsHTML`, which the port replaces
+    wholesale with `tools/app_wiring/review.js`. The constant travelled; the
+    rendering did not. Production served two chips and stopped, and it took driving
+    the deployed page to notice.
+
+    The abstention is the product's argument, so the staged path has to show both
+    halves the way the live branch does. This reads the SERVED page, because that is
+    where the previous fix failed to arrive.
+    """
+    page = create_app().test_client().get("/app").get_data(as_text=True)
+    branch = page[page.index("if(liveSimulated()){"):]
+    branch = branch[:branch.index("if(chipsOnly) return '';")]
+    assert "STAGED_NOTSEEN" in branch, (
+        "the staged branch of reviewChipsHTML does not render STAGED_NOTSEEN; the "
+        "review screen will show committed chips with no abstention beside them"
+    )
+    assert "vc-notseen" in branch, (
+        "the staged abstention must use the same class as the live branch's, or it "
+        "is a different object saying the same thing"
+    )
