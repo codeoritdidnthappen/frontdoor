@@ -43,6 +43,15 @@ catalogue is not allowed to keep (#242). Every entrance appears in the
 matching report with the basis it was decided on. A record on the wrong
 storefront is a worse failure than a record on no storefront.
 
+Evidence boxes (TICK-467, --evidence-boxes): this is the only path in the
+project that locates the rectangle a person can be pointed at for a finding,
+and it is here rather than on ``/screen`` or ``/screen/publish`` because it
+costs about a minute of CPU per entrance -- fine in a batch nobody is waiting
+on, unacceptable in a capture flow that is already ~19 seconds from shutter to
+verdict. The detector runs AFTER the assessment is settled, is never handed a
+verdict, and can only add a key to the record. A missing box is not an absent
+feature; see frontdoor.evidence_boxes.
+
 The captures are repo-external (D-018), so the photo root is an argument.
 Nothing here has a default that points outside the repository.
 
@@ -63,6 +72,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
+from frontdoor.evidence_boxes import DetectorUnavailable, load_detector, locate_evidence
 from frontdoor.faceblur import JPEG_QUALITY, process_upload
 from frontdoor.manifest import read_manifest
 from frontdoor.scan_records import (
@@ -339,8 +349,46 @@ def _write_cache(cache_dir, entrance_id, result):
 ASSESSMENT_ATTEMPTS = 3
 
 
+def _locate_boxes(entrance_id, stored_frames, detector):
+    """``(searched, boxes)`` for these stored frames.
+
+    Kept small and separate on purpose (TICK-467). It is handed IMAGE BYTES and
+    an entrance ID for the log line, never a verdict, and its return value goes
+    straight onto the record without passing anything that could re-open the
+    assessment. A detector that is not installed, or that throws, costs the
+    entrance its boxes and nothing else -- the box is a courtesy, so an
+    entrance published without one is complete, not broken.
+
+    ``searched`` is the whole reason this returns a pair. Downstream, "there is
+    no box for handrails" has two readings that a person at a door would take
+    very differently -- *we looked here and could not point at one*, and
+    *nobody looked* -- and the mapping alone cannot tell them apart. The flag
+    is deliberately per ENTRANCE and not per criterion: every criterion is
+    looked for on every entrance, so one boolean says everything true about
+    the search, and no per-criterion "we found nothing here" value has to
+    exist. That value is the shape that got this detector dropped as a scorer,
+    and there is no reason to invent it again to say a sentence a flag already
+    says.
+    """
+    if detector is None:
+        return False, {}
+    try:
+        boxes = locate_evidence(stored_frames, detector=detector)
+    except DetectorUnavailable as exc:
+        logger.warning("evidence boxes unavailable for %s: %s", entrance_id, exc)
+        return False, {}
+    except Exception:  # pragma: no cover - defensive; a pointer cannot fail a publish
+        logger.exception("evidence boxes failed for %s; publishing without", entrance_id)
+        return False, {}
+    logger.info(
+        "located evidence for %s: %s", entrance_id,
+        ", ".join(sorted(boxes)) or "nothing to point at",
+    )
+    return True, boxes
+
+
 def assess_publishable(entrances, *, get_capture, engine, cache_dir=None,
-                       attempts=ASSESSMENT_ATTEMPTS):
+                       attempts=ASSESSMENT_ATTEMPTS, detector=None):
     """Assess each publishable entrance exactly once, caching as it goes.
 
     A cached entrance is not re-assessed, so a run interrupted part-way costs
@@ -351,21 +399,44 @@ def assess_publishable(entrances, *, get_capture, engine, cache_dir=None,
     Every attempt goes through ``assess_entrance``, so the sealed refusal is
     re-run on each one; a retry is a new call into the same guard, never a way
     around it.
+
+    ``detector``, when given, is the open-vocabulary detector that locates the
+    evidence a person can be pointed at (TICK-467). It runs AFTER the attempt
+    loop has finished and the assessment is settled, on the privacy-processed
+    frames rather than on the reduced copies the model read, so its geometry is
+    in the stored frame and it has nothing left to influence: by the time it is
+    called, ``best`` is final and no branch below re-enters the engine. An
+    entrance restored from cache keeps its cached verdicts EXACTLY and is
+    re-processed for boxes alone -- the boxes are added to an answer, never
+    used to reconsider one.
     """
     publishable = frozenset(entrances)
     results = {}
     for entrance_id, capture_ids in entrances.items():
         cached = _read_cache(cache_dir, entrance_id)
         if cached is not None:
+            if detector is not None and not cached.get("evidence_boxes_searched"):
+                stored = [
+                    process_upload(get_capture(capture_id).image).image_bytes
+                    for capture_id in capture_ids
+                ]
+                (cached["evidence_boxes_searched"],
+                 cached["evidence_boxes"]) = _locate_boxes(
+                    entrance_id, stored, detector)
+                _write_cache(cache_dir, entrance_id, cached)
             results[entrance_id] = cached
             continue
         captures = [get_capture(capture_id) for capture_id in capture_ids]
-        images, faces_blurred = [], 0
+        images, stored_frames, faces_blurred = [], [], 0
         for capture in captures:
             # Unconditional: the engine is never handed a byte that has not
             # been through the privacy pass, whatever the capture ID says.
             processed = process_upload(capture.image)
             images.append(_fit_for_the_model(processed.image_bytes))
+            # The frame the boxes are measured in, kept separately because
+            # _fit_for_the_model rescales: the model reads a reduced copy, and
+            # geometry taken from THAT would be in a frame nothing stores.
+            stored_frames.append(processed.image_bytes)
             faces_blurred += processed.face_count
         best = None
         for attempt in range(1, max(1, attempts) + 1):
@@ -392,6 +463,12 @@ def assess_publishable(entrances, *, get_capture, engine, cache_dir=None,
             if result["error"] is None:
                 break
         result = best
+        # After the loop, deliberately: the assessment above is finished and
+        # nothing below re-enters the engine, so the detector cannot be an
+        # input to any verdict in `result`. It only ever ADDS a key.
+        (result["evidence_boxes_searched"],
+         result["evidence_boxes"]) = _locate_boxes(
+            entrance_id, stored_frames, detector)
         results[entrance_id] = result
         if result["error"] is None:
             _write_cache(cache_dir, entrance_id, result)
@@ -638,6 +715,15 @@ def build_records(assessments, matches):
             contributor=SCAN_CONTRIBUTOR,
             entrance_id=entrance_id,
             verdict_failures=result.get("verdict_failures"),
+            # Where a person can be pointed at each finding (TICK-467). Read
+            # off the result, never re-derived here, and omitted entirely when
+            # nothing was found -- a record with no boxes is byte-identical to
+            # one written before this existed. The searched flag rides with it
+            # so a reader can tell "we looked and could not point at one" from
+            # "nobody looked"; without it the record can only say the first,
+            # and only one of the two is true of a run with no detector.
+            evidence_boxes=result.get("evidence_boxes"),
+            evidence_boxes_searched=result.get("evidence_boxes_searched", False),
         ))
     return records
 
@@ -718,6 +804,15 @@ def main(argv=None):
     parser.add_argument("--matches", default=DEFAULT_MATCHES_PATH)
     parser.add_argument("--cache", default=None)
     parser.add_argument("--replace", action="store_true")
+    parser.add_argument(
+        "--evidence-boxes",
+        action="store_true",
+        help="also locate, for each criterion, one rectangle on one stored "
+             "frame that a person can be pointed at (TICK-467). Adds about a "
+             "minute of CPU per entrance and no API spend at all, which is why "
+             "it lives here and not on any path a user waits on. Opt-in: a "
+             "publish run that just wants the verdicts should not pay for it.",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(
@@ -750,12 +845,21 @@ def main(argv=None):
     engine = ScreeningEngine(
         config=ScreeningConfig(max_usd_per_run=PUBLISH_MAX_USD_PER_RUN)
     )
+    detector = None
+    if args.evidence_boxes:
+        try:
+            detector = load_detector()
+        except DetectorUnavailable as exc:
+            # Not fatal, and deliberately so: the run publishes the verdicts it
+            # was asked for and says out loud that it found nowhere to point.
+            print(f"evidence boxes disabled: {exc}", file=sys.stderr)
     try:
         assessments = assess_publishable(
             entrances,
             get_capture=loader.load,
             engine=engine,
             cache_dir=args.cache,
+            detector=detector,
         )
     except SpendCapError as exc:
         print(exc, file=sys.stderr)
