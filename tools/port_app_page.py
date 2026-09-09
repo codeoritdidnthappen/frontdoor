@@ -408,6 +408,55 @@ OPS: list[Op] = [
         ),
     ),
     Op(
+        name="locate_real_fix",
+        why=(
+            "the locate control asks navigator.geolocation where the phone is, instead "
+            "of panning to the pilot frame and asserting 'Centered on you' to whoever "
+            "pressed it. Granted, denied, unavailable, timed out and a fix outside the "
+            "pilot area are five different answers and are reported as five different "
+            "things; the map is only ever claimed to be centred on a real fix. The "
+            "region reaches the empty-area invite because that invite now has two "
+            "causes -- an emptying filter and a fix we have mapped nothing near -- and "
+            "its copy and its second button have to say which. This is wiring rather "
+            "than design because the permission is granted to this origin, its four "
+            "failure modes are conditions this repository has to report honestly, and "
+            "the false one-liner is still in the prototype the design source is "
+            "refreshed from: as an op a refresh either carries this or fails loudly"
+        ),
+        kind="replace_region",
+        anchor=(
+            "document.getElementById('locate-btn').addEventListener('click',()=>{ "
+            "panMap(0); setZoom(false, null); "
+            "toast('Centered on you \\u00b7 2nd & Colorado'); });\n"
+        ),
+        until="/* ===================== trust sheet ===================== */",
+        fragment="locate.js",
+    ),
+    Op(
+        name="map_empty_cause",
+        why=(
+            "renderMap decided the invite's visibility from one fact (no pins) and the "
+            "invite now has two causes, so the choice moves to paintEmptyInvite, which "
+            "says which one is open. The same call re-places the 'you are here' mark: "
+            "every zoom, pan, filter and re-render moves the ground under it, and a "
+            "mark left at a stale point is the same class of defect as the toast this "
+            "change removes"
+        ),
+        kind="replace",
+        anchor=(
+            "  /* empty-area invite: filtering (or panning) to zero pins invites, never shames */\n"
+            "  const me=document.getElementById('map-empty');\n"
+            "  if(me) me.classList.toggle('on', shown.length===0);\n"
+        ),
+        replacement=(
+            "  /* empty-area invite: filtering (or panning) to zero pins invites, never\n"
+            "     shames -- and a real location fix outside the pilot area opens the same\n"
+            "     invite with its own words (tools/app_wiring/locate.js). */\n"
+            "  paintEmptyInvite(shown.length===0);\n"
+            "  placeYouHere();\n"
+        ),
+    ),
+    Op(
         name="map_data",
         why="GET /map/data merged into the embedded pins, so the map shows published scans",
         kind="insert_before",
@@ -521,6 +570,20 @@ WIRING_REQUIRED: list[str] = [
     #   and the cover-fit inverse, without which a box lands in the wrong place,
     #   which is worse than drawing none.
     "const s = Math.max(cw/nw, ch/nh);",
+    # The locate control. The design source's handler never called geolocation at
+    # all, so every one of these lines is the difference between a control that
+    # works and one that pans to a fixed point and says it found you.
+    "function locateMe(){",
+    "navigator.geolocation.getCurrentPosition(onGeoFix, onGeoFail, GEO_OPTS);",
+    "geoState='denied';",
+    "function placeYouHere(){",
+    "function paintEmptyInvite(noPins){",
+    "  paintEmptyInvite(shown.length===0);\n  placeYouHere();",
+    "Centered on you — you are marked on the map",
+    "EntryMap has not mapped your area yet",
+    "Location is off for this site, so the map has not moved",
+    "el.setAttribute('aria-label','You are here');",
+    "el.setAttribute('role','alert');",
 ]
 
 # ...and none of these. The design source is worked on against a deployed host and a
@@ -555,6 +618,13 @@ WIRING_FORBIDDEN: list[str] = [
     "p.f.step_free",
     "['step_free','Step-free']",
     "crit:['step_free'",
+    # The locate button's original handler. It asked the phone nothing, panned to a
+    # fixed point and told whoever pressed it -- in Austin or a thousand miles from
+    # it -- that the map was centred on them. It is a broken control and a false
+    # statement in one line, it is still in the prototype the design source is
+    # refreshed from, and it may never reach a page a person at a door reads.
+    "Centered on you \\u00b7 2nd & Colorado",
+    "setZoom(false, null); toast('Centered on you",
 ]
 
 

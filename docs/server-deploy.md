@@ -118,6 +118,28 @@ front door, which is worse than no answer. A test pins that allowlist.
 Both files are served from the app's own origin, and the worker is served with `no-cache` and
 `Service-Worker-Allowed: /`, so a redeploy reaches phones that already installed.
 
+**How a redeploy actually reaches a phone that already has the app (#483).** The sentence above
+used to be the whole story, and it was not true. `/app` is served cache-first, so the launch
+right after a deploy is answered out of the *old* worker's cache and renders the previous build
+— silently, and looking exactly like a fix that did not ship. It was reported as one, twice.
+Worse, `/app` itself was held for five minutes (`max-age=300`), so the new worker refilled its
+new, correctly commit-named cache out of that window: watched in Chromium across a deploy, three
+consecutive launches served the old page, not the one the ticket predicted.
+
+Two things close it, both pinned by `tests/test_app_page.py`:
+
+- `/app` is served `no-cache` with an **ETag**, so no cache anywhere can answer with a build the
+  server has replaced. An unchanged build still costs no download — the conditional request is
+  answered `304` with no body.
+- The page **reloads itself once** when a new worker claims it. The stale document still paints
+  instantly (cache-first is kept: the page is 1.6 MB and has to open on one bar of signal), and
+  the new build then replaces it without anyone knowing to reload. Measured across two simulated
+  deploys in Chromium: the launch after each deploy renders twice, about 2.8 s apart; every
+  other launch renders once, and offline still opens.
+
+So `GET /version` is now a complete answer to "is the fix live": the served page can no longer
+disagree with the commit it reports.
+
 ### Redeploying from CI
 
 `.github/workflows/deploy.yml` deploys this app on manual dispatch only, never on merge: Actions

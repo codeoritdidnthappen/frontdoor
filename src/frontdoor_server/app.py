@@ -441,9 +441,22 @@ def create_app():
         Same origin as the endpoints it calls -- the page's /screen, /screen/publish,
         /scan/photo/<key> and /map/data URLs are relative -- so there is no second host to
         get wrong and no CORS in the way, and the page on a phone is the page that was
-        tested. The page is self-contained (its photos are embedded, ~1 MB), so the only
-        caching header is a short max-age: enough to spare a phone the download on every
-        navigation, short enough that a redeploy shows within minutes.
+        tested. The page is self-contained (its photos are embedded, ~1.6 MB).
+
+        Revalidated rather than held for a fixed window (#483). This used to be
+        `public, max-age=300`, on the reasoning that five minutes spares a phone the
+        download and a redeploy still shows "within minutes". Watched in a real browser
+        across a real deploy, it did something else: the service worker's own fetch of
+        /app was answered out of that five-minute HTTP cache, so the *new* worker filled
+        its *new*, correctly commit-named cache with the *previous* build. The shell was
+        then stale with nothing left to invalidate it -- three consecutive loads served
+        the old page, not the single stale load #483 predicted. A fresh cache name cannot
+        fix that, because the wrong bytes arrive after the name is already right.
+
+        `no-cache` does not mean "do not store": it means revalidate before reuse. With
+        the ETag below, an unchanged build costs a conditional request answered 304 with
+        no body, and only a genuinely new build pays the 1.6 MB. The download is still
+        spared; the answer can no longer be older than the server.
         """
         html = (
             resources.files("frontdoor_server")
@@ -451,8 +464,12 @@ def create_app():
             .read_text(encoding="utf-8")
         )
         response = Response(html, mimetype="text/html")
-        response.headers["Cache-Control"] = "public, max-age=300"
-        return response
+        response.headers["Cache-Control"] = "no-cache"
+        # Over the page's own bytes rather than FRONTDOOR_COMMIT: locally the commit is
+        # unset for every build, and an ETag that cannot tell two builds apart is worse
+        # than none. This digest changes exactly when the page does.
+        response.add_etag()
+        return response.make_conditional(request)
 
     @app.get("/app-manifest.json")
     def app_manifest():

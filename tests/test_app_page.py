@@ -141,11 +141,55 @@ def test_the_scan_docstring_matches_what_the_code_does():
     assert "The simulated pipeline runs only where there is no server to talk to" in html
 
 
-def test_the_page_carries_a_short_max_age_and_nothing_else_about_caching():
+def test_the_page_is_revalidated_rather_than_held_for_a_window():
+    """The five-minute window fed the service worker a build older than the server (#483).
+
+    It used to be `public, max-age=300`. Watched in Chromium across a deploy, the new
+    worker's own fetch of /app was answered out of that window, so it filled its new,
+    correctly commit-named cache with the PREVIOUS build -- and then served it, from a
+    cache nothing was left to invalidate, for three consecutive loads. `no-cache` means
+    revalidate before reuse, so no cache anywhere can answer with a build the server has
+    replaced.
+    """
     response = page()
-    assert response.headers["Cache-Control"] == "public, max-age=300"
+    assert response.headers["Cache-Control"] == "no-cache"
+    assert "max-age" not in response.headers["Cache-Control"]
     assert "Expires" not in response.headers
-    assert "ETag" not in response.headers
+
+
+def test_an_unchanged_page_is_revalidated_without_sending_it_again():
+    """`no-cache` without a validator would mean 1.6 MB on every navigation.
+
+    The point of the header is correctness, and the point of the ETag is that
+    correctness stays cheap: a phone that already has the current build pays a
+    conditional request answered with no body at all.
+    """
+    client = create_app().test_client()
+    first = client.get("/app")
+    assert first.status_code == 200
+    etag = first.headers["ETag"]
+    assert etag
+
+    again = client.get("/app", headers={"If-None-Match": etag})
+    assert again.status_code == 304
+    assert again.get_data() == b""
+
+
+def test_the_validator_is_taken_from_the_page_itself():
+    """An ETag that cannot tell two builds apart is worse than none.
+
+    It is a digest of the page's own bytes rather than of FRONTDOOR_COMMIT, because
+    locally the commit is unset for every build -- which is exactly when a stale page
+    is hardest to notice. Being a digest is what makes it change on, and only on, a
+    change to the page.
+    """
+    from werkzeug.http import generate_etag
+
+    served = page()
+    assert served.headers["ETag"].strip('"') == generate_etag(served.get_data())
+    assert generate_etag(served.get_data() + b"<!-- a later build -->") != generate_etag(
+        served.get_data()
+    )
 
 
 def test_the_page_is_outside_the_cors_scope():
@@ -291,6 +335,74 @@ def test_the_page_registers_the_worker_and_links_the_manifest():
     html = page().get_data(as_text=True)
     assert '<link rel="manifest" href="/app-manifest.json">' in html
     assert 'navigator.serviceWorker.register("/app-sw.js")' in html
+
+
+def test_the_page_reloads_itself_once_when_a_new_build_takes_over():
+    """The load right after a deploy renders the previous build, and says nothing (#483).
+
+    /app is served cache-first, so the navigation is answered out of the old worker's
+    cache before the browser has even looked at /app-sw.js. Cache-first is kept -- the
+    page is 1.6 MB and has to open on one bar of signal -- so the page corrects itself:
+    when the new worker claims it, it reloads, once.
+
+    Watched in Chromium across two simulated deploys, the load after each deploy
+    rendered twice (old, then new, ~2.8 s apart) and every other load rendered once.
+    """
+    html = page().get_data(as_text=True)
+    assert 'navigator.serviceWorker.addEventListener("controllerchange"' in html
+    assert "location.reload();" in html
+
+
+def test_the_reload_cannot_loop():
+    """A worker that reloads on activation is one unlucky race from reloading forever.
+
+    Two guards, and both have to be here: a document that had no controller when it
+    loaded came off the network and is already current, so claim() on a first-ever visit
+    must not reload it; and no document may reload more than once whatever it is told.
+    """
+    html = page().get_data(as_text=True)
+    guard = html.split('addEventListener("controllerchange"', 1)[1].split("});", 1)[0]
+    assert "if (!swHadController || swReloaded) return;" in guard
+    assert "swReloaded = true;" in guard
+    # The flag has to be read from the controller at load time, not at event time: by the
+    # time the event fires there is always a controller, and the guard would never hold.
+    assert "var swHadController = !!navigator.serviceWorker.controller;" in html
+
+
+def test_the_new_worker_takes_over_without_waiting_for_the_precache():
+    """skipWaiting() used to be chained after cache.addAll(SHELL).
+
+    That put a 1.6 MB download between the stale page appearing and the new worker
+    claiming it -- and the page's reload cannot happen until the claim does. Measured
+    on localhost the takeover is ~1.7 s; behind the precache it is the download as well.
+    """
+    worker = (
+        resources.files("frontdoor_server").joinpath("app-sw.js").read_text(encoding="utf-8")
+    )
+    install = worker.split('addEventListener("install"', 1)[1].split("\n});", 1)[0]
+    assert "self.skipWaiting();" in install
+    before, after = install.split("self.skipWaiting();", 1)
+    assert "addAll(SHELL)" in before, "the precache is assigned before the takeover"
+    assert "await" not in before and ".then(() => self.skipWaiting())" not in install
+    assert "skipWaiting" not in after, "skipWaiting must be called once, not chained again"
+
+
+def test_the_previous_shell_is_only_dropped_once_this_one_is_in_place():
+    """Claiming early is what makes the correction fast; deleting early would cost the
+    offline promise.
+
+    activate() claims immediately, then waits for the precache before dropping the old
+    cache. Between the two there would otherwise be a window with the previous shell
+    gone and this one still filling, and a phone that lost signal inside it would have
+    no app to open -- the one failure this worker exists to prevent.
+    """
+    worker = (
+        resources.files("frontdoor_server").joinpath("app-sw.js").read_text(encoding="utf-8")
+    )
+    activate = worker.split('addEventListener("activate"', 1)[1].split("\n});", 1)[0]
+    assert activate.index("clients") < activate.index("precached") < activate.index(
+        "caches.delete"
+    ), activate
 
 
 def _block(html, start, end="\n}"):
@@ -860,3 +972,120 @@ def test_the_processing_screen_does_not_promise_eight_seconds_for_a_live_scan():
         "nothing refreshes the caption when the request lands, so the screen keeps "
         "saying it is waiting after it has stopped"
     )
+
+
+# --- the locate control asks the phone, and says what it was told ------------
+#
+# The design source's handler never called navigator.geolocation. It reset the pan,
+# returned the frame to the pilot bbox, and raised a toast saying the map was now
+# centred on you, naming a downtown Austin intersection -- to whoever pressed it,
+# wherever they were. A control that does nothing and a false statement in one line.
+#
+# There is no JavaScript runner in this suite, so these read the SERVED page: the
+# handler lives in a wiring fragment (tools/app_wiring/locate.js) and editing only the
+# design source would change nothing a phone ever runs.
+
+
+def locate_handler(html):
+    """The body of locateMe(), which is where the asking is decided."""
+    body = html.split("function locateMe(){", 1)[1]
+    return body[: body.index("\n}")]
+
+
+def test_the_locate_control_asks_the_browser_where_the_phone_is():
+    html = page().get_data(as_text=True)
+    assert "function locateMe(){" in html
+    assert "navigator.geolocation.getCurrentPosition(onGeoFix, onGeoFail, GEO_OPTS);" in html
+    assert "document.getElementById('locate-btn').addEventListener('click', locateMe);" in html
+    # ...and the fixed-point claim is gone from the page, in either spelling
+    assert "Centered on you \\u00b7 2nd & Colorado" not in html
+    assert "Centered on you · 2nd & Colorado" not in html
+
+
+def test_centred_on_you_is_said_only_where_the_map_is_centred_on_a_real_fix():
+    """The one toast that claims a centre sits inside the one branch that has one."""
+    html = page().get_data(as_text=True)
+    claims = [i for i in range(len(html)) if html.startswith("toast('Centered on you", i)]
+    assert len(claims) == 1, "more than one place claims the map is centred on you"
+    branch = html.rindex("if(inPilot(youFix)){", 0, claims[0])
+    assert "else" not in html[branch:claims[0]], (
+        "the 'Centered on you' toast is not inside the in-the-pilot-area branch"
+    )
+
+
+def test_a_denied_permission_is_an_answer_and_is_not_asked_again():
+    handler = locate_handler(page().get_data(as_text=True))
+    denied = handler.index("if(geoState==='denied')")
+    asks = handler.index("navigator.geolocation.getCurrentPosition")
+    assert denied < asks, "a denied permission falls through and re-prompts on every tap"
+    assert "return;" in handler[denied:asks]
+
+
+def test_denied_unavailable_and_timed_out_are_three_different_answers():
+    html = page().get_data(as_text=True)
+    said = [
+        "Location is off for this site, so the map has not moved",
+        "Finding your location took too long, so the map has not moved.",
+        "Your device could not work out where it is, so the map has not moved.",
+        "This page is not on a secure connection, so the browser will not share",
+        "This browser cannot share a location, so the map has not moved",
+    ]
+    for sentence in said:
+        assert sentence in html, f"no wording for one of the outcomes: {sentence!r}"
+    assert len(set(said)) == len(said)
+
+
+def test_a_failed_attempt_is_announced_as_an_error_not_only_toasted():
+    html = page().get_data(as_text=True)
+    assert "el.setAttribute('role','alert');" in html
+    stopped = html.split("function geoStopped(state, short, why){", 1)[1]
+    stopped = stopped[: stopped.index("\n}")]
+    assert "toast(short);" in stopped and "geoAlert(why);" in stopped, (
+        "a failed attempt does not reach the alert region"
+    )
+    # ...and every failing branch goes through it rather than only raising a toast
+    fail = html.split("function onGeoFail(err){", 1)[1]
+    fail = fail[: fail.index("\n}")]
+    assert fail.count("geoStopped(") + fail.count("sayDenied()") == 3
+    assert "toast(" not in fail, "a failure branch toasts without announcing"
+
+
+def test_a_failure_clears_what_the_last_fix_left_on_the_map():
+    """The mark and the out-of-area invite outlive their fix unless this runs."""
+    html = page().get_data(as_text=True)
+    stopped = html.split("function geoStopped(state, short, why){", 1)[1]
+    stopped = stopped[: stopped.index("\n}")]
+    assert "youOutside=false;" in stopped
+    assert "renderMap();" in stopped
+
+
+def test_a_fix_outside_the_pilot_area_says_what_we_have_mapped_not_what_is_there():
+    """The invite may say we have nothing here. It may never judge the places here."""
+    html = page().get_data(as_text=True)
+    assert "EntryMap has not mapped your area yet" in html
+    invite = html.split("function paintEmptyInvite(noPins){", 1)[1]
+    invite = invite[: invite.index("\n}")]
+    assert "it says nothing about the places around you" in invite
+    for verdict in ("not accessible", "no accessible", "inaccessible", "fails", "unsuitable"):
+        assert verdict not in invite.lower(), f"the invite passes a verdict: {verdict!r}"
+
+
+def test_the_you_are_here_mark_is_drawn_only_where_a_real_fix_is():
+    html = page().get_data(as_text=True)
+    assert "function placeYouHere(){" in html
+    mark = html.split("function placeYouHere(){", 1)[1]
+    mark = mark[: mark.index("\n}")]
+    assert "geoState!=='ok'" in mark, "the mark does not check that a fix was granted"
+    assert "el.hidden = !on;" in mark, "the mark is not hidden when the fix is off-frame"
+    # every re-render re-places it, so a zoom or a pan cannot leave it on a stale point
+    assert "  paintEmptyInvite(shown.length===0);\n  placeYouHere();" in html
+    assert "#you-here{" in html
+
+
+def test_the_locate_control_is_named_for_what_it_does_now():
+    html = page().get_data(as_text=True)
+    names = html.split("const LOCATE_NAME = {", 1)[1]
+    names = names[: names.index("};")]
+    assert "denied:" in names and "unavailable:" in names
+    assert "Why your location is not shown" in names
+    assert "locateBtn.setAttribute('aria-label'," in html
