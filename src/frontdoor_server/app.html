@@ -8421,8 +8421,27 @@ function runProcessing(forceReduced){
   after(PROC_SETTLE+ringDur()+1600,watchdog);
 }
 
-/* review chips (the staged one-photo honest partial) */
-const STAGED = [['step_free',86],['hardware',90],['approach',84]];
+/* Review chips.
+
+   The staged fallback runs whenever there is no live result -- camera denied, no
+   camera, or the endpoint unreachable -- which is the path a colleague testing on a
+   laptop takes, and the path a denied permission takes on stage. It therefore has to
+   obey the same claims rules as everything else the product renders.
+
+   It did not. It read [['step_free',86],['hardware',90],['approach',84]], so the
+   review screen asserted "Step-free entry" with a confidence beside it. The engine
+   does not assess step-free (#368); the interface names it as a feature and the
+   deck's own claims list says a slide showing that chip is not describing something
+   we measure. "Clear approach" is not one of the four either. A screen a room can
+   read was making the one claim the pitch forbids, on the likeliest demo path.
+
+   The fallback now names the four criteria the engine actually returns, and it
+   commits to two of them rather than all four -- so the staged path shows the same
+   shape the live path shows: what the photograph supported, and what was not seen.
+   The abstention is the product's argument, and the fallback should demonstrate it
+   rather than contradict it. */
+const STAGED = [['ramp',86],['hardware',90]];
+const STAGED_NOTSEEN = ['handrails','signage'];
 /* the four real /screen criteria, in server order, mapped onto the chip vocabulary */
 const LIVE_CRITERIA = ['ramp_or_bevel','handrails','accessible_door_hardware','accessibility_signage'];
 /* the detected chips -- shared by the processing screen (5.5-6.5 s populate) and the review */

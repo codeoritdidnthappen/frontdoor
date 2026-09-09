@@ -537,3 +537,43 @@ def test_every_manifest_icon_is_actually_served():
         response = client.get(icon["src"])
         assert response.status_code == 200, f"{icon['src']} is {response.status_code}"
         assert response.mimetype == "image/png", icon["src"]
+
+
+def test_the_staged_review_chips_name_only_criteria_the_engine_assesses():
+    """The staged fallback is the likeliest demo path, and it was making a claim.
+
+    `reviewChipsHTML` falls back to STAGED whenever there is no live result --
+    camera denied, no camera, endpoint unreachable. It read step_free with a
+    confidence of 86, so the review screen asserted "Step-free entry" as something
+    the scan found. The engine does not assess step-free (#368) and "clear approach"
+    is not one of the four criteria either.
+
+    The four the engine returns are ramp_or_bevel, handrails,
+    accessible_door_hardware and accessibility_signage; through EST_KEYMAP those are
+    the chip keys ramp, handrails, hardware and signage. Nothing else may appear in
+    the staged arrays, in either direction: a chip that claims more than the engine
+    reads, or a "not seen" line naming something never looked for.
+    """
+    page = create_app().test_client().get("/app").get_data(as_text=True)
+    allowed = {"ramp", "handrails", "hardware", "signage"}
+
+    staged = re.search(r"const STAGED = \[(.*?)\];", page)
+    assert staged, "STAGED not found in the served page"
+    committed = set(re.findall(r"\['([a-z_]+)'", staged.group(1)))
+    assert committed <= allowed, (
+        f"staged review chips claim {sorted(committed - allowed)}, which the engine "
+        "does not assess"
+    )
+
+    notseen = re.search(r"const STAGED_NOTSEEN = \[(.*?)\];", page)
+    assert notseen, "STAGED_NOTSEEN not found; the staged path must show abstention"
+    absent = set(re.findall(r"'([a-z_]+)'", notseen.group(1)))
+    assert absent <= allowed, (
+        f"staged 'not seen' line names {sorted(absent - allowed)}, which was never "
+        "looked for"
+    )
+    assert committed and absent, (
+        "the staged path must show both what the photograph supported and what was "
+        "not seen -- the abstention is the product's argument"
+    )
+    assert not (committed & absent), "a criterion cannot be both committed and not seen"
