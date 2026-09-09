@@ -555,6 +555,25 @@ WIRING_REQUIRED: list[str] = [
     "function doneProvenance(p, simulated){",
     "Added to this entrance's receipt as a dated source",
     "Nothing was published, so nothing joined this entrance's receipt.",
+    # TICK-467. The evidence box lives in the design source, so a refresh from a
+    # design round that does not carry it drops the whole feature silently --
+    # which is TICK-474 again, in the other direction. Four lines, one per thing
+    # that cannot be lost without the feature becoming a lie:
+    #   the chips exist and are gated on the detector having RUN, not on which
+    #   criteria came back with a box (gating on the boxes turns the row of
+    #   chips itself into a verdict);
+    "if(photos && p.evbox && p.f){",
+    #   the sentence for a criterion nothing could be pointed at, which is the
+    #   whole reason this ticket exists and the one thing a bare photograph
+    #   must never be left to say;
+    "we looked for this and couldn't point at it in these photos. "
+    "That doesn't change the answer above.",
+    #   the standing note that the outline is the finder's and the answer is
+    #   the model's;
+    "The outline shows where our finder pointed. It never changes the answer.",
+    #   and the cover-fit inverse, without which a box lands in the wrong place,
+    #   which is worse than drawing none.
+    "const s = Math.max(cw/nw, ch/nh);",
     # The locate control. The design source's handler never called geolocation at
     # all, so every one of these lines is the difference between a control that
     # works and one that pans to a fixed point and says it found you.
