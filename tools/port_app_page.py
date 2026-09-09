@@ -461,6 +461,62 @@ OPS: list[Op] = [
         ),
     ),
     Op(
+        name="loc_toggle_real",
+        why=(
+            "TICK-488, the locate button's defect on the Settings switch. #loc-toggle "
+            "ships as `class=\"toggle on\" aria-checked=\"true\"` and its handler flipped "
+            "it on tap and toasted 'Location on while using' -- so the app claimed a "
+            "permission, visually and to a screen reader, that nothing had asked for. "
+            "The switch is a claim about a permission, so its state is now a function "
+            "of the permission: paintLocToggle() in locate.js paints it from what the "
+            "browser actually said, repaints it away from the markup's opening claim as "
+            "soon as the page runs, and tapping it asks through the shared askGeo() "
+            "instead of asserting. Dropping the design source's listener here is what "
+            "stops two handlers writing the same switch"
+        ),
+        kind="replace",
+        anchor=(
+            "const loct=document.getElementById('loc-toggle');\n"
+            "loct.addEventListener('click',()=>{\n"
+            "  const on=!loct.classList.contains('on');\n"
+            "  loct.classList.toggle('on',on); loct.setAttribute('aria-checked',on);\n"
+            "  toast(on?'Location on while using':'No problem \\u2014 search the map instead');\n"
+            "});\n"
+        ),
+        replacement=(
+            "/* The Location switch is painted and handled by paintLocToggle() and the\n"
+            "   listener beside it in tools/app_wiring/locate.js, from the permission the\n"
+            "   browser actually granted. The design source's handler flipped it on tap and\n"
+            "   said location was on without asking, which is TICK-488 on this element. */\n"
+        ),
+    ),
+    Op(
+        name="onboarding_location_real",
+        why=(
+            "TICK-488. Onboarding's 'Allow location' flipped #loc-toggle on, set "
+            "aria-checked='true' and advanced, without ever calling "
+            "navigator.geolocation: nothing asked, no permission granted, and the "
+            "interface then told a new user -- visually and to a screen reader -- that "
+            "location was allowed. It is #487's defect one step earlier and about a "
+            "permission rather than a place. The step now asks through the SHARED "
+            "askGeo() in locate.js, so the eight outcomes are branched on in one place "
+            "and only the wording differs, and the switch is never written by the tap. "
+            "Onboarding is skippable, so no answer blocks the step: each says what will "
+            "be different without a location and names the way onward, and a denial is "
+            "accepted rather than asked again. Wiring rather than design for the same "
+            "reason as locate: the false two-liner is still in the prototype the design "
+            "source is refreshed from, so as an op a refresh either carries this or "
+            "fails the port loudly"
+        ),
+        kind="replace_region",
+        anchor="document.getElementById('ob-allow-loc').addEventListener('click',()=>{\n",
+        until=(
+            "document.getElementById('ob-needs-back')"
+            ".addEventListener('click',()=>showScreen('ob-location'));"
+        ),
+        fragment="onboarding-location.js",
+    ),
+    Op(
         name="map_data",
         why="GET /map/data merged into the embedded pins, so the map shows published scans",
         kind="insert_before",
@@ -578,7 +634,6 @@ WIRING_REQUIRED: list[str] = [
     # all, so every one of these lines is the difference between a control that
     # works and one that pans to a fixed point and says it found you.
     "function locateMe(){",
-    "navigator.geolocation.getCurrentPosition(onGeoFix, onGeoFail, GEO_OPTS);",
     "geoState='denied';",
     "function placeYouHere(){",
     "function paintEmptyInvite(noPins){",
@@ -588,6 +643,39 @@ WIRING_REQUIRED: list[str] = [
     "Location is off for this site, so the map has not moved",
     "el.setAttribute('aria-label','You are here');",
     "el.setAttribute('role','alert');",
+    # TICK-488. Three controls ask or claim the same permission -- the map's locate
+    # button, onboarding's "Allow location" and the Settings switch -- and the eight
+    # outcomes are branched on in exactly one of them. askGeo() is that one place and
+    # the only caller of getCurrentPosition; losing it is how a second copy of the
+    # branching comes back, and a second copy is how one of them drifts into claiming
+    # an outcome it never reached.
+    "function askGeo(say){",
+    "function geoPrecheck(){",
+    "function geoFixOutcome(pos){",
+    "function geoFailOutcome(err){",
+    "function recordGeoOutcome(o){",
+    "navigator.geolocation.getCurrentPosition(",
+    # The onboarding step asks, and the switch it used to assert is painted from the
+    # answer instead of from the tap.
+    "function obAllowTap(){",
+    "if(askGeo(obLocSays)==='busy') obLocBusy(false);",
+    "function paintLocToggle(){",
+    "const on = geoPermission==='granted';",
+    "locToggle.setAttribute('aria-checked', on ? 'true' : 'false');",
+    # ...and each outcome's own wording on the step, which is not the map's wording,
+    # because on this step nothing has been shown yet and what is said is what will be
+    # different.
+    "Location is off for this site, so nothing was shared and the map will",
+    "Finding your location took too long, so nothing was shared.",
+    "Your device could not work out where it is, so nothing was shared.",
+    "This browser cannot share a location, so the map will open on the few",
+    "location. The map will open on the few blocks of downtown Austin this pilot ",
+    "Location is on — the map will center on you",
+    "Location is on — you are just outside the mapped blocks, so the map will open ",
+    # ...and the grant MOVES the frame rather than promising it. finishOnboarding()
+    # only renders, so without this line the map opens on the pilot bbox and the
+    # sentence above is staged rather than produced -- this ticket's own defect.
+    "    setZoom(false, youFix);",
 ]
 
 # ...and none of these. The design source is worked on against a deployed host and a
@@ -629,6 +717,21 @@ WIRING_FORBIDDEN: list[str] = [
     # refreshed from, and it may never reach a page a person at a door reads.
     "Centered on you \\u00b7 2nd & Colorado",
     "setZoom(false, null); toast('Centered on you",
+    # TICK-488. Onboarding's "Allow location" flipped the switch on, set
+    # aria-checked="true" and advanced -- without ever calling navigator.geolocation.
+    # Nothing was asked and no permission was granted, and the interface then stated
+    # that location was allowed, visually and to a screen reader, as the first thing a
+    # new user is told. It is the locate button's defect about a permission instead of
+    # a place, and it is on the path every new user walks. Both spellings of the lie
+    # are here: the two-line body, and the anonymous listener the design source hangs
+    # it from, so a refresh that rewrites one still fails on the other.
+    "lt.classList.add('on'); lt.setAttribute('aria-checked','true');",
+    "document.getElementById('ob-allow-loc').addEventListener('click',()=>{",
+    # ...and the same defect on the Settings switch, which flipped on tap and said so.
+    "toast(on?'Location on while using'",
+    "loct.classList.toggle('on',on); loct.setAttribute('aria-checked',on);",
+    "No problem \\u2014 search the map instead",
+    "No problem — search the map instead",
 ]
 
 
