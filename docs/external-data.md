@@ -45,6 +45,43 @@ No external source ever upgrades a trust tier by itself.
 - **Refresh**: rerun the CLI; network calls happen only in the CLI path,
   never at import and never in tests.
 
+## OpenStreetMap categories — "kind of place" (TICK-491, #491)
+
+- **What**: named elements in the demo bbox carrying `amenity`, `shop`,
+  `tourism`, `office`, `leisure`, `craft` or `healthcare`, fetched via the
+  Overpass API by `python -m frontdoor.place_categories --refresh`. This is
+  what a place **is**, not a claim about its entrance.
+- **License**: ODbL 1.0, same posture as the wheelchair slice. Stored ONLY
+  in the segregated side file `data/external/osm_categories.json`, joined at
+  render time, never merged into `data/precatalogue.json`.
+- **Matching is identity, not proximity**, and it is stricter than the
+  provenance matcher on purpose. A category becomes the pin's answer to
+  "what is this place", so a wrong one is a statement about a named
+  business. Measured over the committed bbox: the distance-only rule types
+  173 of 186 pins but 134 of those match more than one element, and 102 of
+  the 234 category-bearing elements in the box are unnamed street furniture
+  — it types Group Therapy (a bar) from an `amenity=parking_space` 6 m away,
+  First Citizens Bank as `amenity=restaurant`, and Keen Salon as
+  `tourism=hotel`. So a match needs an exact phone, an exact website host,
+  or a name both sides carry; an unnamed element can never supply a
+  category.
+- **Coverage, and what it costs**: 64 of 186 pins typed (34.4%) — 21 by
+  phone, 16 by website, 27 by name — with no ambiguous match. **122 places
+  have no category on record.** The Filters sheet states that number before
+  a selection is made, because a filter that silently drops what it has no
+  type for is worse than no filter.
+- **Display**: a "Kind of place" section in the app's Filters sheet, five
+  human categories (Food and drink, Shops, Services, Culture and nightlife,
+  Places to stay) with per-category counts. The tag-to-category mapping is
+  `CATEGORIES` in `frontdoor.place_categories`. A category never changes a
+  tier, a state, a checklist or a criterion, and it is **not** one of the
+  engine's four criteria (#481) — the two vocabularies stay separate.
+- **Not Google Places.** See the display-time-only section below: caching
+  place types would be a second violation of a criterion #242 has open and
+  unsettled. Nothing here touches Places.
+- **Refresh**: rerun the CLI; network calls happen only in the CLI path,
+  never at import and never in tests.
+
 ## Wikimedia Commons imagery (shipped in round one)
 
 - **What**: geotagged File-namespace photos in the demo bbox via the public
@@ -151,7 +188,12 @@ the #73 design thread).
 
 Consequently `frontdoor.external_data` contains no Google/Yelp ingest and
 must never grow one; a display-time overlay, if built, lives entirely in
-the page's render path.
+the page's render path. `frontdoor.place_categories` is held to the same
+rule and has a test that fails if a Places endpoint or field name appears
+in it: **place types were the obvious way to fill the 122 pins OSM cannot
+type, and they were deliberately not fetched**, because caching a `types`
+field would stack a second violation on the one this section already
+records as unsettled.
 
 The pre-catalogue is the exception, and it is a known one: `name` and
 `location` from Places sit in `data/precatalogue.json` and in the Second
@@ -166,6 +208,7 @@ matched on were resolved in the same pass and never written down.
 | File | Status | Contents |
 | --- | --- | --- |
 | `data/external/osm_accessibility.json` | public-safe, segregated, ODbL-attributed | OSM wheelchair/entrance records for the demo bbox |
+| `data/external/osm_categories.json` | public-safe, segregated, ODbL-attributed | named OSM POIs for the demo bbox with their `amenity`/`shop`/`tourism`/`office`/`leisure`/`craft`/`healthcare` tags — what a place IS, for the app's "Kind of place" filter (#491). Carries no accessibility claim |
 | `data/external/entrance_anchors.json` | public-safe, segregated, ODbL-attributed | Nominatim geocodes of the street numbers read at the captured entrances, so the entrance-to-place distance gate (#346) has a door position to measure from. Only an address the operator actually read is geocoded, never a business name |
 | `data/external/commons_imagery.json` | public-safe, segregated, per-record CC license + artist | open-licensed Wikimedia Commons photo records for the demo bbox |
 | `data/external/disagreements.json` | INTERNAL ONLY | external-vs-AI conflicts as scan priorities; never rendered |

@@ -1759,3 +1759,74 @@ sentence that no data test or render test would ever have reached — the page's
 Each was mutation-checked by restoring the value it replaced. Four of the eight forms are now
 refused by `tools/port_app_page.py` itself, so a refresh from a new design round fails the build
 instead of quietly reintroducing the claim, which is how this survived #368 and #471.
+
+## 2026-09-09 — The map can be filtered by what a place IS, and says how many it cannot type (TICK-491, #491)
+
+Until now a person could filter by what *they* need and not by what the place *is*, which is
+backwards from how anyone looks for somewhere to go: the query is "a coffee shop I can get into",
+not "every door within 300 feet that has a ramp". The Filters sheet gains a **Kind of place**
+section — Food and drink, Shops, Services, Culture and nightlife, Places to stay — in the sheet,
+not on the map surface, because Rounds 15 and 16 cut the floating chrome and this does not put it
+back.
+
+**The category comes from OpenStreetMap and never from the name.** "Group Therapy" is a bar,
+"Hemline" is a clothing shop, "Serenade" could be anything; a name classifier would guess, be
+wrong on exactly the places most likely to be demoed, and be unable to say where its answer came
+from. `frontdoor.place_categories` fetches `amenity`/`shop`/`tourism`/`office`/`leisure`/`craft`/
+`healthcare` tags by Overpass into `data/external/osm_categories.json`, a segregated ODbL side
+file joined at render time, the same posture `osm_accessibility.json` already has.
+
+**Google Places was the obvious way to fill the rest and was deliberately not used.** #242 records
+that the Places ToS forbids storing anything but `place_id`, and #242's own audit has that
+criterion open and **unsettled** — `data/precatalogue.json` persists `name` and `location` on all
+186 rows against it. Caching a `types` field would stack a second violation on an unresolved
+first, four days before a public demo. A test fails if a Places endpoint or field name appears in
+the new module.
+
+**Matching is identity, not proximity, and that is the whole defect this avoids.** The provenance
+matcher falls back to distance alone when either side is unnamed, which is fine for a second
+witness and wrong for a category, because a category becomes the pin's answer to "what is this
+place" about a named real business. Measured over the committed bbox: distance-only types 173 of
+186 pins, but **134 of those match more than one element**, and 102 of the 234 category-bearing
+elements in the box are unnamed street furniture. It types Group Therapy from an
+`amenity=parking_space` 6 m away, First Citizens Bank as `amenity=restaurant`, Keen Salon as
+`tourism=hotel`, and Serenade as `tourism=artwork`. So a match now needs an exact phone, an exact
+website host, or a name both sides carry, and an unnamed element can never supply a category. All
+four of those are fixed: the bank and the salon get no category, and Group Therapy and Serenade —
+the two the name could never have answered — are typed correctly from an exact website and an
+exact phone number, each citing the OSM node that said so.
+
+**Coverage is 64 of 186 pins, 34.4%** (21 by phone, 16 by website, 27 by name), with no ambiguous
+match. **122 places have no category on record**, and that is the majority, so what an untyped
+place does is the design question rather than an edge case. A category selection narrows to the
+typed set — and the sheet says so **before** anything is selected: "Kind of place comes from
+OpenStreetMap. 64 of 221 places have one on record; the other 157 are left out when you filter by
+kind." Measured on the served page, that sentence was cut mid-line by the sticky apply bar while
+the chips above it stayed fully selectable, so it now sits above the chips. Per-category counts
+ride on the chips, and a category with nothing in it is never offered. Hiding is allowed; hiding
+silently is not.
+
+**The claims rule, which is the one thing here that could have gone badly wrong.** Category and
+needs will be used together and the result must never read as *"here are the accessible
+restaurants"* — a claim reached by combination rather than by sentence. The two facts stay in
+separate clauses and neither becomes an adjective on the other:
+
+> Showing 3 places in Food and drink, matched against what you said you need — halos show fit, not certainty
+
+"in Food and drink" is what they are, from OpenStreetMap. "matched against what you said you need"
+is an operation we ran, not a verdict we reached. The trailing half is the needs filter's own
+existing disclaimer, reused word for word. Category alone reads "Showing 38 places in Food and
+drink — kind of place comes from OpenStreetMap". The active-filter row keeps them as two separate
+removable chips, "Wheelchair" and "Food and drink", so the row cannot accumulate into the claim
+either. Every pin keeps its own tier and its own dated evidence, and a place of another kind — or
+of no recorded kind — is simply absent, never shown as failing anything.
+
+**Category is not a fifth criterion.** #481 cut `FILT_FEATS` to the engine's four and added
+`WIRING_FORBIDDEN` entries so a fifth cannot creep back. `CAT_ORDER` is a separate vocabulary that
+never touches it: it comes from OpenStreetMap rather than from screening, `/map/data` attaches it
+after every state, label and checklist is computed, and nothing downstream reads it. A test
+asserts the two lists share no key.
+
+Pinned by 61 tests in `tests/test_place_categories.py`, including the four worked mis-types by
+name, and by two new `WIRING_REQUIRED` entries so a design refresh that drops the category wiring
+fails the port instead of silently removing the section.

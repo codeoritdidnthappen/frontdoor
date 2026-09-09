@@ -1278,6 +1278,13 @@ body{
 .dist-row input[type=range]{flex:1;accent-color:var(--purple);min-height:var(--tap)}
 .dist-label{font-weight:var(--fw-strong);font-size:var(--fs-body);color:var(--ink);min-width:58px;text-align:right;line-height:var(--lh-row);letter-spacing:var(--ls-flat);}
 .filt-caption{font-size:var(--fs-meta);color:var(--sub);font-weight:var(--fw-body);text-align:center;margin-top:var(--sp-4);line-height:var(--lh-meta);letter-spacing:var(--ls-flat);}
+/* TICK-491: the count that rides on a category chip. Dimmer than the label and
+   never the reason to press it -- the chip says what it is, this says how many. */
+.filtchip .cat-n{font-weight:var(--fw-body);opacity:.72;font-variant-numeric:tabular-nums;}
+/* TICK-491: the coverage line. Left-aligned under its own chips rather than
+   centred like .filt-caption, because it belongs to the section above it and is
+   read before a selection, not after. */
+.filt-cats-note{font-size:var(--fs-meta);color:var(--sub);font-weight:var(--fw-body);margin:var(--sp-0) var(--sp-0) var(--sp-4);line-height:var(--lh-meta);letter-spacing:var(--ls-flat);}
 
 /* trust sheet */
 .ladder{display:flex;flex-direction:column;gap:var(--sp-5);margin-top:var(--sp-5)}
@@ -3997,6 +4004,22 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
         </div>
         <div class="chips-title">My Needs</div>
         <div class="chips" id="filt-needs"></div>
+        <!-- TICK-491/#491: what a place IS, beside what a visitor NEEDS and never fused
+             with it. The whole block is hidden when no pin carries a category, because
+             offering the control without the data would be a filter that answers from
+             nothing. filt-cats-note is not a footnote: it is where the map says how many
+             places it has no category for, before anything is selected. -->
+        <div id="filt-cats-block" hidden>
+          <div class="chips-title">Kind of place</div>
+          <!-- The coverage sentence sits ABOVE the chips, not under them. Measured on
+               the served page: with it underneath, the sheet at rest showed the chips
+               in full and cut the sentence mid-line behind the apply bar -- so a person
+               could pick a kind having read "64 of 221 places have..." and never the
+               half that says what filtering by kind leaves out. That is the sentence
+               the whole feature rests on; it goes first. -->
+          <p class="filt-cats-note" id="filt-cats-note"></p>
+          <div class="chips" id="filt-cats"></div>
+        </div>
         <div class="chips-title">Entrance features</div>
         <div class="chips" id="filt-feats"></div>
         <div class="chips-title">Freshness</div>
@@ -6715,11 +6738,39 @@ const FILT_FEATS=[['ramp','Ramp or bevel'],['handrails','Handrails'],['hardware'
    connected and still never changed an answer. Feet is also the unit the card, the
    pin label and the list already speak in. FILT_DIST_MAX means "any distance". */
 const FILT_DIST_MAX=1000;
-let filtFeats=new Set(), filtFresh='any', filtDist=FILT_DIST_MAX, filterApplied=false;
+/* TICK-491/#491: "kind of place" is a SEPARATE VOCABULARY from FILT_FEATS above, and
+   the separation is the point. FILT_FEATS is the four things the engine assesses at a
+   door (#481 cut it to exactly those and the port forbids a fifth). A category is not
+   a fifth criterion: it says what the business is, it comes from OpenStreetMap rather
+   than from our screening, and it can never move a tier, a state or a checklist. The
+   two lists must not learn about each other.
+
+   The labels are not defined here -- they arrive on the pin from /map/data with the
+   OSM element that supplied them, so the page cannot invent a category for a place
+   the server has no source for. CAT_ORDER only fixes the order they are offered in. */
+const CAT_ORDER=['food_drink','shops','services','culture_nightlife','stay'];
+let filtFeats=new Set(), filtCats=new Set(), filtFresh='any', filtDist=FILT_DIST_MAX, filterApplied=false;
 /* straight-line feet from the located point, the same arithmetic distLabel prints */
 function distFt(p){ return Math.hypot((p.lng-LOC.lng)*314000, (p.lat-LOC.lat)*364000); }
+/* the categories actually present on the pins, in CAT_ORDER, with their counts. Built
+   from the data every time rather than from a constant, so a category with nothing in
+   it is never offered and a count on a chip is never stale. */
+function catCounts(){
+  const n=new Map();
+  places.forEach(p=>{ if(p.cat) n.set(p.cat.key,(n.get(p.cat.key)||0)+1); });
+  return CAT_ORDER.filter(k=>n.has(k)).map(k=>[k,catLabel(k),n.get(k)]);
+}
+function catLabel(k){ const p=places.find(q=>q.cat&&q.cat.key===k); return p?p.cat.label:k; }
+function catTyped(){ return places.filter(p=>p.cat).length; }
 function filterPass(p){
   for(const f of filtFeats){ if(!(p.f[f]&&p.f[f].v==='present')) return false; }
+  /* TICK-491: a place with no category on record is NOT a place of another kind, so
+     this is deliberately not `filtCats.has(p.cat&&p.cat.key)` with a silent false. It
+     is the same test, but the sheet has already said in words how many places have no
+     category and that filtering by kind leaves them out -- the hiding is stated before
+     it happens rather than discovered afterwards. Nothing here is rendered as the
+     place failing a check: it is simply not in this result. */
+  if(filtCats.size && !(p.cat && filtCats.has(p.cat.key))) return false;
   /* ROUND 6: freshness asks how old the evidence is, in days. It used to ask only
      "is this an estimate?", which is why 7 days and 30 days returned the same 12
      places -- two labels over one test. Now each window is its own answer. */
@@ -6743,6 +6794,7 @@ function renderFilters(){
     });
     fn.appendChild(b);
   });
+  renderCatFilters();
   const ff=document.getElementById('filt-feats');
   ff.innerHTML='';
   FILT_FEATS.forEach(([k,label])=>{
@@ -6761,10 +6813,45 @@ function renderFilters(){
     b.classList.toggle('sel',on); b.setAttribute('aria-pressed',on);
   });
 }
+/* TICK-491: the "Kind of place" row, and the sentence that says what it does not cover.
+   The block is hidden outright when no pin carries a category -- on file:// or with no
+   category side file on the server there is no source, and a control with no source is
+   the thing this product does not ship. */
+function renderCatFilters(){
+  const block=document.getElementById('filt-cats-block');
+  const fc=document.getElementById('filt-cats');
+  const note=document.getElementById('filt-cats-note');
+  if(!block||!fc||!note) return;
+  const rows=catCounts();
+  block.hidden = rows.length===0;
+  if(block.hidden){ fc.innerHTML=''; note.textContent=''; return; }
+  fc.innerHTML='';
+  rows.forEach(([k,label,n])=>{
+    const b=document.createElement('button');
+    b.className='filtchip'+(filtCats.has(k)?' sel':'');
+    b.innerHTML=`<span class="sel-dot" aria-hidden="true">${iconSVG('check',12)}</span>${esc(label)} <span class="cat-n">${n}</span>`;
+    b.setAttribute('aria-pressed',filtCats.has(k));
+    /* the visible label is "Food and drink 38"; a screen reader gets the sentence */
+    b.setAttribute('aria-label',label+' — '+n+(n===1?' place':' places'));
+    b.addEventListener('click',()=>{
+      if(filtCats.has(k)) filtCats.delete(k); else filtCats.add(k);
+      renderFilters(); updateFiltShow();
+    });
+    fc.appendChild(b);
+  });
+  /* THE COVERAGE SENTENCE. It is here, above the fold of the selection, because a
+     filter that silently drops the places it has no type for is worse than no filter.
+     It is a statement about our data and never about a business: "no kind on record"
+     is something WE lack, not something the place failed. */
+  const typed=catTyped(), total=places.length, missing=total-typed;
+  note.textContent = missing
+    ? `Kind of place comes from OpenStreetMap. ${typed} of ${total} places have one on record; the other ${missing} are left out when you filter by kind.`
+    : `Kind of place comes from OpenStreetMap, for all ${total} places on this map.`;
+}
 /* one definition of "a filter is on", so the button, the badge, the chip row and
    the applied state cannot disagree about which controls count. */
-function anyFilter(){ return filtFeats.size>0 || filtFresh!=='any' || filtDist<FILT_DIST_MAX || personas.size>0; }
-function filterCount(){ return filtFeats.size+(filtFresh!=='any'?1:0)+(filtDist<FILT_DIST_MAX?1:0)+personas.size; }
+function anyFilter(){ return filtFeats.size>0 || filtCats.size>0 || filtFresh!=='any' || filtDist<FILT_DIST_MAX || personas.size>0; }
+function filterCount(){ return filtFeats.size+filtCats.size+(filtFresh!=='any'?1:0)+(filtDist<FILT_DIST_MAX?1:0)+personas.size; }
 function updateFiltShow(){
   document.getElementById('btn-filt-show').textContent='Show '+filtCount()+' places';
   const badge=document.getElementById('filt-badge');
@@ -6794,15 +6881,52 @@ distIn.addEventListener('input',()=>{ syncDist(); updateFiltShow(); });
    line on a card can say where it came from. When hours arrive as real provenance,
    the control comes back with them. */
 document.getElementById('filt-reset').addEventListener('click',()=>{
-  filtFeats.clear(); filtFresh='any'; filterApplied=false;
+  filtFeats.clear(); filtCats.clear(); filtFresh='any'; filterApplied=false;
   distIn.value=FILT_DIST_MAX; syncDist();
   personas.clear(); applyPersona();
   renderFilters(); updateFiltShow(); armPinFlux(); renderMap();
 });
+/* TICK-491: the kinds, as a phrase. Two get named; three or more would run past a
+   toast, so they get counted. */
+function catPhrase(){
+  const names=catCounts().filter(([k])=>filtCats.has(k)).map(([,label])=>label);
+  if(names.length===1) return names[0];
+  if(names.length===2) return names[0]+' and '+names[1];
+  return names.length+' kinds of place';
+}
+/* ============================================================================
+   TICK-491, THE CLAIMS RULE. This is the one line in the feature that could go
+   badly wrong, so it is written out rather than assembled.
+
+   Category and needs WILL be used together, and the result must never read as
+   "here are the accessible restaurants". That claim is forbidden however it is
+   arrived at, and arriving at it by COMBINATION -- one control naming a kind,
+   another naming a need, the sentence quietly welding them -- is the way it gets
+   made without anyone writing it.
+
+   So the two facts stay in separate clauses and neither becomes an adjective on
+   the other. "12 places in Food and drink" is what they ARE, from OpenStreetMap.
+   "matched against what you said you need" is an OPERATION WE RAN, not a verdict
+   we reached -- and the half-sentence after it is the app's existing disclaimer,
+   reused word for word, because the needs filter has always said that its halos
+   show fit rather than certainty and combining it with a category changes none
+   of that. Every pin in the result still carries its own tier and its own dated
+   evidence, and the card is still where the answer for a particular door is.
+
+   Never a negative: a place of another kind, or of no recorded kind, is absent
+   from the result and is never told it failed anything. The needs filter recedes
+   rather than condemns; this recedes the same way.
+   ========================================================================== */
+function filterToast(){
+  const n=filtCount();
+  if(!filtCats.size) return 'Showing '+n+' places that fit';
+  if(personas.size) return 'Showing '+n+' places in '+catPhrase()+', matched against what you said you need — halos show fit, not certainty';
+  return 'Showing '+n+' places in '+catPhrase()+' — kind of place comes from OpenStreetMap';
+}
 document.getElementById('btn-filt-show').addEventListener('click',()=>{
   filterApplied = anyFilter();
   armPinFlux(); renderMap(); renderNearby(); updateFiltShow(); renderChipRow(); closeSheets();
-  if(filterApplied) toast('Showing '+filtCount()+' places that fit');
+  if(filterApplied) toast(filterToast());
 });
 document.getElementById('fab-filters').addEventListener('click',()=>{renderFilters();updateFiltShow();openSheet('sheet-filters');});
 
@@ -6834,6 +6958,16 @@ function renderChipRow(){
     }));
   });
   if(filterApplied){
+    /* TICK-491: a category is removable from the row like every other filter, and
+       reads as the bare kind -- "Food and drink" -- so the row never accumulates
+       into a sentence about accessible restaurants either. */
+    filtCats.forEach(k=>{
+      row.appendChild(chipEl(catLabel(k),()=>{
+        filtCats.delete(k);
+        filterApplied = anyFilter();
+        armPinFlux(); renderMap(); renderNearby(); updateFiltShow(); renderChipRow();
+      }));
+    });
     filtFeats.forEach(k=>{
       const lbl=(FILT_FEATS.find(f=>f[0]===k)||[k,FEATS[k]?FEATS[k].label:k])[1];
       row.appendChild(chipEl(lbl,()=>{
@@ -7410,7 +7544,9 @@ document.getElementById('me-area').addEventListener('click',()=>{
     toast('Showing the mapped blocks in downtown Austin');
     return;
   }
-  filtFeats.clear(); filtFresh='any'; filterApplied = personas.size>0;
+  /* TICK-491: the kind-of-place selection eases with the rest. Leaving it set would
+     empty the map again on the very next render and blame the wrong control. */
+  filtFeats.clear(); filtCats.clear(); filtFresh='any'; filterApplied = personas.size>0;
   renderFilters(); updateFiltShow(); renderChipRow(); renderMap(); renderNearby();
   toast('Filters eased — showing this area again');
 });
@@ -9844,6 +9980,13 @@ function mergeServerPin(pin, base){
      same pin exactly as before -- and the card turns it into the existing
      "Could you take another look?" nudge, which asks for a photo and claims nothing. */
   p.relook = pin.needs_relook===true;
+  /* TICK-491: what the place IS, straight from the server with the OpenStreetMap
+     element that said so. Assigned, never merged: a pin the server has no category
+     for loses any it was carrying, so the page can only ever show a kind the server
+     can currently cite. It is read by the Filters sheet and by nothing else -- not by
+     featsOf, not by matchOf, not by any tier or state below -- which is why this line
+     sits above the branch rather than inside it. */
+  p.cat = (pin.category && pin.category.key) ? pin.category : null;
   if(scanned){
     if(p.tier==='est') p.tier='scan';
     p.live=true;

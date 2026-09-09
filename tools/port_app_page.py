@@ -565,6 +565,15 @@ WIRING_REQUIRED: list[str] = [
     "Location is off for this site, so the map has not moved",
     "el.setAttribute('aria-label','You are here');",
     "el.setAttribute('role','alert');",
+    # TICK-491. The kind-of-place filter reads p.cat, and p.cat exists only because
+    # the map-data wiring copies /map/data's category onto the pin -- the design
+    # source has no categories in its embedded set and cannot invent one. Lose this
+    # line and the Filters sheet silently stops offering the section, which is a
+    # feature disappearing rather than a build failing. The reset line is here for
+    # the same reason: without it an eased filter leaves the kind set and the map
+    # comes back empty.
+    "p.cat = (pin.category && pin.category.key) ? pin.category : null;",
+    "filtFeats.clear(); filtCats.clear(); filtFresh='any'; filterApplied = personas.size>0;",
 ]
 
 # ...and none of these. The design source is worked on against a deployed host and a

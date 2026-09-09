@@ -287,7 +287,9 @@ document.getElementById('me-area').addEventListener('click',()=>{
     toast('Showing the mapped blocks in downtown Austin');
     return;
   }
-  filtFeats.clear(); filtFresh='any'; filterApplied = personas.size>0;
+  /* TICK-491: the kind-of-place selection eases with the rest. Leaving it set would
+     empty the map again on the very next render and blame the wrong control. */
+  filtFeats.clear(); filtCats.clear(); filtFresh='any'; filterApplied = personas.size>0;
   renderFilters(); updateFiltShow(); renderChipRow(); renderMap(); renderNearby();
   toast('Filters eased — showing this area again');
 });
