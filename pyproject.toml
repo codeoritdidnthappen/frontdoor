@@ -25,7 +25,14 @@ boxes = ["torch>=2.2", "transformers>=4.40", "pillow>=10"]
 # pyyaml is named explicitly because tests/test_workflow_hardening.py parses the
 # GitHub Actions workflows. It arrives transitively through moto today, which is an
 # accident of that package's dependency tree and not something to rely on.
-dev = ["pytest>=8", "flask>=3", "moto>=5", "pyyaml>=6"]
+# pillow is named for the same reason pyyaml is: a test needs it directly.
+# test_evidence_boxes_on_the_served_page reads each seeded photograph's real
+# pixel dimensions out of its data: URI to assert that every evidence box lands
+# inside the frame it names -- geometry that overhangs its own photograph is
+# geometry from some other frame, which is the failure this discipline exists to
+# catch. It is a few hundred KB and it is NOT the `boxes` extra, which carries
+# torch and runs the detector; CI installs this and never that.
+dev = ["pytest>=8", "flask>=3", "moto>=5", "pyyaml>=6", "pillow>=10"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
