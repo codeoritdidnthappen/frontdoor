@@ -14,10 +14,25 @@ dependencies = ["jsonschema>=4.21", "rfc3339-validator>=0.1.1", "boto3>=1.34", "
 [project.optional-dependencies]
 server = ["flask>=3", "gunicorn>=22"]
 agents = ["claude-agent-sdk>=0.1.0"]
+# Locating the evidence a verdict is about (TICK-467). Deliberately NOT a
+# runtime dependency: the detector runs at publish time only, costs about a
+# minute of CPU per entrance, and torch alone is hundreds of megabytes of RSS in
+# a worker sized for image decoding. frontdoor.evidence_boxes imports it lazily,
+# inside the one function that needs it, so a machine without this extra
+# publishes verdicts and no boxes -- a supported outcome, because a box is a
+# courtesy and never a qualifier.
+boxes = ["torch>=2.2", "transformers>=4.40", "pillow>=10"]
 # pyyaml is named explicitly because tests/test_workflow_hardening.py parses the
 # GitHub Actions workflows. It arrives transitively through moto today, which is an
 # accident of that package's dependency tree and not something to rely on.
-dev = ["pytest>=8", "flask>=3", "moto>=5", "pyyaml>=6"]
+# pillow is named for the same reason pyyaml is: a test needs it directly.
+# test_evidence_boxes_on_the_served_page reads each seeded photograph's real
+# pixel dimensions out of its data: URI to assert that every evidence box lands
+# inside the frame it names -- geometry that overhangs its own photograph is
+# geometry from some other frame, which is the failure this discipline exists to
+# catch. It is a few hundred KB and it is NOT the `boxes` extra, which carries
+# torch and runs the detector; CI installs this and never that.
+dev = ["pytest>=8", "flask>=3", "moto>=5", "pyyaml>=6", "pillow>=10"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
