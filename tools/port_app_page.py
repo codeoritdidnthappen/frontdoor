@@ -207,10 +207,12 @@ OPS: list[Op] = [
         kind="replace_region",
         anchor="function startScan(){",
         # TICK-490 rewrote the paragraph this used to point at, which is exactly the
-        # failure this file's docstring warns about. The anchor is now the one line of
-        # it that is a heading rather than a description, so re-describing the beats
-        # below it cannot break the build again.
-        until="/* ---- processing.\n",
+        # failure this file's docstring warns about. Round 14 then rewrote the heading
+        # line itself, from "processing." to "processing: the ring draws itself...", so
+        # the sentence is gone too. What survives every rewrite is the section rule and
+        # the word it names, and there is exactly one of it in the design source: the
+        # region now ends at the marker rather than at any wording after it.
+        until="/* ---- processing",
         fragment="scan-entry.js",
     ),
     Op(
@@ -459,6 +461,39 @@ OPS: list[Op] = [
             "  paintEmptyInvite(shown.length===0);\n"
             "  placeYouHere();\n"
         ),
+    ),
+    Op(
+        name="you_here_is_a_real_fix",
+        why=(
+            "Round 15 gave the map a 'where you are' mark and drew it at LOC, the "
+            "constant at 2nd & Colorado, so the prototype shows the mark always and "
+            "announces 'Your location, 2nd & Colorado, is marked' to a screen reader. "
+            "That is the locate button's old lie in a second place -- the one this "
+            "repository already refused once (locate_real_fix, and the two "
+            "'Centered on you' forms in WIRING_FORBIDDEN) -- and it would have been "
+            "the round's quietest regression, because nothing about it fails: the "
+            "design ships the element, the wiring adopts it, and whichever of the two "
+            "runs last wins. Round 15's drawing is kept exactly; its position and its "
+            "visibility come from placeYouHere(), which only ever draws a real fix"
+        ),
+        kind="replace",
+        anchor=(
+            "function renderYouHere(W,H){\n"
+            "  const el = document.getElementById('you-here'); if(!el) return;\n"
+            "  if(!el.firstChild) el.innerHTML = youHereSVG();\n"
+            "  const xy = proj(LOC.lat, LOC.lng, W, H, MAP_PAD);\n"
+            "  const on = xy[0] >= -12 && xy[0] <= W+12 && xy[1] >= -12 && xy[1] <= H+12;\n"
+            "  el.hidden = !on;\n"
+            "  if(!on) return;\n"
+            "  el.style.left = xy[0]+'px';\n"
+            "  el.style.top  = xy[1]+'px';\n"
+            "  /* 7.7: the mark's state as text, on the group a screen reader actually lands on. */\n"
+            "  pinsEl.setAttribute('aria-label',\n"
+            "    'Entrance pins on the map. Your location, ' + LOC_NAME + ', is marked'\n"
+            "    + (on ? ' on the map.' : ' outside the current view.'));\n"
+            "}\n"
+        ),
+        fragment="you-here.js",
     ),
     Op(
         name="loc_toggle_real",
@@ -762,6 +797,10 @@ WIRING_REQUIRED: list[str] = [
     "Location is off for this site, so the map has not moved",
     "el.setAttribute('aria-label','You are here');",
     "el.setAttribute('role','alert');",
+    # Round 15's mark, drawn only where the phone says the phone is. Losing this
+    # line puts the mark back on a constant, which is the locate button's old lie
+    # in a second place.
+    "  if(!el.firstChild) el.innerHTML = youHereSVG();\n  placeYouHere();",
     # TICK-488. Three controls ask or claim the same permission -- the map's locate
     # button, onboarding's "Allow location" and the Settings switch -- and the eight
     # outcomes are branched on in exactly one of them. askGeo() is that one place and
@@ -836,6 +875,11 @@ WIRING_FORBIDDEN: list[str] = [
     # refreshed from, and it may never reach a page a person at a door reads.
     "Centered on you \\u00b7 2nd & Colorado",
     "setZoom(false, null); toast('Centered on you",
+    # Round 15's "where you are" mark, as the design source draws it: at LOC, the
+    # constant this page sorts distances by. It is the same false statement as the
+    # two lines above, in a mark rather than a toast, and it announces itself.
+    "proj(LOC.lat, LOC.lng, W, H, MAP_PAD)",
+    "'Entrance pins on the map. Your location, ' + LOC_NAME",
     # TICK-488. Onboarding's "Allow location" flipped the switch on, set
     # aria-checked="true" and advanced -- without ever calling navigator.geolocation.
     # Nothing was asked and no permission was granted, and the interface then stated
