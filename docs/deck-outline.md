@@ -39,11 +39,14 @@ it is the better one.
 
 **Four criteria, and the deck says which four.** Every accuracy figure on every slide describes
 `ramp_or_bevel`, `handrails`, `accessible_door_hardware` and `accessibility_signage`. It does
-**not** describe step-free entry, which the interface names as a feature and the engine does not
-assess (#368 — measured, and held rather than shipped, because the version that abstains declines
-on entrances whose ground plane is plainly visible). If a slide shows a feature chip that reads
-"Step-free entry", the number beside it is not about that chip. Say so once, in Section 3, rather
-than hoping nobody asks.
+**not** describe step-free entry, which the engine does not assess (#368 — measured, and held
+rather than shipped, because the version that abstains declines on entrances whose ground plane
+is plainly visible). **The interface no longer names it either** (#474): the app's whole feature
+vocabulary — the card chips, the pin and list accessible names, the Filters sheet, the My Needs
+personas, the owner workspace, and the "not yet seen — be the first to scan" invitation — is
+those same four and nothing else, so every feature chip on a slide is a criterion the numbers
+are about. The consequence is worth saying out loud rather than hiding: needs-matching is
+thinner than it was, because it is now sourced only from what was actually read.
 
 Claims discipline, product-wide (from the #73 product-model thread): never claim a measurement,
 a compliance determination, or a legal status. The line that survives every slide: **"when it

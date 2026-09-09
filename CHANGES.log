@@ -1715,3 +1715,47 @@ gives no rule for choosing, and one had the privacy blur over the door in three 
 was answered `absent` rather than `not_visible`. The A/B that would settle wording against acuity
 was written and attempted; the API account was out of credit and returned 400 on every call, so it
 produced no verdicts and no spend. It is a separate ticket, not a claim made here.
+
+## 2026-09-08 — The product's feature vocabulary is the engine's feature vocabulary (#474, #476, #477, #478)
+
+The engine assesses four criteria (`frontdoor.screening.CRITERIA_KEYS`): `ramp_or_bevel`,
+`handrails`, `accessible_door_hardware`, `accessibility_signage`. The served app carried
+**eight** entrance features and rendered all eight identically. The four with nothing behind
+them were `step_free_entry`, `clear_approach`, `door_width_adequate` and `auto_door_button`.
+
+They were not a fallback and not a stub. On the deployed app, nine of the twelve pilot doors —
+named real businesses — published a step-free finding **with a confidence**: as a chip under
+"Seen at this door", inside every pin's accessible name, in the list view offered as the
+accessible alternative to the map, in the owner workspace under a tick labelled `seen on-site`,
+and in the owner's "This is how customers see it" preview. `dotTriple()` appends an `sr-only`
+span, so a screen reader announced "Step-free entry, confidence high" about a field no engine
+had ever answered. The Filters sheet offered Step-free and Wide door as filters, which is the
+stronger claim again: it says the map holds this answer for every pin. And `satOf()` carried a
+substitution — a step-free observation satisfied the *ramp* need — so a card could reach
+**"Good match · 3 of 3 needs"** for a wheelchair user on the strength of it. That is the closest
+this product comes to saying a place is accessible.
+
+**Decision: the vocabulary shrinks to what the engine reads, and needs-matching is rebuilt on
+those four rather than deleted.** `DOOR_KEYMAP` and `FEATS` name the four, so `featsOf()` cannot
+surface a fifth whatever a dataset holds; the twelve seeded doors were trimmed to the four as
+well, so the page does not carry the fields at all. Filters, personas, the owner workspace and
+the "not yet seen — be the first to scan" invitation are the same four. `satOf()` lost its
+substitution outright rather than gaining an inverted one: a need is satisfied by the criterion
+it names, and an unmet need already renders as "not yet seen", which is the honest answer.
+
+**Two product findings this exposes, recorded rather than patched.** *Low vision* is down to
+access signage alone: its other field was clear approach, and nothing in the four replaces it.
+*Stroller* and *Wheelchair* now key on the same pair — ramp or bevel, easy-grip handle — because
+nothing among the four separates them. Neither is fixed by inventing a field; both are fixed by
+#368, the engine learning to answer more. The visible cost is real and is the point: across the
+twelve pilot doors the wheelchair profile now finds **one** Good match (SEV Laser, which has an
+observed ramp *and* handrails *and* a pull handle) where the substitution used to manufacture
+several.
+
+Pinned by five tests in `tests/test_app_page.py` that read the **served** page and derive the
+allowed set from `CRITERIA_KEYS` rather than from a copy of it, covering the data, the mappings,
+the filters, the personas, the owner workspace, `satOf()`, and — for #476, a hand-written
+sentence that no data test or render test would ever have reached — the page's static markup.
+Each was mutation-checked by restoring the value it replaced. Four of the eight forms are now
+refused by `tools/port_app_page.py` itself, so a refresh from a new design round fails the build
+instead of quietly reintroducing the claim, which is how this survived #368 and #471.

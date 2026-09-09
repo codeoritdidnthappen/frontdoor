@@ -577,3 +577,216 @@ def test_the_staged_review_chips_name_only_criteria_the_engine_assesses():
         "not seen -- the abstention is the product's argument"
     )
     assert not (committed & absent), "a criterion cannot be both committed and not seen"
+
+
+# ---------------------------------------------------------------------------
+# TICK-474 / #476 / #477 / #478: the product's feature vocabulary is the
+# engine's feature vocabulary.
+#
+# The served page used to carry eight entrance features and render all eight
+# identically -- chip, confidence dots, `sr-only` "confidence high", pin
+# accessible name, list row, owner workspace, public-listing preview. Four of
+# them (step_free_entry, clear_approach, door_width_adequate, auto_door_button)
+# are not in frontdoor.screening.CRITERIA_KEYS: nothing assesses them, so every
+# one of those renderings was a finding the engine never produced, on named
+# real businesses.
+#
+# These tests read the SERVED page, because that is what a person meets, and
+# they derive the allowed vocabulary from CRITERIA_KEYS rather than from a
+# copy of it, so adding a criterion to the engine is the only way to widen
+# what the product may say.
+# ---------------------------------------------------------------------------
+
+# Feature names the product may not print or announce. Every one of them was on
+# the deployed app when this was filed.
+UNASSESSED_FEATURE_PROSE = (
+    "step-free",
+    "step free",
+    "wide door",
+    "clear approach",
+    "auto-door",
+    "auto door",
+    "automatic door",
+    "door button",
+)
+
+
+def _served_page():
+    return create_app().test_client().get("/app").get_data(as_text=True)
+
+
+def _decl(page, opening, closing="};"):
+    """The body of a single declaration in the served page's script."""
+    match = re.search(
+        re.escape(opening) + r"(.*?)" + re.escape(closing), page, re.DOTALL
+    )
+    assert match, f"{opening!r} not found in the served page"
+    return match.group(1)
+
+
+def _chip_vocabulary(page):
+    """The chip keys the four engine criteria map to, read off the page itself.
+
+    EST_KEYMAP is the page's own translation of the /screen contract, so its
+    keys must BE CRITERIA_KEYS and its values are the only feature keys any
+    other structure on the page may name.
+    """
+    from frontdoor.screening import CRITERIA_KEYS
+
+    pairs = re.findall(r"([a-z_]+):'([a-z_]+)'", _decl(page, "const EST_KEYMAP = {"))
+    assert {key for key, _ in pairs} == set(CRITERIA_KEYS), (
+        "EST_KEYMAP no longer covers exactly the criteria the engine assesses; "
+        "the page and frontdoor.screening have diverged"
+    )
+    return {chip for _, chip in pairs}
+
+
+def test_the_feature_vocabulary_is_exactly_the_criteria_the_engine_assesses():
+    """DOOR_KEYMAP and FEATS are the choke points every feature rendering passes.
+
+    `featsOf()` reads DOOR_KEYMAP, and every chip row, "not yet seen" list and
+    accessible name is built from FEATS. Trimming both to the four is what makes
+    the fix data-shaped: the next dataset can hold whatever it likes and still
+    cannot surface a feature nothing assessed.
+    """
+    page = _served_page()
+    chips = _chip_vocabulary(page)
+
+    door = dict(re.findall(r"([a-z_]+):'([a-z_]+)'", _decl(page, "const DOOR_KEYMAP = {")))
+    assert set(door.values()) == chips, (
+        f"DOOR_KEYMAP maps to {sorted(set(door.values()) - chips)} beyond the "
+        "criteria the engine assesses"
+    )
+
+    feats = set(re.findall(r"^\s*([a-z_]+):\{", _decl(page, "const FEATS = {"), re.M))
+    assert feats == chips, (
+        f"FEATS names {sorted(feats - chips)}, which the engine does not assess; "
+        "every 'not yet seen' list on the product is built from Object.keys(FEATS)"
+    )
+    assert "const unknown = Object.keys(FEATS).filter(" in page, (
+        "the card's 'not yet seen' list must stay derived from FEATS, so trimming "
+        "FEATS is what keeps the invitation to scan honest (#478)"
+    )
+
+
+def test_no_seeded_place_carries_a_criterion_the_engine_does_not_assess():
+    """The shipped map data itself, not only what is rendered from it.
+
+    Twelve pilot doors carried eight criteria each and nine of them published a
+    step-free finding with a confidence. The page does not carry those fields at
+    all now, so no rendering path that is added later can reach them either.
+    """
+    from frontdoor.screening import CRITERIA_KEYS
+
+    page = _served_page()
+    door_keys = set(
+        dict(re.findall(r"([a-z_]+):'([a-z_]+)'", _decl(page, "const DOOR_KEYMAP = {")))
+    )
+    data = json.loads(_decl(page, "const DATA = ", ";\n"))
+
+    assert data["doors"], "the seeded pilot doors are missing from the page"
+    for door in data["doors"]:
+        extra = set(door["crit"]) - door_keys
+        assert not extra, (
+            f"{door['name']} ({door['id']}) publishes {sorted(extra)}, which the "
+            "engine does not assess"
+        )
+    for place in data["est"]:
+        extra = set(place["crit"]) - set(CRITERIA_KEYS)
+        assert not extra, (
+            f"{place['name']} publishes {sorted(extra)}, which the engine does "
+            "not assess"
+        )
+
+
+def test_no_filter_persona_or_owner_row_names_an_unassessed_criterion():
+    """The controls that say what the map can answer for every pin.
+
+    Offering a filter is a stronger claim than naming a feature: it says the map
+    holds this answer everywhere. The personas are stronger still -- they are the
+    input to the match verdict -- so they are checked in both languages, the keys
+    they score on and the prose they advertise.
+    """
+    page = _served_page()
+    chips = _chip_vocabulary(page)
+
+    filt = set(re.findall(r"\['([a-z_]+)',", _decl(page, "const FILT_FEATS=[", "];")))
+    assert filt <= chips, (
+        f"the Filters sheet offers {sorted(filt - chips)}, which the map cannot answer"
+    )
+
+    personas = _decl(page, "const PERSONAS = {")
+    for name, sub, crit in re.findall(
+        r"^\s*([a-z]+):\{label:.*?sub:'([^']*)'.*?crit:\[([^\]]*)\]", personas, re.M
+    ):
+        keys = set(re.findall(r"'([a-z_]+)'", crit))
+        assert keys <= chips, (
+            f"the {name} persona matches on {sorted(keys - chips)}, which the "
+            "engine does not assess"
+        )
+        assert keys, f"the {name} persona scores on nothing at all"
+        for word in UNASSESSED_FEATURE_PROSE:
+            assert word not in sub.lower(), (
+                f"the {name} persona advertises {word!r}, which the engine does "
+                "not assess"
+            )
+
+    owner_keys = set(re.findall(r"\{k:'([a-z_]+)'", _decl(page, "const OW_FEATURES = [", "];")))
+    assert owner_keys == chips, (
+        f"the owner workspace edits {sorted(owner_keys - chips)}, and its rows "
+        'carry an aria-label of "seen on-site"'
+    )
+    owner_crit = set(
+        chip for _, chip in re.findall(r"([a-z_]+):'([a-z_]+)'", _decl(page, "const OW_CRIT = {"))
+    )
+    door_keys = set(
+        dict(re.findall(r"([a-z_]+):'([a-z_]+)'", _decl(page, "const DOOR_KEYMAP = {")))
+    )
+    assert owner_crit <= door_keys, (
+        f"publishing an owner update writes {sorted(owner_crit - door_keys)} onto "
+        "the place record, where nothing can render it honestly"
+    )
+
+
+def test_the_needs_match_has_no_cross_criterion_substitution():
+    """`satOf()` is the closest this product comes to saying a place is accessible.
+
+    It carried one substitution -- a step-free observation satisfying the ramp
+    need -- which could take a card to "Good match, 3 of 3 needs" for a
+    wheelchair user on a field the engine never produced. A need is satisfied by
+    the criterion it names or it is not satisfied; an unmet need already renders
+    as "not yet seen".
+    """
+    page = _served_page()
+    body = _decl(page, "function satOf(p, crit){", "\n}")
+    assert "p.f.step_free" not in body, (
+        "satOf() still lets a field outside the four satisfy a need"
+    )
+    assert not re.search(r"if\s*\(\s*ck\s*===", body), (
+        "satOf() special-cases a criterion; a match must be over the four, with "
+        "no substitution in either direction"
+    )
+    assert len(re.findall(r"\bok\b\s*=", body)) == 1, (
+        "satOf() decides satisfaction more than once, which is how the "
+        "substitution got in"
+    )
+
+
+def test_the_pages_own_prose_names_no_feature_the_engine_does_not_assess():
+    """The hand-written sentences, which no data test and no render test reaches.
+
+    Profile > Accessibility > Preview was static markup asserting that a scan saw
+    step-free entry at a named real business (#476). It is prose typed into the
+    page, so only reading the page finds it. Scripts, styles and comments are
+    stripped: what is left is what a person can read on the screen.
+    """
+    page = _served_page()
+    visible = re.sub(r"<script\b.*?</script>", " ", page, flags=re.DOTALL | re.IGNORECASE)
+    visible = re.sub(r"<style\b.*?</style>", " ", visible, flags=re.DOTALL | re.IGNORECASE)
+    visible = re.sub(r"<!--.*?-->", " ", visible, flags=re.DOTALL)
+    lowered = visible.lower()
+    for word in UNASSESSED_FEATURE_PROSE:
+        assert word not in lowered, (
+            f"the page's own markup says {word!r}; the engine assesses ramp or "
+            "bevel, handrails, accessible door hardware and accessibility signage"
+        )
