@@ -206,7 +206,11 @@ OPS: list[Op] = [
         ),
         kind="replace_region",
         anchor="function startScan(){",
-        until="/* ---- processing: the ring draws itself as one marigold stroke; the named checks surface",
+        # TICK-490 rewrote the paragraph this used to point at, which is exactly the
+        # failure this file's docstring warns about. The anchor is now the one line of
+        # it that is a heading rather than a description, so re-describing the beats
+        # below it cannot break the build again.
+        until="/* ---- processing.\n",
         fragment="scan-entry.js",
     ),
     Op(

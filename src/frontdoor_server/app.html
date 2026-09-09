@@ -3406,18 +3406,29 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
             <svg class="ring" viewBox="0 0 150 150" aria-hidden="true" style="position:absolute;inset:0;pointer-events:none">
               <circle class="ring-fill" cx="75" cy="75" r="58"/>
             </svg>
-            <!-- ROUND 11 closes the first of the two beats 8.1 has been held on since
+            <!-- ROUND 11 closed the first of the two beats 8.1 had been held on since
                  Round 8: visual-language section 7 says "a large purple progress ring
-                 with the countdown inside it" and there was no countdown. It counts
-                 whole seconds to the review hand-off (PROC_SETTLE + ringDur() +
-                 PROC_CHIPS + PROC_HOLD = 7,360ms, which is what "Usually under 8
-                 seconds" beneath it is a rounding of), and it hands the ring's centre
-                 to the doorway glyph the moment the checks settle. It is aria-hidden
-                 because #proc-progress already carries the same fact as a progressbar
-                 with a live aria-valuenow, and #proc-caption says the duration in
-                 words: a ticking number in a live region would be eight
-                 interruptions of the four announcements that matter. -->
-            <div class="ring-count" id="ring-count" aria-hidden="true"><span class="rc-in"><span id="ring-count-n">8</span><span class="rc-u">s</span></span></div>
+                 with the countdown inside it" and there was no countdown. It hands the
+                 ring's centre to the doorway glyph the moment the checks settle.
+
+                 TICK-490: the digit counts DOWN only where a finish time is known, and
+                 that is the staged run and nothing else. A staged run waits for no
+                 server, so PROC_SETTLE + ringDur() + PROC_CHIPS + PROC_HOLD = 7,360ms
+                 IS its length and counting down to it is a fact. A live run's length is
+                 the model's, measured at 12.5-23.0s (the derivation is on LIVE_EST_MS),
+                 so there is no number to count down to and the digit counts UP: elapsed
+                 whole seconds, true at second 5 and still true at second 23. It never
+                 blanks and it never reaches a zero that says the wait is over.
+
+                 It is aria-hidden because #proc-progress already carries the same fact
+                 as a progressbar with a live aria-valuenow, and #proc-caption says the
+                 duration in words: a ticking number in a live region would be twenty
+                 interruptions of the four announcements that matter.
+
+                 The static value is empty on purpose. Before runProcessing() runs this
+                 page cannot know which of the two runs it is about to show, and "8" was
+                 an answer to that question; runProcessing() fills it on the same turn. -->
+            <div class="ring-count" id="ring-count" aria-hidden="true"><span class="rc-in"><span id="ring-count-n"></span><span class="rc-u">s</span></span></div>
             <div class="ring-center" aria-hidden="true">
               <!-- the logo's doorway mark: lintel + two jambs -->
               <svg width="46" height="46" viewBox="0 0 40 40" fill="currentColor"><rect x="7" y="9" width="26" height="6" rx="3"/><rect x="10" y="17" width="6" height="16" rx="3"/><rect x="24" y="17" width="6" height="16" rx="3"/></svg>
@@ -8539,13 +8550,31 @@ document.getElementById('btn-retake').addEventListener('click',()=>{
   if(wasLive) tryStartCamera();
 });
 
-/* ---- processing: the ring draws itself as one marigold stroke; the named checks surface
-   as the stroke passes each third (each quarter when a double-check pass is running).
-   Beats (product doc 2026-09-04): 0-1.0 s the captured image settles into the ring -
-   1.0-2.5 "Doorway framed" - 2.5-4.0 "Entry path visible" - 4.0-5.5 "Photo quality checked" -
-   5.5-6.5 detected chips populate (here, before review) - then review; the pin drops with
-   bounce + ripple at landing (after Publish). Reduced motion presents results immediately
-   with a screen-reader announcement. ---- */
+/* ---- processing.
+
+   There are two runs on this screen and TICK-490 stops averaging them into one.
+
+   STAGED (no server to talk to at all -- this page opened from file://, or the camera was
+   denied so there is no frame to send). Nothing is waited for, so the whole thing is a
+   fixed animation and every number about it is exact. The ring draws itself as one
+   marigold stroke over ringDur(); the named checks surface as the stroke passes each
+   quarter; the digit inside the ring counts DOWN to the hand-off. Beats (product doc
+   2026-09-04): 0-1.0s the captured image settles into the ring - then the four checks at
+   2.125 / 3.25 / 4.375 / 5.5s - 5.5-6.5s the chips populate - 7.36s the map-return
+   contraction, 7.6s the review screen.
+
+   LIVE (a real POST /screen is out). Its length is the model's: 12.5 to 23.0 seconds
+   measured, with no constant that is right (see LIVE_EST_MS). So nothing on this screen
+   may name a finish time. The ring is a determinate bar paced by the measured estimate
+   and held at 96% by held() if the model runs long; it closes the moment the answer
+   lands, however early that is. The digit counts UP elapsed seconds, which is true at
+   every second of any run. The four named checks do not tick on a schedule at all -- the
+   server answers all four criteria at once, so they land together in finish(), which is
+   when that actually happened.
+
+   Reduced motion drops the motion in both, and the pacing in neither: on a live run it
+   must not announce a wait that is still running as finished.
+   The pin drops with bounce + ripple at landing (after Publish). ---- */
 const PROC_SETTLE=1000;  /* image settles */
 /* ROUND 9: the checklist is the spec's FOUR events rather than three, and the run is
    the same length it was -- 4 x 1125 = 4500ms of checks, exactly the 3 x 1500 it
@@ -8564,6 +8593,39 @@ const RING_CIRC=408.4;   /* 2pi-65 */
    four. It survives only as the ring EXTENSION for agreement gating, which is what
    its comment always said it was; it has 0 call sites today. */
 const ringDur=()=> PROC_CHECK*4;
+/* TICK-490. How long a LIVE run takes, which is the model's business and not ours.
+
+   Measured against production /screen on 2026-09-08, at the size captureFrame() actually
+   uploads (long side 1280, q0.85):
+
+     upload   model latency_ms   wall clock
+     307 KB        7.9 s          21.2 s     |  before the /screen cascade fix
+     255 KB        8.5 s          18.6 s     |  (#472 / #479)
+     251 KB        7.9 s          19.4 s     |
+     239 KB       16.7 s          23.0 s     |  after it, which is what is deployed
+     195 KB       17.1 s          19.1 s     |
+     260 KB        7.8 s          12.5 s     |
+
+   The wall clock ranges 12.5-23.0s and the model call alone ranges 7.8-17.1s. The spread
+   is the model's and it did not shrink when our overhead did, so there is no constant that
+   is right -- 19,000 is the median of the three post-fix runs (23.0 / 19.1 / 12.5) and is
+   used ONLY to pace a determinate bar, never to decide when the run ends. Re-derive it by
+   timing six /screen round trips the next time the model or the uploaded size changes.
+
+   RECORDED DIVERGENCE from the approved asset library. docs/design/entrymap/
+   interaction-motion.json sets durationMs.scanTarget = 7600 and scanMaximum = 8000, and
+   interaction-motion-spec.md says "approximately 7.6 seconds and never longer than 8
+   seconds". The STAGED run still meets both exactly: PROC_SETTLE + ringDur() + PROC_CHIPS
+   + PROC_HOLD = 7,360ms to the map-return contraction and 7,600ms to the review screen. A
+   LIVE run cannot meet either and never could -- it is a network round trip to a vision
+   model, and 8 seconds was a budget for an animation, not a measurement of a scan. The
+   library is copied in unedited (docs/design/entrymap/README.md), so the divergence is
+   recorded here beside the code it governs rather than by editing the package, and again
+   in CHANGES.log. Nothing on the screen quotes either number at a person any more. */
+const LIVE_EST_MS=19000;
+/* When the answer lands the arc closes from wherever it had got to, over this. The
+   estimate paces the wait; it never decides when the wait is over. */
+const LIVE_CLOSE_MS=420;
 function procLog(t0,label){}   /* the design source's beat timing; not for the served page */
 let gate2=false;         /* agreement gating (verified tier): adds "Double-checking", extends the ring */
 let procRun=null;        /* the active run's hooks (gate2 flipping mid-run extends, never restarts) */
@@ -8642,6 +8704,12 @@ function runProcessing(forceReduced){
   scr.classList.remove('leaving'); scr.classList.toggle('reduced',reduced);
   wrap.classList.remove('settled'); wrap.classList.remove('captured');
   chipsEl.innerHTML='';
+  /* TICK-490: the status region kept the PREVIOUS run's "Checks complete ..." for the
+     whole of this one. Nothing re-announces it, but a screen reader reading the page
+     rather than following the announcements found a sentence saying this scan had
+     finished while it was still waiting -- announced state has to match shown state at
+     every moment of the run, including its first. */
+  const liveEl=document.getElementById('proc-live'); if(liveEl) liveEl.textContent='';
   applyGate2();
   for(let i=1;i<=4;i++) setCheckState(i,false);
   /* the captured frame (or the illustrated doorway) sits inside the ring */
@@ -8650,35 +8718,44 @@ function runProcessing(forceReduced){
     : doorwayArt(false, scanTarget&&scanTarget.name);
 
   const t0=performance.now();
-  /* ROUND 11: the countdown's own clock. It counts to the hand-off, not to the ring
-     closing at 5.5s -- a counter that reached 0 with 1.86s of chips still to come
-     would be a lie about the wait. It is repainted 4x a second so the digit changes
-     within 250ms of the second it names, and it is stopped by finish(). */
+  /* ROUND 11 gave the digit its own clock, counting to the hand-off rather than to the
+     ring closing at 5.5s: a counter that reached 0 with 1.86s of chips still to come
+     would be a lie about the wait. That reasoning is unchanged and is why the staged
+     branch below counts to PROC_TOTAL. What TICK-490 adds is that the live branch has no
+     hand-off to count to. */
+  /* TICK-490: which of the two runs this is, decided once at the top so nothing
+     downstream has to keep asking. startLiveUpload() fires at the shutter, before this
+     screen exists, so a live run already has its request out by the time we get here. */
+  const isLive = !!liveUpload;
+  /* The staged run's own length, and the only duration on this screen we actually own. */
   const PROC_TOTAL = PROC_SETTLE + ringDur() + PROC_CHIPS + PROC_HOLD;
+  /* Staged: the arc runs over ringDur(), which is exact. Live: over LIVE_EST_MS, a
+     measured estimate -- so the bar is determinate and moving for the whole wait, and
+     holds honestly at the 96% ceiling held() already imposes if the model runs long,
+     instead of sitting at that ceiling from second 5.5 as it did before. */
+  const ringSpan = isLive ? LIVE_EST_MS : ringDur();
   const countEl = document.getElementById('ring-count-n');
+  const unitEl = countEl && countEl.parentElement && countEl.parentElement.querySelector('.rc-u');
   let _countLast = -1;
   procCountStop();
   if(countEl){
-    countEl.textContent = String(Math.ceil(PROC_TOTAL/1000));
+    if(unitEl) unitEl.textContent = 's';
+    /* TICK-490. Two different facts, and the digit says whichever one is true here.
+       STAGED counts DOWN to PROC_TOTAL, which is this animation's real end and is
+       reached by waiting for nothing. LIVE counts UP the seconds that have actually
+       passed. A countdown has to name a finish time; a live scan has none to name. #484
+       stopped the old one from displaying a zero it had run past, but a number that
+       stops counting is still a number that ran out, and it ran out on most runs.
+       Elapsed cannot run out: it reads 5 at second 5 and 23 at second 23, both true.
+       It is repainted 4x a second so the digit changes within 250ms of the second it
+       names, and it is stopped by finish() and by cancelScanTimers(). */
+    countEl.textContent = isLive ? '0' : String(Math.ceil(PROC_TOTAL/1000));
     procCountTimer = setInterval(()=>{
       if(!procActive()){ procCountStop(); return; }
-      const left = Math.ceil((PROC_TOTAL - (performance.now()-t0))/1000);
-      /* TICK-475: past its own estimate with the request still out, this counted down
-         to 0 and held there -- the one number on the screen saying the wait was over
-         while it plainly was not. It counts while it has something to count, and stops
-         claiming when it does not. The ring already holds at 96% for the same reason;
-         this is that decision applied to the digits beside it. */
-      if(left<=0){
-        if(_countLast!==0){
-          _countLast = 0;
-          countEl.textContent = '';
-          const u=countEl.parentElement && countEl.parentElement.querySelector('.rc-u');
-          if(u) u.textContent = '···';
-          procCaption();
-        }
-        return;
-      }
-      if(left!==_countLast){ _countLast=left; countEl.textContent=String(left); }
+      const n = isLive
+        ? Math.floor((performance.now()-t0)/1000)
+        : Math.max(0, Math.ceil((PROC_TOTAL-(performance.now()-t0))/1000));
+      if(n!==_countLast){ _countLast=n; countEl.textContent=String(n); }
     },250);
   }
   let fired=false, surfaced=0;
@@ -8693,6 +8770,15 @@ function runProcessing(forceReduced){
     if(pct!==lastPct){ lastPct=pct; prog.setAttribute('aria-valuenow',pct); }
   }
   function surface(f){
+    /* TICK-490: a LIVE run has no intermediate steps to surface. The server is sent one
+       photograph and answers once, with all four criteria in the same response, so
+       ticking them off at f = 1/4, 2/4, 3/4 described a timetable rather than anything
+       that had happened. The interaction spec says it in as many words: "Checklist items
+       must correspond to completed processing steps; do not show fake progress labels."
+       On a live run all four land together, in finish(), which is the moment the answer
+       actually arrived. The staged run keeps its cadence -- it is an illustration with no
+       server behind it, and the review screen it hands to says so. */
+    if(isLive) return;
     const n=4;
     for(let i=surfaced+1;i<=n;i++){
       const at = i<n ? i/n : .985;               /* the last check surfaces as the stroke closes */
@@ -8708,11 +8794,31 @@ function runProcessing(forceReduced){
   function finish(){
     if(fired) return; fired=true;
     procCountStop();
-    paint(1); surface(1);
+    paint(1);
+    /* TICK-490: on a live run the four criteria land HERE, together, because that is how
+       the server answered them -- and only if it answered. A scan that timed out, failed
+       to reach the server, or came back unassessable checked NOTHING, and marking four
+       rows done and saying "Checks complete" over it is the same fake progress label the
+       scheduled ticks were, arriving at the one moment it is least true. It was measured
+       doing exactly that: on a run held past the client's 30s abort, all four rows went
+       done at 30.39s and "Checks complete. 0 features identified" was announced at
+       32.39s, over a review screen that then read "No verdicts -- the scan timed out".
+       surface() has already landed the four on a staged run, which is an illustration
+       with nothing behind it either way and says so on the next screen. */
+    const answered = !isLive || !!liveResult;
+    if(!isLive) surface(1);
+    else if(answered){
+      for(let i=1;i<=4;i++) setCheckState(i,true);
+      surfaced=4; procLog(t0,'criteria returned');
+    } else procLog(t0,'no verdicts');
     wrap.classList.add('settled');               /* the doorway lights, the interior fills */
     populateChips(); procLog(t0,'chips populate');
     const n=chipsEl.querySelectorAll('.fchip').length;
-    announce(`Checks complete. ${n} feature${n===1?'':'s'} identified. Review before publishing.`);
+    /* The progressbar reaching 100% says the WAIT is over, which is true either way. What
+       is announced has to say whether anything was checked. */
+    announce(answered
+      ? `Checks complete. ${n} feature${n===1?'':'s'} identified. Review before publishing.`
+      : `This scan could not be completed \u2014 ${typeof liveFailure==='function'?liveFailure():'the scan did not finish'}. Review before publishing.`);
     /* I16: hold long enough for "Checks complete" to be spoken before the screen
        changes. ROUND 8 REMOVES THE `reduced?0:` (a11y N4). The comment on this line
        said the hold exists so the announcement is spoken before the navigation --
@@ -8745,6 +8851,30 @@ function runProcessing(forceReduced){
     wrap.classList.add('captured');
     procRun={extend(){}};
     paint(0);
+    if(isLive){
+      /* TICK-490, and the defect this branch carried. It ran the four ticks on the fixed
+         cadence and called finish() at 5.5s whatever the server was doing, so under
+         Reduce Motion -- the setting a screen-reader user is likeliest to have on --
+         "Checks complete" was ANNOUNCED, all four rows were marked done and aria-valuenow
+         was written as 100 while the request was still out, for as much as another 17
+         seconds. Announced state has to match shown state and both have to match what
+         happened; here all three disagreed.
+         The reduced-motion contract is that animation is replaced by its END STATE, not
+         shortened. A wait that is genuinely still running has no end state yet, so there
+         is nothing to replace it with, and the only honest thing to show is that it is
+         still running. The bar is repainted from the same measured estimate the motion
+         path uses, but as discrete steps rather than a sweep -- transitions are 0s under
+         .rm, so it jumps -- and it is capped at 96% by held() exactly as the ring is.
+         Nothing is ticked and nothing is announced until the answer is actually in. */
+      const poll=()=>{
+        if(!procActive() || fired) return;
+        if(!held()){ finish(); return; }
+        paint(Math.max(0, Math.min(.96, (performance.now()-t0-PROC_SETTLE)/ringSpan)));
+        after(250,poll);
+      };
+      after(PROC_SETTLE,poll);
+      return;
+    }
     const tick = k => function(){
       if(!procActive() || fired) return;
       const n = 4;
@@ -8760,18 +8890,27 @@ function runProcessing(forceReduced){
 
   /* schedule: 0-1.0 s settle, then the ring runs fBase->1 over tBase->tEnd;
      an extension (gate2 flipping mid-run) re-bases so the arc never rewinds */
-  let fBase=0, tBase=t0+PROC_SETTLE, tEnd=tBase+ringDur();
+  let fBase=0, tBase=t0+PROC_SETTLE, tEnd=tBase+ringSpan;
   const progress=now=>Math.max(0,Math.min(1, fBase+(1-fBase)*((now-tBase)/Math.max(1,tEnd-tBase))));
   procRun={ extend(){
     const now=performance.now();
     fBase=progress(now); tBase=Math.max(now,t0+PROC_SETTLE);
-    tEnd=Math.max(now+400, t0+PROC_SETTLE+ringDur());
+    tEnd=Math.max(now+400, t0+PROC_SETTLE+ringSpan);
   }};
+  /* TICK-490: the estimate paces the wait, it never extends it. The moment the request
+     settles the arc closes over LIVE_CLOSE_MS from wherever it had got to, so the 12.5s
+     scan in the measurements finishes at 12.5s instead of stalling until 19s -- which is
+     the other way a fixed duration in front of a variable wait goes wrong, and the reason
+     a longer constant is not a fix. Never before the settle beat is over, so a request
+     that answers almost instantly still gets the 1.0s the photograph needs to land. */
+  let closing=false;
+  function closeNow(now){ fBase=progress(now); tBase=now; tEnd=now+LIVE_CLOSE_MS; closing=true; }
 
   paint(0);
   requestAnimationFrame(()=>{ wrap.classList.add('captured'); procLog(t0,'image settles'); });
   function step(now){
     if(!procActive()||fired) return;
+    if(isLive && !closing && !held() && now>=t0+PROC_SETTLE) closeNow(now);
     const raw=progress(now);
     const f=held()?Math.min(raw,.96):raw;
     paint(f); surface(f);
@@ -8788,7 +8927,7 @@ function runProcessing(forceReduced){
     if(left>0){ after(left,watchdog); return; }
     finish();
   }
-  after(PROC_SETTLE+ringDur()+1600,watchdog);
+  after(PROC_SETTLE+ringSpan+1600,watchdog);
 }
 
 /* Review chips.
