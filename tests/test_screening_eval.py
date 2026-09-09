@@ -219,21 +219,28 @@ def test_score_joins_counts_per_criterion_and_skips_unlabeled():
     assert per_criterion["ramp_or_bevel"] == {
         "correct": 2, "wrong": 0, "abstained": 0, "not_visible": 0,
         "failed": 0, "rejected": 0, "unlabeled": 0,
+        # one present label and one absent label underneath the two committed
+        # rows, which is what the majority-class baseline is computed from
+        "committed_present": 1, "committed_absent": 1,
     }
     assert per_criterion["handrails"] == {
         "correct": 0, "wrong": 1, "abstained": 0, "not_visible": 0,
         "failed": 0, "rejected": 0, "unlabeled": 1,
+        "committed_present": 1, "committed_absent": 0,
     }
     # This one abstained by saying not_visible ...
     assert per_criterion["accessible_door_hardware"] == {
         "correct": 0, "wrong": 0, "abstained": 1, "not_visible": 1,
         "failed": 0, "rejected": 0, "unlabeled": 1,
+        # an abstention is not a committed row, so it adds to neither
+        "committed_present": 0, "committed_absent": 0,
     }
     # ... and this one by returning no verdict at all. Both abstain; only the
     # first counts toward the not-visible rate.
     assert per_criterion["accessibility_signage"] == {
         "correct": 0, "wrong": 0, "abstained": 1, "not_visible": 0,
         "failed": 0, "rejected": 0, "unlabeled": 1,
+        "committed_present": 0, "committed_absent": 0,
     }
     assert len(joins) == 5
     assert all(join["entrance_id"] != DEV_C for join in joins)
@@ -524,7 +531,9 @@ def test_report_json_values(tmp_path):
     assert signage == {
         "correct": 0, "wrong": 0, "abstained": 0, "not_visible": 0,
         "failed": 0, "rejected": 0, "unlabeled": 2,
-        "accuracy_of_committed": None, "abstention_rate": None,
+        "committed_present": 0, "committed_absent": 0,
+        "accuracy_of_committed": None, "majority_class_baseline": None,
+        "abstention_rate": None,
         "not_visible_rate": None, "failure_rate": None, "rejection_rate": None,
     }
 
@@ -587,8 +596,8 @@ def test_report_markdown_carries_the_numbers(tmp_path):
     assert "- model: fake-screening-model" in text
     assert "- images: 3" in text
     assert "- spend estimate: $0.15" in text
-    assert "| ramp_or_bevel | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 1.000 |" in text
-    assert "| handrails | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0.500 |" in text
+    assert "| ramp_or_bevel | 2 | 0 | 0 | 0 | 0 | 0 | 0 | 1.000 | 0.500 | 1/1 |" in text
+    assert "| handrails | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 0.500 | 1.000 | 0/2 |" in text
     assert "- not visible rate: 0.200" in text
     assert "0.750 (3 correct / 4 committed)" in text
     for dimension in CONDITION_KEYS:
@@ -598,6 +607,43 @@ def test_report_markdown_carries_the_numbers(tmp_path):
     assert f"| {DEV_A} | 0.167 |" in text
     assert "| 2.000 | 4.000 | 16.000 | 16.000 | 1 of 3 |" in text
     assert SEALED_ID not in text
+
+
+def test_every_accuracy_is_reported_beside_its_majority_class_baseline(tmp_path):
+    """TICK-398: an accuracy figure is unreadable without the constant answer.
+
+    handrails is the case the ticket was filed over, in miniature: 50%
+    accuracy where always answering "absent" would have scored 100%. The
+    percentage alone reads as a coin toss; against the baseline it is a
+    criterion the engine is worse than useless on. The report must carry both
+    numbers on the same row, and the label balance they were computed from.
+    """
+    result, out_dir = _run_report(tmp_path)
+
+    ramp = result["criteria"]["ramp_or_bevel"]
+    assert ramp["committed_present"] == 1 and ramp["committed_absent"] == 1
+    assert ramp["accuracy_of_committed"] == 1.0
+    assert ramp["majority_class_baseline"] == 0.5
+
+    hand = result["criteria"]["handrails"]
+    assert hand["committed_present"] == 0 and hand["committed_absent"] == 2
+    assert hand["accuracy_of_committed"] == 0.5
+    assert hand["majority_class_baseline"] == 1.0
+
+    # An abstained-only criterion has no committed rows, so it has no baseline
+    # either - never a 0.0 that would read as a floor it beat.
+    hardware = result["criteria"]["accessible_door_hardware"]
+    assert hardware["majority_class_baseline"] is None
+
+    overall = result["overall"]
+    assert overall["committed_present"] == 1 and overall["committed_absent"] == 3
+    assert overall["majority_class_baseline"] == pytest.approx(3 / 4)
+
+    text = (out_dir / "screening_eval.md").read_text(encoding="utf-8")
+    assert "majority-class baseline" in text
+    assert "committed labels (present/absent)" in text
+    # and the aggregate says in the report itself not to be quoted alone
+    assert "should not be quoted on" in text
 
 
 def _without_runtime(text):
@@ -1723,7 +1769,9 @@ def test_tick_399_a_partially_recovered_reply_loses_only_the_refused_field(
     assert result["criteria"]["handrails"] == {
         "correct": 0, "wrong": 0, "abstained": 0, "not_visible": 0,
         "failed": 1, "rejected": 1, "unlabeled": 0,
-        "accuracy_of_committed": None, "abstention_rate": 0.0,
+        "committed_present": 0, "committed_absent": 0,
+        "accuracy_of_committed": None, "majority_class_baseline": None,
+        "abstention_rate": 0.0,
         "not_visible_rate": 0.0, "failure_rate": 1.0, "rejection_rate": 1.0,
     }
     stats = result["rejected_responses"]
