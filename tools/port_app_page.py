@@ -207,10 +207,12 @@ OPS: list[Op] = [
         kind="replace_region",
         anchor="function startScan(){",
         # TICK-490 rewrote the paragraph this used to point at, which is exactly the
-        # failure this file's docstring warns about. The anchor is now the one line of
-        # it that is a heading rather than a description, so re-describing the beats
-        # below it cannot break the build again.
-        until="/* ---- processing.\n",
+        # failure this file's docstring warns about. Round 14 then rewrote the heading
+        # line itself, from "processing." to "processing: the ring draws itself...", so
+        # the sentence is gone too. What survives every rewrite is the section rule and
+        # the word it names, and there is exactly one of it in the design source: the
+        # region now ends at the marker rather than at any wording after it.
+        until="/* ---- processing",
         fragment="scan-entry.js",
     ),
     Op(
@@ -461,11 +463,207 @@ OPS: list[Op] = [
         ),
     ),
     Op(
+        name="you_here_is_a_real_fix",
+        why=(
+            "Round 15 gave the map a 'where you are' mark and drew it at LOC, the "
+            "constant at 2nd & Colorado, so the prototype shows the mark always and "
+            "announces 'Your location, 2nd & Colorado, is marked' to a screen reader. "
+            "That is the locate button's old lie in a second place -- the one this "
+            "repository already refused once (locate_real_fix, and the two "
+            "'Centered on you' forms in WIRING_FORBIDDEN) -- and it would have been "
+            "the round's quietest regression, because nothing about it fails: the "
+            "design ships the element, the wiring adopts it, and whichever of the two "
+            "runs last wins. Round 15's drawing is kept exactly; its position and its "
+            "visibility come from placeYouHere(), which only ever draws a real fix"
+        ),
+        kind="replace",
+        anchor=(
+            "function renderYouHere(W,H){\n"
+            "  const el = document.getElementById('you-here'); if(!el) return;\n"
+            "  if(!el.firstChild) el.innerHTML = youHereSVG();\n"
+            "  const xy = proj(LOC.lat, LOC.lng, W, H, MAP_PAD);\n"
+            "  const on = xy[0] >= -12 && xy[0] <= W+12 && xy[1] >= -12 && xy[1] <= H+12;\n"
+            "  el.hidden = !on;\n"
+            "  if(!on) return;\n"
+            "  el.style.left = xy[0]+'px';\n"
+            "  el.style.top  = xy[1]+'px';\n"
+            "  /* 7.7: the mark's state as text, on the group a screen reader actually lands on. */\n"
+            "  pinsEl.setAttribute('aria-label',\n"
+            "    'Entrance pins on the map. Your location, ' + LOC_NAME + ', is marked'\n"
+            "    + (on ? ' on the map.' : ' outside the current view.'));\n"
+            "}\n"
+        ),
+        fragment="you-here.js",
+    ),
+    Op(
+        name="loc_toggle_real",
+        why=(
+            "TICK-488, the locate button's defect on the Settings switch. #loc-toggle "
+            "ships as `class=\"toggle on\" aria-checked=\"true\"` and its handler flipped "
+            "it on tap and toasted 'Location on while using' -- so the app claimed a "
+            "permission, visually and to a screen reader, that nothing had asked for. "
+            "The switch is a claim about a permission, so its state is now a function "
+            "of the permission: paintLocToggle() in locate.js paints it from what the "
+            "browser actually said, repaints it away from the markup's opening claim as "
+            "soon as the page runs, and tapping it asks through the shared askGeo() "
+            "instead of asserting. Dropping the design source's listener here is what "
+            "stops two handlers writing the same switch"
+        ),
+        kind="replace",
+        anchor=(
+            "const loct=document.getElementById('loc-toggle');\n"
+            "loct.addEventListener('click',()=>{\n"
+            "  const on=!loct.classList.contains('on');\n"
+            "  loct.classList.toggle('on',on); loct.setAttribute('aria-checked',on);\n"
+            "  toast(on?'Location on while using':'No problem \\u2014 search the map instead');\n"
+            "});\n"
+        ),
+        replacement=(
+            "/* The Location switch is painted and handled by paintLocToggle() and the\n"
+            "   listener beside it in tools/app_wiring/locate.js, from the permission the\n"
+            "   browser actually granted. The design source's handler flipped it on tap and\n"
+            "   said location was on without asking, which is TICK-488 on this element. */\n"
+        ),
+    ),
+    Op(
+        name="onboarding_location_real",
+        why=(
+            "TICK-488. Onboarding's 'Allow location' flipped #loc-toggle on, set "
+            "aria-checked='true' and advanced, without ever calling "
+            "navigator.geolocation: nothing asked, no permission granted, and the "
+            "interface then told a new user -- visually and to a screen reader -- that "
+            "location was allowed. It is #487's defect one step earlier and about a "
+            "permission rather than a place. The step now asks through the SHARED "
+            "askGeo() in locate.js, so the eight outcomes are branched on in one place "
+            "and only the wording differs, and the switch is never written by the tap. "
+            "Onboarding is skippable, so no answer blocks the step: each says what will "
+            "be different without a location and names the way onward, and a denial is "
+            "accepted rather than asked again. Wiring rather than design for the same "
+            "reason as locate: the false two-liner is still in the prototype the design "
+            "source is refreshed from, so as an op a refresh either carries this or "
+            "fails the port loudly"
+        ),
+        kind="replace_region",
+        anchor="document.getElementById('ob-allow-loc').addEventListener('click',()=>{\n",
+        until=(
+            "document.getElementById('ob-needs-back')"
+            ".addEventListener('click',()=>showScreen('ob-location'));"
+        ),
+        fragment="onboarding-location.js",
+    ),
+    Op(
         name="map_data",
         why="GET /map/data merged into the embedded pins, so the map shows published scans",
         kind="insert_before",
         anchor="/* ===================== boot ===================== */",
         fragment="map-data.js",
+    ),
+    Op(
+        name="card_photostrip_from_server",
+        why=(
+            "TICK-494: the card's photo strip reads PHOTOS, the design source's embedded "
+            "set, which only ever covers the twelve demo doors. A place the server marks "
+            "scanned on-site therefore showed no strip and no way into its own evidence, "
+            "which is what the owner reported. p.photos is that pin's published scan, "
+            "named by /map/data and streamed from /scan/photo/"
+        ),
+        kind="insert_before",
+        anchor=(
+            "    } else if(PHOTOS[p.id]){\n"
+            "      const imgs = PHOTOS[p.id].map("
+        ),
+        replacement=(
+            "    } else if(p.photos && p.photos.length){\n"
+            "      /* The scan's own photographs, in upload order. The count is this\n"
+            "         scan's, not the place's: p.views is how many SCANS a place has\n"
+            "         had, and p.photos is one scan's frames, so 'n of views' would be\n"
+            "         two different things in one sentence. */\n"
+            "      const imgs = p.photos.map((u,i)=>`<img src=\"${u}\" alt=\"Entrance "
+            "photo ${i+1} of ${esc(p.name)}\">`).join('');\n"
+            "      photoStrip = `<button class=\"photostrip\" data-openrcpt "
+            "aria-label=\"Scan photos \\u2014 open the evidence receipt\">\n"
+            "        ${imgs}\n"
+            "        <span class=\"ps-tag\">${iconSVG('camera',11,'#fff')} "
+            "${p.photos.length} photo${p.photos.length>1?'s':''} from this scan "
+            "\\u00b7 tap for the receipt</span>\n"
+            "      </button>`;\n"
+        ),
+    ),
+    Op(
+        name="receipt_photos_from_server",
+        why=(
+            "TICK-494: the same gap on the surface that exists to show the evidence. A "
+            "published scan's photographs are drawn here, in the order the frames were "
+            "uploaded -- the order blur_regions and an evidence box's `frame` index "
+            "against, so a reordering here would point a box at the wrong photograph"
+        ),
+        kind="insert_before",
+        anchor=(
+            "  } else if(PHOTOS[p.id]){\n"
+            "    photos=`<div class=\"rcpt-photos\">${PHOTOS[p.id].map("
+        ),
+        replacement=(
+            "  } else if(p.photos && p.photos.length){\n"
+            "    photos=`<div class=\"rcpt-photos\">${p.photos.map((u,i)=>shot("
+            "`<img src=\"${u}\" alt=\"Entrance photo ${i+1} of ${esc(p.name)}\">`,i))"
+            ".join('')}</div>`;\n"
+        ),
+    ),
+    Op(
+        name="receipt_says_when_there_is_no_photograph",
+        why=(
+            "TICK-494: a scanned pin with no stored photograph is not an edge case -- the "
+            "curated on-site publication publishes verdicts and dates and no bytes at all "
+            "(frontdoor.scan_publish.build_records), so most scanned pins are in it. The "
+            "receipt has to say that in words. It must never read as 'this place was not "
+            "scanned', because it was, and the checks below it come from that visit. Kept "
+            "OUT of `photos` on purpose: the evidence-box chips are gated on `photos` "
+            "being a real photograph (TICK-467), and a note is not something a box can be "
+            "drawn on"
+        ),
+        kind="insert_before",
+        anchor=(
+            "  /* Chips on the receipt, beside the photographs they point into."
+        ),
+        replacement=(
+            "  /* Scanned, but nothing to show: say so, and say what the checks below\n"
+            "     still are. A silent empty space under the word 'evidence' invites the\n"
+            "     one reading that is false -- that nobody went. */\n"
+            "  const noPhoto = (!photos && p.tier!=='est')\n"
+            "    ? `<div class=\"nophoto\">${iconSVG('camera',22,'var(--blue-ink)')} "
+            "No photograph was published with this scan \\u2014 the checks and dates "
+            "below came from an on-site visit.</div>`\n"
+            "    : '';\n"
+        ),
+    ),
+    Op(
+        name="receipt_renders_the_no_photograph_note",
+        why="the note above has to reach the receipt it was written for",
+        kind="replace",
+        anchor="    ${photos}\n    ${evChips}\n",
+        replacement="    ${photos}${noPhoto}\n    ${evChips}\n",
+    ),
+    Op(
+        name="receipt_does_not_count_photographs_it_does_not_have",
+        why=(
+            "TICK-494: this row counts p.views -- on a server pin the number of SCANS -- "
+            "and calls them photographs. On a scan that published no bytes it printed "
+            "'1 photo of this entrance so far' directly beneath the note saying no "
+            "photograph was published: the receipt contradicting itself on the one "
+            "surface that exists to be checked. The count is unchanged; only the noun "
+            "moves to the thing actually being counted"
+        ),
+        kind="replace",
+        anchor=(
+            "      <span>${nViews} neighbor${nViews>1?'s':''}<span class=\"rc-sub\">"
+            "${nViews} photo${nViews>1?'s':''} of this entrance so far</span></span>\n"
+        ),
+        replacement=(
+            "      <span>${nViews} neighbor${nViews>1?'s':''}<span class=\"rc-sub\">"
+            "${photos ? `${nViews} photo${nViews>1?'s':''} of this entrance so far` "
+            ": `${nViews} on-site visit${nViews>1?'s':''} recorded here`}"
+            "</span></span>\n"
+        ),
     ),
     Op(
         name="boot_live_map",
@@ -574,11 +772,22 @@ WIRING_REQUIRED: list[str] = [
     #   and the cover-fit inverse, without which a box lands in the wrong place,
     #   which is worse than drawing none.
     "const s = Math.max(cw/nw, ch/nh);",
+    # TICK-494. The published scan's photographs, on the card and on the
+    # receipt, plus the sentence for a scanned place that has none. Without
+    # these the receipt for the only places with real evidence behind them is
+    # empty, which is what the owner reported.
+    "p.photos = Array.isArray(pin.photos) && pin.photos.length",
+    "} else if(p.photos && p.photos.length){",
+    "photos=`<div class=\"rcpt-photos\">${p.photos.map(",
+    "${p.photos.length} photo${p.photos.length>1?'s':''} from this scan",
+    "No photograph was published with this scan \\u2014 the checks and dates "
+    "below came from an on-site visit.",
+    "    ${photos}${noPhoto}\n    ${evChips}",
+    "${nViews} on-site visit${nViews>1?'s':''} recorded here",
     # The locate control. The design source's handler never called geolocation at
     # all, so every one of these lines is the difference between a control that
     # works and one that pans to a fixed point and says it found you.
     "function locateMe(){",
-    "navigator.geolocation.getCurrentPosition(onGeoFix, onGeoFail, GEO_OPTS);",
     "geoState='denied';",
     "function placeYouHere(){",
     "function paintEmptyInvite(noPins){",
@@ -597,6 +806,43 @@ WIRING_REQUIRED: list[str] = [
     # comes back empty.
     "p.cat = (pin.category && pin.category.key) ? pin.category : null;",
     "filtFeats.clear(); filtCats.clear(); filtFresh='any'; filterApplied = personas.size>0;",
+    # Round 15's mark, drawn only where the phone says the phone is. Losing this
+    # line puts the mark back on a constant, which is the locate button's old lie
+    # in a second place.
+    "  if(!el.firstChild) el.innerHTML = youHereSVG();\n  placeYouHere();",
+    # TICK-488. Three controls ask or claim the same permission -- the map's locate
+    # button, onboarding's "Allow location" and the Settings switch -- and the eight
+    # outcomes are branched on in exactly one of them. askGeo() is that one place and
+    # the only caller of getCurrentPosition; losing it is how a second copy of the
+    # branching comes back, and a second copy is how one of them drifts into claiming
+    # an outcome it never reached.
+    "function askGeo(say){",
+    "function geoPrecheck(){",
+    "function geoFixOutcome(pos){",
+    "function geoFailOutcome(err){",
+    "function recordGeoOutcome(o){",
+    "navigator.geolocation.getCurrentPosition(",
+    # The onboarding step asks, and the switch it used to assert is painted from the
+    # answer instead of from the tap.
+    "function obAllowTap(){",
+    "if(askGeo(obLocSays)==='busy') obLocBusy(false);",
+    "function paintLocToggle(){",
+    "const on = geoPermission==='granted';",
+    "locToggle.setAttribute('aria-checked', on ? 'true' : 'false');",
+    # ...and each outcome's own wording on the step, which is not the map's wording,
+    # because on this step nothing has been shown yet and what is said is what will be
+    # different.
+    "Location is off for this site, so nothing was shared and the map will",
+    "Finding your location took too long, so nothing was shared.",
+    "Your device could not work out where it is, so nothing was shared.",
+    "This browser cannot share a location, so the map will open on the few",
+    "location. The map will open on the few blocks of downtown Austin this pilot ",
+    "Location is on — the map will center on you",
+    "Location is on — you are just outside the mapped blocks, so the map will open ",
+    # ...and the grant MOVES the frame rather than promising it. finishOnboarding()
+    # only renders, so without this line the map opens on the pilot bbox and the
+    # sentence above is staged rather than produced -- this ticket's own defect.
+    "    setZoom(false, youFix);",
 ]
 
 # ...and none of these. The design source is worked on against a deployed host and a
@@ -638,6 +884,26 @@ WIRING_FORBIDDEN: list[str] = [
     # refreshed from, and it may never reach a page a person at a door reads.
     "Centered on you \\u00b7 2nd & Colorado",
     "setZoom(false, null); toast('Centered on you",
+    # Round 15's "where you are" mark, as the design source draws it: at LOC, the
+    # constant this page sorts distances by. It is the same false statement as the
+    # two lines above, in a mark rather than a toast, and it announces itself.
+    "proj(LOC.lat, LOC.lng, W, H, MAP_PAD)",
+    "'Entrance pins on the map. Your location, ' + LOC_NAME",
+    # TICK-488. Onboarding's "Allow location" flipped the switch on, set
+    # aria-checked="true" and advanced -- without ever calling navigator.geolocation.
+    # Nothing was asked and no permission was granted, and the interface then stated
+    # that location was allowed, visually and to a screen reader, as the first thing a
+    # new user is told. It is the locate button's defect about a permission instead of
+    # a place, and it is on the path every new user walks. Both spellings of the lie
+    # are here: the two-line body, and the anonymous listener the design source hangs
+    # it from, so a refresh that rewrites one still fails on the other.
+    "lt.classList.add('on'); lt.setAttribute('aria-checked','true');",
+    "document.getElementById('ob-allow-loc').addEventListener('click',()=>{",
+    # ...and the same defect on the Settings switch, which flipped on tap and said so.
+    "toast(on?'Location on while using'",
+    "loct.classList.toggle('on',on); loct.setAttribute('aria-checked',on);",
+    "No problem \\u2014 search the map instead",
+    "No problem — search the map instead",
 ]
 
 

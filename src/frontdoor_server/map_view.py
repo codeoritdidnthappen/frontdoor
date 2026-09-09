@@ -46,6 +46,12 @@ state (the page's Scanned tier), raise a criterion observation, or move
 freshness forward — nothing else. A scanned pin also carries a
 "Scanned on-site — <date>" provenance row.
 
+Scan photographs (TICK-494, #494): a scanned pin also names the stored,
+privacy-processed photographs of the scan that supplied its last_scanned, as
+an optional "photos" array of image keys in upload order. Keys, not bytes —
+each is fetched from GET /scan/photo/<key>. A scan that stored none (the
+curated publication publishes verdicts and dates only) carries no such key.
+
 Community corrections (TICK-387, #387): the correction store
 (FRONTDOOR_CORRECTIONS, default data/corrections.jsonl) can mark a place as
 needing a re-look, and that is the ONLY thing it can do to a pin. The rows
@@ -241,6 +247,25 @@ def _attach_scan_provenance(pins, scan_meta):
     the external lines rather than being overwritten by them. Like every
     provenance line, it only ever appends information; the pin's state was
     already computed from the merged row.
+
+    The same pass names the scan's photographs (TICK-494, #494). Until this, a
+    pin said it had been scanned on site and carried no reference to the one
+    thing that made that true, so the evidence receipt for the only places
+    with real evidence behind them had nothing to show.
+
+    References, not bytes: this endpoint serves 187 pins and inlining images
+    would be absurd, so the pin carries the stored KEYS and the page fetches
+    each from GET /scan/photo/<key> -- a route that already exists, already
+    streams exactly these objects, and whose scope and CORS posture this does
+    not touch. Every stored byte is privacy-processed by construction (faces
+    irreversibly blurred, EXIF/GPS stripped, re-encoded; scan_view), and the
+    keys are filtered through the same allowlist that route enforces, so
+    nothing here can name an unprocessed original. Omitted entirely when the
+    scan stored none, the way provenance and the record's optional keys are.
+
+    A photograph is evidence of what was seen, never a verdict. This runs
+    after the state, the label and the checklist are decided, out of a meta
+    mapping that had no part in deciding any of them.
     """
     if not scan_meta:
         return
@@ -257,6 +282,9 @@ def _attach_scan_provenance(pins, scan_meta):
         pin["provenance"] = [line] + pin.get("provenance", [])
         pin["last_scanned"] = date
         pin["scan_count"] = meta["scan_count"]
+        photos = meta.get("photos")
+        if photos:
+            pin["photos"] = list(photos)
 
 
 def _attach_relook(pins, dataset, relook):

@@ -167,106 +167,217 @@ function paintEmptyInvite(noPins){
   }
 }
 
-/* ---- the four answers --------------------------------------------------------- */
-function onGeoFix(pos){
-  geoState='ok';
-  clearGeoAlert();
-  youFix={lat:pos.coords.latitude, lng:pos.coords.longitude};
-  const km=kmApart(youFix, pilotCentre());
-  paintLocateBtn();
-  if(inPilot(youFix)){
-    youOutside=false; youAway='';
-    panMap(0);
-    setZoom(false, youFix);          /* re-renders, which draws the mark on the fix */
-    toast('Centered on you — you are marked on the map');
-  } else if(km<=GEO_NEAR_KM){
-    /* just outside: the frame moves as close to the fix as the pilot bbox allows,
-       and the toast says that rather than claiming a centre it does not have */
-    youOutside=false; youAway=awayLabel(km);
-    panMap(0);
-    setZoom(false, youFix);          /* clamped to the pilot bbox by clampCentre */
-    toast('You are just outside the mapped blocks — showing the nearest of them');
-  } else {
-    /* far out: the map does not move, because there is nothing of ours to move it to */
-    youOutside=true; youAway=awayLabel(km);
-    renderMap();
-    toast('EntryMap has not mapped your area yet');
-  }
+/* ===================== one question, asked once, for every control that asks ==========
+   Two controls in this app ask the browser where the phone is: the map's locate
+   button, and onboarding's "Allow location" (tools/app_wiring/onboarding-location.js).
+   A third, the Location switch in Settings, is the standing claim about the answer.
+
+   There are eight things the browser can say, and every one of them has to be told
+   apart from the others: not asked yet, granted inside the pilot area, granted near
+   it, granted far from it, denied, position unavailable, timed out, no geolocation
+   API at all, and a page the browser will not answer for because it is not secure.
+
+   The branching that decides which one happened lives HERE, once. Two copies of it is
+   how one copy drifts back into staging the appearance of an outcome instead of
+   producing it -- the defect this file exists to remove, found a second time on the
+   onboarding step (#488). What each control DOES with the answer is its own: a map
+   moves or does not move, an onboarding step sets a switch and carries on. Those are
+   presentation and they differ honestly. The answer itself does not differ, so it is
+   not computed twice. */
+
+/* What can be known before the browser is asked. Both are checked BEFORE
+   getCurrentPosition, because a browser answers "denied" for an insecure page, and
+   being told a permission was refused when it was never offered is the wrong thing to
+   act on. A remembered denial is checked here too: a denied permission is an answer,
+   and asking again on the next tap is not listening to it. */
+function geoPrecheck(){
+  if(!navigator.geolocation) return {kind:'no-api'};
+  if(!window.isSecureContext || location.protocol==='file:') return {kind:'insecure'};
+  if(geoState==='denied') return {kind:'denied', remembered:true};
+  return null;
 }
-/* Every way of not getting a fix ends here, and every one of them clears what the
-   LAST attempt left on the map. Without that, the mark from an earlier fix stays
-   drawn -- "You are here" over a point nothing has confirmed -- beside a control
-   that has just said we do not know where you are, and the out-of-area invite keeps
-   quoting a distance from a fix we no longer have. The re-render takes both down; a
-   filter that legitimately empties the map keeps its own invite, because
-   paintEmptyInvite still asks about the pins. */
-function geoStopped(state, short, why){
-  geoState=state;
+/* A granted fix is one answer with three shapes, because "we know where you are" and
+   "we have mapped anything near you" are different facts. */
+function geoFixOutcome(pos){
+  const fix={lat:pos.coords.latitude, lng:pos.coords.longitude};
+  const km=kmApart(fix, pilotCentre());
+  return {kind:'granted', fix:fix, km:km, away:awayLabel(km),
+          where: inPilot(fix) ? 'inside' : (km<=GEO_NEAR_KM ? 'near' : 'far')};
+}
+/* Denied, timed out and unavailable are three different answers, because a person
+   acts on each of them differently. */
+function geoFailOutcome(err){
+  const code = err && err.code;
+  if(code===1) return {kind:'denied'};        /* PERMISSION_DENIED */
+  if(code===3) return {kind:'timeout'};       /* TIMEOUT */
+  return {kind:'unavailable'};                /* POSITION_UNAVAILABLE */
+}
+
+/* Recording the answer is separate from saying it, and it happens for every caller
+   before any of them speaks. So a denial heard on the onboarding step is already the
+   map control's name and the Settings switch's state by the time the map is reached,
+   and a fix granted there is already the mark the map draws. One answer, one record. */
+function recordGeoOutcome(o){
+  if(o.kind==='granted'){
+    geoState='ok'; geoPermission='granted';
+    youFix=o.fix; youAway=o.away; youOutside = o.where==='far';
+  } else {
+    if(o.kind==='denied'){ geoState='denied'; geoPermission='denied'; }
+    else if(o.kind==='no-api' || o.kind==='insecure'){ geoState='unavailable'; geoPermission=o.kind; }
+    else { geoState='unavailable'; }   /* a timeout or an unavailable position says
+                                          nothing about the permission, so neither
+                                          does the switch */
+    youFix=null; youAway=''; youOutside=false;
+  }
   paintLocateBtn();
+  paintLocToggle();
+}
+
+/* The one place navigator.geolocation is called. `say` is handed exactly one outcome,
+   exactly once, after it has been recorded. Returns 'busy' if a request is already in
+   flight (say is not called), 'answered' if the answer was known without asking (say
+   has already run, synchronously), or 'asking' if the browser was really asked. */
+function askGeo(say){
+  if(geoState==='asking') return 'busy';       /* one request at a time */
+  const pre=geoPrecheck();
+  if(pre){ recordGeoOutcome(pre); say(pre); return 'answered'; }
+  geoState='asking'; paintLocateBtn();
+  navigator.geolocation.getCurrentPosition(
+    pos=>{ const o=geoFixOutcome(pos); recordGeoOutcome(o); say(o); },
+    err=>{ const o=geoFailOutcome(err); recordGeoOutcome(o); say(o); },
+    GEO_OPTS);
+  return 'asking';
+}
+
+/* ---- the map's words for the five answers that are not a fix ------------------ */
+const GEO_STOPPED = {
+  denied: {short:'Location is off for this site',
+    why:'Location is off for this site, so the map has not moved and shows the pilot area '
+      +'in downtown Austin. You can turn location back on for this site in your browser '
+      +'settings.'},
+  timeout: {short:'Finding your location timed out',
+    why:'Finding your location took too long, so the map has not moved. '
+      +'Tap the location button to try again.'},
+  unavailable: {short:'Your location is not available',
+    why:'Your device could not work out where it is, so the map has not moved. '
+      +'Trying again, or outdoors, often works.'},
+  'no-api': {short:'This browser cannot share a location',
+    why:'This browser cannot share a location, so the map has not moved and shows the '
+      +'pilot area in downtown Austin.'},
+  insecure: {short:'Location needs a secure connection',
+    why:'This page is not on a secure connection, so the browser will not share a '
+      +'location. The map has not moved.'}
+};
+
+/* ---- the Settings switch, which is the standing claim ------------------------
+   #loc-toggle ships as `class="toggle on" aria-checked="true"` and its handler flipped
+   it on tap and toasted "Location on while using" -- so the app said location was on,
+   visually and to a screen reader, on a first load where nothing had been asked. It is
+   the same defect as #488's, on the same element.
+
+   The switch is a claim about a permission, so its state is a function of the
+   permission and of nothing else: it reads on only where the browser has actually said
+   granted, and it is repainted from the real state as soon as this file runs, which is
+   what takes the markup's opening claim down.
+
+   Turning it off is not ours to do -- a page cannot revoke a permission the browser has
+   granted -- so the control says where that is done rather than pretending to do it. */
+var geoPermission = 'unknown';   /* unknown | prompt | granted | denied | no-api | insecure */
+const locToggle = document.getElementById('loc-toggle');
+const LOC_TOGGLE_SUB = {
+  unknown:  'While using · not asked yet',
+  prompt:   'While using · not asked yet',
+  granted:  'On for this site · while using',
+  denied:   'Off for this site · turn it on in browser settings',
+  'no-api': 'This browser cannot share a location',
+  insecure: 'Location needs a secure connection'
+};
+function paintLocToggle(){
+  if(!locToggle) return;
+  const on = geoPermission==='granted';
+  locToggle.classList.toggle('on', on);
+  locToggle.setAttribute('aria-checked', on ? 'true' : 'false');
+  const row=locToggle.closest ? locToggle.closest('.prof-row') : null;
+  const sub=row ? row.querySelector('.rowsub') : null;
+  if(sub) sub.textContent = LOC_TOGGLE_SUB[geoPermission] || LOC_TOGGLE_SUB.unknown;
+}
+function locToggleSays(o){
+  if(o.kind==='granted'){ clearGeoAlert(); toast('Location is on for this site'); return; }
+  const said=GEO_STOPPED[o.kind];
+  geoStopped(said.short, said.why);
+}
+if(locToggle){
+  paintLocToggle();
+  locToggle.addEventListener('click',()=>{
+    if(geoPermission==='granted'){
+      toast('Location is on in your browser for this site');
+      geoAlert('This site has permission to use your location. A page cannot take that '
+        +'back — you turn it off for this site in your browser settings.');
+      return;
+    }
+    if(askGeo(locToggleSays)==='asking') toast('Finding your location…');
+  });
+}
+
+/* ---- the map's half of the answer --------------------------------------------
+   Every way of not getting a fix ends in geoStopped, and it clears what the LAST
+   attempt left on the map. Without that, the mark from an earlier fix stays drawn --
+   "You are here" over a point nothing has confirmed -- beside a control that has just
+   said we do not know where you are, and the out-of-area invite keeps quoting a
+   distance from a fix we no longer have. The re-render takes both down; a filter that
+   legitimately empties the map keeps its own invite, because paintEmptyInvite still
+   asks about the pins. */
+function geoStopped(short, why){
   toast(short);
   geoAlert(why);
   youOutside=false;
   renderMap();
 }
-function sayDenied(){
-  geoStopped('denied', 'Location is off for this site',
-    'Location is off for this site, so the map has not moved and shows the pilot area '
-    +'in downtown Austin. You can turn location back on for this site in your browser '
-    +'settings.');
-}
-function onGeoFail(err){
-  const code = err && err.code;
-  if(code===1){                                   /* PERMISSION_DENIED */
-    sayDenied();
-  } else if(code===3){                            /* TIMEOUT */
-    geoStopped('unavailable', 'Finding your location timed out',
-      'Finding your location took too long, so the map has not moved. '
-      +'Tap the location button to try again.');
-  } else {                                        /* POSITION_UNAVAILABLE */
-    geoStopped('unavailable', 'Your location is not available',
-      'Your device could not work out where it is, so the map has not moved. '
-      +'Trying again, or outdoors, often works.');
+/* The rule the copy below is written against: nothing says "Centered on you" unless
+   the map is centred on a real fix. */
+function mapSaysGeo(o){
+  if(o.kind==='granted'){
+    clearGeoAlert();
+    if(o.where==='inside'){
+      panMap(0);
+      setZoom(false, youFix);        /* re-renders, which draws the mark on the fix */
+      toast('Centered on you — you are marked on the map');
+    } else if(o.where==='near'){
+      /* just outside: the frame moves as close to the fix as the pilot bbox allows,
+         and the toast says that rather than claiming a centre it does not have */
+      panMap(0);
+      setZoom(false, youFix);        /* clamped to the pilot bbox by clampCentre */
+      toast('You are just outside the mapped blocks — showing the nearest of them');
+    } else {
+      /* far out: the map does not move, because there is nothing of ours to move it to */
+      renderMap();
+      toast('EntryMap has not mapped your area yet');
+    }
+    return;
   }
+  const said=GEO_STOPPED[o.kind];
+  geoStopped(said.short, said.why);
 }
 
 function locateMe(){
-  if(geoState==='asking') return;              /* one request at a time */
   closeSheets();
-  /* the two cases where there is nothing to ask. Checked BEFORE getCurrentPosition,
-     because a browser answers "denied" for an insecure page, and being told the
-     permission was refused when it was never offered is the wrong thing to act on. */
-  if(!navigator.geolocation){
-    geoStopped('unavailable', 'This browser cannot share a location',
-      'This browser cannot share a location, so the map has not moved and shows the '
-      +'pilot area in downtown Austin.');
-    return;
-  }
-  if(!window.isSecureContext || location.protocol==='file:'){
-    geoStopped('unavailable', 'Location needs a secure connection',
-      'This page is not on a secure connection, so the browser will not share a '
-      +'location. The map has not moved.');
-    return;
-  }
-  if(geoState==='denied'){                     /* answered already; never ask twice */
-    sayDenied();
-    return;
-  }
-  geoState='asking'; paintLocateBtn();
-  toast('Finding your location…');
-  navigator.geolocation.getCurrentPosition(onGeoFix, onGeoFail, GEO_OPTS);
+  if(askGeo(mapSaysGeo)==='asking') toast('Finding your location…');
 }
 document.getElementById('locate-btn').addEventListener('click', locateMe);
 
-/* If the browser will tell us the standing permission without prompting, the control
-   is named correctly before it is ever pressed, and a user who turns location back on
-   in site settings gets a control that asks again instead of one that keeps repeating
-   the refusal. Reading this state prompts nobody and fetches no position. */
+/* If the browser will tell us the standing permission without prompting, every control
+   is correct before any of them is pressed -- the map button is named for what it does
+   now, and the Settings switch reads on only if the permission really is granted. A
+   user who turns location back on in site settings gets controls that ask again instead
+   of ones that keep repeating the refusal. Reading this state prompts nobody and
+   fetches no position. */
 if(navigator.permissions && navigator.permissions.query){
   navigator.permissions.query({name:'geolocation'}).then(st=>{
     const sync=()=>{
-      if(st.state==='denied'){ geoState='denied'; youOutside=false; youFix=null; }
-      else if(geoState==='denied'){ geoState='idle'; }
-      paintLocateBtn(); renderMap();
+      if(st.state==='denied'){ geoState='denied'; geoPermission='denied'; youOutside=false; youFix=null; }
+      else if(st.state==='granted'){ geoPermission='granted'; if(geoState==='denied') geoState='idle'; }
+      else { geoPermission='prompt'; if(geoState==='denied') geoState='idle'; }
+      paintLocateBtn(); paintLocToggle(); renderMap();
     };
     sync();
     st.onchange=sync;
