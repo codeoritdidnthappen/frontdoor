@@ -7,3 +7,15 @@
 .entrance-field{width:100%;text-align:left}
 .entrance-hint{font-size:var(--fs-meta);color:var(--sub);font-weight:var(--fw-strong);margin-top:var(--sp-2);line-height:var(--lh-meta);letter-spacing:var(--ls-flat)}
 .sim-tag{display:inline-flex;align-items:center;background:var(--ui-lavender-1,#EEF1F6);color:var(--sub);border:1.5px solid var(--line,#D5D9E6);border-radius:999px;padding:var(--sp-1) var(--sp-4);font-size:var(--fs-meta);font-weight:var(--fw-strong);letter-spacing:var(--ls-caps);text-transform:uppercase;margin-top:var(--sp-1)}
+
+/* ---- the "you are here" mark. Drawn only where a real geolocation fix is, and only
+   while that point is inside the frame (tools/app_wiring/locate.js). It is a mark and
+   not a pin: no tail, no tier, no tap target, and it sits below the pin the user has
+   open rather than over it. In the design's own tokens. ---- */
+#you-here{
+  position:absolute;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;
+  background:var(--brand-blue-ink,#1C4B7E);
+  box-shadow:0 0 0 3px var(--float-white,#fff), 0 0 0 4.5px rgba(28,75,126,.28), 0 2px 6px rgba(16,24,40,.32);
+  z-index:55;pointer-events:none;
+}
+#you-here[hidden]{display:none}

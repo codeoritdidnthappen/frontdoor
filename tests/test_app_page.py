@@ -860,3 +860,120 @@ def test_the_processing_screen_does_not_promise_eight_seconds_for_a_live_scan():
         "nothing refreshes the caption when the request lands, so the screen keeps "
         "saying it is waiting after it has stopped"
     )
+
+
+# --- the locate control asks the phone, and says what it was told ------------
+#
+# The design source's handler never called navigator.geolocation. It reset the pan,
+# returned the frame to the pilot bbox, and raised a toast saying the map was now
+# centred on you, naming a downtown Austin intersection -- to whoever pressed it,
+# wherever they were. A control that does nothing and a false statement in one line.
+#
+# There is no JavaScript runner in this suite, so these read the SERVED page: the
+# handler lives in a wiring fragment (tools/app_wiring/locate.js) and editing only the
+# design source would change nothing a phone ever runs.
+
+
+def locate_handler(html):
+    """The body of locateMe(), which is where the asking is decided."""
+    body = html.split("function locateMe(){", 1)[1]
+    return body[: body.index("\n}")]
+
+
+def test_the_locate_control_asks_the_browser_where_the_phone_is():
+    html = page().get_data(as_text=True)
+    assert "function locateMe(){" in html
+    assert "navigator.geolocation.getCurrentPosition(onGeoFix, onGeoFail, GEO_OPTS);" in html
+    assert "document.getElementById('locate-btn').addEventListener('click', locateMe);" in html
+    # ...and the fixed-point claim is gone from the page, in either spelling
+    assert "Centered on you \\u00b7 2nd & Colorado" not in html
+    assert "Centered on you · 2nd & Colorado" not in html
+
+
+def test_centred_on_you_is_said_only_where_the_map_is_centred_on_a_real_fix():
+    """The one toast that claims a centre sits inside the one branch that has one."""
+    html = page().get_data(as_text=True)
+    claims = [i for i in range(len(html)) if html.startswith("toast('Centered on you", i)]
+    assert len(claims) == 1, "more than one place claims the map is centred on you"
+    branch = html.rindex("if(inPilot(youFix)){", 0, claims[0])
+    assert "else" not in html[branch:claims[0]], (
+        "the 'Centered on you' toast is not inside the in-the-pilot-area branch"
+    )
+
+
+def test_a_denied_permission_is_an_answer_and_is_not_asked_again():
+    handler = locate_handler(page().get_data(as_text=True))
+    denied = handler.index("if(geoState==='denied')")
+    asks = handler.index("navigator.geolocation.getCurrentPosition")
+    assert denied < asks, "a denied permission falls through and re-prompts on every tap"
+    assert "return;" in handler[denied:asks]
+
+
+def test_denied_unavailable_and_timed_out_are_three_different_answers():
+    html = page().get_data(as_text=True)
+    said = [
+        "Location is off for this site, so the map has not moved",
+        "Finding your location took too long, so the map has not moved.",
+        "Your device could not work out where it is, so the map has not moved.",
+        "This page is not on a secure connection, so the browser will not share",
+        "This browser cannot share a location, so the map has not moved",
+    ]
+    for sentence in said:
+        assert sentence in html, f"no wording for one of the outcomes: {sentence!r}"
+    assert len(set(said)) == len(said)
+
+
+def test_a_failed_attempt_is_announced_as_an_error_not_only_toasted():
+    html = page().get_data(as_text=True)
+    assert "el.setAttribute('role','alert');" in html
+    stopped = html.split("function geoStopped(state, short, why){", 1)[1]
+    stopped = stopped[: stopped.index("\n}")]
+    assert "toast(short);" in stopped and "geoAlert(why);" in stopped, (
+        "a failed attempt does not reach the alert region"
+    )
+    # ...and every failing branch goes through it rather than only raising a toast
+    fail = html.split("function onGeoFail(err){", 1)[1]
+    fail = fail[: fail.index("\n}")]
+    assert fail.count("geoStopped(") + fail.count("sayDenied()") == 3
+    assert "toast(" not in fail, "a failure branch toasts without announcing"
+
+
+def test_a_failure_clears_what_the_last_fix_left_on_the_map():
+    """The mark and the out-of-area invite outlive their fix unless this runs."""
+    html = page().get_data(as_text=True)
+    stopped = html.split("function geoStopped(state, short, why){", 1)[1]
+    stopped = stopped[: stopped.index("\n}")]
+    assert "youOutside=false;" in stopped
+    assert "renderMap();" in stopped
+
+
+def test_a_fix_outside_the_pilot_area_says_what_we_have_mapped_not_what_is_there():
+    """The invite may say we have nothing here. It may never judge the places here."""
+    html = page().get_data(as_text=True)
+    assert "EntryMap has not mapped your area yet" in html
+    invite = html.split("function paintEmptyInvite(noPins){", 1)[1]
+    invite = invite[: invite.index("\n}")]
+    assert "it says nothing about the places around you" in invite
+    for verdict in ("not accessible", "no accessible", "inaccessible", "fails", "unsuitable"):
+        assert verdict not in invite.lower(), f"the invite passes a verdict: {verdict!r}"
+
+
+def test_the_you_are_here_mark_is_drawn_only_where_a_real_fix_is():
+    html = page().get_data(as_text=True)
+    assert "function placeYouHere(){" in html
+    mark = html.split("function placeYouHere(){", 1)[1]
+    mark = mark[: mark.index("\n}")]
+    assert "geoState!=='ok'" in mark, "the mark does not check that a fix was granted"
+    assert "el.hidden = !on;" in mark, "the mark is not hidden when the fix is off-frame"
+    # every re-render re-places it, so a zoom or a pan cannot leave it on a stale point
+    assert "  paintEmptyInvite(shown.length===0);\n  placeYouHere();" in html
+    assert "#you-here{" in html
+
+
+def test_the_locate_control_is_named_for_what_it_does_now():
+    html = page().get_data(as_text=True)
+    names = html.split("const LOCATE_NAME = {", 1)[1]
+    names = names[: names.index("};")]
+    assert "denied:" in names and "unavailable:" in names
+    assert "Why your location is not shown" in names
+    assert "locateBtn.setAttribute('aria-label'," in html
