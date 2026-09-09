@@ -986,16 +986,22 @@ def test_the_processing_screen_does_not_promise_eight_seconds_for_a_live_scan():
 # design source would change nothing a phone ever runs.
 
 
-def locate_handler(html):
-    """The body of locateMe(), which is where the asking is decided."""
-    body = html.split("function locateMe(){", 1)[1]
+def body_of(html, opener):
+    """The body of a top-level function, up to its closing brace in column zero."""
+    body = html.split(opener, 1)[1]
     return body[: body.index("\n}")]
+
+
+def locate_handler(html):
+    """The body of askGeo(), which is where the asking is decided -- for every caller."""
+    return body_of(html, "function askGeo(say){")
 
 
 def test_the_locate_control_asks_the_browser_where_the_phone_is():
     html = page().get_data(as_text=True)
     assert "function locateMe(){" in html
-    assert "navigator.geolocation.getCurrentPosition(onGeoFix, onGeoFail, GEO_OPTS);" in html
+    assert "askGeo(mapSaysGeo)" in html
+    assert "navigator.geolocation.getCurrentPosition(" in locate_handler(html)
     assert "document.getElementById('locate-btn').addEventListener('click', locateMe);" in html
     # ...and the fixed-point claim is gone from the page, in either spelling
     assert "Centered on you \\u00b7 2nd & Colorado" not in html
@@ -1007,18 +1013,38 @@ def test_centred_on_you_is_said_only_where_the_map_is_centred_on_a_real_fix():
     html = page().get_data(as_text=True)
     claims = [i for i in range(len(html)) if html.startswith("toast('Centered on you", i)]
     assert len(claims) == 1, "more than one place claims the map is centred on you"
-    branch = html.rindex("if(inPilot(youFix)){", 0, claims[0])
+    branch = html.rindex("if(o.where==='inside'){", 0, claims[0])
     assert "else" not in html[branch:claims[0]], (
         "the 'Centered on you' toast is not inside the in-the-pilot-area branch"
     )
 
 
 def test_a_denied_permission_is_an_answer_and_is_not_asked_again():
-    handler = locate_handler(page().get_data(as_text=True))
-    denied = handler.index("if(geoState==='denied')")
+    """...for every control that asks, because they all ask through askGeo."""
+    html = page().get_data(as_text=True)
+    # the remembered denial is decided in the precheck, which askGeo runs before it
+    # ever reaches getCurrentPosition
+    pre = body_of(html, "function geoPrecheck(){")
+    assert "if(geoState==='denied') return {kind:'denied', remembered:true};" in pre
+    assert "getCurrentPosition" not in pre
+    handler = locate_handler(html)
+    checks = handler.index("const pre=geoPrecheck();")
     asks = handler.index("navigator.geolocation.getCurrentPosition")
-    assert denied < asks, "a denied permission falls through and re-prompts on every tap"
-    assert "return;" in handler[denied:asks]
+    assert checks < asks, "a denied permission falls through and re-prompts on every tap"
+    assert "return 'answered';" in handler[checks:asks]
+    # ...and no control that asks for the permission asks around the precheck: the
+    # map button, the onboarding step and the Settings switch all go through askGeo
+    for opener in (
+        "function locateMe(){",
+        "function obAllowTap(){",
+        "function locToggleSays(o){",
+        "function mapSaysGeo(o){",
+        "function obLocSays(o){",
+    ):
+        assert "getCurrentPosition" not in body_of(html, opener), (
+            f"{opener!r} asks the browser itself instead of through askGeo"
+        )
+    assert handler.count("navigator.geolocation.getCurrentPosition") == 1
 
 
 def test_denied_unavailable_and_timed_out_are_three_different_answers():
@@ -1038,23 +1064,28 @@ def test_denied_unavailable_and_timed_out_are_three_different_answers():
 def test_a_failed_attempt_is_announced_as_an_error_not_only_toasted():
     html = page().get_data(as_text=True)
     assert "el.setAttribute('role','alert');" in html
-    stopped = html.split("function geoStopped(state, short, why){", 1)[1]
-    stopped = stopped[: stopped.index("\n}")]
+    stopped = body_of(html, "function geoStopped(short, why){")
     assert "toast(short);" in stopped and "geoAlert(why);" in stopped, (
         "a failed attempt does not reach the alert region"
     )
-    # ...and every failing branch goes through it rather than only raising a toast
-    fail = html.split("function onGeoFail(err){", 1)[1]
-    fail = fail[: fail.index("\n}")]
-    assert fail.count("geoStopped(") + fail.count("sayDenied()") == 3
-    assert "toast(" not in fail, "a failure branch toasts without announcing"
+    # ...and every failing branch goes through it rather than only raising a toast:
+    # the map's presentation sends all five non-fix outcomes down the one path
+    said = html.split("function mapSaysGeo(o){", 1)[1]
+    said = said[: said.index("\n}")]
+    tail = said[said.index("return;") :]
+    assert "geoStopped(said.short, said.why);" in tail
+    assert "toast(" not in tail, "a failure branch toasts without announcing"
+    # every non-fix outcome has an entry in the table that path reads
+    table = html.split("const GEO_STOPPED = {", 1)[1]
+    table = table[: table.index("\n};")]
+    for kind in ("denied:", "timeout:", "unavailable:", "'no-api':", "insecure:"):
+        assert kind in table, f"the map has no wording for {kind!r}"
 
 
 def test_a_failure_clears_what_the_last_fix_left_on_the_map():
     """The mark and the out-of-area invite outlive their fix unless this runs."""
     html = page().get_data(as_text=True)
-    stopped = html.split("function geoStopped(state, short, why){", 1)[1]
-    stopped = stopped[: stopped.index("\n}")]
+    stopped = body_of(html, "function geoStopped(short, why){")
     assert "youOutside=false;" in stopped
     assert "renderMap();" in stopped
 
@@ -1166,3 +1197,135 @@ def test_the_processing_screen_names_no_finish_time_it_cannot_know():
         "the reduced-motion branch finishes on the fixed cadence, so it announces a "
         "wait that is still running as finished"
     )
+
+
+# --- TICK-488: onboarding's Allow control, and the switch that is the claim ---
+#
+# The step's Allow control flipped #loc-toggle on, set aria-checked="true" and
+# advanced -- without ever calling navigator.geolocation. Nothing was asked, no
+# permission was granted, and the interface then stated that location was allowed,
+# visually and to a screen reader, as the first thing a new user is told. The map
+# control's defect (above) made a false claim about a place; this one made a false
+# claim about a permission.
+
+
+def test_the_onboarding_allow_control_asks_the_browser_instead_of_asserting():
+    html = page().get_data(as_text=True)
+    assert "function obAllowTap(){" in html
+    assert "if(obAllowBtn) obAllowBtn.addEventListener('click', obAllowTap);" in html
+    tap = body_of(html, "function obAllowTap(){")
+    assert "askGeo(obLocSays)" in tap, "the step does not ask the browser anything"
+    # ...and the two lines that staged the outcome are gone, in both their spellings
+    assert "lt.classList.add('on'); lt.setAttribute('aria-checked','true');" not in html
+    assert "document.getElementById('ob-allow-loc').addEventListener('click',()=>{" not in html
+
+
+def test_the_switch_is_a_function_of_the_permission_and_not_of_the_tap():
+    """#loc-toggle's state and aria-checked come from what the browser said."""
+    html = page().get_data(as_text=True)
+    paint = body_of(html, "function paintLocToggle(){")
+    assert "const on = geoPermission==='granted';" in paint
+    assert "locToggle.setAttribute('aria-checked', on ? 'true' : 'false');" in paint
+    # nothing outside that one painter writes the switch's state
+    for writer in (
+        "loc-toggle').classList",
+        "lt.classList.add('on')",
+        "lt.setAttribute('aria-checked'",
+        "loct.classList.toggle('on'",
+    ):
+        assert writer not in html, f"something other than the permission sets it: {writer!r}"
+    # ...and the permission it reads is only ever written where the browser answered:
+    # recording an outcome, or reading the standing permission state
+    record = body_of(html, "function recordGeoOutcome(o){")
+    sync = html.split("navigator.permissions.query({name:'geolocation'})", 1)[1]
+    sync = sync[: sync.index("st.onchange=sync;")]
+    writes = html.count("geoPermission=") - html.count("geoPermission==")
+    inside = (record.count("geoPermission=") - record.count("geoPermission==")) + (
+        sync.count("geoPermission=") - sync.count("geoPermission==")
+    )
+    assert inside > 0, "nothing records the permission"
+    assert writes == inside, (
+        "the permission is written somewhere other than where the browser answered"
+    )
+
+
+def test_the_settings_switch_no_longer_claims_a_permission_on_a_tap():
+    html = page().get_data(as_text=True)
+    assert "toast(on?'Location on while using'" not in html
+    assert "No problem \\u2014 search the map instead" not in html
+    assert "No problem — search the map instead" not in html
+    # a page cannot revoke what the browser granted, and it says so rather than
+    # pretending to
+    assert "A page cannot take that " in html
+
+
+def test_every_outcome_has_its_own_wording_on_the_onboarding_step():
+    """Eight outcomes, and the step's words for the seven that reach it."""
+    html = page().get_data(as_text=True)
+    said = body_of(html, "const OB_LOC_SAID = {").replace("\n", " ")
+    for kind in ("'no-api':", "insecure:", "denied:", "timeout:", "unavailable:", "far:"):
+        assert kind in said, f"the step has no wording for {kind!r}"
+    # ...each saying what will be DIFFERENT, which is not the map's "has not moved"
+    for sentence in (
+        "Location is off for this site, so nothing was shared and the map will",
+        "Finding your location took too long, so nothing was shared.",
+        "Your device could not work out where it is, so nothing was shared.",
+        "This browser cannot share a location, so the map will open on the few",
+        "location. The map will open on the few blocks of downtown Austin this pilot ",
+    ):
+        assert sentence in html, f"no onboarding wording for: {sentence!r}"
+    # granted, and inside or near the pilot area, is the one outcome with nothing to
+    # explain -- and it is the only one that claims the switch is on
+    assert "Location is on — the map will center on you" in html
+    # ...and being just outside the mapped blocks is not being centred on, because
+    # clampCentre holds the frame inside the pilot bbox, so it says what it will do
+    assert "Location is on — you are just outside the mapped blocks, so the map will " in html
+
+
+def test_the_granted_step_moves_the_frame_rather_than_promising_it():
+    """"the map will center on you" is a claim, and finishOnboarding only renders.
+
+    Without the frame being set here the map opens on the pilot bbox and the sentence
+    is staged rather than produced -- which is the defect this ticket is about, one
+    sentence further on.
+    """
+    html = page().get_data(as_text=True)
+    says = body_of(html, "function obLocSays(o){")
+    granted = says[: says.index("const said =")]
+    assert "setZoom(false, youFix);" in granted, (
+        "the granted step promises a centred map without moving the frame"
+    )
+    # and it is only ever said where the frame was really moved
+    assert "Location is on — the map will center on you" in granted
+
+
+def test_a_refusal_does_not_block_the_onboarding_step():
+    """Skippable by design: every answer names the way onward."""
+    html = page().get_data(as_text=True)
+    said = body_of(html, "const OB_LOC_SAID = {")
+    # a denial is an answer: the button under it carries on, it never offers a retry
+    denied = said[said.index("denied:") : said.index("timeout:")]
+    assert "does: 'go'" in denied and "Try again" not in denied
+    # a timeout and an unavailable position are worth trying again, and say so
+    for kind in ("timeout:", "unavailable:"):
+        block = said[said.index(kind) :]
+        block = block[: block.index("does:") + 20]
+        assert "'ask'" in block, f"{kind!r} offers no way to try again"
+    # "Choose an area instead" still skips the step, and still opens search
+    assert "openSearchAfterOnboarding=true;" in html
+    assert "No problem — pick an area by search" in html
+    # ...and it does not write the switch either way, because it is not an answer
+    notnow = html.split("document.getElementById('ob-loc-notnow')", 1)[1]
+    notnow = notnow[: notnow.index("});")]
+    assert "loc-toggle" not in notnow and "aria-checked" not in notnow
+
+
+def test_a_failed_answer_on_the_onboarding_step_reaches_the_alert_region():
+    html = page().get_data(as_text=True)
+    says = body_of(html, "function obLocSays(o){")
+    assert "geoAlert(sentence);" in says, (
+        "the step changes on screen without announcing to a screen reader"
+    )
+    assert "obLocLine.textContent=sentence" in says
+    # the step never writes the switch: it has already been painted from the answer
+    assert "loc-toggle" not in says and "aria-checked" not in says
