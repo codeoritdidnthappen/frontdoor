@@ -559,6 +559,113 @@ OPS: list[Op] = [
         fragment="map-data.js",
     ),
     Op(
+        name="card_photostrip_from_server",
+        why=(
+            "TICK-494: the card's photo strip reads PHOTOS, the design source's embedded "
+            "set, which only ever covers the twelve demo doors. A place the server marks "
+            "scanned on-site therefore showed no strip and no way into its own evidence, "
+            "which is what the owner reported. p.photos is that pin's published scan, "
+            "named by /map/data and streamed from /scan/photo/"
+        ),
+        kind="insert_before",
+        anchor=(
+            "    } else if(PHOTOS[p.id]){\n"
+            "      const imgs = PHOTOS[p.id].map("
+        ),
+        replacement=(
+            "    } else if(p.photos && p.photos.length){\n"
+            "      /* The scan's own photographs, in upload order. The count is this\n"
+            "         scan's, not the place's: p.views is how many SCANS a place has\n"
+            "         had, and p.photos is one scan's frames, so 'n of views' would be\n"
+            "         two different things in one sentence. */\n"
+            "      const imgs = p.photos.map((u,i)=>`<img src=\"${u}\" alt=\"Entrance "
+            "photo ${i+1} of ${esc(p.name)}\">`).join('');\n"
+            "      photoStrip = `<button class=\"photostrip\" data-openrcpt "
+            "aria-label=\"Scan photos \\u2014 open the evidence receipt\">\n"
+            "        ${imgs}\n"
+            "        <span class=\"ps-tag\">${iconSVG('camera',11,'#fff')} "
+            "${p.photos.length} photo${p.photos.length>1?'s':''} from this scan "
+            "\\u00b7 tap for the receipt</span>\n"
+            "      </button>`;\n"
+        ),
+    ),
+    Op(
+        name="receipt_photos_from_server",
+        why=(
+            "TICK-494: the same gap on the surface that exists to show the evidence. A "
+            "published scan's photographs are drawn here, in the order the frames were "
+            "uploaded -- the order blur_regions and an evidence box's `frame` index "
+            "against, so a reordering here would point a box at the wrong photograph"
+        ),
+        kind="insert_before",
+        anchor=(
+            "  } else if(PHOTOS[p.id]){\n"
+            "    photos=`<div class=\"rcpt-photos\">${PHOTOS[p.id].map("
+        ),
+        replacement=(
+            "  } else if(p.photos && p.photos.length){\n"
+            "    photos=`<div class=\"rcpt-photos\">${p.photos.map((u,i)=>shot("
+            "`<img src=\"${u}\" alt=\"Entrance photo ${i+1} of ${esc(p.name)}\">`,i))"
+            ".join('')}</div>`;\n"
+        ),
+    ),
+    Op(
+        name="receipt_says_when_there_is_no_photograph",
+        why=(
+            "TICK-494: a scanned pin with no stored photograph is not an edge case -- the "
+            "curated on-site publication publishes verdicts and dates and no bytes at all "
+            "(frontdoor.scan_publish.build_records), so most scanned pins are in it. The "
+            "receipt has to say that in words. It must never read as 'this place was not "
+            "scanned', because it was, and the checks below it come from that visit. Kept "
+            "OUT of `photos` on purpose: the evidence-box chips are gated on `photos` "
+            "being a real photograph (TICK-467), and a note is not something a box can be "
+            "drawn on"
+        ),
+        kind="insert_before",
+        anchor=(
+            "  /* Chips on the receipt, beside the photographs they point into."
+        ),
+        replacement=(
+            "  /* Scanned, but nothing to show: say so, and say what the checks below\n"
+            "     still are. A silent empty space under the word 'evidence' invites the\n"
+            "     one reading that is false -- that nobody went. */\n"
+            "  const noPhoto = (!photos && p.tier!=='est')\n"
+            "    ? `<div class=\"nophoto\">${iconSVG('camera',22,'var(--blue-ink)')} "
+            "No photograph was published with this scan \\u2014 the checks and dates "
+            "below came from an on-site visit.</div>`\n"
+            "    : '';\n"
+        ),
+    ),
+    Op(
+        name="receipt_renders_the_no_photograph_note",
+        why="the note above has to reach the receipt it was written for",
+        kind="replace",
+        anchor="    ${photos}\n    ${evChips}\n",
+        replacement="    ${photos}${noPhoto}\n    ${evChips}\n",
+    ),
+    Op(
+        name="receipt_does_not_count_photographs_it_does_not_have",
+        why=(
+            "TICK-494: this row counts p.views -- on a server pin the number of SCANS -- "
+            "and calls them photographs. On a scan that published no bytes it printed "
+            "'1 photo of this entrance so far' directly beneath the note saying no "
+            "photograph was published: the receipt contradicting itself on the one "
+            "surface that exists to be checked. The count is unchanged; only the noun "
+            "moves to the thing actually being counted"
+        ),
+        kind="replace",
+        anchor=(
+            "      <span>${nViews} neighbor${nViews>1?'s':''}<span class=\"rc-sub\">"
+            "${nViews} photo${nViews>1?'s':''} of this entrance so far</span></span>\n"
+        ),
+        replacement=(
+            "      <span>${nViews} neighbor${nViews>1?'s':''}<span class=\"rc-sub\">"
+            "${photos ? `${nViews} photo${nViews>1?'s':''} of this entrance so far` "
+            ": `${nViews} on-site visit${nViews>1?'s':''} recorded here`}"
+            "</span></span>\n"
+        ),
+    ),
+    Op(
         name="boot_live_map",
         why="ask the server for the live map once the embedded pins are drawn",
         kind="replace",
@@ -665,6 +772,18 @@ WIRING_REQUIRED: list[str] = [
     #   and the cover-fit inverse, without which a box lands in the wrong place,
     #   which is worse than drawing none.
     "const s = Math.max(cw/nw, ch/nh);",
+    # TICK-494. The published scan's photographs, on the card and on the
+    # receipt, plus the sentence for a scanned place that has none. Without
+    # these the receipt for the only places with real evidence behind them is
+    # empty, which is what the owner reported.
+    "p.photos = Array.isArray(pin.photos) && pin.photos.length",
+    "} else if(p.photos && p.photos.length){",
+    "photos=`<div class=\"rcpt-photos\">${p.photos.map(",
+    "${p.photos.length} photo${p.photos.length>1?'s':''} from this scan",
+    "No photograph was published with this scan \\u2014 the checks and dates "
+    "below came from an on-site visit.",
+    "    ${photos}${noPhoto}\n    ${evChips}",
+    "${nViews} on-site visit${nViews>1?'s':''} recorded here",
     # The locate control. The design source's handler never called geolocation at
     # all, so every one of these lines is the difference between a control that
     # works and one that pans to a fixed point and says it found you.

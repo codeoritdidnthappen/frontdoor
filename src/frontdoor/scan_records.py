@@ -476,13 +476,38 @@ def _upgrade_row(base, scan):
     return row
 
 
+def _scan_photos(scan):
+    """The scan's stored photograph keys, in the order the frames were given.
+
+    That order is load-bearing (TICK-494): blur_regions is one list per frame
+    in the same order, and an evidence box's "frame" is an index into this
+    list. A receipt that reorders them draws a box on the wrong photograph,
+    which is worse than drawing none. Keys that do not match the public
+    allowlist are dropped rather than served, so nothing outside scans/ can
+    reach a reader through this field.
+    """
+    keys = scan.get("image_keys")
+    if not isinstance(keys, list):
+        return []
+    return [key for key in keys if is_scan_image_key(key)]
+
+
 def merge_scans(dataset, scans):
     """(merged dataset, scan meta by place key).
 
     The merged dataset is the pre-catalogue rows plus every scan's upgrades;
-    meta carries {"scan_count", "last_scanned"} for each scanned place so the
-    map can attach the provenance line. Total: a malformed dataset or scan
-    list merges to whatever is usable, never an error.
+    meta carries {"scan_count", "last_scanned", "photos"} for each scanned
+    place so the map can attach the provenance line and the receipt's
+    photographs. Total: a malformed dataset or scan list merges to whatever is
+    usable, never an error.
+
+    "photos" is ONE scan's image keys, never a pooled set (TICK-494): the scan
+    that supplied "last_scanned", which is the capture the receipt dates. The
+    frame indexes above are only meaningful inside a single scan, so pooling
+    two captures' photographs would make every index a guess. A place whose
+    latest scan stored no bytes therefore carries no photographs even if an
+    older scan did -- the strip and the date on the receipt then always
+    describe the same visit.
     """
     merged = dict(dataset) if isinstance(dataset, dict) else {}
     meta = {}
@@ -495,7 +520,15 @@ def merge_scans(dataset, scans):
             continue
         key = _place_key(merged, scan)
         merged[key] = _upgrade_row(merged.get(key), scan)
-        entry = meta.setdefault(str(key), {"scan_count": 0, "last_scanned": ""})
+        entry = meta.setdefault(
+            str(key), {"scan_count": 0, "last_scanned": "", "photos": []})
         entry["scan_count"] += 1
-        entry["last_scanned"] = max(entry["last_scanned"], _scan_date(scan))
+        date = _scan_date(scan)
+        # >= rather than >, so the last record read at the latest date wins.
+        # The curated publication is read before the runtime store, and it
+        # publishes verdicts and dates with no bytes at all, so a phone's scan
+        # on the same day brings its photographs rather than being shadowed.
+        if date >= entry["last_scanned"]:
+            entry["photos"] = _scan_photos(scan)
+        entry["last_scanned"] = max(entry["last_scanned"], date)
     return merged, meta

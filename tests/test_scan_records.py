@@ -314,7 +314,13 @@ def test_a_scan_upgrades_a_neutral_pin_to_the_verified_scanned_state():
     assert row["source"] == "community_scan"
     # Freshness moved forward to the scan's date.
     assert row["imagery_date"] == "2026-09-04"
-    assert meta == {PLACE: {"scan_count": 1, "last_scanned": "2026-09-04"}}
+    # "photos" joined this mapping with TICK-494: the scan's stored
+    # photographs, so the receipt the pin points at has something to show.
+    assert meta == {PLACE: {
+        "scan_count": 1,
+        "last_scanned": "2026-09-04",
+        "photos": ["scans/ChIJexample/" + "a" * 32 + ".jpg"],
+    }}
 
 
 def test_scan_confidences_stay_on_the_one_public_scale():
@@ -339,7 +345,13 @@ def test_freshness_is_monotone_across_scans():
     newer = scan(scan_id="new", created_at="2026-09-04T00:00:00Z")
     merged, meta = merge_scans({PLACE: precat_row()}, [newer, older])
     assert merged[PLACE]["imagery_date"] == "2026-09-04"
-    assert meta[PLACE] == {"scan_count": 2, "last_scanned": "2026-09-04"}
+    # The photographs are the newer scan's, whichever order the store was
+    # read in -- one scan's frames, dated by the same scan (TICK-494).
+    assert meta[PLACE] == {
+        "scan_count": 2,
+        "last_scanned": "2026-09-04",
+        "photos": ["scans/ChIJexample/" + "a" * 32 + ".jpg"],
+    }
 
 
 def test_a_scan_matches_by_distance_and_name_without_a_place_id():

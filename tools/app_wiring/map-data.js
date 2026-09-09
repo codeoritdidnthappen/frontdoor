@@ -5,7 +5,9 @@
    page does not know is added. A place the server still lists as not-yet-checked keeps the
    embedded detail, which is the same estimate with its evidence text. No server, or a
    dataset_error, leaves the embedded pins exactly as they are.
-   needs_relook rides along on a pin: freshness only, never a state and never a verdict. */
+   needs_relook rides along on a pin: freshness only, never a state and never a verdict.
+   photos rides along the same way: the stored, privacy-processed photographs of the scan the
+   pin is dated by, as keys for /scan/photo/. Evidence of what was seen, never a verdict. */
 const OBS_TO_V = {visible:'present', not_visible:'not_visible'};
 const inBBox = loc => loc.lat>=BBOX.lat0-0.001 && loc.lat<=BBOX.lat1+0.001 && loc.lng>=BBOX.lng0-0.001 && loc.lng<=BBOX.lng1+0.001;
 function critFromChecklist(checklist, keymap){
@@ -38,6 +40,17 @@ function mergeServerPin(pin, base){
     p.views=pin.scan_count||p.views||1;
     p.crit=critFromChecklist(pin.checklist, LIVE_TO_DOOR);
     p.date=pin.last_scanned||pin.imagery_date||p.date||'';
+    /* TICK-494: the scan's own photographs, as keys, fetched through the same
+       /scan/photo/ route the publish path already uses. The order is the order
+       the frames were uploaded and is preserved end to end -- it is what
+       blur_regions and an evidence box's `frame` index against, so reordering
+       here would point a box at the wrong photograph. The server omits the
+       field when the scan stored no bytes, which is a real case rather than an
+       error (the curated on-site publication carries verdicts and dates only),
+       so that absence is left as null for the receipt to say out loud instead
+       of being filled in with anything. */
+    p.photos = Array.isArray(pin.photos) && pin.photos.length
+      ? pin.photos.map(k=>PHOTO_API+k) : null;
   } else if(!base){
     p.crit=critFromChecklist(pin.checklist, null);
   }
