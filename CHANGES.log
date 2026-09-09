@@ -1760,6 +1760,77 @@ Each was mutation-checked by restoring the value it replaced. Four of the eight 
 refused by `tools/port_app_page.py` itself, so a refresh from a new design round fails the build
 instead of quietly reintroducing the claim, which is how this survived #368 and #471.
 
+## 2026-09-09 — The processing screen stops naming a finish time it cannot know (TICK-490, #490)
+
+Source: measurement of production `POST /screen` on 2026-09-08 at the size `captureFrame()`
+uploads (long side 1280, q0.85), and #484, which fixed the two worst symptoms and left the
+cause.
+
+`PROC_TOTAL` — `PROC_SETTLE + ringDur() + PROC_CHIPS + PROC_HOLD` = 7,360ms — is the length
+of this screen's ANIMATION. The ring, the four named checks and the countdown were all
+scripted against it, and it sat in front of a wait whose length is the model's:
+
+    upload   model latency_ms   wall clock
+    307 KB        7.9 s          21.2 s     before the /screen cascade fix (#472 / #479)
+    255 KB        8.5 s          18.6 s
+    251 KB        7.9 s          19.4 s
+    239 KB       16.7 s          23.0 s     after it, which is what is deployed
+    195 KB       17.1 s          19.1 s
+    260 KB        7.8 s          12.5 s
+
+Wall clock ranges 12.5-23.0s; the model call alone ranges 7.8-17.1s. The spread is the
+model's and did not shrink when our overhead did, so there is no constant that is right: too
+short and the screen runs out and waits, too long and it stalls on a fast scan.
+
+- D-486a **The countdown counts DOWN only on the staged run, and counts UP on a live one.**
+  A countdown has to name a finish time. The staged run has one — it waits for nothing, so
+  7,360ms is a fact and counting down to it is a fact. A live run has none to name. #484
+  stopped the digit displaying a zero it had run past; a number that stops counting is still
+  a number that ran out, and it ran out on most runs. Elapsed seconds cannot run out: 5 at
+  second 5, 23 at second 23, both true. The pre-JS markup no longer paints an `8`, because
+  before `runProcessing()` runs the page does not yet know which run it is about to show.
+- D-486b **The ring is a determinate bar on a measured estimate, and the estimate never
+  decides when the run ends.** `LIVE_EST_MS` = 19,000ms, the median of the three post-fix
+  measurements, paces the arc so it moves for the whole wait and reaches its 96% ceiling —
+  the ceiling `held()` already imposed — at about 19s instead of at 5.5s. The instant the
+  request settles the arc closes over `LIVE_CLOSE_MS` from wherever it had got to, so the
+  12.5s scan finishes at 12.5s. The estimate paces the wait; it never extends it.
+  Re-derive `LIVE_EST_MS` by timing six round trips whenever the model or the uploaded
+  image size changes; the derivation is written beside the constant.
+- D-486c **The four named checks stop landing on a schedule during a live run.** The server
+  is sent one photograph and answers once, with all four criteria in the same response, so
+  ticks at 1/4, 2/4, 3/4 of the arc described a timetable rather than anything that had
+  happened. `interaction-motion-spec.md` says it in as many words: "Checklist items must
+  correspond to completed processing steps; do not show fake progress labels." They now land
+  together, in `finish()`, which is the moment the answer arrived. The staged run keeps its
+  cadence: it is an illustration with no server behind it, and the review screen it hands to
+  says so.
+- D-486d **Reduce Motion no longer announces a wait that is still running as finished.**
+  The reduced branch ran the four ticks on the fixed cadence and called `finish()` at 5.5s
+  whatever the server was doing, so "Checks complete" was announced, all four rows were
+  marked done and `aria-valuenow` was written as 100 while the request was still out — for
+  as much as another 17 seconds, on the setting a screen-reader user is likeliest to have
+  on. Measured on the served page after the fix: the answer lands at 23.12s, the four checks
+  at 23.24s, the announcement at 23.32s and the review screen at 25.13s. Reduced motion
+  still replaces animation with its end state rather than shortening it; a wait that has no
+  end state yet is shown as still running, its bar stepped discretely from the same estimate
+  and capped at the same 96%.
+
+**Recorded divergence, not a spec edit.** `docs/design/entrymap/interaction-motion.json` sets
+`durationMs.scanTarget` = 7600 and `scanMaximum` = 8000, and `interaction-motion-spec.md`
+says "approximately 7.6 seconds and never longer than 8 seconds". The STAGED run still meets
+both exactly — measured on the served page at 7.41-7.71s to the review screen, with the
+map-return contraction at 7,360ms. A LIVE run cannot meet either and never could: it is a
+network round trip to a vision model, and 8 seconds was a budget for an animation rather
+than a measurement of a scan. `docs/design/entrymap/` is the approved asset library and is
+copied in unedited, so the divergence is recorded here and in a comment beside `LIVE_EST_MS`
+rather than by editing the package. The Swift mirror in
+`ios/FrontdoorCapture/UI/DesignSystem/` and `tests/test_ios_design_system.py` are unchanged.
+Nothing on the screen quotes either number at a person any more.
+
+One build note: `tools/port_app_page.py`'s `scan_entry` op ended at a line of prose in the
+processing block's header comment, so rewriting that comment broke the port. Its anchor is
+now the one line of that comment that is a heading rather than a description.
 ## 2026-09-09 — The box the finder drew is a pointer, and it may never be a qualifier (TICK-467, #467)
 
 The product's claim is a verdict about a doorway. This answers the next question, which is

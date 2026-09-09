@@ -1089,3 +1089,80 @@ def test_the_locate_control_is_named_for_what_it_does_now():
     assert "denied:" in names and "unavailable:" in names
     assert "Why your location is not shown" in names
     assert "locateBtn.setAttribute('aria-label'," in html
+
+
+def test_the_processing_screen_names_no_finish_time_it_cannot_know():
+    """A countdown has to name a finish time. A live scan has none to name.
+
+    Measured against production `/screen` on 2026-09-08, at the size `captureFrame()`
+    uploads: wall clock 12.5 / 18.6 / 19.1 / 19.4 / 21.2 / 23.0 seconds, the model call
+    alone 7.8-17.1. The spread is the model's, so no constant is right -- too short and
+    the screen runs out and waits, too long and it stalls on a fast scan. #484 stopped
+    the countdown displaying a zero it had run past; a number that stops counting is
+    still a number that ran out.
+
+    This pins the four decisions that replace it, read off the SERVED page:
+
+    * the digit counts DOWN only on the staged run, whose 7,360ms is a fact, and counts
+      UP elapsed seconds on a live one, which is true at every second of any run;
+    * the arc is paced by a measured estimate rather than by the staged animation's
+      length, and closes as soon as the answer lands rather than running the estimate
+      out;
+    * the four named checks do not land on a schedule during a live run -- the server
+      answers all four criteria at once -- and do not land at all when it did not
+      answer;
+    * Reduce Motion does not call `finish()` while the request is still out, which is
+      how "Checks complete" came to be announced 17 seconds before the answer arrived.
+    """
+    page = create_app().test_client().get("/app").get_data(as_text=True)
+
+    assert '<span id="ring-count-n"></span>' in page, (
+        "the countdown's static value names a duration in the markup, before the page "
+        "knows whether this run has a finish time at all"
+    )
+
+    assert "const LIVE_EST_MS" in page, "no measured live estimate in the served page"
+    run = page[page.index("function runProcessing("):]
+    run = run[:run.index("\n/* Review chips.")]
+
+    assert "const isLive = !!liveUpload" in run, (
+        "runProcessing does not distinguish the staged run from the live one, so one "
+        "set of timings is being used for both"
+    )
+    assert "const ringSpan = isLive ? LIVE_EST_MS : ringDur();" in run, (
+        "the arc is paced by the staged animation's length on a live run too"
+    )
+    assert "isLive && !closing && !held()" in run, (
+        "nothing closes the arc when the answer lands, so a fast scan stalls until the "
+        "estimate runs out"
+    )
+
+    count = run[run.index("procCountTimer = setInterval"):]
+    count = count[:count.index("},250);")]
+    assert "Math.floor((performance.now()-t0)/1000)" in count, (
+        "the digit does not count elapsed seconds on a live run, so it is naming a "
+        "finish time nobody knows"
+    )
+
+    surface = run[run.index("function surface(f)"):]
+    surface = surface[:surface.index("function populateChips()")]
+    assert "if(isLive) return;" in surface, (
+        "the named checks still surface on a schedule during a live run, which is the "
+        "fake progress label interaction-motion-spec.md forbids"
+    )
+
+    finish = run[run.index("function finish()"):]
+    finish = finish[:finish.index("if(reduced){")]
+    assert "const answered = !isLive || !!liveResult;" in finish, (
+        "a live run that returned no verdicts still marks the four checks done"
+    )
+    assert "could not be completed" in finish, (
+        "a scan that could not be completed is still announced as complete"
+    )
+
+    reduced = run[run.index("if(reduced){"):]
+    reduced = reduced[:reduced.index("/* schedule: 0-1.0 s settle")]
+    assert "if(!held()){ finish(); return; }" in reduced, (
+        "the reduced-motion branch finishes on the fixed cadence, so it announces a "
+        "wait that is still running as finished"
+    )
