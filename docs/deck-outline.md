@@ -131,7 +131,8 @@ per-criterion verdicts) and answer "how do we know you didn't peek?" on the same
   informs the verdict instead of being outvoted by frontal frames that hide it. Offline eval on
   the 12-entrance pilot set: per-image majority voting amplifies shared camera-position blind
   spots; the integrated call raised committed accuracy **~90% → 97%** and cut abstentions
-  **38 → 4**. Latency: **~7s median per entrance** on the recommended sonnet-class model
+  **38 → 4**. Latency: **~7s median per entrance for the model call alone** on the recommended
+  sonnet-class model -- not the shutter-to-verdict time, which is ~19s (see §6)
   (matches the larger model's accuracy at ~2.5x cheaper). Source: `src/frontdoor/screening.py`
   module header and `ScreeningConfig` notes (engine PR #240).
 - Privacy is part of the pipeline, not a manual step: automatic face blur (YuNet + classical
@@ -263,7 +264,7 @@ happens, not after.
    from this line. The label says how the evidence was collected, not that a place is accessible
    (#461): the top rung of the ladder is somebody standing at the door with a camera, and there is
    no rung above it because the next one would be a compliance claim a photograph cannot support.
-2. **Scan an unknown door LIVE on stage.** Photo in → **~7 seconds** → pin drops with the
+2. **Scan an unknown door LIVE on stage.** Photo in → **under half a minute** → pin drops with the
    per-criterion checklist filling in. This is the marketing pop, and the number behind it is
    Section 3's: 97% committed accuracy on the offline eval, abstention when it can't see.
    {{live_demo_entrance_id: TICK-104 rehearsal log — entrance ID used, or "TBD day-of" if genuinely live}}
@@ -307,7 +308,8 @@ untested pre-registered bar stated plainly.
 **Content:**
 - **Pilot / development numbers (labeled PILOT SET — NOT SEALED-CONFIRMATORY, on the slide):**
   offline eval on the 12-entrance pilot set — **97% agreement with the reference (75/77), 4
-  abstentions**, ~7s median per entrance, single integrated call. **Say "agreement", not
+  abstentions**, ~7s median per entrance for the model call alone (shutter to verdict is ~19s
+  -- see §6), single integrated call. **Say "agreement", not
   "accuracy":** the reference was produced by a model reading the same photographs (#437), so the
   two readings share their blind spots and the figure cannot see its own. **On-slide caveat,
   verbatim: "prompt rules were derived on this same set; held-out validation is owed on the next
@@ -436,7 +438,8 @@ accuracy (#437). Section 4 carries that disclosure; these rows carry the arithme
 | **97%** | §1, §5, §6, §7 | 75 of 77 committed verdicts agreeing with the reference, over the 12-entrance pilot set, four criteria, **one unrepeated run** | `screening_eval` output; engine PR #240 |
 | **90% → 97%** | §3 | the same figure before and after the integrated multi-view call; both single runs | PR #240 |
 | **38 → 4** | §3 | abstentions over the same set, before and after that change | PR #240 |
-| **~7s median** | §3, §6 | per-entrance latency on the sonnet-class model, integrated call | `screening_eval` latency section |
+| **~7s median** | §3 | **the model call only**, per entrance, sonnet-class, integrated call | `screening_eval` latency section |
+| **~19s median** | §6 | shutter to verdict against production, three scans at the app's own upload size (1280 long side, q0.85, 245-307 KB): wall 18.6 / 19.4 / 21.2s against model 7.9 / 8.5 / 7.9s. The gap is upload, face blur, decode and the store. Measured on a desk connection; cellular will be slower | production `/screen`, 2026-09-08 |
 | **92% vs 93%** | §3, §7 | committed accuracy with and without face blur, controlled comparison — the claim is that blurring costs nothing, and a 1-point gap on one run does not establish otherwise in either direction | PR #243 (TICK-257) |
 | **0/17** | §3 | pilot photographs with a face still recognisable after blur, per the independent audit | PR #243 |
 | **88.9% / 79.5%** | §7, §9, §10 | Estimated tier: committed accuracy and abstention rate over 11 place_id-verified doors from Street View imagery | live pre-catalogue run (TICK-248) |
