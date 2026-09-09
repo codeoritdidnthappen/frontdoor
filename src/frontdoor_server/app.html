@@ -8508,7 +8508,20 @@ function reviewChipsHTML(chipsOnly){
   if(liveSimulated()){
     const chips=STAGED.map(([k,c])=>
       `<span class="fchip scan" style="cursor:default">${FEATS[k].label}${dotTriple(c,'var(--marigold-ink)')}</span>`).join('');
-    return chipsOnly ? chips : chips+`<span class="sim-tag">Simulated</span>`;
+    if(chipsOnly) return chips;
+    /* The staged path shows BOTH halves, for the same reason the live branch above does.
+       #471 took step_free out of STAGED and added the abstention line -- but only to the
+       design source's own copy of this function, which this fragment replaces. So the
+       served page rendered two confident chips and stopped, which was verified against
+       production before this was found.
+
+       Two chips and nothing else reads as a complete answer, and a complete answer from
+       one photograph is the claim this product exists not to make. Same class, same
+       separator, same sentence as the live branch. */
+    return chips +
+      (STAGED_NOTSEEN.length?`<span class="vc-notseen">Not seen this time: ${
+        STAGED_NOTSEEN.map(k=>FEATS[k].label).join(' · ')}</span>`:'') +
+      `<span class="sim-tag">Simulated</span>`;
   }
   if(chipsOnly) return '';
   return `<span class="vc-notseen">No verdicts — ${esc(liveFailure())}. Publishing checks the photo again.</span>`;
