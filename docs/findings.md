@@ -80,6 +80,32 @@ No 12-entrance pilot accuracy is restated here. That figure lived in a module
 docstring, was not a sealed run, and quoting it as a finding would be peeking
 in all but name.
 
+### 3a. No accuracy figure is reported without its baseline, and none only in aggregate (TICK-398)
+
+A percentage on its own cannot be read. Over the 40 non-sealed entrances the
+`accessible_door_hardware` label is `present` on all but two, so answering
+"present" every time scores **93.9%** of committed; the engine scored
+**54.5%**. On the same run `ramp_or_bevel` scored **88.2%** — which is exactly
+what its own constant answer scores, so that figure demonstrates no skill
+either. One is far below its floor and one merely equals it, and neither case
+is visible in an accuracy column, still less in an average across the four.
+
+So `screening_eval` reports, per criterion and over the same committed
+denominator, the **majority-class baseline** and the **committed label
+balance** it was computed from, and says under the aggregate that the
+aggregate is not the figure to quote. Any presentation of these numbers —
+this document, the deck, the notebook — carries the per-criterion table rather
+than one headline percentage. A viewer asking about a front door is asking
+about one criterion, and "can I open this door" is the one asked about most.
+
+The hardware result is a real one rather than an artefact of how the labels
+were mapped onto the engine's vocabulary: fifteen disagreements were
+adjudicated against the photographs, and in fourteen the label was right and
+the engine wrong, every error running the same way — `absent` where the truth
+was `present`, never the reverse. The fifteenth is a labelling error, an
+automatic sliding entrance that carries no manual hardware at all; correcting
+it moves 54.5% to 57.6%. Recorded on #398.
+
 ## 4. Arms without a pass/fail bar (D-022)
 
 The 0.25″ bar applies to **Arm A only**. Other arms are reported without a

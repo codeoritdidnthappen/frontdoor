@@ -206,6 +206,24 @@ def accuracy_of_committed(counts):
     return counts["correct"] / committed
 
 
+def majority_class_baseline(counts):
+    """What answering the commoner label every time would have scored here.
+
+    An accuracy figure cannot be read without it (TICK-398, #398). On the 40
+    non-sealed entrances `accessible_door_hardware` is labeled present on all
+    but two, so a constant "present" would have scored 94% where the engine
+    scored 55%; on the same run `ramp_or_bevel` scored 88%, which is exactly
+    what the constant answer scores. One figure is far BELOW the baseline and
+    the other merely equals it, and the accuracy column on its own shows
+    neither. Computed over the committed rows alone, so it shares its
+    denominator with accuracy_of_committed and the two compare directly.
+    """
+    committed = counts["correct"] + counts["wrong"]
+    if committed == 0:
+        return None
+    return max(counts["committed_present"], counts["committed_absent"]) / committed
+
+
 def score_joins(screenings, labels):
     """Join every screened (entrance, criterion) to its label.
 
@@ -233,6 +251,12 @@ def score_joins(screenings, labels):
             # than a refusal, a truncation or a transport error.
             "rejected": 0,
             "unlabeled": 0,
+            # The label balance underneath the committed rows, so the report
+            # can say what a constant answer would have scored (TICK-398).
+            # Counted only where the engine committed, so these two sum to
+            # correct + wrong.
+            "committed_present": 0,
+            "committed_absent": 0,
         }
         for key in CRITERIA_KEYS
     }
@@ -249,6 +273,8 @@ def score_joins(screenings, labels):
                 continue
             outcome = classify(verdict, label, failed=failed)
             per_criterion[key][outcome] += 1
+            if outcome in ("correct", "wrong") and label in ("present", "absent"):
+                per_criterion[key][f"committed_{label}"] += 1
             if verdict == "not_visible":
                 per_criterion[key]["not_visible"] += 1
             if outcome == "failed" and cell.rejected:
@@ -531,6 +557,7 @@ def build_result(
     overall = {
         "correct": 0, "wrong": 0, "abstained": 0, "not_visible": 0,
         "failed": 0, "rejected": 0, "unlabeled": 0,
+        "committed_present": 0, "committed_absent": 0,
     }
     criteria = {}
     for key in CRITERIA_KEYS:
@@ -541,6 +568,7 @@ def build_result(
         criteria[key] = {
             **counts,
             "accuracy_of_committed": accuracy_of_committed(counts),
+            "majority_class_baseline": majority_class_baseline(counts),
             "abstention_rate": counts["abstained"] / scored if scored else None,
             "not_visible_rate": counts["not_visible"] / scored if scored else None,
             # Reported beside the abstention rate, never inside it (TICK-399).
@@ -562,6 +590,7 @@ def build_result(
         "overall": {
             **overall,
             "accuracy_of_committed": accuracy_of_committed(overall),
+            "majority_class_baseline": majority_class_baseline(overall),
             "abstention_rate": overall["abstained"] / scored if scored else None,
             "not_visible_rate": overall["not_visible"] / scored if scored else None,
             "failure_rate": overall["failed"] / scored if scored else None,
@@ -624,10 +653,20 @@ def render_markdown(result):
         "",
         "## Per-criterion accuracy",
         "",
+        "Read every accuracy against the baseline beside it (TICK-398). The "
+        "baseline is what answering the commoner label every time would have "
+        "scored on the same committed rows: an accuracy at or below it "
+        "demonstrates no skill on that criterion however high the percentage "
+        "looks, and an accuracy far below it means the engine is wrong in one "
+        "direction. Read the criteria one by one; the aggregate below averages "
+        "them and hides both cases.",
+        "",
         "| criterion | correct | wrong | abstained | not visible | failed "
-        "| rejected | unlabeled | accuracy of committed | abstention rate "
+        "| rejected | unlabeled | accuracy of committed | majority-class "
+        "baseline | committed labels (present/absent) | abstention rate "
         "| not visible rate | failure rate |",
-        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |",
+        "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- "
+        "| --- | --- | --- |",
     ]
     for key in CRITERIA_KEYS:
         c = result["criteria"][key]
@@ -636,6 +675,8 @@ def render_markdown(result):
             f"| {c['not_visible']} | {c['failed']} | {c['rejected']} "
             f"| {c['unlabeled']} "
             f"| {_fmt(c['accuracy_of_committed'])} "
+            f"| {_fmt(c['majority_class_baseline'])} "
+            f"| {c['committed_present']}/{c['committed_absent']} "
             f"| {_fmt(c['abstention_rate'])} | {_fmt(c['not_visible_rate'])} "
             f"| {_fmt(c['failure_rate'])} |"
         )
@@ -650,6 +691,12 @@ def render_markdown(result):
         f"{_fmt(overall['accuracy_of_committed'])} "
         f"({overall['correct']} correct / "
         f"{overall['correct'] + overall['wrong']} committed)",
+        f"- majority-class baseline over the same rows: "
+        f"{_fmt(overall['majority_class_baseline'])} "
+        f"({overall['committed_present']} present / "
+        f"{overall['committed_absent']} absent). This aggregate is an average "
+        f"across criteria that behave differently and should not be quoted on "
+        f"its own (TICK-398): quote the per-criterion table.",
         f"- abstention rate: {_fmt(overall['abstention_rate'])} "
         f"({overall['abstained']} abstained)",
         f"- not visible rate: {_fmt(overall['not_visible_rate'])} "

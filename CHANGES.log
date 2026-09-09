@@ -1670,3 +1670,48 @@ identical runs) that were mostly discarded responses. Two tests pin it: the call
 no `temperature`, `top_p` or `top_k`, and the SDK signature is asserted to have no temperature to
 set, so a later SDK or model that reinstates one fails a test and reopens the question rather
 than letting somebody add a parameter that takes production down.
+
+## 2026-09-08 — Every accuracy figure is reported beside what a constant answer would score (TICK-398, #398)
+
+`accessible_door_hardware` scored **54.5% of committed on `main` (18 of 33)** and **50.0% on a
+branch (30 committed)** over the 40 non-sealed entrances, while the other three originals on the
+same runs sat at 88–96%. #398 asked whether that was a mapping artefact, a prompt problem or a
+real limit. Fifteen disagreements were adjudicated against the photographs one by one.
+
+**It is a real result, and the aggregate was hiding a worse one.** In 14 of the 15, the reference
+label was right and the engine was wrong: plainly graspable hardware — brass tube pulls, ornate
+backplates with a projecting D-pull, full-height tubular pulls on glass shopfronts, an aluminium
+offset pull, a brass lever — read as `absent`. Every one of the 15 errors ran the same way,
+`absent` where the label said `present`; not one ran the other way. The remaining case is a
+labelling one: a pharmacy whose entrance is an automatic sliding door, decals and all, carries no
+manual hardware at all, so `present` is not supportable there under either wording. Correcting it
+moves 54.5% to **57.6%**. The two prompt wordings are near-identical restatements of the same
+question, so the mapping explains almost none of the gap.
+
+The number that makes it legible is not in any report the repo writes: on those committed rows the
+label is `present` on all but two, so **answering "present" every time scores 93.9%**. The engine
+scored 55%. On the same run `ramp_or_bevel` scored 88.2% — and its baseline is also 88.2%, so that
+figure demonstrates no skill either, for the opposite reason. An accuracy column alone shows
+neither case, and an aggregate that averages a 96% criterion with a 55% one tells a reader nothing
+about the criterion they came to ask about, which for a front door is usually "can I open it".
+
+So the report now carries, per criterion and over the same committed denominator:
+
+- **`majority_class_baseline`** — what answering the commoner label every time would have scored.
+- **`committed_present` / `committed_absent`** — the label balance it was computed from, so the
+  baseline can be checked rather than trusted.
+- A line in the per-criterion table saying how to read the two together, and a line under the
+  aggregate saying the aggregate should not be quoted on its own.
+
+Nothing about scoring changed: the committed denominator, the abstention rule and the failure
+accounting are untouched, and `not_visible` is still never `absent`. What changed is that a
+percentage can no longer be presented without the floor it has to clear.
+
+The prompt is not exonerated, and it is not fixed here. Two wordings that ask the same question
+disagreed on 12 of 40 entrances on this criterion with neither better than the other, five of the
+fifteen misses are a pull mounted on a decorative backplate (the visual signature of the "flat
+push plate" the prompt excludes), one is a revolving-door lobby whose usable swing leaf the prompt
+gives no rule for choosing, and one had the privacy blur over the door in three of five views yet
+was answered `absent` rather than `not_visible`. The A/B that would settle wording against acuity
+was written and attempted; the API account was out of credit and returned 400 on every call, so it
+produced no verdicts and no spend. It is a separate ticket, not a claim made here.
