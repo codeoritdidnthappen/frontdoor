@@ -1759,3 +1759,86 @@ sentence that no data test or render test would ever have reached — the page's
 Each was mutation-checked by restoring the value it replaced. Four of the eight forms are now
 refused by `tools/port_app_page.py` itself, so a refresh from a new design round fails the build
 instead of quietly reintroducing the claim, which is how this survived #368 and #471.
+
+## 2026-09-09 — The box the finder drew is a pointer, and it may never be a qualifier (TICK-467, #467)
+
+The product's claim is a verdict about a doorway. This answers the next question, which is
+*where*: tapping a feature chip on an evidence receipt draws a rectangle over the photograph the
+finder pointed at, and the receipt says in words what the rectangle does and does not mean.
+
+**The same detector already failed at this job once, as a scorer.** Cropping to detected door
+and handle regions and re-asking took held-out accuracy from 94.2% to 86.5%: zero fixes, four new
+errors, three of them a real handle called `absent` because **no handle box was found**. The
+model read a missing box as evidence of absence rather than abstaining. A coverage gate cut four
+errors to one and the arm was still net negative, and that evaluation's own recorded conclusion
+was to keep box receipts as a diagnostic rather than a scoring path. This is that diagnostic, and
+the thing that failed as a judge is exactly what is wanted as a pointer.
+
+**A missing box is not an absent feature**, held by mechanism rather than by comment:
+`locate_evidence(frames, *, detector)` has no parameter a verdict can arrive through and no
+return value one can be read out of; a criterion with nothing found is *absent from the mapping*,
+never a null, a false, an empty box or a zero score, because each of those is a shape a later
+reader could mistake for a finding; and the receipt prints "we looked for this and couldn't point
+at it in these photos — that doesn't change the answer above" beside the engine's own unedited
+sentence. Two mutation checks in `tests/test_evidence_boxes_do_not_judge.py` prove the pinning
+test would notice: one flips a verdict to `absent` where no box was found — the measured failure,
+reproduced — and one only *weights a confidence* by box presence, which is the reasonable-sounding
+version of the same mistake. Neutering either mutation makes its check fail.
+
+**"We looked and could not point at one" and "nobody looked" are different sentences**, and the
+mapping alone says neither. The flag that separates them, `evidence_boxes_searched`, is per
+ENTRANCE and not per criterion: every criterion is looked for on every entrance, so one boolean
+carries the whole truth about the search, and no per-criterion "searched and empty" value — the
+shape that got the detector dropped — has to exist. The receipt's chips are gated on that flag,
+so inside them the no-box sentence is always true, and an entrance nobody ran the finder on
+offers no chips and makes no claim. Every criterion shown gets a chip whether or not it has a
+box, because offering chips only where a box exists would turn the row of chips itself into a
+verdict.
+
+**Publish time only, opt-in, and off the scan path structurally.** `--evidence-boxes` on
+`frontdoor.scan_publish`; `torch`/`transformers`/`pillow` are the `boxes` extra, imported lazily.
+Measured on this machine: **$0.00 of API spend** and **24.1 s mean for a two-frame entrance**
+(20.5-26.5 s over twelve), about 12 s a frame, so roughly a minute for a five-view door — the
+figure the ticket estimated. A live scan is already ~19 s shutter-to-verdict, so
+`tests/test_evidence_boxes_off_the_scan_path.py` pins that neither request handler names the
+detector in any spelling and that a process which has built the server app has none of
+`frontdoor.evidence_boxes`, `torch` or `transformers` in its module table.
+
+**Legibility was measured, not chosen.** Every displayed pixel of all **335 photographs** in the
+capture corpus was swept through the receipt's exact `object-fit:cover` geometry, in both layouts,
+at sizes read off the served page in a browser (166x220 two-up, 339x220 one-up, dpr 2). A bare
+white stroke measures **1.00:1** worst case, with a median 38% of a photograph's displayed pixels
+under 3:1 and every one of the 335 over a tenth — not a corner case, most of the corpus. The mark
+is therefore a stroke inside a halo, the doorway guide's own construction. Its halo edge against
+the picture is allowed to vanish and does (1.00:1); what carries it is the stroke against the
+halo, which has a floor no photograph can reach, because the halo is at most 40% of whatever is
+under it: **4.65:1**, over white, computable without a corpus, and matched exactly by the sweep.
+0 of 335 under 3:1 in both layouts. `docs/evidence-box-legibility.py` reproduces the tables.
+
+**The seeded demo is real detector output, including the awkward case.** The twelve receipt
+photographs were run through `locate_evidence` and its mapping written into the seed: four
+entrances got a box, eight say we looked and could not point at one, and nothing was tidied. On
+door-06 the finder outlines the diagonal brass tube that the engine's own sentence, printed
+underneath, explains **is a door pull and not a handrail**; the verdict stays `absent`. That is
+why the caption locates and never asserts — "outlined in photo 1", never "here it is" — and why
+that case is now the clearest thing on the receipt rather than the worst.
+
+Two corrections to the parked work, both from running it rather than reading it. The detector's
+minimum box side is a share of the frame's long side rather than 12 absolute pixels, which on a
+480px frame silently discarded boxes that display *larger* than ones it kept on a 2048px one.
+And the receipt's words now come from the data and never from the layout: a sheet opened before
+its photographs had a measured width read `clientWidth` 0, failed to place a box it *had*, and
+printed the no-box sentence — the one sentence in this feature that must never be said
+untruthfully. Placement retries; the words do not wait on it.
+
+Pinned on the **served** page by thirteen tests in `tests/test_evidence_boxes_on_the_served_page.py`
+that read `GET /app` from the test client, and by four new `WIRING_REQUIRED` entries in
+`tools/port_app_page.py` so a refresh from a new design round fails the build rather than quietly
+dropping the feature.
+
+**Not in this ticket.** OCR: reading text is a different capability from locating a feature, and
+our own measurement put RapidOCR at 66.7% precision and 34.6% recall for business names. Anything
+letting a box influence an assessment: measured, and it made the product worse. And boxes on a
+pin published through `/map/data` — a gap rather than a decision, recorded in
+`docs/evidence-boxes.md`: a published server pin's receipt carries no photograph yet, so a box
+there would have nothing to draw on. The record already holds the geometry for when it does.
