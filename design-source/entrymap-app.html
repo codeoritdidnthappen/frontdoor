@@ -3377,7 +3377,10 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
         </ul>
         <!-- 5.5-6.5 s: detected chips populate here, before review -->
         <div class="proc-chips" id="proc-chips" role="group" aria-label="Features identified"></div>
-        <div class="under8" id="proc-caption">Usually under 8 seconds.</div>
+        <!-- TICK-475: the static value is what a phone paints before procCaption() runs, so
+             it may not name a duration -- it cannot know yet whether this run is waiting
+             on a server. procCaption() replaces it on the same turn the run starts. -->
+        <div class="under8" id="proc-caption">Reading the photograph.</div>
         <div class="sr-only" id="proc-live" aria-live="polite" role="status"></div>
       </div>
     </section>
@@ -7868,7 +7871,10 @@ function startLiveUpload(frame){
     .then(r=> r.ok ? r.json() : null)
     .then(j=>{ liveResult=(j && j.assessment && j.assessment.criteria) ? j : null; })
     .catch(()=>{ liveResult=null; }) /* CORS / network / abort -> simulated fallback */
-    .then(()=>{ clearTimeout(timer); liveSettled=true; });
+    .then(()=>{ clearTimeout(timer); liveSettled=true;
+      /* TICK-475: the caption is a function of whether the request is still out,
+         so the moment it lands the screen stops saying it is waiting. */
+      if(typeof procCaption==='function') procCaption(); });
 }
 
 /* ===================== scan flow ===================== */
@@ -7957,9 +7963,25 @@ const procActive=()=>document.getElementById('scan-processing').classList.contai
    cancelled scan never leaves a number ticking behind a screen that is gone. */
 let procCountTimer=null;
 function procCountStop(){ if(procCountTimer){ clearInterval(procCountTimer); procCountTimer=null; } }
-function applyGate2(){
-  document.getElementById('proc-caption').textContent = gate2 ? 'Usually under 15 seconds.' : 'Usually under 8 seconds.';
+/* TICK-475. The caption used to read "Usually under 8 seconds", which is a rounding
+   of PROC_TOTAL -- the length of this screen's ANIMATION. It was never a measurement
+   of a scan. Measured against production on 2026-09-08, at the size captureFrame()
+   actually uploads (long side 1280, q0.85, 245-307 KB), the model call ran 7.9 / 8.5 /
+   7.9 seconds and the round trip a person watches ran 18.6 / 19.4 / 21.2 -- median
+   19.4s, on a desk connection rather than a venue's. So the screen was promising eight
+   and delivering nineteen, and the countdown beside it reached zero at second eight and
+   sat there for the remaining eleven.
+
+   A staged run really does take about eight seconds, because there is nothing to wait
+   for. A live one does not. The caption now says which it is instead of averaging the
+   two into a number that is wrong for both. */
+function procCaption(){
+  const el = document.getElementById('proc-caption'); if(!el) return;
+  if(liveUpload && !liveSettled) el.textContent = 'Reading the photograph. Usually under half a minute.';
+  else if(liveUpload)            el.textContent = 'Nearly there.';
+  else                           el.textContent = gate2 ? 'Usually under 15 seconds.' : 'Usually under 8 seconds.';
 }
+function applyGate2(){ procCaption(); }
 function setGate2(on){ gate2=!!on; applyGate2(); if(procRun) procRun.extend(); }
 function goReview(){
   if(!procActive()) return;
@@ -8030,7 +8052,22 @@ function runProcessing(forceReduced){
     countEl.textContent = String(Math.ceil(PROC_TOTAL/1000));
     procCountTimer = setInterval(()=>{
       if(!procActive()){ procCountStop(); return; }
-      const left = Math.max(0, Math.ceil((PROC_TOTAL - (performance.now()-t0))/1000));
+      const left = Math.ceil((PROC_TOTAL - (performance.now()-t0))/1000);
+      /* TICK-475: past its own estimate with the request still out, this counted down
+         to 0 and held there -- the one number on the screen saying the wait was over
+         while it plainly was not. It counts while it has something to count, and stops
+         claiming when it does not. The ring already holds at 96% for the same reason;
+         this is that decision applied to the digits beside it. */
+      if(left<=0){
+        if(_countLast!==0){
+          _countLast = 0;
+          countEl.textContent = '';
+          const u=countEl.parentElement && countEl.parentElement.querySelector('.rc-u');
+          if(u) u.textContent = '···';
+          procCaption();
+        }
+        return;
+      }
       if(left!==_countLast){ _countLast=left; countEl.textContent=String(left); }
     },250);
   }

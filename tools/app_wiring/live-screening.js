@@ -110,7 +110,12 @@ function startLiveUpload(frame){
       else liveError=errorText(j, r.status);          /* answered but could not assess: shown on review */
     }), ()=>{ if(mine()) liveNetFail=true; })          /* offline, aborted, or timed out */
     .catch(()=>{ if(mine() && !liveError) liveError='the answer could not be read'; })
-    .then(()=>{ clearTimeout(timer); if(mine()) liveSettled=true; });
+    .then(()=>{ clearTimeout(timer); if(mine()){ liveSettled=true;
+      /* TICK-475: the processing caption is a function of whether this request is
+         still out, so the moment it lands the screen stops saying it is waiting.
+         The design source has the same line; this fragment owns this region, so
+         editing only that one would have changed nothing a phone ever runs. */
+      if(typeof procCaption==='function') procCaption(); } });
 }
 
 /* ---- where a scan publishes: the card it was launched from, or the phone's fix + a typed name ---- */

@@ -814,3 +814,49 @@ def test_the_staged_review_path_renders_its_abstention_line():
         "the staged abstention must use the same class as the live branch's, or it "
         "is a different object saying the same thing"
     )
+
+
+def test_the_processing_screen_does_not_promise_eight_seconds_for_a_live_scan():
+    """Eight seconds is this screen's animation, not a scan.
+
+    `PROC_TOTAL` is 7,360ms and the caption was a rounding of it. Measured against
+    production at the size `captureFrame()` uploads, the model call runs about 8
+    seconds and the round trip a person watches runs about 19 -- so the screen
+    promised eight and delivered nineteen, and the countdown beside it reached zero
+    at second eight and sat there for the remaining eleven.
+
+    A staged run really does take about eight seconds, because it waits for nothing.
+    A live one does not. This pins that the screen says which it is:
+
+    * nothing painted before JS runs names a duration, because at that moment the
+      page cannot know which kind of run this is;
+    * the caption is chosen from whether the request is still out;
+    * the countdown stops claiming a number rather than displaying zero.
+
+    Read off the SERVED page: the settle that drives the caption lives in a wiring
+    fragment, and editing only the design source would have changed nothing a phone
+    ever runs.
+    """
+    page = create_app().test_client().get("/app").get_data(as_text=True)
+
+    markup = page[:page.index("<script")]
+    assert "Usually under 8 seconds" not in markup, (
+        "the pre-JS caption names a duration before the page can know whether this "
+        "run is waiting on a server"
+    )
+
+    assert "function procCaption()" in page, "procCaption is not in the served page"
+    caption = page[page.index("function procCaption()"):]
+    caption = caption[:caption.index("function applyGate2()")]
+    assert "liveUpload" in caption and "liveSettled" in caption, (
+        "the caption does not branch on whether the request is still out, so it says "
+        "the same thing for a staged run and a live one"
+    )
+    assert "half a minute" in caption, (
+        "no live-scan wording found; the live branch must not promise eight seconds"
+    )
+
+    assert "if(typeof procCaption==='function') procCaption()" in page, (
+        "nothing refreshes the caption when the request lands, so the screen keeps "
+        "saying it is waiting after it has stopped"
+    )
