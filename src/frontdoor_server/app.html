@@ -395,7 +395,25 @@
      GOING while the row is still transitioning toward it. Reading the live rect
      mid-transition is how the fit silently computed the wrong band. */
   --fab-bottom:110px;    /* the FAB row over the bottom navigation */
-  --fab-bottom-lift:214px; /* and again with the nearby rail up */
+  /* ROUND 15: the two floating map columns were pinned at a literal 104px while the
+     app bar they hang under is 106px at 390 wide at the two smallest text steps and
+     160px in every case where its row wraps -- 320 wide at every step, 390 wide from
+     Larger up. So the bar covered the top 56px of the map key and of the control
+     column in 15 of 25 frame x text-step cases. syncMapChromeTop() writes the
+     measured height less the 2px overlap the default layout already had, so 390 at
+     Default is unchanged at 104 and the wrapped cases move to 158. */
+  --map-chrome-top:104px;
+  /* ROUND 15: THIS CONSTANT WAS ALWAYS GOING TO BE WRONG AT FOUR OF FIVE TEXT STEPS,
+     and measuring it is what found that. The rail it has to clear is 90.3px tall at
+     Default and 138.6px at Double, so 214 cleared it by 29.7px at Default and
+     OVERLAPPED it by 18.6px at Double -- a 48px FAB sitting on a 48px card, which is
+     7.15's coin toss, at Round 14 HEAD and in 15 of 25 frame x text-step cases.
+     syncFabLift() now writes the real number from the rail's own height, which is
+     safe to read because the rail is a display toggle and not a transition -- unlike
+     the FAB row's own `bottom`, which is the reason Round 9 named these two offsets
+     as constants in the first place. The value below is the Default-step answer and
+     stays as the fallback. */
+  --fab-bottom-lift:196px; /* and again with the nearby rail up */
   --inset-x:16px;        /* screen side padding */
   --inset-sheet:18px;    /* sheet side padding */
   --inset-onboard:26px;  /* onboarding is single-column narrative, deliberately narrower */
@@ -409,6 +427,13 @@
      the frame. 121 = 105 + --sp-6, which is the closest the shutter can sit to the
      control it replaces without sharing pixels with it (7.15). */
   --dock-floor:121px;
+  /* ROUND 14. The nav bar is gone from the capture screen (#457), so the shutter no
+     longer has to clear it -- it takes its place. Measured on the Round 13 build,
+     the Scan ring's centre sat 74px above the bottom of the frame on all five
+     supported sizes. 36 + 76/2 = 74, so the shutter's centre lands on that same
+     row and the thumb does not move between the tap that opens the camera and the
+     tap that takes the photograph. */
+  --capture-floor:36px;
 
   /* ---- MOTION (design-systems-spec section 4) -----------------------------------
      Everything that is only a state change is fast; everything that travels is
@@ -494,15 +519,76 @@
      green anywhere in the kit or on the board. That is what "the board in the other
      one is white and blue" was asking for.
 
-     CONTRAST. The darkest tone the ground now paints is the block edge #CFBCEE at
-     relative luminance 0.554; the darkest FILLED area is the place accent over a
-     block, #C1D4F9 at 0.655. --edge is re-solved above against both. */
+     ROUND 16 OVERRULES THE GREEN HALF OF THAT SENTENCE, ON THE OWNER'S OWN DECISION.
+     The line above stays because it is the true record of what Round 7 did; it is no
+     longer the rule. Read on before reverting it.
+
+     WHAT WENT WRONG. Painting the kit's `places` layer in --sky400 made the canopy
+     the ESTIMATED TIER'S colour. Along a treed street the band is a row of pale blue
+     discs at a 7.5px pitch under a 9.2px diameter, so they overlap and fuse; the
+     owner read the result as "blue wavy lines" around Congress and asked, of the same
+     marks, "why aren't the trees on the map". Two complaints, one cause. It also
+     broke visual-language.md section 11 outright -- ground furniture in a semantic
+     hue, in a marker-like shape -- which nothing in the rubric had scored.
+
+     THE DECISION AND WHO MADE IT. The owner was given two options, a lavender canopy
+     or a muted green as a GROUND TOKEN, and answered: "gound token i think." So a
+     green enters this file as --g-canopy and as nothing else. It is NEVER semantic,
+     never a state, never on a pin, a chip, a sheet, a swatch or any UI surface; it is
+     ground furniture with a --g- name like every other ground value. grep is the
+     guard: --g-canopy must resolve in exactly one place, groundSVG's canopy layer.
+
+     WHY GREEN AND NOT A FOURTH LAVENDER. Green is the only hue in this build that
+     carries no product meaning -- sky is Estimated, marigold is Scanned, violet is
+     Owner-confirmed, amber is ageing, red is banned, and the green that once meant
+     needs-match was retired in Round 4 (--match-green is gone; the three halos carry
+     their state in LINE STYLE). NOTE, because a reader will hit it: section 11 of
+     visual-language.md still says "green means needs-match". That sentence is stale
+     by four rounds against this build and is the reason to re-read the tokens rather
+     than the prose. A lavender canopy would have been a FOURTH lavender separable
+     from the other three by lightness alone, which fails in greyscale and in high
+     contrast, and rubric 3.10 exists to stop the lavenders multiplying.
+
+     THE VALUE, and it is the thirteenth authored colour in this file rather than a
+     mix of two of the twelve, because the palette contains no green to mix from --
+     that is the whole content of the owner's decision. --g-canopy #A3C98E, CIE
+     L 77.0 / C 34.6 / h 133. It obeys section 11's rule, which is SATURATION not hue:
+       - the least saturated marker ink is sky700 at chroma 34.7; sky400 is 39.0.
+       - the raw token is chroma 34.6, already under both, and the PAINTED tone is
+         chroma 12.8 over a block (#C4D5C0) and 15.3 over the land (#CADDC3) at .52,
+         against the blue canopy it replaces at 20.3 (#C1D4F9) and 16.1. The canopy
+         got LESS saturated, not more: its ratio against the least saturated marker
+         moves 0.58 -> 0.44.
+       - RESIST THE TEMPTATION TO CALL THAT A LOWER CEILING FOR THE GROUND. It is
+         not. The canopy was never the loudest thing the ground painted, and this
+         was mis-stated once in this file before it was measured properly. Read off
+         a raster of the emitted SVG, the loudest painted tone is the block EDGE
+         #CFBCEE at chroma 27.6 -- a 1px hairline -- and the loudest FILLED tone is
+         the road casing over that edge, #DACBF2 at 21.3, with casing-over-land at
+         17.9. None of the three is touched by this round, so the ground's ceiling
+         is unchanged at 27.6 / 21.3 and its ratio against sky700 stays 0.80 / 0.61.
+         What this round changes is the canopy, and only the canopy.
+     Contrast, re-measured in Round 16 against every tone: table under rubric 3.4.
+
+     CONTRAST, read off a raster of the emitted SVG rather than modelled. The darkest
+     tone the ground paints is still the block edge #CFBCEE at relative luminance
+     0.554, and the second darkest is still the road casing crossing that edge,
+     #D2C1EF at 0.581; both are hairlines, both predate this round, and the Estimated
+     outline holds 3.59:1 and 3.75:1 on them. The darkest tone of any AREA is now the
+     canopy over a block, #C4D5C0 at 0.631, where the blue it replaces was #C1D4F9 at
+     0.653: the Estimated outline holds 4.05:1 on the green against 4.17:1 on the
+     blue, and 3.36:1 against the raw token against 3.08:1 before. Every figure clears
+     the 3:1 floor. --edge is re-solved above against the two hairlines. */
   --g-land:var(--lavender100);       /* kit land   #F5F2FC */
   --g-block:var(--lavender200);      /* kit blocks #E8E1F7 */
   --g-block-edge:var(--lavender-path); /* kit blocks stroke #CFBCEE */
   --g-road:var(--white);             /* kit roads  #FFFFFF */
   --g-road-edge:var(--lavender-path);/* kit roads casing #CFBCEE, painted at .55 */
-  --g-place:var(--sky400);           /* kit places #76BCFD, painted at .34 */
+  /* ROUND 16. The kit's `places` slot, renamed to what it actually draws and
+     repointed off the Estimated tier's blue. GROUND ONLY -- see the block above for
+     the owner's decision and the saturation numbers. --g-place is deliberately gone
+     rather than left aliased, so nothing can reach the old blue by its old name. */
+  --g-canopy:#A3C98E;                /* the tree canopy, painted at .52. NEVER semantic */
   --g-paper:var(--violet600);        /* kit land pattern dot, painted at .045 */
   --g-building:var(--white);         /* board: faint footprint outlines. Kit is silent. */
   --g-label:var(--indigo900);        /* kit labels #1E1142 -- 15.64:1 on the land */
@@ -653,7 +739,29 @@ body{
    have made both of them un-swipeable, which is the trap this policy is avoiding in
    the other direction). The rails themselves declare the axis they do own. */
 #screen-map .screen-body{touch-action:auto;overscroll-behavior-y:auto}
-.nearby,.map-top.tight .legend{touch-action:pan-x;overscroll-behavior-x:contain}
+/* ROUND 16: .map-top.tight .key-body was the second name on this rule. The key's
+   horizontal line is gone (see the key sheet, below), so #nearby is the only
+   horizontal rail left inside the map body. The declaration is unchanged. */
+.nearby{touch-action:pan-x;overscroll-behavior-x:contain}
+/* ROUND 14 -- THE MAP'S OWN POLICY, AND WHY IT IS SAFE HERE (#432).
+   The map surface owns a two-finger gesture outright, so it declares `none`. This
+   is the third value in Round 13's policy and the first surface to need it that is
+   not a drag handle.
+   It does NOT reach the horizontal rail. touch-action intersects DOWN the ancestor
+   chain, and #nearby is a SIBLING of #map inside #screen-map .screen-body, not a
+   descendant of it -- which is why that body was held at `auto` in Round 13
+   (Round 16: .key-body was the second sibling named here; it is inside #sheet-key
+   now, which hangs off .phone and inherits the .sheet-scroll `pan-y` policy, so it
+   is no longer under #map's `none` either)
+   and why it can stay there. Verified by computed style rather than by reading the
+   cascade -- after this change #map computes `none`, #nearby still computes `pan-x`,
+   #screen-map .screen-body is still the one `auto` among 15 screen bodies, and the
+   other 33 declared surfaces are unchanged. Figures in the round log. */
+#map{touch-action:none}
+/* nothing lags under a finger: the pan transition (--dur-map, for the card sheet's
+   reveal) is off for the length of a gesture, for every user rather than only for
+   one motion preference. */
+#map.map-gesture{transition:none}
 
 /* ============ map ============ */
 #screen-map .screen-body{padding:var(--sp-0);overflow:hidden;position:relative}
@@ -847,59 +955,167 @@ body{
    Cuts, all measured: card padding 12 -> 8 vertical (8px), row gap 8 -> 6 across
    four gaps (8px), the CTA's 2px top margin (2px), the column gap 8 -> 6 (2px), and
    the match strip's own padding 8 -> 6 (4px). */
-.map-top{position:absolute;top:104px;left:12px;right:12px;z-index:20;display:flex;flex-direction:column;gap:var(--sp-3);pointer-events:none;align-items:flex-start}
+/* ROUND 15: the column gap goes 6px -> 12px, which is a 7.15 fix and not rhythm.
+   .achip carries an `inset:-8px` pseudo-element to reach 48px on a 32px chip, so at a
+   6px gap the chip's HIT AREA overlapped the control under it by 2px -- 223 to 344px
+   of shared target in 25 of 25 frame x text-step scans, at Round 14 HEAD and before
+   it. 12px clears the 8px reach with 4px to spare. */
+.map-top{position:absolute;top:var(--map-chrome-top,104px);left:12px;right:12px;z-index:20;display:flex;flex-direction:column;gap:var(--sp-5);pointer-events:none;align-items:flex-start}
+/* ============ ROUND 15: THE MAP KEY, ONE CONTROL, CLOSED BY DEFAULT ============
+   What was here: a permanently open four-row card (#legend) AND a permanently open
+   match strip (#match-legend), both floating, neither closable. Measured on the
+   running page at Round 14 HEAD, as a share of #map's own box with a needs profile
+   applied: card 7.14% + strip 2.91% at 390x844, and 7.41% + 8.35% at 320x568.
+   They are one thing now, and it is shut until asked for.
+   Nothing is hidden that lives nowhere else: the collapsed pill DRAWS the three
+   tier marks at the receipt sizes the expanded card already used (24/28/32 -- no new
+   size enters the token table), its accessible name still lists all six marks, and
+   the numbered disc is now taught ON the mark by the press-and-hold preview rather
+   than only in a row of a card. */
+/* ============ ROUND 16: THE KEY OPENS AS A SHEET, NOT AS A CARD =============
+   The owner, on Round 15's key: "i like the minimized legend. but expanding it cuts
+   off part of the legend." Measured before deciding anything, on the running page,
+   over 5 frames x 5 text steps x {no profile, wheelchair} = 50 configurations:
+
+     - NOTHING was ever clipped vertically. #screen-map .screen-body is the only
+       overflow:hidden ancestor and the expanded card's bottom edge was 227.1px to
+       540.7px ABOVE it in 50 of 50. The band was never the thing that cut.
+     - What cut was `.map-top.tight`. Round 9's fallback re-laid the whole key out
+       as ONE horizontal line inside a box 166-330px wide, with scrollbar-width:none
+       and ::-webkit-scrollbar{display:none}. It fired in 22 of the 50: 16 of the 25
+       with a needs profile set (all five text steps on 320x568, 360x640 and
+       375x667, and Double on 390x844) and 6 of the 25 without one (all five on
+       320x568, and Double on 360x640). In those 22, 4 to 6 of the key's 6-7 rows
+       sat past the card's right edge -- 492px to 1458px of overflow in a window
+       that showed about 300px of it, with no scrollbar, no fade and no arrow. On
+       375x667 at Default with a profile the card read "Estimated | Scanned on-site
+       | Ow" and stopped mid-word. That is the cut, and it is horizontal.
+     - Two further facts that argued against patching the card in place: the tight
+       column STILL overran the FAB row's top in 6 of the 50 -- by 13.0, 16.0, 24.0,
+       39.7 and 99.6px on 320x568 at the five text steps with a profile, and by
+       27.6px on 360x640 at Double; and .map-ctls (z-index 42) paints OVER .map-top
+       (z-index 20), so the zoom and locate buttons sat on top of the expanded
+       card's right-hand rows.
+
+   AFTER, re-measured on the same 50 configurations with the sheet open: 6 rows
+   without a profile and 7 with one in 50 of 50; zero rows unreachable in 50 of 50
+   (each row scrolled into view and its rect tested against the scroller's, rather
+   than assumed); horizontal overflow inside the sheet 0px in 50 of 50, against
+   492-1458px before; vertical scroll needed in 6 of 50 (5-201px) and present when
+   needed. The sheet itself is 33.7% to 73.6% of the frame, under its 76% cap. The
+   floating column's overrun of the FAB row falls from 6 of 50 to 1 of 50 (320x568
+   at Double with a profile, +41.6px), and that one is the chip row plus the pill,
+   with no key in it at all.
+
+   THE DECISION, AND WHAT WAS REJECTED.
+   Rejected -- let it scroll vertically inside its own box, capped at the band. It
+   is the cheapest fix and it keeps the card beside the map, but the band it would
+   be capped to is 62px on 320x568 at Double with a profile and filters, and a 62px
+   window on a seven-row key is a worse legend than a clipped one. It also leaves
+   both facts above standing: the column still overruns, the controls still paint
+   over it, and the affordance is an 8px scroller over a moving map.
+   Rejected -- yield the band, by standing the FAB row or the control rail down
+   while the key is up. It trades one occlusion for another, needs a second set of
+   geometry to be correct, and Round 15 spent the round reducing occlusion.
+   Chosen -- the key is a sheet. It is a thing you open, read and dismiss, which is
+   what this file's sheet component already is: three of them, a scrim, background
+   inert, a Tab trap, Escape, focus in on the heading and focus back to the opener,
+   and a stack so "How trust grows" can open on top and come back. A sheet's height
+   is a function of ITSELF (max-height:76% and its own overflow-y:auto), not of the
+   app bar, the chip row, the FAB row or the nearby rail -- so the entire class of
+   defect this round measured cannot recur in it. One answer on all five frames:
+   there is no media query and no per-frame branch anywhere in this change.
+   WHAT THIS COSTS, said plainly: the key can no longer stand open BESIDE the map.
+   Round 15 remembered the open state for the session so a user who wanted it up
+   kept it up; a modal cannot do that and the memory is gone. The mitigation is the
+   part the owner already likes -- the collapsed pill draws the three tier marks at
+   the receipt sizes, on the map, where they are seen.
+   The pill itself is untouched except for its chevron, which pointed DOWN because
+   the card expanded downward in place. It points right now, which is what this file
+   uses for "opens something" (the same glyph the trust row uses). */
+/* ============ ROUND 17: WHAT THE SHEET HOLDS, AND WHAT THE PILL PROMISES ======
+   The rows are now the three tiers, the match strip when a needs profile is set,
+   and the route to "How trust grows" -- see the note above renderKey() for which
+   two rows left and where each is taught instead.
+   THE CHEVRON STAYS POINTING RIGHT, and this round looked at it rather than
+   inheriting it. The owner approved a pill whose chevron pointed DOWN, and Round 16
+   turned it right when the control stopped expanding in place. Right is still the
+   correct glyph: the control opens a modal sheet, `aria-haspopup="dialog"` says so,
+   and every other "opens something" row in this file (.key-cta, .prof-row, .rcpt-row)
+   uses the same right-pointing chevron. A down chevron on a control that opens a
+   sheet would be the only one in the build, and it would promise an expand-in-place
+   that Round 16 measured as unfixable in the band available. Not changed.
+   THE NON-MODAL QUESTION, MEASURED RATHER THAN GUESSED, AND ANSWERED NO. Round 16
+   noted that the key can no longer stand open BESIDE the map, and this round makes
+   the key shorter, which is the thing that would make a non-modal version viable if
+   anything could. It is not enough. See the numbers in the rubric log: the sheet's
+   own height falls but the band it would have to live in -- from the floating
+   column's top to the FAB row's top, which is what fitMapColumn() already measures
+   -- is unchanged, and it is that band, not the sheet's height, that Round 16 found
+   to be 62px in the worst case. Nothing non-modal was built. */
 .legend{
   pointer-events:auto;background:var(--float-white);border-radius:var(--r-3);box-shadow:var(--elev-2);
-  padding:var(--sp-4) var(--sp-5);display:flex;flex-direction:column;gap:var(--sp-3);max-width:100%;
+  display:flex;flex-direction:column;max-width:100%;overflow:hidden;
 }
-/* and the last of it: when the match strip is up, the card sheds its written
-   call-to-action. The card is still a <button> and its accessible name still says it
-   opens "how trust grows"; what goes is 19px of duplicated prompt at exactly the
-   moment two floating elements are competing for the same band. */
-.legend.compact .legend-cta{display:none}
-/* and the card tightens its own rhythm while it is sharing the band. Measured with
-   a needs profile applied (which also raises the filter chip row AND lifts the FABs
-   to bottom:214px): at Round 7 HEAD the .map-top column already overran the FAB row
-   by 50.7 / 54.3 / 62.3px at the three text sizes -- a defect that predates this
-   round and is NOT on the Round 7 punch list. The fourth row costs 34px; the
-   compaction here gives back 46, so the overrun after Round 8 is 46.9 / 49.4 /
-   55.1px -- 3.8 to 7.2px SMALLER than it was found, with one more mark taught. The
-   residual is a real layout defect and is reported, not hidden: three floating
-   elements plus a 48px FAB row do not fit in 196px of map. */
-.legend.compact{gap:var(--sp-2);padding:var(--sp-3) var(--sp-5)}
-/* ---- ROUND 9 CLOSES THE OVERRUN Round 8 reduced and reported open. ------------
-   First, what actually reproduces. Round 8 recorded 46.9 / 49.4 / 55.1px of overrun
-   at the three text sizes and a 196px band; re-measured here on the live build at
-   five real frames -- 430x932, 390x844, 375x667, 390x664, 360x640 -- the column
-   CLEARS the FAB row at every one of them, by 42.2px at the tightest (360x640,
-   Larger) and by 246px at the default 390x844 stage. The band is 456px there, not
-   196. The 196px band corresponds to a 564px-tall map, which is a short browser
-   window rather than any device in the set. So Round 8's figure is not reproducible
-   as stated; the DEFECT is, on short frames: swept downward, the column first
-   touches the FAB row at a map height of about 600px and overruns it by 21.6 / 24.1
-   / 29.8px at 320x568, the smallest frame in the sweep.
-   The fix is therefore conditional on measurement rather than on a fixed number: the
-   column is laid out as a column while it fits, and .tight lays the map key's four
-   keys out as a wrapping ROW when it does not. No mark is dropped, no mark is
-   shrunk, nothing is hidden behind a control -- all four keys are still drawn and
-   still labelled (5.7), they just occupy two rows of two rather than four of one.
-   fitMapColumn() decides it from the live geometry on every render, persona change
-   and resize. */
-.map-top.tight .legend{flex-direction:row;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;
-  column-gap:var(--sp-6);align-items:center;width:100%}
-.map-top.tight .legend::-webkit-scrollbar{display:none}
-.map-top.tight .legend .lg{flex:0 0 auto}
-.map-top.tight .legend .lg .lgpin{flex:0 0 auto}
-.map-top.tight .match-legend{column-gap:var(--sp-4)}
-.legend .lg{display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-meta);font-weight:var(--fw-strong);color:var(--sub);white-space:nowrap;line-height:var(--lh-meta);letter-spacing:var(--ls-flat);}
-.legend .lg .lgpin{flex:0 0 40px;display:flex;justify-content:center}
-.match-legend{
-  pointer-events:auto;background:var(--float-white);border-radius:var(--r-2);box-shadow:var(--elev-2);
-  padding:var(--sp-3) var(--sp-5);display:none;align-items:center;flex-wrap:wrap;gap:var(--sp-3) var(--sp-5);max-width:100%;
-  font-size:var(--fs-meta);font-weight:var(--fw-strong);color:var(--sub);line-height:var(--lh-meta);letter-spacing:var(--ls-flat);}
-.match-legend.on{display:flex}
-.match-legend .lg{display:flex;align-items:center;gap:var(--sp-3);white-space:nowrap}
-.match-legend .sw{display:block;width:15px;height:15px;border-radius:50%;flex:0 0 auto}
+.key-toggle{
+  pointer-events:auto;min-height:var(--tap);border:none;background:none;cursor:pointer;
+  display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-0) var(--sp-5);
+  font-family:inherit;font-size:var(--fs-meta);font-weight:var(--fw-strong);color:var(--sub);
+  line-height:var(--lh-meta);letter-spacing:var(--ls-flat);width:100%;text-align:left;
+}
+.key-art{display:flex;align-items:flex-end;gap:var(--sp-2);flex:0 0 auto}
+.key-word{flex:1 1 auto;white-space:nowrap}
+/* the library ships one chevron and it points right, which is this file's mark for
+   "opens something". It is drawn unrotated. */
+.key-chev{flex:0 0 auto;display:flex;align-items:center}
+/* ---- the key sheet's body. The rows are the same objects the card held, at the
+   same sizes, in a surface that scrolls vertically on its own. #sheet-key gets the
+   flex:1/min-height:0 pair #sheet-filters and #sheet-correct already carry, which
+   is what makes .sheet-scroll a real scroller inside a flex column. ---- */
+#sheet-key .sheet-scroll{flex:1 1 auto;min-height:0}
+.key-body{display:flex;flex-direction:column;gap:var(--sp-3);max-width:100%}
+/* the match rows only exist while a needs profile does. The swatch contrasts Round 8
+   raised to 3:1 are the same declarations on the same tokens. */
+.key-match{display:flex;align-items:center;flex-wrap:wrap;gap:var(--sp-3) var(--sp-5);
+  padding-top:var(--sp-4);border-top:1px solid var(--hairline);
+  font-size:var(--fs-meta);font-weight:var(--fw-strong);color:var(--sub);
+  line-height:var(--lh-meta);letter-spacing:var(--ls-flat);}
+.key-match .lg{display:flex;align-items:center;gap:var(--sp-3);white-space:nowrap}
+.key-match .sw{display:block;width:15px;height:15px;border-radius:50%;flex:0 0 auto}
+/* the trust link is its own 48px control, in the tab order in its own right, and it
+   is present whether or not a needs profile is.
+   ROUND 17: it carries a sub-line now. Two rows left this key, and a key that stops
+   listing a mark owes the reader a sentence saying where that mark is taught
+   instead -- otherwise the removal is a deletion. The sub-line is the same
+   label-over-sub-copy shape .prof-row and .rowsub already use, at --sp-1, which the
+   token table defines as exactly "a sub-line under its label". Vertical padding
+   replaces the 0 it had: with one line, min-height:var(--tap) centred it and the
+   padding never applied; with two, it is what keeps the second line off the
+   hairline at the large text steps. */
+.key-cta{
+  min-height:var(--tap);border:none;background:none;cursor:pointer;font-family:inherit;
+  display:flex;align-items:center;justify-content:space-between;gap:var(--sp-4);width:100%;
+  padding:var(--sp-4) var(--sp-0);margin-top:var(--sp-4);border-top:1px solid var(--hairline);
+  font-size:var(--fs-body);font-weight:var(--fw-strong);color:var(--purple-ink);
+  line-height:var(--lh-row);letter-spacing:var(--ls-flat);text-align:left;
+}
+.key-cta-main{display:flex;flex-direction:column;gap:var(--sp-1);min-width:0;flex:1 1 auto}
+/* the sub-line is body weight in the muted ink, so the purple label stays the thing
+   that reads as the control. --sub is the token every .rowsub already uses and it is
+   not a new colour: measured on the running sheet it is rgb(70,59,99) on white,
+   10.16:1, at --fs-meta (11.7px at the default step, weight 500) -- the same size,
+   weight and ink as the three tier rows above it. The label stays --purple-ink,
+   11.16:1. */
+.key-cta-sub{font-size:var(--fs-meta);font-weight:var(--fw-body);color:var(--sub);
+  line-height:var(--lh-meta);letter-spacing:var(--ls-flat)}
+/* the key's rows and the cluster preview's rows are the same object drawn in two
+   places, so they are one declaration. `white-space:nowrap` came off: inside a card
+   that could not grow, a wrapping label was a clipped label; inside a sheet that
+   scrolls, a wrapping label is a wrapping label, and at the 200% text step the
+   longest of them ("Owner-confirmed") is what would otherwise need to be cut. */
+.key-body .lg,.cluster-peek .lg{display:flex;align-items:center;gap:var(--sp-4);font-size:var(--fs-meta);font-weight:var(--fw-strong);color:var(--sub);line-height:var(--lh-meta);letter-spacing:var(--ls-flat);}
+.cluster-peek .lg{white-space:nowrap}
+.key-body .lg .lgpin,.cluster-peek .lg .lgpin{flex:0 0 40px;display:flex;justify-content:center}
 .sw.good{border:2px solid var(--match-good)}
 .sw.partial{border:2px dashed var(--match-partial)}
 /* ROUND 8: the swatch was dotted sky400 (#76BCFD, 1.83:1 on the legend's white)
@@ -1338,6 +1554,19 @@ body{
 }
 .filt-apply .btn{width:100%}
 .filt-apply .filt-caption{margin-top:var(--sp-4)}
+/* ROUND 14 -- THE SAME DOCK, GENERALISED TO ONE MORE SHEET (#465 / 7.16).
+   The correction sheet's Send sat 201px (default text) to 639px (200%) down a
+   scroller on a 320x568 frame, and the bottom 86px of that frame is the nav bar,
+   which is outside every scroller and scrolls nothing. It is now outside the
+   scroller too. --pad-bottom (104px) is the nav clearance the sheet's own scroller
+   used to carry at its foot; it moves down here with the buttons. */
+#sheet-correct .sheet-scroll{flex:1 1 auto;min-height:0;padding-bottom:var(--sp-5)}
+.sheet-dock{
+  flex:0 0 auto;background:var(--card);
+  padding:var(--sp-5) var(--inset-sheet) var(--sp-7);
+  border-top:1px solid var(--hairline);
+}
+.sheet-dock .card-actions{margin-top:var(--sp-0)}
 .filt-reset{border:none;background:none;font-family:inherit;color:var(--purple-ink);font-weight:var(--fw-strong);font-size:var(--fs-sub);cursor:pointer;min-height:var(--tap);min-width:var(--tap);/* ROUND 7: it had the height and not the width, and measured 45.8x48 open */padding:var(--sp-0) var(--sp-3);line-height:var(--lh-sub);letter-spacing:var(--ls-flat);}
 .filtchip{
   display:inline-flex;align-items:center;gap:var(--sp-3);border-radius:999px;padding:var(--sp-4) var(--sp-6);min-height:var(--tap);
@@ -1404,9 +1633,29 @@ body{
 /* ROUND 12: the capture body no longer pads for the nav bar, because it no longer
    ends at it -- the dock below it owns that clearance. --pad-bottom stays on every
    other scan screen. */
-#scan-capture .scan-body{padding-top:var(--pad-top);padding-bottom:var(--sp-5)}
+#scan-capture .scan-body{padding-top:var(--pad-top);padding-bottom:var(--sp-5);
+  /* ROUND 14: with the nav bar gone (#457) the body is 86px taller than its content
+     on the roomier frames, and top-aligning left an 86px well of empty indigo
+     between the target line and the shutter. `safe center` and not `center`: this
+     is a scroller, and plain `center` in an overflowing flex column puts the top of
+     the content above the scroll origin, where no gesture can reach it -- which is
+     the failure this whole round is about. `safe` falls back to flex-start exactly
+     when the content overflows, which is the 320x568 case at the two largest text
+     steps. Measured both ways in the round log. */
+  justify-content:safe center}
+/* ROUND 14 -- THE VIEWFINDER CLIPS ITS PICTURE, NOT ITS INSTRUCTIONS (#458).
+   `overflow:hidden` was on .viewfinder itself, so it clipped everything inside it:
+   the camera image (which it must), and the coach pill (which it must not).
+   Measured on the pre-change build, the coach rendered 380.2px wide inside a 330px
+   viewfinder at the 200% text step on every frame -- 25.1px cut off each side at
+   390 and 430 wide, and 56.1px each side at 320 -- and the sentence that was
+   trimmed is the one telling the user how to aim.
+   The clip now lives on .vf-media, which holds only the video and the illustrated
+   frontage. The overlays -- guide, coach, LIVE chip -- are siblings of it inside a
+   viewfinder that no longer clips. Nothing about the picture's rounded corners
+   changes: .vf-media inherits the radius and clips exactly what it used to. */
 .viewfinder{
-  position:relative;width:100%;max-width:330px;aspect-ratio:3/4;border-radius:var(--r-4);overflow:hidden;
+  position:relative;width:100%;max-width:330px;aspect-ratio:3/4;border-radius:var(--r-4);
   background:linear-gradient(180deg,#E6F3FF 0% 46%, #F0ECFB 46% 78%, #DFD7F2 78% 100%);
   /* ROUND 12 -- A FLOOR THE VIEWFINDER CANNOT BE SHRUNK BELOW.
      This is a flex item that shrinks, and the dock below it is now a fixed 197px of
@@ -1421,6 +1670,7 @@ body{
      two rather than crushing the thing the screen is for. */
   min-height:200px;
 }
+.vf-media{position:absolute;inset:0;border-radius:inherit;overflow:hidden}
 /* ROUND 10 -- THE FRAME GUIDE IS THE DOORWAY, NOT FOUR ANONYMOUS BRACKETS.
    Four white corner brackets at inset:26px marked a rectangle that meant nothing
    in particular. The guide is now the J1 Estimated pin's own glyph -- two rounded
@@ -1469,9 +1719,35 @@ body{
    transform -- without it the guide would SNAP 3% smaller, which is a jump, not a
    state.) */
 .rm .phone .frame-guide.got{transform:translate(-50%,-50%)}
+/* ROUND 14 -- THE COACH HAS TWO PLACES AND THE BUILD MEASURES WHICH ONE IT IS IN.
+   `white-space:nowrap` is gone: a line that cannot wrap can only be cut, and it was
+   being cut. It now wraps inside a max-width that fitCoach() writes from the FRAME's
+   width (the viewfinder is 268-330px, the frame 320-430, and the pill is centred in
+   both), so the pill is never wider than the phone.
+   Wrapping alone would have traded a horizontal clip for a vertical collision: a
+   three-line pill at the 200% step is ~114px tall, and the doorway guide's lower
+   edge sits at 78% of the viewfinder, so the pill would cover the shape the sentence
+   is telling you to aim with. So there are two positions, and fitCoach() picks
+   between them by measurement rather than by text-size class:
+     INSIDE  (default, and the board's treatment): floating over the frontage,
+             12px off the viewfinder's bottom edge. Used while 22% of the
+             viewfinder's height leaves the pill 20px of clearance under the guide.
+     BELOW:  in the gap under the viewfinder, which the screen opens by exactly the
+             pill's own height (--coach-drop). Used when it does not.
+   Neither position clips, at any text step, on any supported frame. */
 .coach{
   position:absolute;left:50%;transform:translateX(-50%);background:rgba(23,20,31,.82);color:#fff;
-  font-size:var(--fs-meta);font-weight:var(--fw-strong);border-radius:999px;padding:var(--sp-4) var(--sp-6);white-space:nowrap;line-height:var(--lh-meta);letter-spacing:var(--ls-flat);}
+  font-size:var(--fs-meta);font-weight:var(--fw-strong);border-radius:999px;padding:var(--sp-4) var(--sp-6);
+  /* width:max-content is load-bearing and was found by measuring rather than by
+     reading. An absolutely positioned box with `left:50%` and no `right` shrinks
+     to fit the space from its left edge to the containing block's right edge --
+     HALF the viewfinder, 134px at 320 wide. Without this the fix for a 25px clip
+     would have been a pill wrapped to three lines at every text step. max-content
+     asks for the line, and the inline max-width fitCoach() writes is what caps it. */
+  width:max-content;
+  white-space:normal;text-align:center;line-height:var(--lh-meta);letter-spacing:var(--ls-flat);}
+#scan-capture.coach-below .coach{top:calc(100% + 10px);bottom:auto !important}
+#scan-capture.coach-below .viewfinder{margin-bottom:var(--coach-drop,0px)}
 .scan-target{color:#F5F2FC;font-weight:var(--fw-body);font-size:var(--fs-sub);margin-top:var(--sp-6);text-align:center;line-height:var(--lh-sub);letter-spacing:var(--ls-flat);}
 .scan-target b{color:#fff}
 /* ROUND 12 -- THE SHUTTER AND THE SCAN TAB ARE ONE CONTROL IN TWO STATES.
@@ -1494,7 +1770,31 @@ body{
      control drawn twice with nothing to say which one is live. Marigold on white is
      1.85:1 and is not an option for the glyph; --ink on white is 16.36:1.
    The ticket asked for the fill to match too; it is the one line of #457 not taken,
-   and the round log carries the measurement behind the refusal. */
+   and the round log carries the measurement behind the refusal.
+
+   ROUND 14 CLOSES THE REST OF #457, AND THE ANSWER IS SUBTRACTION.
+   The owner came back after Round 12: "fix the capture button. it should be the
+   photo button to capture as well." Round 12 had made the two look alike; it had
+   not made them ONE. Measured on the Round 13 build, the capture screen carried
+   TWO camera-glyph buttons at once: the 76px shutter with its centre 159px off the
+   bottom of the frame, and the nav bar's 62px Scan ring with its centre 74px off
+   the bottom -- 85px apart, on every one of the five supported frames (320x568,
+   360x640, 375x667, 390x844, 430x932: shutter centre 409/481/508/685/773, ring
+   centre 494/566/593/770/858). Same glyph, same ring, same glow, one action,
+   drawn twice, one above the other.
+   So the nav bar leaves the capture screen, and the shutter takes the ring's exact
+   place: the dock's floor is now 36px, which puts the shutter's centre at
+   frameHeight-74 -- the pixel row the Scan ring occupied on all five frames. The
+   button the user pressed to get here does not reappear underneath the one that
+   replaced it; it BECOMES it, in place. One camera button on the screen.
+   What that costs, stated: board 03 draws the nav bar on the capture panel, so this
+   is a deliberate divergence from the approved artwork, taken on the owner's own
+   directive after he had seen the board's arrangement built twice. What it buys,
+   besides the ticket: 86px of frame handed back to the viewfinder, which is where
+   the 200% text step was hurting most.
+   The nav bar is `display:none` here rather than moved, so nothing about it can be
+   half-present; showScreen() also marks it `inert`, as it already does for
+   onboarding, so it leaves the tab order and the accessibility tree together. */
 .shutter{
   width:76px;height:76px;border-radius:50%;background:#fff;border:3px solid var(--marigold);
   cursor:pointer;box-shadow:var(--ring-action);color:var(--ink);
@@ -1514,8 +1814,12 @@ body{
 .capture-dock{
   flex:0 0 auto;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;
   column-gap:var(--sp-5);padding:var(--sp-0) var(--inset-onboard);
-  margin-bottom:var(--dock-floor);
+  /* ROUND 14: 36px, not --dock-floor's 121. 36 + half of a 76px shutter = 74, which
+     is where the nav bar's Scan ring centre measured on every supported frame. */
+  margin-bottom:var(--capture-floor);
 }
+/* ROUND 14 (#457): one camera button on the capture screen. See the note above. */
+.phone[data-screen="scan-capture"] #navbar{display:none}
 .capture-dock .shutter{grid-area:1/2;justify-self:center}
 .capture-dock .lib-link{grid-area:1/1;justify-self:start;margin-top:var(--sp-0)}
 /* At the two text sizes Round 11 added, "Choose from library" no longer fits the
@@ -1535,7 +1839,50 @@ body{
   position:absolute;top:54px;left:14px;width:var(--tap);height:var(--tap);border-radius:50%;border:none;cursor:pointer;
   background:rgba(255,255,255,.16);color:#fff;font-size:var(--icon-glyph);font-weight:var(--fw-strong);z-index:5;
 }
-#scan-capture .cancel-x{background:rgba(255,255,255,.16)}
+/* ROUND 14 (#459) -- THE ONE CONTROL THAT GETS YOU OUT OF A CAMERA SCREEN WAS THE
+   HARDEST THING ON IT TO SEE. Its fill was white at 16%, which over a bright
+   frontage is white on almost-white. It now takes the doorway guide's own answer to
+   the same problem, with the same token at the same alpha: indigo900 at 60%. That
+   is not a new treatment, it is the halo that already sits behind the guide's
+   stroke 250px below it, so the two dark-on-camera devices on this screen are one
+   device. Measured the way the guide's 4.65:1 was measured -- the 36 x 44px of the
+   disc that lies over the picture at 375 wide, mapped back through object-fit:cover
+   into each of the 335 photographs in photos/door-01..64, mean luminance under the
+   disc, white glyph against the composite: WORST 5.50:1, 1st percentile 5.75,
+   median 11.26, and 0 of 335 below 4.5:1. The fill it replaces, white at 16%, over
+   the same 335 discs: worst 1.24:1, median 3.67:1, and 200 of 335 below 4.5:1 --
+   which is the defect, stated as a count rather than as an impression.
+   THE OVERLAP IS PARTLY GONE AND WHAT REMAINS IS A DECISION. Centring the capture
+   body in the height the nav bar left behind (#457) pushed the viewfinder down far
+   enough that on 390 and 430 wide the overlap is now 0.0px at four of the five text
+   steps -- it was 8 to 32px on every one. On 320, 360 and 375 it is still 12 to
+   36px, and it stays: the viewfinder there is 268-323px inside a frame 320-375px
+   wide, so there is no column beside it to move a 48px control into, and the only
+   remaining way to clear it is to push the viewfinder further down, which at the
+   200% text step comes straight out of the thing the screen is for. So on the
+   narrow frames the control overlaps and stops depending on what is behind it. */
+/* AND A KEYLINE, BECAUSE THE HALO ALONE DISAPPEARS ON THE OTHER HALF OF THE SCREEN.
+   Found by looking at the result rather than at the number: #scan-capture's ground
+   IS indigo900, and indigo900 at 60% over indigo900 is indigo900 -- so wherever the
+   control does not overlap the picture (all of 390 and 430 wide after the body was
+   centred) the disc vanished into the screen and only the glyph was left. The white
+   glyph is 17.30:1 there and perfectly readable; the BUTTON had stopped looking like
+   a button. And measuring the DISC's edge rather than the glyph's showed the halo
+   was never the edge carrier over a photograph either: disc against the picture
+   behind it, over the same 335, is worst 1.00:1, median 2.21:1, and **245 of 335
+   below 3:1** -- a dark disc on a dark doorway has no edge at all. The glyph was
+   always readable; the control's outline was not, on either ground, and the 60%
+   halo alone would have shipped that.
+   A 1.5px white keyline at 55% fixes both, and the alpha is the one the corpus
+   picked rather than the one that looked right. Best available edge (the strongest
+   of disc-vs-picture, keyline-vs-picture and keyline-vs-disc), swept at keyline
+   0.40 / 0.55 / 0.70 / 0.85 / 1.00: worst 2.87 (26 of 335 under 3:1), **3.50 (0 of
+   335)**, 4.00, 4.49, 5.48. 0.55 is the first that clears 3:1 on every photograph,
+   and it measures **5.91:1** against the indigo screen ground where there is no
+   picture at all. The halo stays at the guide's own 60% so the two dark-on-camera
+   devices on this screen are still one device. */
+#scan-capture .cancel-x{background:rgba(30,17,66,.60);
+  box-shadow:inset 0 0 0 1.5px rgba(255,255,255,.55)}
 .scanscreen.light .cancel-x{background:#fff;color:var(--sub);box-shadow:var(--elev-2)}
 
 /* live camera (real rear-camera viewfinder; silently absent on desktop) */
@@ -1672,6 +2019,19 @@ body{
 .review-img{
   position:relative;width:100%;max-width:320px;aspect-ratio:3/4;border-radius:var(--r-4);overflow:hidden;
   background:linear-gradient(180deg,#E6F3FF 0% 46%, #F0ECFB 46% 78%, #DFD7F2 78% 100%);
+  /* ROUND 14 -- THE SAME FLOOR THE VIEWFINDER GOT IN ROUND 12, AND FOR A WORSE
+     REASON. Found by this round's ancestor-aware sweep (#458), which flagged the
+     "Auto-blur applied" pill as clipped 42.3px at its TOP by this box; measuring
+     the box to find out why produced the real defect. This is a flex item with an
+     aspect-ratio and no floor, so it shrank to nothing: measured on the Round 13
+     build it rendered 268 x 3.1px at 320x568 default, and 320 x 0, 308 x 0 and
+     268 x 0 -- ZERO HEIGHT -- at 320x568 and 360x640 at the Huge and Double steps
+     and at 390x844 at Double. A screen headed "Review before publishing" was
+     showing nothing to review, and the pill was the only thing left of the photo.
+     200px is the viewfinder's floor, chosen there for the same reason; the body
+     around it already scrolls and its Publish is already docked (Round 13), so the
+     cost of the floor is scroll on a screen where nothing terminal depends on it. */
+  min-height:200px;
 }
 .blurband{
   position:absolute;left:8%;bottom:20%;width:56px;height:96px;border-radius:var(--r-3);
@@ -1773,7 +2133,14 @@ ul.prof-card>li:last-child .prof-row{border-bottom:none}
    mark's own accent arcs (sky + marigold) so the screen is not a field of purple. ---- */
 #ob-welcome{background:#1E1142}
 .wl-hero{
-  position:relative;flex:1 1 auto;padding:var(--pad-top) var(--inset-onboard) var(--sp-0);
+  /* ROUND 14: shrink factor 100 against the card's 1, with a floor at the status
+     bar's own clearance. The card became shrinkable this round so that its actions
+     could be docked; without this the hero and the card would have shared the
+     deficit proportionally and the narrative would have started scrolling at the
+     DEFAULT text step, where it never did. The decorative hero yields first, all
+     the way down to the status bar, and the card only after it has nothing left. */
+  position:relative;flex:1 100 auto;min-height:var(--pad-top);
+  padding:var(--pad-top) var(--inset-onboard) var(--sp-0);
   display:flex;flex-direction:column;align-items:center;gap:var(--sp-5);overflow:hidden;
 }
 .wl-lock{display:flex;flex-direction:column;align-items:center;gap:var(--sp-5);margin:auto var(--sp-0)}
@@ -1783,10 +2150,20 @@ ul.prof-card>li:last-child .prof-row{border-bottom:none}
   color:#E8E1F7;text-align:center;
 }
 .wl-sky{display:block;width:100%;margin-top:var(--sp-6);margin-bottom:-2px}
+/* ROUND 14: `flex:0 0 auto` is now `0 1 auto` with min-height:0, so the card can be
+   smaller than its content -- which at the 200% text step it must be, because that
+   content is 716px and the shortest supported frame is 568. The narrative inside it
+   scrolls; the actions below do not. See the markup note. */
 .wl-card{
-  flex:0 0 auto;background:var(--card);border-radius:var(--r-5) var(--r-5) 0 0;
+  flex:0 1 auto;min-height:0;background:var(--card);border-radius:var(--r-5) var(--r-5) 0 0;
   padding:var(--sp-8) var(--sp-7) var(--sp-8);display:flex;flex-direction:column;align-items:center;
   position:relative;z-index:2;box-shadow:var(--elev-3-dark);
+}
+/* the 35th scrolling surface, declared under Round 13's policy on the same terms as
+   the other 34: it scrolls vertically, it owns nothing else, it does not chain. */
+.wl-scroll{
+  width:100%;min-height:0;overflow-y:auto;display:flex;flex-direction:column;align-items:center;
+  touch-action:pan-y;overscroll-behavior-y:contain;-webkit-overflow-scrolling:touch;
 }
 .wl-h{font-size:var(--fs-h1);font-weight:var(--fw-display);text-align:center;line-height:var(--lh-h1);color:var(--ink);letter-spacing:var(--ls-h1);text-wrap:balance}
 /* ROUND 9.1 -- the welcome line carries the idea, so it is set rather than merely typed.
@@ -1869,19 +2246,19 @@ ul.prof-card>li:last-child .prof-row{border-bottom:none}
    above; the map key card and the nearby card are in the ROW press group below,
    which washes rather than scales, so box-shadow is added to that group's own
    transition rather than declared here where the later group would replace it. */
-.ctl-btn:active,.fab-needs:active,.fab-filters:active,button.legend:active,
+.ctl-btn:active,.fab-needs:active,.fab-filters:active,.legend:has(.key-toggle:active),
 .nb-card:active,.sheet-close:active{box-shadow:var(--elev-1)}
 /* physically larger controls need a deeper press to read as one */
 .shutter:active{transform:scale(.93);transition:transform var(--dur-press) var(--ease-exit)}
 .toggle:active{transform:scale(.97);transition:transform var(--dur-press) var(--ease-exit)}
 .nav-scan:active .ring{transform:scale(.95);transition:transform var(--dur-press) var(--ease-exit)}
 .prof-row,.srow,.lrow,.nb-card,.prov-row,.persona,.claim-result,.verify-opt,.authz,
-.ow-editrow,.photostrip,.photo-add,button.legend,.navbtn,.ow-sel select,.rcpt-row{
+.ow-editrow,.photostrip,.photo-add,.key-toggle,.key-cta,.navbtn,.ow-sel select,.rcpt-row{
   transition:background-color var(--dur-fast) var(--ease-exit),
              box-shadow var(--dur-peer) var(--ease-sheet);   /* ROUND 9: N8, release */
 }
 .prof-row:active,.nb-card:active,.prov-row:active,.persona:active,.verify-opt:active,
-.authz:active,.ow-editrow:active,.photostrip:active,.photo-add:active,button.legend:active,
+.authz:active,.ow-editrow:active,.photostrip:active,.photo-add:active,.key-toggle:active,.key-cta:active,
 .navbtn:active,.ow-sel select:active,.rcpt-row:active{
   background-color:var(--press-wash);transition:background-color var(--dur-press) var(--ease-exit),
                                                 box-shadow var(--dur-press) var(--ease-exit)}
@@ -1949,7 +2326,13 @@ ul.prof-card>li:last-child .prof-row{border-bottom:none}
 .rm .phone .pinbtn.leaving{animation:none !important}
 
 /* ============ map controls (right stack): list toggle - zoom - locate ============ */
-.map-ctls{position:absolute;top:104px;right:12px;z-index:42;display:flex;flex-direction:column;gap:var(--sp-4)}
+/* ROUND 15: the control column gets the same conditional the key column has had
+   since Round 9 -- when it does not fit the band between the app bar and the FAB
+   row, it tightens rather than sitting on top of a 48px target. 12px -> 6px of gap
+   is 12px of band recovered, which is what the measurement said was missing at the
+   first two text steps on the 320 frame. */
+.map-ctls{position:absolute;top:var(--map-chrome-top,104px);right:12px;z-index:42;display:flex;flex-direction:column;gap:var(--sp-5)}
+.map-ctls.tight{gap:var(--sp-3)}
 .ctl-btn[hidden]{display:none}
 /* ROUND 9 closes a11y N9. These discs were `border:0px none` over a map whose
    lightest tones are white road and #F5F2FC land, so the CONTROL was 1.00-1.26:1
@@ -1977,12 +2360,61 @@ ul.prof-card>li:last-child .prof-row{border-bottom:none}
    never averages one, and it is centred on its own centroid, not tip-anchored. */
 .cluster{
   position:absolute;width:0;height:0;padding:var(--sp-0);margin:var(--sp-0);border:none;background:none;cursor:pointer;
+  /* ROUND 15: a press-and-hold is now a real gesture on this control, and a long
+     press on a control the browser thinks holds text is a selection or a callout. */
+  -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;
 }
 .cluster::before{content:'';position:absolute;width:var(--tap);height:var(--tap);left:calc(var(--tap) / -2);top:calc(var(--tap) / -2);border-radius:50%}
 .cluster .disc{position:absolute;left:0;top:0;transform:translate(-50%,-50%);pointer-events:none;transition:transform var(--dur-fast) var(--ease-enter)}
 .cluster:focus-visible{outline:none}
 .cluster:focus-visible::before{outline:3px solid var(--brand-blue-ink);outline-offset:1px}
 .cluster:active .disc{transform:translate(-50%,-50%) scale(.97);transition:transform var(--dur-press) var(--ease-exit)}
+/* the held/hovered/focused disc lifts slightly so the preview reads as belonging to
+   THAT disc and not to the map. A transform, never a colour: 9.1 and 9.7 both forbid
+   a cluster taking on any tier's encoding, and a hover state is context. */
+.cluster.peeked .disc{transform:translate(-50%,-50%) scale(1.08)}
+
+/* ============ ROUND 15: WHAT A NUMBER HOLDS, BEFORE YOU COMMIT TO IT ============
+   "hovering over the numbers should also do something" (owner). The disc answered
+   only a tap, and a tap is a navigation. This answers a hover, a press-and-hold and
+   a keyboard focus with the two facts the disc already encodes and never said out
+   loud: how many, and the mix of tiers. The mix bars are the same three tokens the
+   disc's own arcs are drawn in, in the same order, so the preview teaches the arc
+   ring rather than merely repeating the count. */
+.cluster-peek{
+  position:absolute;z-index:44;pointer-events:none;
+  background:var(--float-white);border-radius:var(--r-3);box-shadow:var(--elev-3-free);
+  padding:var(--sp-4) var(--sp-5);max-width:min(240px,86%);
+  opacity:0;transform:translateY(4px);
+  transition:opacity var(--dur-fast) var(--ease-enter),transform var(--dur-fast) var(--ease-enter);
+}
+.cluster-peek[hidden]{display:none}
+.cluster-peek.on{opacity:1;transform:translateY(0)}
+.cpk-h{font-size:var(--fs-sub);font-weight:var(--fw-strong);color:var(--ink);
+  line-height:var(--lh-sub);letter-spacing:var(--ls-flat)}
+.cpk-rows{display:flex;flex-direction:column;gap:var(--sp-2);margin-top:var(--sp-3)}
+.cpk-n{flex:0 0 auto;font-variant-numeric:tabular-nums;color:var(--ink);margin-right:var(--sp-1)}
+.cpk-f{margin-top:var(--sp-3);padding-top:var(--sp-3);border-top:1px solid var(--hairline);
+  font-size:var(--fs-micro);font-weight:var(--fw-strong);color:var(--purple-ink);
+  line-height:var(--lh-micro);letter-spacing:var(--ls-flat)}
+
+/* ============ ROUND 15: WHERE YOU ARE ============
+   The map named a location in the header pill, measured every distance in the
+   product from it, sorted the nearby rail by it and gave a button that recentres on
+   it -- and never drew it. This is that mark. It is the locate button's own glyph,
+   so the control and the thing it returns to are the same drawing; it is 24px, the
+   smallest size in the pin table's receipt row, so it can never read as heavier than
+   the smallest evidence mark on the map (32px at overview, 40 at street); it is
+   pointer-events:none, so it takes no tap and 7.15 does not reach it.
+   Z-INDEX 80, WHICH IS A RECORDED DIVERGENCE AND NOT AN OVERSIGHT (9.10). The
+   approved render order -- cluster 10, Estimated 20, Scanned 30, Owner 40, match 50,
+   selected 60, live 70 -- is a table of EVIDENCE marks, and this is not one; it is
+   the user. Drawn under them it was measured 70% covered by one scanned pin's tail
+   at the pilot frame, which is a mark that adds nothing. Above them it is 24px of
+   the smallest size in the table with its own white halo, it never covers a glyph it
+   is not directly on, and it is the one thing on a map that must never be lost. */
+.you-here{position:absolute;z-index:80;pointer-events:none;transform:translate(-50%,-50%)}
+.you-here[hidden]{display:none}
 
 /* ============ selected pin: a squash on tap, growing from the anchored tip ============ */
 /* The selected pin is re-rendered at its selected SIZE, so this keyframe grows it
@@ -2136,7 +2568,8 @@ ul.prof-card>li:last-child .prof-row{border-bottom:none}
      measured at 715px of content. It is still a popup: 99px of map stays visible. */
   left:18px;right:18px;bottom:auto;top:50%;border-radius:var(--r-4);max-height:88%;
   box-shadow:var(--elev-3-free);
-  /* it is opened by button.legend on the map, so it grows FROM that button.
+  /* it is opened by the key card's "How trust grows" row on the map, so it grows
+     FROM that row.
      openSheet() writes --pop-x / --pop-y from the opener's own rect. */
   transform-origin:var(--pop-x,50%) var(--pop-y,50%);
   transform:translateY(-50%) scale(.92);opacity:0;
@@ -2145,9 +2578,7 @@ ul.prof-card>li:last-child .prof-row{border-bottom:none}
 .sheet.popup.on{transform:translateY(-50%) scale(1);opacity:1;
   transition:transform var(--dur-base) var(--ease-enter),opacity var(--dur-base) var(--ease-enter),visibility 0s 0s}
 .sheet.popup .sheet-scroll{padding:var(--inset-sheet) var(--inset-sheet) var(--sp-7)}
-.legend-cta{font-size:var(--fs-micro);font-weight:var(--fw-strong);color:var(--purple-ink);margin-top:var(--sp-0);line-height:var(--lh-micro);letter-spacing:var(--ls-flat);}
-button.legend{border:none;cursor:pointer;font-family:inherit;text-align:left}
-button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offset:3px}
+.key-toggle:focus-visible,.key-cta:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offset:-3px}
 
 /* ============ splash ============ */
 .splash{background:#1E1142;z-index:58;align-items:center;justify-content:center}
@@ -2176,9 +2607,12 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
    rotation entirely, so it now stacks the measured line above the resting
    instruction -- the guidance is present as static text either way, and nothing
    the user needs depends on a change happening. .coach is white-space:nowrap for
-   the single-line form, so the static form has to release that and stack. */
-.coach.static{white-space:normal;display:flex;flex-direction:column;gap:var(--sp-1);text-align:center;
-  max-width:84%;border-radius:var(--r-2);padding:var(--sp-3) var(--sp-5)}
+   the single-line form, so the static form has to release that and stack.
+   ROUND 14: .coach is no longer nowrap (#458) so the release is redundant, and the
+   84% max-width is gone -- fitCoach() writes the pill's max-width from the frame,
+   inline, for both forms, so there is one rule about how wide the coach may be. */
+.coach.static{display:flex;flex-direction:column;gap:var(--sp-1);
+  border-radius:var(--r-2);padding:var(--sp-3) var(--sp-5)}
 .coach.swap{opacity:0}
 
 /* ============ processing: captured image settles into the ring, chips populate ============ */
@@ -2313,13 +2747,11 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
     transition-duration:0s !important;transition-delay:0s !important;animation-delay:0s !important}
 }
 
-/* ============ nearby matches rail title ============ */
-.nearby-title{
-  position:absolute;left:14px;bottom:186px;z-index:21;display:none;
-  background:var(--float-white);border-radius:999px;padding:var(--sp-3) var(--sp-5);
-  font-size:var(--fs-micro);font-weight:var(--fw-strong);letter-spacing:var(--ls-caps);text-transform:uppercase;color:var(--sub);
-  box-shadow:var(--elev-2);pointer-events:none;line-height:var(--lh-micro);}
-.nearby-title.on{display:block}
+/* ROUND 15 REMOVES THE "NEARBY MATCHES" LABEL. It floated a fourth band into the
+   bottom-left stack -- 1.06% of the map at 390x844 and 2.92% at the 200% text step --
+   over a rail whose every card already says a name, a match and a distance. Nothing
+   is lost to a screen reader: #nearby is role="group" aria-label="Nearby matches",
+   which is where that phrase was doing real work. */
 
 /* ============ empty-area invite ============ */
 .map-empty{
@@ -2760,6 +3192,19 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
    side -- outline on indigo900, the audit's 1.12:1. It is an occlusion, not a
    colour. 8px of clearance puts the whole 6px ring above the overhang. */
 .ow-cta{margin-top:auto;padding-top:var(--sp-6);padding-bottom:var(--sp-4)}
+/* ROUND 14 -- THE SCREEN-LEVEL DOCK (#465 / 7.16).
+   Same shape as .filt-apply (Round 6), .scan-dock (Round 13) and .sheet-dock: a
+   terminal action lives OUTSIDE the scroller, so reaching it is not a gesture.
+   .screen is already a flex column and .screen-body already flex:1, so this needs
+   no new mechanism -- only the nav clearance, which moves out of the scroller's
+   foot and into the dock's. Applied to the two owner-flow publishes; the scroller
+   above them drops to --sp-5 at the foot because it no longer ends at the bar. */
+.screen-dock{
+  flex:0 0 auto;background:var(--ground);border-top:1px solid var(--hairline);
+  padding:var(--sp-5) var(--inset-x) var(--pad-bottom);
+}
+.screen-dock .ow-cta{margin-top:var(--sp-0);padding-top:var(--sp-0);padding-bottom:var(--sp-0)}
+#ow-photos .screen-body,#ow-review .screen-body{padding-bottom:var(--sp-5)}
 .ow-photo{display:flex;gap:var(--sp-5);align-items:stretch;background:#fff;border-radius:var(--r-3);box-shadow:var(--elev-1);padding:var(--sp-5);margin-top:var(--sp-5)}
 .ow-photo .ph-img{position:relative;width:136px;height:118px;border-radius:var(--r-2);overflow:hidden;flex:0 0 auto;background:var(--blue-wash)}
 .ow-photo .ph-img img{width:100%;height:100%;object-fit:cover;display:block}
@@ -2874,7 +3319,11 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
      re-toned onto the canonical lavenders rather than invented afresh. */
   --g-land:#FFFFFF;--g-block:#FFFFFF;--g-block-edge:var(--indigo900);
   --g-road:#E8E1F7;--g-road-edge:#FFFFFF;
-  --g-place:#FFFFFF;--g-paper:#FFFFFF;--g-building:#FFFFFF;
+  /* ROUND 16: --g-canopy is white here for the same reason --g-place was -- the
+     canopy layer is skipped entirely under `if(!hc)`, and a token that resolves to
+     the ground's own white cannot paint anything if that guard is ever lost. The
+     green never reaches high contrast. */
+  --g-canopy:#FFFFFF;--g-paper:#FFFFFF;--g-building:#FFFFFF;
   --g-line:var(--indigo900);--g-label:#140E34}
 .phone.hc .fchip,.phone.hc .persona,.phone.hc .tierchip,.phone.hc .field select,.phone.hc .field textarea{border-width:2px}
 .phone.hc .prof-row .chev{color:var(--sub)}
@@ -3005,12 +3454,34 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
         </div>
         <div class="map-top">
           <div class="chiprow" id="chiprow" role="group" aria-label="Active filters"></div>
-          <button class="legend" id="legend" aria-label="Map key: the three pin tiers, the numbered cluster disc, the pale disc behind a matched pin and the double ring on the one you have open"></button>
-          <div class="match-legend" id="match-legend">
-            <span id="ml-label"></span>
-            <span class="lg"><span class="sw good"></span>good</span>
-            <span class="lg"><span class="sw partial"></span>partial</span>
-            <span class="lg"><span class="sw unknown"></span>not yet seen</span>
+          <!-- ROUND 15. ONE KEY, NOT TWO, AND IT IS CLOSED UNTIL IT IS ASKED FOR.
+               Two floating explainers stood over the map at once -- the tier card and
+               the match strip -- and both were open with no way to shut either. They
+               are one control now: a 48px pill that DRAWS the three tier marks (so the
+               marks are present where they are seen) and opens in place to the whole
+               key, match rows included when a needs profile is set. The card was also
+               one giant button whose only action was "open the trust sheet"; the
+               toggle and the sheet link are two separate controls now, which is why
+               .legend is a div and no longer a button. -->
+          <!-- ROUND 16. THE PILL IS THE SAME PILL; IT OPENS A SHEET NOW.
+               It stopped being a disclosure, so aria-expanded and aria-controls came
+               off (there is no controlled region beside it any more) and
+               aria-haspopup="dialog" went on, which is what the control now does.
+               The name still lists every mark.
+               ROUND 17. The name is WRITTEN BY renderKey() now, from the same
+               condition that writes the rows, so it can only ever list what the key
+               contains. The attribute below is the pre-script value and is the
+               no-profile string verbatim; it is overwritten on the first render.
+               The name it replaced promised "the pale disc behind a matched pin and
+               the double ring on the one you have open", and neither of those was
+               ever a row of this key -- see the note above renderKey(). -->
+          <div class="legend" id="legend">
+            <button class="key-toggle" id="key-toggle" aria-haspopup="dialog"
+                    aria-label="Map key. Estimated, Scanned on-site, Owner-confirmed, and how trust grows. Open the map key">
+              <span class="key-art" id="key-art" aria-hidden="true"></span>
+              <span class="key-word">Key</span>
+              <span class="key-chev" id="key-chev" aria-hidden="true"></span>
+            </button>
           </div>
         </div>
         <div class="map-ctls">
@@ -3049,7 +3520,6 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
             <button class="btn ghost" id="me-area" style="min-height:var(--tap)">Try another area</button>
           </div>
         </div>
-        <div class="nearby-title" id="nearby-title">Nearby matches</div>
         <div class="map-fabs">
           <button class="fab-needs" id="fab-needs" aria-label="My needs">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M12 21s-7.5-4.8-10-9.3C.4 8.6 2 5 5.5 5c2 0 3.4 1.1 4.2 2.4h4.6C15.1 6.1 16.5 5 18.5 5 22 5 23.6 8.6 22 11.7 19.5 16.2 12 21 12 21z" transform="scale(.9) translate(1.3 1.3)"/></svg>
@@ -3062,7 +3532,16 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
         </div>
         <div class="nearby" id="nearby" role="group" aria-label="Nearby matches"></div>
         <button class="skiplink" id="skip-pins">Skip the map pins</button>
-        <div id="map"><div id="map-ground" aria-hidden="true"></div><div id="pins" role="group" aria-label="Entrance pins on the map"></div></div>
+        <div id="map"><div id="map-ground" aria-hidden="true"></div><span class="you-here" id="you-here" aria-hidden="true" hidden></span><div id="pins" role="group" aria-label="Entrance pins on the map"></div></div>
+        <!-- ROUND 15. THE PREVIEW A NUMBER ANSWERS BEFORE YOU COMMIT TO IT.
+             Hover on a pointer, press-and-hold on a finger, focus on a keyboard: the
+             disc says how many and what mix, without navigating. aria-hidden, because
+             the disc's own accessible name already carries the count, the breakdown
+             and what a tap does -- a screen reader gets the whole thing without
+             hovering, which is the requirement, and duplicating it here would read it
+             twice. pointer-events:none, so it is not a tap target and 7.15 does not
+             apply to it. -->
+        <div class="cluster-peek" id="cluster-peek" aria-hidden="true" hidden></div>
         <div id="map-veil" aria-hidden="true"></div>
       </div>
     </section>
@@ -3428,8 +3907,12 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
       <div class="scan-body">
         <h1 class="sr-only">Camera &mdash; capture the entrance</h1>
         <div class="viewfinder" id="viewfinder">
-          <div id="doorway-art"></div>
-          <video id="cam-video" autoplay playsinline muted hidden></video>
+          <!-- ROUND 14 (#458): the clip is on this wrapper, so it holds only what
+               must be clipped -- the picture. The overlays below are its siblings. -->
+          <div class="vf-media">
+            <div id="doorway-art"></div>
+            <video id="cam-video" autoplay playsinline muted hidden></video>
+          </div>
           <!-- the J1 Estimated pin's glyph, re-origined from `M32 60V22h32v38` in the
                pin's 96 box. Halo first, mark on top; both non-scaling-stroke. -->
           <div class="frame-guide" id="frame-guide">
@@ -3650,12 +4133,20 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
         </svg>
       </div>
       <div class="wl-card">
-        <h1 class="wl-h"><em class="wl-lead">Access</em> starts <em class="wl-em">before</em> you arrive.</h1>
-        <p class="wl-p">Find entrances and places that fit your needs.</p>
-        <div class="wl-tiers" role="group" aria-label="What the pins mean">
-          <div class="wl-tier t-est"><span id="wl-p1" aria-hidden="true"></span><b>Estimated</b></div>
-          <div class="wl-tier t-scan"><span id="wl-p2" aria-hidden="true"></span><b>Scanned<br>on-site</b></div>
-          <div class="wl-tier t-own"><span id="wl-p3" aria-hidden="true"></span><b>Owner-<br>confirmed</b></div>
+        <!-- ROUND 14. Found by the ancestor-aware clipping sweep (#458), NOT by the
+             ticket: at the 200% text step the welcome card needs 716px and there was
+             no scroller anywhere on this screen, so on a 320x568 frame "Sign in" was
+             cut off by the phone frame itself (27.2px) and "Continue as guest" was
+             entirely below it (87.2px), with no gesture that could reach either. The
+             narrative scrolls; the two buttons do not. -->
+        <div class="wl-scroll">
+          <h1 class="wl-h"><em class="wl-lead">Access</em> starts <em class="wl-em">before</em> you arrive.</h1>
+          <p class="wl-p">Find entrances and places that fit your needs.</p>
+          <div class="wl-tiers" role="group" aria-label="What the pins mean">
+            <div class="wl-tier t-est"><span id="wl-p1" aria-hidden="true"></span><b>Estimated</b></div>
+            <div class="wl-tier t-scan"><span id="wl-p2" aria-hidden="true"></span><b>Scanned<br>on-site</b></div>
+            <div class="wl-tier t-own"><span id="wl-p3" aria-hidden="true"></span><b>Owner-<br>confirmed</b></div>
+          </div>
         </div>
         <div class="wl-actions">
           <button class="btn primary" id="ob-signin">Sign in</button>
@@ -3958,7 +4449,11 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
           <span id="photos-err-text">Replace or crop the flagged photo before publishing.</span>
         </p>
         <div class="ow-review" id="photo-review" aria-live="polite"></div>
-
+      </div>
+      <!-- ROUND 14 (#465 / 7.16): 1,753px of scroll at 200% text on a 320x568 frame,
+           671px at the default step, and the bottom 86px of that frame is the nav bar,
+           which is outside every scroller. The row leaves the scroller. -->
+      <div class="screen-dock">
         <div class="ow-cta">
           <button class="btn primary" style="width:100%" id="photos-publish">Publish update</button>
         </div>
@@ -3989,6 +4484,10 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
           <div class="procbar"><div class="procbar-fill" id="review-bar"></div></div>
         </div>
 
+      </div>
+      <!-- ROUND 14 (#465 / 7.16): 2,251px of scroll at 200% text on a 320x568 frame,
+           702px at the default step. The row leaves the scroller. -->
+      <div class="screen-dock">
         <div class="ow-cta card-actions">
           <button class="btn primary" id="review-publish">Publish update</button>
           <button class="btn quiet" data-back>Back</button>
@@ -4060,6 +4559,25 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
       <button class="sheet-grip-btn" id="card-grip" aria-expanded="false" aria-controls="card-content" aria-label="Expand card &mdash; tap or drag the handle; swipe down to close"><span class="sheet-grip"></span></button>
       <button class="sheet-close" data-close aria-label="Close">&#x2715;</button>
       <div class="sheet-scroll" id="card-content"></div>
+    </div>
+
+    <!-- ROUND 16. The map key, as the sheet it always was in shape: a thing you
+         open, read and dismiss. Same component as the five below it, so it gets the
+         scrim, the background inert, the Tab trap, Escape, focus onto the heading
+         and focus back to the pill for free, and "How trust grows" pushes a level
+         onto the same stack the receipt and the correction sheet use. -->
+    <div class="sheet" id="sheet-key" role="dialog" aria-modal="true" aria-label="Map key">
+      <div class="sheet-grip"></div>
+      <button class="sheet-close" data-close aria-label="Close">&#x2715;</button>
+      <div class="sheet-scroll">
+        <h3 class="sheet-h" style="margin-top:var(--sp-0);padding-right:36px">Map key</h3>
+        <!-- ROUND 17: the pre-script value, and it is the no-profile string verbatim.
+             renderKey() rewrites it on the first render and on every persona change.
+             It used to read "Every mark the map can draw", which stopped being true
+             the moment two marks moved out of this sheet. -->
+        <p class="sheet-p" style="margin-top:var(--sp-2)" id="key-cap">What each pin&rsquo;s mark means.</p>
+        <div class="key-body" id="key-body"></div>
+      </div>
     </div>
 
     <div class="sheet" id="sheet-needs" role="dialog" aria-modal="true" aria-label="My needs">
@@ -4181,6 +4699,14 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
           <span id="correct-err-text">Tell us what you noticed, or add a photo, so the note has something to review.</span>
         </p>
         <p class="sheet-p">We'll review your note with the community.</p>
+      </div>
+      <!-- ROUND 14 (#465 / 7.16): Send leaves the scroller. Measured on the Round 13
+           build at 320x568, the distance a finger had to travel to reach this button
+           was 201px at the default text step and 639px at 200%. .sheet is already a
+           flex column, so this is the same move .filt-apply made in Round 6 and
+           .scan-actions made in Round 13, with the same reason and no new mechanism.
+           DOM order is unchanged, so the tab order is unchanged. -->
+      <div class="sheet-dock">
         <div class="card-actions">
           <button class="btn primary" id="btn-correct-send">Send suggestion</button>
           <button class="btn quiet" data-close>Cancel</button>
@@ -4211,7 +4737,15 @@ button.legend:focus-visible{outline:3px solid var(--brand-blue-ink);outline-offs
       </button>
       <button class="nav-scan" id="nav-scan" aria-label="Scan an entrance">
         <span class="ring">
-          <span class="ic" data-icon="camera" data-size="28" data-color="var(--marigold400)" aria-hidden="true"></span>
+          <!-- ROUND 14 (#459): WHITE, not marigold. Sampled from the approved board
+               rather than taken on description: board-refs/entrymap-assets/
+               03-community-scan-flow.png, the Scan tab of the capture panel, the
+               30x24px block inside the ring -- the dominant glyph pixel is exactly
+               (255,255,255) with 32 of them, on an indigo ground of (19,2,71). The
+               build drew var(--marigold400). Both are legible on the bar; the board
+               wins, and the shutter (which carries the same drawing) keeps its
+               indigo glyph, which is also what the board draws. -->
+          <span class="ic" data-icon="camera" data-size="28" data-color="#FFFFFF" aria-hidden="true"></span>
         </span>
         Scan
       </button>
@@ -4255,8 +4789,13 @@ function isReduced(){ return RM_MEDIA.matches || rmPref; }
    parks its timers on scanTimers and would have them cancelled by a nav action. */
 function defer(ms, fn){ setTimeout(fn, isReduced() ? 0 : ms); }
 const LOC = {lat:30.26495, lng:-97.74530}; /* 2nd & Colorado */
+const LOC_NAME = '2nd & Colorado';
+/* ROUND 15 names the two constants distLabel() carried inline, because the scale bar
+   is the second reader of them and a scale that disagreed with the distances printed
+   on the cards would be worse than no scale at all. Values unchanged. */
+const FT_DEG_LAT = 364000, FT_DEG_LNG = 314000;
 function distLabel(p){
-  const dy=(p.lat-LOC.lat)*364000, dx=(p.lng-LOC.lng)*314000;
+  const dy=(p.lat-LOC.lat)*FT_DEG_LAT, dx=(p.lng-LOC.lng)*FT_DEG_LNG;
   const ft=Math.hypot(dx,dy);
   return ft<1000 ? Math.max(50,Math.round(ft/50)*50)+' ft' : (ft/5280).toFixed(1)+' mi';
 }
@@ -4871,9 +5410,35 @@ function avatarHTML(tier){
 
 /* ===================== map ground ===================== */
 const mapEl = document.getElementById('map');
-/* zoom: the map view box is the base bbox (in) or 2.2x it (out -- dense pins collapse to counts) */
-let zoomedOut = false;
-const ZOOM_OUT_K = 2.2;
+/* ROUND 14 -- THE MAP HAS A SCALE, NOT TWO STATES (frontdoor #432).
+   What was here: `let zoomedOut = false` and `const ZOOM_OUT_K = 2.2`. A boolean
+   picked one of two view boxes and, separately, one of two rows of the pin-size
+   table; clustering was computed per level name. There was nothing between the two
+   levels and nothing beyond them, so a pinch had nowhere to land -- which is why
+   the ticket calls this a missing capability rather than a missing listener.
+   `mapK` is that capability: the multiplier on the pilot bbox's span, continuous.
+   The two named stops keep their exact values, because every measurement in this
+   file and in the rubric was taken at them:
+     K_STREET   1.0  -> PIN_SIZE.street   40 / 44 / 48, cluster cell 60
+     K_OVERVIEW 2.2  -> PIN_SIZE.overview 32 / 36 / 40, cluster cell 72
+   Between them every scaled quantity is interpolated on zoomT(); OUTSIDE them it
+   is clamped to the nearer stop, deliberately -- a convex combination of two
+   measured rows is still inside the range those rows were measured over, and an
+   extrapolation is not. So a user who pinches past street sees a larger frame, not
+   larger pins than the tier ladder was ever checked at.
+   The range: 0.40 to 3.30. 0.40 is 2.5x closer than street, which is where the
+   tightest real pair in the pilot block (two 44px pins 24px apart) separates by
+   more than the 48px tap floor; 3.30 is 1.5x wider than overview, at which the
+   pilot bbox occupies a third of the frame and the far grid has nothing left to
+   say. Both are clamps, not stops -- the BUTTON still jumps between 1.0 and 2.2. */
+let mapK = 1;
+const K_STREET = 1, K_OVERVIEW = 2.2;
+const K_MIN = 0.40, K_MAX = 3.30;
+/* 0 at street, 1 at overview, clamped outside -- the one parameter every scaled
+   quantity on this map reads. */
+function zoomT(){
+  return Math.max(0, Math.min(1, (mapK - K_STREET)/(K_OVERVIEW - K_STREET)));
+}
 /* ROUND 9. THE MAP HAS A CENTRE, NOT ONLY A ZOOM.
    Until now the view box was always struck about the pilot bbox's midpoint, so
    "zoom in" could only ever mean "draw the same frame with bigger pins". Tapping a
@@ -4890,12 +5455,21 @@ function clampCentre(c){
           lng: Math.max(BBOX.lng0, Math.min(BBOX.lng1, c.lng))};
 }
 function viewBox(){
-  if(!zoomedOut && !mapCentre) return BBOX;
+  /* the identity return survives: at the pilot frame this is still the BBOX OBJECT,
+     so every downstream identity check is byte-unchanged (Round 9's note). */
+  if(mapK===K_STREET && !mapCentre) return BBOX;
   const cla = mapCentre ? mapCentre.lat : (BBOX.lat0+BBOX.lat1)/2;
   const cln = mapCentre ? mapCentre.lng : (BBOX.lng0+BBOX.lng1)/2;
-  const k = zoomedOut ? ZOOM_OUT_K : 1;
-  const hl=(BBOX.lat1-BBOX.lat0)/2*k, hg=(BBOX.lng1-BBOX.lng0)/2*k;
+  const hl=(BBOX.lat1-BBOX.lat0)/2*mapK, hg=(BBOX.lng1-BBOX.lng0)/2*mapK;
   return {lat0:cla-hl, lat1:cla+hl, lng0:cln-hg, lng1:cln+hg};
+}
+/* the exact inverse of proj(), which is what a gesture needs: it turns the pixel
+   under a finger into the coordinate that must stay under it. */
+function unproj(x,y,W,H,pad,box){
+  pad = pad==null?20:pad;
+  const V = box||viewBox();
+  return {lng: V.lng0 + (x-pad)/(W-2*pad)*(V.lng1-V.lng0),
+          lat: V.lat0 + (1-(y-pad)/(H-2*pad))*(V.lat1-V.lat0)};
 }
 function proj(lat,lng,W,H,pad,box){
   pad = pad==null?20:pad;
@@ -4934,9 +5508,32 @@ const V_STREETS = [ /* north-south */
    sparse: a band on every frontage reads as a green stripe glued to every road. */
 const TREED_V = {'-97.74430':'both', '-97.74715':'east'};
 const TREED_H = {'30.26685':'south'};
-/* Which blocks carry open space, keyed (row,col) from the top-left of the frame.
-   Republic Square sits off the north-west corner; Congress is the retail spine. */
-const LANDCOVER = {'0,0':'park','0,1':'park','2,1':'plaza','4,4':'plaza','6,3':'plaza','3,2':'court','5,5':'court'};
+/* Which blocks carry open space. Republic Square sits off the north-west corner;
+   Congress is the retail spine.
+   ROUND 16: THIS WAS KEYED (row,col) FROM THE TOP-LEFT OF THE FRAME, which made
+   landcover a property of the VIEW instead of the ground. Zoom out and streetsFor()
+   adds four rows and four columns on every side, so cell (0,0) stops being Republic
+   Square and becomes a block a quarter of a mile north-west of it. Measured at the
+   overview stop before this change: the one surviving park was emitted at x=-11.1,
+   y=-16 -- off the corner of the frame -- so the wide view drew no open space at all,
+   and the park had silently MOVED between the two named stops. It is keyed
+   geographically now. The six boxes below are the street stop's own cells read off
+   H_STREETS / V_STREETS, bounded north and east by the first extension street so a
+   park cannot grow into a quarter, and a cell is tested by its own centre. The street
+   stop is byte-unchanged (verified by diff); every other frame now agrees with it. */
+const LANDCOVER = [
+  {k:'park',  lat0:30.26685, lat1:30.26778, lng0:-97.74810, lng1:-97.74620}, /* N of 4th, W of Lavaca: 2 cells */
+  {k:'plaza', lat0:30.26592, lat1:30.26638, lng0:-97.74715, lng1:-97.74620},
+  {k:'plaza', lat0:30.26500, lat1:30.26546, lng0:-97.74530, lng1:-97.74430},
+  {k:'plaza', lat0:30.26320, lat1:30.26410, lng0:-97.74575, lng1:-97.74530},
+  {k:'court', lat0:30.26546, lat1:30.26592, lng0:-97.74620, lng1:-97.74575},
+  {k:'court', lat0:30.26410, lat1:30.26500, lng0:-97.74430, lng1:-97.74335}
+];
+function coverAt(lat,lng){
+  for(let i=0;i<LANDCOVER.length;i++){ const c=LANDCOVER[i];
+    if(lat>=c.lat0 && lat<=c.lat1 && lng>=c.lng0 && lng<=c.lng1) return c.k; }
+  return undefined;
+}
 
 /* zoomed out, the grid continues past the pilot blocks (unlabelled, thinner, so
    the far grid reads as texture rather than as stripes) */
@@ -4953,6 +5550,12 @@ function streetsFor(box){
   const wide = span > base*1.01;
   const panned = !!box && (Math.abs((box.lng0+box.lng1)/2 - (BBOX.lng0+BBOX.lng1)/2) > 1e-9
                         || Math.abs((box.lat0+box.lat1)/2 - (BBOX.lat0+BBOX.lat1)/2) > 1e-9);
+  /* ROUND 14: the far grid's thinning follows the scale rather than a level name.
+     t is computed from the FRAME's own span, not from mapK, because this function
+     is also called with an explicit box (the published-scan mini map, the owner
+     listing preview) and must answer about that box. At the two named stops it is
+     unchanged: 1.0 at street, 0.62 at overview. */
+  const tt = Math.max(0, Math.min(1, (span/base - 1)/(2.2 - 1)));
   if(!wide && !panned) return {h:H_STREETS, v:V_STREETS, k:1};
   const h=H_STREETS.map(s=>({...s})), v=V_STREETS.map(s=>({...s}));
   for(let n=1;n<=4;n++){
@@ -4961,7 +5564,7 @@ function streetsFor(box){
     v.push({lng:-97.74715-n*0.00095, cls:'secondary', label:null});
     v.push({lng:-97.74430+n*0.00095, cls:'secondary', label:null});
   }
-  return {h, v, k: wide ? .62 : 1};
+  return {h, v, k: wide ? (1 + tt*(.62 - 1)) : 1};
 }
 
 /* ---- GROUND: THE MAP KIT'S LAYER STACK --------------------------------------
@@ -5016,11 +5619,19 @@ function splitRect(r, depth, rnd, out){
 /* one source of truth for every ground tone, so a fill is never a second guess.
    Keys and hex fallbacks are the kit's, read off map-kit/svg/base-map.svg. */
 const G = {land:'#F5F2FC', block:'#E8E1F7', blockEdge:'#CFBCEE', road:'#FFFFFF',
-  roadEdge:'#CFBCEE', place:'#76BCFD', paper:'#4F34DB', building:'#FFFFFF',
+  roadEdge:'#CFBCEE', canopy:'#A3C98E', paper:'#4F34DB', building:'#FFFFFF',
   label:'#1E1142', line:'#1E1142'};
 function gc(k){ return 'var(--g-'+k.replace(/[A-Z]/g,function(c){return '-'+c.toLowerCase();})+',' + G[k] + ')'; }
-/* the kit's own painted opacities, named rather than typed at the call site */
-const G_A = {roadEdge:.55, place:.34, paper:.045, building:.85};
+/* the kit's own painted opacities, named rather than typed at the call site.
+   ROUND 16: `place: .34` becomes `canopy: .52`. The .34 was the kit's, and it was
+   the kit's for a BLUE that reinforced the lavender ground underneath it; green
+   opposes that hue, so at .34 it cancels to a near-neutral (painted chroma 5.1 over
+   a block, hue 161 -- grey, not foliage). .52 is the lowest step that puts the
+   painted canopy back at the presence the blue had while leaving it LESS saturated:
+   painted chroma 12.8 over a block against the blue's 20.3. The group carries the
+   opacity, not the shapes, so overlapping lobes do not build up and a grove is one
+   flat tone however many discs make it. */
+const G_A = {roadEdge:.55, canopy:.52, paper:.045, building:.85};
 /* the kit's casing/road width ratio: stroke-width 62 under stroke-width 48 */
 const ROAD_CASING = 62/48;
 
@@ -5058,21 +5669,53 @@ function groundSVG(W,H,pad,box){
      artboard, i.e. 1 CSS px. The kit's blocks are EMPTY -- no footprints, no cast
      shadows, no lit edges, no plaza, no courtyard. The approved board does show
      faint footprint outlines (screen-exports/png/map-default.png), so those are
-     kept as outline-only strokes and nothing else. */
+     kept as outline-only strokes and nothing else.
+
+     ROUND 16 -- FOUR LITERALS IN THIS LAYER WERE THE SAME BUG AS THE CANOPY'S. The
+     roads scale (widths[cls]*wk); the kerb inset, the block's corner radius, the
+     block edge and the footprint outline did not. Now:
+       kerb inset   CURB[cls]*wk    -- the setback is a distance on the ground, so it
+                                      shrinks with the road it is measured from. It
+                                      was eating 6px off every primary frontage at
+                                      overview, where a whole block is 25px wide.
+       corner rx    4*wk            -- a 4px radius on a 25px block is a lozenge. This
+                                      is half of what the owner called a bento box.
+       block       opacity wk       -- the far grid already thins its ROADS to .62 at
+       footprints  opacity .85*wk      overview (streetsFor). The blocks and the lines
+                                      drawn on them now recede on that same one
+                                      parameter -- the block's fill AND its edge, so
+                                      the whole box settles toward the land rather
+                                      than keeping its fill and losing only its
+                                      outline. The wide view answers "where do the
+                                      doors cluster" instead of drawing 160 outlined
+                                      boxes at full strength. This is section 3 of the
+                                      brief: at overview the ground recedes and the
+                                      marks carry the frame.
+     ALL FOUR ARE EXACT NO-OPS AT THE STREET STOP, where wk === 1: 4*1 prints "4",
+     CURB*1 is CURB, and the two opacity attributes are only emitted when wk < 1. The
+     street stop's block layer is byte-identical to Round 14's. Verified by diff. */
   const rnd = mulberry(GEO_SEED);
+  /* emitted only when it would not be 1, so the street stop's bytes do not move.
+     NEVER IN HIGH CONTRAST. Caught by measurement, not by reading: with the fade
+     applied in hc the block's 1px indigo900 outline was painting at .62 and the
+     darkest thing on the hc overview went from relative luminance 0.011 to 0.163 --
+     a hard outline turned into a grey one, which is the opposite of what high
+     contrast is for. High contrast SIMPLIFIES the ground; it does not modulate it. */
+  const fade = (a)=> (wk<1 && !hc) ? ` opacity="${Math.round(a*wk*1000)/1000}"` : (a<1?` opacity="${a}"`:'');
   const rowEdges = [{y:-16,w:0,cls:'frame'}].concat(hs).concat([{y:H+16,w:0,cls:'frame'}]);
   const colEdges = [{x:-16,w:0,cls:'frame'}].concat(vs).concat([{x:W+16,w:0,cls:'frame'}]);
   const greens = [];
   for(let i=0;i<rowEdges.length-1;i++)for(let j=0;j<colEdges.length-1;j++){
-    const m0=CURB[rowEdges[i].cls]||0, m1=CURB[rowEdges[i+1].cls]||0;
-    const n0=CURB[colEdges[j].cls]||0, n1=CURB[colEdges[j+1].cls]||0;
+    const m0=(CURB[rowEdges[i].cls]||0)*wk, m1=(CURB[rowEdges[i+1].cls]||0)*wk;
+    const n0=(CURB[colEdges[j].cls]||0)*wk, n1=(CURB[colEdges[j+1].cls]||0)*wk;
     const y0=rowEdges[i].y+rowEdges[i].w/2+m0, y1=rowEdges[i+1].y-rowEdges[i+1].w/2-m1;
     const x0=colEdges[j].x+colEdges[j].w/2+n0, x1=colEdges[j+1].x-colEdges[j+1].w/2-n1;
     const cw=x1-x0, ch=y1-y0;
     if(cw<12||ch<12) continue;
-    rect(x0,y0,cw,ch,'block',4,` stroke="${gc('blockEdge')}" stroke-width="1"`);
+    rect(x0,y0,cw,ch,'block',f1(4*wk),` stroke="${gc('blockEdge')}" stroke-width="1"${fade(1)}`);
     if(hc) continue;
-    const cover = LANDCOVER[i+','+j];
+    const cc = unproj((x0+x1)/2,(y0+y1)/2,W,H,pad,box);
+    const cover = coverAt(cc.lat, cc.lng);
     if(cover==='park'){ greens.push({x:x0,y:y0,w:cw,h:ch,kind:'park'}); continue; }
     const leaves=[]; splitRect({x:x0,y:y0,w:cw,h:ch},0,rnd,leaves);
     leaves.forEach(L=>{
@@ -5086,7 +5729,7 @@ function groundSVG(W,H,pad,box){
       if((cover==='plaza'&&roll<.55)||(cover==='court'&&roll<.40)) return;
       if(roll>.935){ greens.push({x:r.x,y:r.y,w:r.w,h:r.h,kind:'court'}); return; }
       s+=`<rect x="${f1(r.x)}" y="${f1(r.y)}" width="${f1(r.w)}" height="${f1(r.h)}" rx="1.5"`
-       + ` fill="none" stroke="${gc('building')}" stroke-width="1" opacity="${G_A.building}"/>`;
+       + ` fill="none" stroke="${gc('building')}" stroke-width="1"${fade(G_A.building)}/>`;
     });
   }
 
@@ -5100,51 +5743,129 @@ function groundSVG(W,H,pad,box){
   vs.forEach(st=>{ if(!hc&&st.cls!=='alley') rect(st.x-cas(st.w)/2,-6,cas(st.w),H+12,'roadEdge',0,` opacity="${G_A.roadEdge}"`);
                    rect(st.x-st.w/2,-6,st.w,H+12,'road'); });
 
-  /* ---- layer: places ----------------------------------------------------------
+  /* ---- layer: canopy (the kit's `places` slot) ---------------------------------
      kit: <g id="places" fill="#76BCFD" opacity=".34"> -- discs and one soft blob.
-     On the approved board this layer IS the tree canopy: pale blue rosettes across
-     the blocks and along the treed streets, which is what "the board in the other
-     one is white and blue" names. The rosette geometry is the build's, because the
-     kit draws four blobs where the board draws many; the colour and the opacity are
-     the kit's. A lobe landing within 26px of a full pin is dropped before it is
-     emitted, so canopy never sits inside a marker's halo. */
+     On the approved board this layer IS the tree canopy: rosettes across the blocks
+     and along the treed streets. The rosette geometry is the build's, because the
+     kit draws four blobs where the board draws many.
+
+     ROUND 16 REWRITES THIS LAYER. Two defects, both reported by the owner about the
+     same marks -- "why aren't the trees on the map... why is congress have a blue
+     wavy lines around it" and "zooming out view looks weird like a bunch of bento
+     boxes with random cloud photos". They had two separate causes.
+
+     (a) THE COLOUR. It was --sky400, the Estimated tier's own hue, so the ground was
+         painted in a marker's colour. See --g-canopy at the top of this file for the
+         owner's decision, the reasoning, and the saturation numbers.
+
+     (b) THE SHAPE. A kerbside band was a row of r=4.6 discs at a 7.5px pitch. The
+         pitch was SMALLER THAN THE DIAMETER (7.5 < 9.2), so consecutive discs fused
+         and the band drew one continuous scalloped stripe down the street. That is
+         literally the "wavy line", and it would still have been a wavy line in green.
+         Every tree on this map is now the same four-lobe ROSETTE at three sizes, and
+         kerbside trees stand 15px apart with a 10.6px silhouette, so they are trees
+         in a row rather than a fused band. This also keeps rubric 3.1's guarantee
+         intact: the canopy is only ever four-or-more overlapping lobes, a kerbside
+         line of them, or a filled grove -- never a lone disc, which is a marker's
+         shape.
+
+     (c) THE SCALE, which is the "cloud photos". `wk` appeared ZERO times in the old
+         version of this layer: r=5.6, r=4.6, pitch 8 and pitch 7.5 were literals, so
+         at the overview stop every tree stayed exactly the same number of pixels
+         across while the blocks it sat on shrank to a quarter of their area (the
+         overview frame covers 4.84x the ground). Counted off the emitted SVG at
+         375x812: 354 same-size kerbside discs and 15 same-size clumps at overview,
+         against 362 and 13 at street -- the same marks, the same pixels, a frame
+         nearly five times as wide. That is what "random cloud photos" was naming.
+
+     WHAT THE CANOPY BECOMES AT EACH SCALE, and this is the point: DENSITY IS HANDLED
+     BY DROPPING DETAIL. Nothing here is ever drawn at true world size until it turns
+     into noise; each form is dropped the moment its own smallest circle falls under
+     R_MIN, the smallest radius at which a 52%-opacity disc still reads as an object
+     on this ground rather than as grain. One floor, three thresholds, all derived:
+
+       form              circle    drawn while       i.e. up to     what replaces it
+       kerbside tree     3.6*cs    3.6*cs >= 3.0     zk <= 1.20     nothing
+       courtyard clump   4.6*cs    4.6*cs >= 3.0     zk <= 1.53     nothing
+       grove disc        5.6*cs    5.6*cs >= 3.0     zk <= 1.87     a filled area
+
+     So zooming out from the street stop: the street trees go first (a tree symbol
+     stops being a tree symbol before a park stops being a park), then the courtyard
+     clumps, and last the grove's texture -- but NOT the grove, which becomes one
+     filled rect in the same fill at the same opacity. A park's painted TONE is
+     therefore identical at every scale; only its edge stops being scalloped. At the
+     overview stop (zk 2.2) the canopy is parks and nothing else, which is the honest
+     answer to what a person is looking for at that scale: not individual trees, but
+     where the doors are and how they cluster.
+
+     Nothing is drawn smaller to fit. Nothing is drawn at a fixed size either. */
   if(!hc){
-    const fullPins = places.filter(p=>p.t!=='est'&&p.tier!=='est').map(p=>{
-      const xy=proj(p.lat,p.lng,W,H,pad,box); return {x:xy[0],y:xy[1]};
-    });
-    const clear=(x,y,r)=>!fullPins.some(q=>Math.hypot(q.x-x,q.y-y) < 26+(r||0));
-    s += `<g fill="${gc('place')}" opacity="${G_A.place}">`;
+    /* zk is this FRAME's span over the pilot bbox's: 1.0 at the street stop, 2.2 at
+       the overview stop, 0.40..3.30 at the ends of the pinch range, and whatever an
+       explicit box asks for (the published-scan mini map, the owner listing preview).
+       It is derived from `box`, which is ALREADY part of GROUND_CACHE's key, so scale
+       becomes an input to the drawing without the cache key having to change -- the
+       constraint that would otherwise let the first view drawn win for every other.
+       cs is the world-to-screen factor a tree obeys, capped at 1.6 on the way in
+       because past that a street tree reaches pin size and the ground starts
+       competing with the marks. */
+    const zk = (box.lng1-box.lng0)/(BBOX.lng1-BBOX.lng0);
+    const cs = Math.min(1.6, 1/zk);
+    const R_MIN = 3.0;
+    /* the one canopy motif, at kit scale: core lobe 4.6, three smaller ones round it.
+       Passing k scales the whole rosette; k=1 reproduces Round 14's courtyard clump
+       byte for byte. */
+    const ROS = [[0,0,4.6],[-3.4,1.4,3.6],[3.2,1,3.4],[0,-3.2,3.4]];
+    const rosette=(x,y,k)=>{ ROS.forEach(l=>{
+      s+=`<circle cx="${f1(x+l[0]*k)}" cy="${f1(y+l[1]*k)}" r="${f1(l[2]*k)}"/>`; }); };
+    /* THE 26px CUT-AWAY IS GONE. Round 3 dropped any lobe whose centre landed within
+       26px of a full pin, so canopy could never sit inside a marker's halo. That rule
+       was written when the canopy WAS a marker's colour. Two measurements retire it:
+       it removed 0 of 661 lobes at the street stop and 8 of 424 at overview, so it
+       was very nearly inert already; and the Estimated outline, the weakest marker
+       boundary in the file, holds 4.05:1 against the canopy over a block where the
+       3:1 floor is the requirement. A ground that does not compete does not have to
+       be cut away from the marks -- and this one no longer reads `places` at all, so
+       the ground layer has stopped depending on the data layer. */
+    s += `<g fill="${gc('canopy')}" opacity="${G_A.canopy}">`;
+    /* 1. GROVES. A park block, filled with overlapping discs at the kit's pitch --
+          a mass of canopy, which is what a park is, not a row of individual trees. */
+    const gr=5.6*cs, gp=8*cs;
     greens.filter(o=>o.kind==='park').forEach(o=>{
-      for(let y=o.y+6;y<=o.y+o.h-4;y+=8) for(let x=o.x+6;x<=o.x+o.w-4;x+=8){
-        if(clear(x,y,5.6)) s+=`<circle cx="${f1(x)}" cy="${f1(y)}" r="5.6"/>`;
+      if(gr>=R_MIN){
+        for(let y=o.y+6*cs;y<=o.y+o.h-4*cs;y+=gp) for(let x=o.x+6*cs;x<=o.x+o.w-4*cs;x+=gp)
+          s+=`<circle cx="${f1(x)}" cy="${f1(y)}" r="${f1(gr)}"/>`;
+      } else {
+        s+=`<rect x="${f1(o.x)}" y="${f1(o.y)}" width="${f1(o.w)}" height="${f1(o.h)}" rx="${f1(4*wk)}"/>`;
       }
     });
-    const band=(x0,y0,w,h,vert)=>{
-      if(vert){ const cx=x0+w/2;
-        for(let y=y0+6;y<y0+h-4;y+=7.5) if(clear(cx,y,4.6)) s+=`<circle cx="${f1(cx)}" cy="${f1(y)}" r="4.6"/>`;
-      } else { const cy=y0+h/2;
-        for(let x=x0+6;x<x0+w-4;x+=7.5) if(clear(x,cy,4.6)) s+=`<circle cx="${f1(x)}" cy="${f1(cy)}" r="4.6"/>`;
-      }
-    };
-    const BW=9;
-    vs.forEach(st=>{
-      const side=TREED_V[st.lng!=null?st.lng.toFixed(5):''];
-      if(!side) return;
-      if(side==='both'||side==='west') band(st.x-st.w/2-BW-1,8,BW,H-16,true);
-      if(side==='both'||side==='east') band(st.x+st.w/2+1,8,BW,H-16,true);
-    });
-    hs.forEach(st=>{
-      const side=TREED_H[st.lat!=null?st.lat.toFixed(5):''];
-      if(side==='south') band(8,st.y+st.w/2+1,W-16,BW,false);
-      if(side==='north') band(8,st.y-st.w/2-BW-1,W-16,BW,false);
-    });
-    greens.filter(o=>o.kind==='court'&&o.w>14&&o.h>14).forEach(o=>{
-      const x=o.x+o.w/2, y=o.y+o.h/2;
-      if(!clear(x,y,5)) return;
-      [[0,0,4.6],[-3.4,1.4,3.6],[3.2,1,3.4],[0,-3.2,3.4]].forEach(l=>{
-        s+=`<circle cx="${f1(x+l[0])}" cy="${f1(y+l[1])}" r="${l[2]}"/>`;
+    /* 2. KERBSIDE TREES. Deliberately sparse streets (TREED_V/TREED_H), one rosette
+          every 15 ground-units of frontage, standing clear of the road's own casing
+          -- the setback is measured from the casing edge, so it follows the road
+          hierarchy instead of being a hand-picked number. */
+    const tc=3.6*cs, tk=tc/4.6, tp=15*cs;
+    if(tc>=R_MIN){
+      const set=(w)=> (cas(w)-w)/2 + 5.5*cs;
+      vs.forEach(st=>{
+        const side=TREED_V[st.lng!=null?st.lng.toFixed(5):''];
+        if(!side) return;
+        const off=st.w/2+set(st.w);
+        if(side==='both'||side==='west') for(let y=8+tp/2;y<H-8;y+=tp) rosette(st.x-off,y,tk);
+        if(side==='both'||side==='east') for(let y=8+tp/2;y<H-8;y+=tp) rosette(st.x+off,y,tk);
       });
-    });
+      hs.forEach(st=>{
+        const side=TREED_H[st.lat!=null?st.lat.toFixed(5):''];
+        if(!side) return;
+        const off=st.w/2+set(st.w), sg=(side==='north')?-1:1;
+        for(let x=8+tp/2;x<W-8;x+=tp) rosette(x,st.y+sg*off,tk);
+      });
+    }
+    /* 3. COURTYARD CLUMPS. One rosette in the middle of a leaf the block layer left
+          open. k=cs, so at the street stop this is Round 14's geometry unchanged. */
+    if(4.6*cs>=R_MIN){
+      greens.filter(o=>o.kind==='court'&&o.w>14&&o.h>14)
+            .forEach(o=>rosette(o.x+o.w/2,o.y+o.h/2,cs));
+    }
     s += `</g>`;
   }
 
@@ -5204,6 +5925,19 @@ const LEVEL = {
   est:  {rank:1, lvl:3}
 };
 function pinPx(tier, context){ return PIN_SIZE[context][tier]; }
+/* ROUND 14 (#432) -- THE DRAWN SIZE AT THE LIVE SCALE.
+   The ticket's requirement is exact: "Pin sizes equal the token file's values
+   exactly at the two named stops." So the two stops are RETURNED, not computed --
+   t===0 and t===1 short-circuit to the table rows themselves, and no floating-point
+   arithmetic stands between pin-hierarchy.json and what is drawn at street and at
+   overview. Only strictly between them is anything interpolated, and only ever
+   between those same two rows. */
+function pinPxLive(tier){
+  const t = zoomT();
+  if(t===0) return PIN_SIZE.street[tier];
+  if(t===1) return PIN_SIZE.overview[tier];
+  return PIN_SIZE.street[tier] + t*(PIN_SIZE.overview[tier] - PIN_SIZE.street[tier]);
+}
 /* overlap: the fraction of the SMALLER mark that may be covered before it yields.
    cap: full pins on screen at phone width. spacing: a floor between two estimates.
    ROUND 5: with Estimated restored to a 40px teardrop every mark is far larger,
@@ -5261,12 +5995,12 @@ function overlapFrac(x1,y1,r1,x2,y2,r2){
    counted inside a disc, so the map still shows every place. */
 function mapLayout(list, W, H){
   const mx = W/2, my = H/2;
-  const ctx = zoomedOut ? 'overview' : 'street';
+  /* ROUND 14: the size comes from the live scale, not from a level name. */
   const items = list.map(p=>{
     const [x,y] = proj(p.lat,p.lng,W,H,22);
     const L = LEVEL[p.tier];
     const sel = p.id===selectedId;
-    const size = pinPx(p.tier, sel ? 'selected' : ctx);
+    const size = sel ? pinPx(p.tier,'selected') : pinPxLive(p.tier);
     /* the collision radius is the head, not the whole teardrop: a pin's tail
        overlapping a neighbour's tail is not what makes a map illegible. */
     return {p, x, y, size, r:size*0.42, rank: sel ? 99 : L.rank,
@@ -5339,7 +6073,9 @@ function mapLayout(list, W, H){
      fewer, fuller discs read as aggregation, where many small ones read as a
      second rash. Measured after: 12 pins and 9 discs at street, 12 and 11 at
      overview, with 52 of the 64 places counted rather than drawn. */
-  const CELL = zoomedOut ? 72 : 60;
+  /* ROUND 14: 60 at street, 72 at overview, and the same interpolation between --
+     the disc grid widens with the scale rather than switching at a level name. */
+  const CELL = 60 + zoomT()*12;
   const cells = new Map();
   yielded.forEach(it=>{
     const key = Math.floor(it.x/CELL)+','+Math.floor(it.y/CELL);
@@ -5508,6 +6244,10 @@ function renderMap(){
      nothing else: the re-render is driven by the map's own visibility (the observer
      below, plus showScreen), not by the toggle that happened while it was hidden. */
   if(!(W>40) || !(H>40)){ _mapZeroPending = true; return; }
+  /* ROUND 15: a preview describes ONE disc, and this line destroys every disc. It is
+     dropped before the new set is drawn rather than left pointing at a button that
+     no longer exists. */
+  hideClusterPeek();
   document.getElementById('map-ground').innerHTML = groundSVG(W,H,22);
   /* ROUND 11 (9.9 / N11). The pin layer is diffed ONLY when a filter or a needs
      profile just changed -- _pinFlux is armed by those handlers and by nothing else,
@@ -5576,9 +6316,13 @@ function renderMap(){
     const mix={est:0,scan:0,owner:0};
     c.members.forEach(it=>{ mix[it.p.tier]++; });
     b.innerHTML='<span class="disc">'+pinSVG('cluster', CLUSTER_PX, {count:n, mix:mix})+'</span>';
-    const tiers={};
-    c.members.forEach(it=>{ const t=tierName(it.p.tier); tiers[t]=(tiers[t]||0)+1; });
-    const breakdown=Object.entries(tiers).map(([k,v])=>v+' '+k.toLowerCase()).join(', ');
+    /* ROUND 15: the spoken breakdown is ordered est -> scan -> owner, which is the
+       order the disc's arcs are drawn in and the order the press-and-hold preview
+       lists them in. It used to follow whichever tier happened to appear first in
+       the member list, so the same disc could speak its mix in a different order
+       than it drew it. */
+    const breakdown=['est','scan','owner'].filter(t=>mix[t])
+      .map(t=>mix[t]+' '+tierName(t).toLowerCase()).join(', ');
       /* ROUND 8: the name now says what the NUMBER is, not only what is under it --
        the owner could not read the disc off the map ("what are the numbers on the
        map?") and neither could a screen-reader user, who was told "8 entrances
@@ -5598,10 +6342,21 @@ function renderMap(){
        The name is written for whichever branch will actually run. */
     const cLat = c.members.reduce((a,e)=>a+e.p.lat,0)/n;
     const cLng = c.members.reduce((a,e)=>a+e.p.lng,0)/n;
-    const resolveByZoom = zoomedOut;
+    /* ROUND 14 -- THE CLUSTER SHEET STAYS, AND SO DOES THE STOP IT IS GUARANTEED AT.
+       The ticket is explicit: zooming is not a substitute for the sheet, because a
+       screen-reader or keyboard user has no pinch and because two entrances at the
+       same address never separate at any scale. So the test is unchanged in
+       meaning -- a disc resolves BY ZOOMING only while there is a named stop below
+       the current scale, i.e. while the frame is wider than street. At street and
+       closer, the tap opens the list, which is what makes Round 9's "64 of 64
+       places reachable" a property of a stop rather than of a gesture. */
+    const resolveByZoom = mapK > K_STREET + 1e-9;
     b.setAttribute('aria-label', n+' places grouped here \u2014 the disc shows the count ('
       +breakdown+') \u2014 '+(resolveByZoom ? 'tap to zoom in on them' : 'tap to list them'));
     b.dataset.count = n;
+    /* ROUND 15: the preview reads the same three numbers the accessible name already
+       speaks, from the same object, so the two can never disagree. */
+    b._peek = {n:n, mix:mix, action: resolveByZoom ? 'Tap to zoom in on them' : 'Tap to list them'};
     b.addEventListener('click',()=>{
       if(resolveByZoom){
         setZoom(false, {lat:cLat, lng:cLng});
@@ -5652,20 +6407,228 @@ function renderMap(){
   const sk=document.getElementById('skip-pins');
   if(sk) sk.setAttribute('aria-label','Skip the '+pinsEl.querySelectorAll('.pinbtn,.cluster').length+
     ' map pins and go to the bottom navigation');
+  renderYouHere(W,H);
   fitMapColumn();
   if(listOpen) renderList();
 }
+/* ================= ROUND 15 -- THE PREVIEW A NUMBER ANSWERS ====================
+   "hovering over the numbers should also do something" (owner, on the map screen).
+   A disc answered a tap and nothing else, and a tap is a commitment: it opens a
+   sheet or it moves the whole map. This is the answer short of a commitment, and it
+   is the same answer on three inputs:
+     mouse    -- hover;
+     finger   -- press and hold (PEEK_HOLD_MS), and the release does NOT then navigate;
+     keyboard -- focus, via :focus-visible, so tabbing to a disc shows what it holds.
+   WHAT IT DRAWS. The count, and the mix as one row per tier: the tier's own pin at
+   the receipt size the map key already uses, its count, its name. Not a colour bar:
+   the disc's arcs are sky400 / marigold / violet600, and the first two measure well
+   under 3:1 on this popover's white, which is the reason Round 11 refused a swatch
+   below 3:1 in the match strip. The pins carry their own measured contrast and, more
+   to the point, they are the marks the number stands FOR -- so the preview teaches
+   "a number is a group of these" rather than repeating a count.
+   WHAT IT IS NOT. It adds no glyph to the disc (9.1, 9.7) and no colour to it; the
+   only thing that happens to the mark is an 8% scale, which is context, not
+   encoding. It is aria-hidden and pointer-events:none, so it is neither a second
+   voice for a screen reader -- the disc's name already carries count, breakdown and
+   what a tap does, hover or no hover -- nor a tap target that 7.15 would have to
+   separate from the disc under it.
+   REDUCED MOTION. Visibility is the `hidden` attribute, set synchronously; the
+   opacity transition is decoration on top of a state that has already changed. No
+   transitionend, no transition-delay, nothing that the reduced-motion floor's
+   zeroing of durations and delays can strand -- which is the seam this file has
+   opened once before. */
+const PEEK_HOLD_MS = 420;      /* long enough not to fire on a tap, short enough to feel like an answer */
+const PEEK_SLOP    = 10;       /* a hold that travels this far was a pan starting */
+let peekHeld = false;          /* endMapPointer reads this: a hold is not a tap */
+let peekTimer = null, peekOwner = null;
+let peekDown = null;
+
+function clusterPeekHTML(d){
+  const ROWS = [['est','Estimated'],['scan','Scanned on-site'],['owner','Owner-confirmed']];
+  let rows = '';
+  ROWS.forEach(function(r){
+    const v = d.mix[r[0]] || 0; if(!v) return;
+    rows += '<span class="lg"><span class="lgpin">' + pinSVG(r[0], pinPx(r[0],'receipt'))
+          + '</span><span class="cpk-n">' + v + '</span> ' + r[1] + '</span>';
+  });
+  return '<div class="cpk-h">' + d.n + ' places grouped here</div>'
+       + '<div class="cpk-rows">' + rows + '</div>'
+       + '<div class="cpk-f">' + d.action + '</div>';
+}
+function showClusterPeek(btn){
+  const d = btn && btn._peek; if(!d) return;
+  const el = document.getElementById('cluster-peek'); if(!el) return;
+  if(peekOwner === btn && !el.hidden) return;
+  if(peekOwner && peekOwner !== btn) peekOwner.classList.remove('peeked');
+  peekOwner = btn;
+  el.innerHTML = clusterPeekHTML(d);
+  el.hidden = false;
+  /* place it against the MAP's box, not the frame's: the popover belongs to the map
+     and must not spill over the app bar or the navigation. */
+  const host = el.offsetParent || document.querySelector('#screen-map .screen-body');
+  const hr = host.getBoundingClientRect();
+  const mr = mapEl.getBoundingClientRect();
+  const br = btn.getBoundingClientRect();     /* the anchor is a 0x0 box on the centroid */
+  const pw = el.offsetWidth, ph = el.offsetHeight;
+  const cx = br.left + br.width/2, cy = br.top + br.height/2;
+  const GAP = CLUSTER_PX/2 + 10;
+  let top = cy - GAP - ph;
+  if(top < mr.top + 8) top = cy + GAP;                       /* no room above: go below */
+  if(top + ph > mr.bottom - 8) top = Math.max(mr.top + 8, mr.bottom - 8 - ph);
+  let left = cx - pw/2;
+  left = Math.max(mr.left + 8, Math.min(left, mr.right - 8 - pw));
+  el.style.left = (left - hr.left) + 'px';
+  el.style.top  = (top  - hr.top ) + 'px';
+  btn.classList.add('peeked');
+  /* one reflow so the fade has two frames to run between; under reduced motion the
+     duration is already zero, so this is the same instant appearance either way. */
+  void el.offsetHeight;
+  el.classList.add('on');
+}
+function hideClusterPeek(){
+  const el = document.getElementById('cluster-peek');
+  if(peekOwner){ peekOwner.classList.remove('peeked'); peekOwner = null; }
+  if(peekTimer){ clearTimeout(peekTimer); peekTimer = null; }
+  if(el){ el.classList.remove('on'); el.hidden = true; }
+}
+/* delegated on #pins, which survives every re-render; the buttons do not. */
+pinsEl.addEventListener('pointerover', function(e){
+  if(e.pointerType && e.pointerType !== 'mouse') return;
+  const c = e.target.closest && e.target.closest('.cluster');
+  if(c) showClusterPeek(c); else hideClusterPeek();
+});
+pinsEl.addEventListener('pointerout', function(e){
+  if(e.pointerType && e.pointerType !== 'mouse') return;
+  const c = e.target.closest && e.target.closest('.cluster');
+  if(c && !c.contains(e.relatedTarget)) hideClusterPeek();
+});
+pinsEl.addEventListener('pointerdown', function(e){
+  if(e.pointerType === 'mouse') return;
+  const c = e.target.closest && e.target.closest('.cluster');
+  if(!c) return;
+  peekDown = {x:e.clientX, y:e.clientY, id:e.pointerId};
+  if(peekTimer) clearTimeout(peekTimer);
+  peekTimer = setTimeout(function(){
+    peekTimer = null; peekHeld = true; showClusterPeek(c);
+  }, PEEK_HOLD_MS);
+});
+pinsEl.addEventListener('pointermove', function(e){
+  if(!peekDown || e.pointerId !== peekDown.id) return;
+  if(Math.hypot(e.clientX-peekDown.x, e.clientY-peekDown.y) > PEEK_SLOP){
+    peekDown = null; hideClusterPeek();
+  }
+});
+function endPeekPointer(e){
+  if(e.pointerType === 'mouse') return;
+  peekDown = null;
+  if(peekTimer){ clearTimeout(peekTimer); peekTimer = null; }
+  if(peekOwner) hideClusterPeek();
+}
+pinsEl.addEventListener('pointerup', endPeekPointer);
+pinsEl.addEventListener('pointercancel', endPeekPointer);
+/* keyboard. :focus-visible is the browser own answer to "did a keyboard put focus
+   here", so a mouse click on a disc does not also raise the preview it is about to
+   navigate away from. */
+pinsEl.addEventListener('focusin', function(e){
+  const c = e.target.closest && e.target.closest('.cluster');
+  if(c && c.matches(':focus-visible')) showClusterPeek(c); else hideClusterPeek();
+});
+pinsEl.addEventListener('focusout', function(e){
+  const c = e.target.closest && e.target.closest('.cluster');
+  if(c === peekOwner) hideClusterPeek();
+});
+pinsEl.addEventListener('click', function(){ hideClusterPeek(); });
+
+/* ================= ROUND 15 -- WHERE YOU ARE ==================================
+   Every distance in this build is measured from LOC and the map never drew it. The
+   location pill names it, distLabel() measures from it, the nearby rail sorts by it,
+   the list sorts by it and #locate-btn recentres on it -- so it was the one anchor
+   the whole screen refers to and the one thing on the screen you could not see.
+
+   A SCALE BAR WAS BUILT HERE FIRST AND TAKEN BACK OUT, and the reason is a finding
+   rather than a preference. The pilot projection is not equal-aspect: measured on
+   the running page through the same two constants distLabel() uses, one pixel is
+   3.780 ft east-west and 2.433 ft north-south at k=1.0, a ratio of 1.554, and the
+   ratio is the same 1.554 at k=0.4, 2.2 and 3.3 -- so it is the view box's aspect,
+   not a zoom artefact. A single horizontal bar would have been right in one
+   direction and 55% wrong in the other, on a product whose 6.4 forbids implying
+   measurement. The projection is not this round's to change: every pin position,
+   every street and Round 14's byte-identical layout diff hang off it. It is
+   escalated in the round log instead.
+
+   WHAT THIS MARK IS NOT. Not a teardrop and not numbered, so it cannot be read as a
+   tier (9.1) or as a cluster (9.7). Not any tier's hue: it is indigo900 on white,
+   the chrome pair. It is taught in two places, which is what 5.7 asks: a row of the
+   map key, and a rung of "Marks that are not tiers" in the sheet that key opens. */
+function youHereSVG(){
+  /* the locate button's OWN glyph, reproduced through iconSVG's exact geometry --
+     same 24-unit source, same 1.33333 scale into the 32 viewBox, same 1.725 stroke
+     weight and round terminals -- so 5.4's one grid, one weight, one terminal style
+     holds and the control and the mark it returns to are literally one drawing.
+     The only addition is a white lift disc: indigo900 measures 17.30 / 15.64 / 13.63
+     / 9.95:1 against road, land, blocks and block edge, so the GLYPH is the carrier
+     on every ground the map has and the disc is a lift rather than the contrast. */
+  return '<svg width="24" height="24" viewBox="0 0 32 32" fill="none" aria-hidden="true"'
+    + ' focusable="false" style="display:block">'
+    + '<circle cx="16" cy="16" r="15" fill="#FFFFFF" fill-opacity=".94"/>'
+    + '<g stroke="var(--indigo900,#1E1142)" stroke-width="2.3" stroke-linecap="round"'
+    +   ' stroke-linejoin="round" fill="none">'
+    +   '<g transform="scale(1.33333)" stroke-width="1.725">' + ICONS.locate + '</g>'
+    + '</g></svg>';
+}
+function renderYouHere(W,H){
+  /* WIRING. Round 15 gave the map a "where you are" mark, and drew it at LOC -- a
+     constant, 2nd & Colorado -- so in the prototype the mark is always on the map and
+     the pin group announces "Your location, 2nd & Colorado, is marked". That is the
+     same false statement the locate button used to make -- the one the locate_real_fix
+     op removed, and whose two forms WIRING_FORBIDDEN names so they cannot come back.
+     It may not reach a page a person at a door reads: this service knows where
+     somebody is only when the phone has told it.
+
+     So the design keeps the drawing and this keeps the claim honest. The glyph is
+     Round 15's, painted once and unchanged. The POSITION and the visibility come from
+     placeYouHere() (tools/app_wiring/locate.js), which draws the mark only on a real
+     geolocation fix, hides it when the fix is off the frame, and never invents one.
+     The pin group says a location is marked only when one really is; the mark's own
+     aria-hidden is Round 15's, and the group label is where it teaches. */
+  const el = document.getElementById('you-here'); if(!el) return;
+  if(!el.firstChild) el.innerHTML = youHereSVG();
+  placeYouHere();
+  const marked = !el.hidden;
+  /* 7.7: the mark's state as text, on the group a screen reader actually lands on. */
+  pinsEl.setAttribute('aria-label', marked
+    ? 'Entrance pins on the map. Your location is marked on the map.'
+    : 'Entrance pins on the map.');
+}
+
 /* ROUND 9. The floating column and the FAB row are anchored to opposite ends of the
    same map, so whether they collide is a fact about the frame's height and about the
    text size, not a constant that can be solved once in CSS. This measures it: the
    band is from the column's top to the FAB row's top, less an 8px breathing gap, and
    .tight is on exactly when the column does not fit in it. Measuring the natural
    height means removing .tight first, so the test is of the column's own size and
-   not of the answer from the last call -- otherwise it latches. */
+   not of the answer from the last call -- otherwise it latches.
+   ROUND 16: the FLOATING COLUMN's half of this is gone, because the thing it was
+   compressing is gone. Seven selectors in this file carried `.map-top.tight`, and
+   all seven named .key-body, .key-match or .key-cta, which now live in #sheet-key;
+   the class would have been dead. The column is unconditionally SHORTER than either
+   of the two states it used to have -- the key contributes a 48px pill (measured
+   179.5-199.1 x 48 across all 25 frame x text-step cases) instead of a 266-431px
+   card (flow) or a 106-162px line (tight) -- so removing the toggle cannot make any
+   collision worse than the one it replaces. Measured after the change over the same
+   50 configurations: the column overruns the band in 1 (320x568 at Double with a
+   profile, +41.6px), against 6 before. That one is the chip row plus the pill, and
+   none of the seven deleted selectors would have touched it. The chip row's own fit
+   is not this round's ticket and is not silently claimed as fixed.
+   The CONTROL column's test is untouched: it still has a .tight rule and still
+   needs the band. */
 function fitMapColumn(){
   const col=document.querySelector('.map-top'), fabs=document.querySelector('.map-fabs');
   if(!col || !fabs || !mapEl.clientHeight) return;
-  col.classList.remove('tight');
+  /* ROUND 15: both of the numbers this function used to take on faith are measured
+     first -- where the app bar ends, and where the nearby rail's top edge is. */
+  syncMapChromeTop();
+  syncFabLift();
   /* the FAB row's RESTING offset, not its animating one: `bottom` is transitioned
      over --dur-base, so a rect read during the lift reports a band that is up to
      104px too generous and the fit latches on the wrong answer. */
@@ -5673,23 +6636,205 @@ function fitMapColumn(){
   const lift=parseFloat(cs.getPropertyValue(
     fabs.classList.contains('lifted') ? '--fab-bottom-lift' : '--fab-bottom')) || 110;
   const fabTop = mapEl.clientHeight - lift - fabs.offsetHeight;
-  const band = fabTop - col.offsetTop - 8;
-  if(col.getBoundingClientRect().height > band) col.classList.add('tight');
+  /* kept as a measured value rather than deleted: colOver is what a later round
+     needs if the chip row is ever given a fit of its own. It is read, not written. */
+  fitMapColumn.colOver = col.getBoundingClientRect().height - (fabTop - col.offsetTop - 8);
+  /* ROUND 15: the control column is measured against the same band, because it is
+     anchored to the same two things and had no test at all. */
+  const ctls=document.querySelector('.map-ctls');
+  if(ctls){
+    ctls.classList.remove('tight');
+    if(ctls.getBoundingClientRect().height > fabTop - ctls.offsetTop - 8) ctls.classList.add('tight');
+  }
 }
 /* ROUND 9: setZoom takes the centre it should land on. Passing `undefined` keeps
    whatever centre is in play (the zoom button just changes scale); passing `null`
    returns to the pilot frame (the locate button); passing a {lat,lng} zooms AND
    pans, which is what resolving a cluster needs. */
+/* ROUND 14: the button is now what the ticket asks it to be -- a jump between the
+   two NAMED stops, and the fastest way back out for anyone not using two fingers.
+   Its signature and its two callers (the locate button, the cluster resolve) are
+   unchanged; only the state it writes is continuous. */
 function setZoom(out, centre){
-  zoomedOut=!!out;
+  mapK = out ? K_OVERVIEW : K_STREET;
   if(centre !== undefined) mapCentre = clampCentre(centre);
-  const zb=document.getElementById('zoom-toggle');
-  zb.setAttribute('aria-pressed',zoomedOut);
-  zb.setAttribute('aria-label', zoomedOut?'Zoom in':'Zoom out');
-  zb.innerHTML = iconSVG(zoomedOut ? 'zoom-in' : 'zoom-out', 19);
+  syncZoomBtn();
   panMap(0);
   renderMap();
 }
+/* The button reports whether the frame is wider than street, which is the state it
+   has always reported, and names the stop it would jump TO. Between the stops it
+   still reads "Zoom in", because that is what pressing it does. */
+function syncZoomBtn(){
+  const zb=document.getElementById('zoom-toggle'); if(!zb) return;
+  const out = mapK > K_STREET + 1e-9;
+  zb.setAttribute('aria-pressed',out);
+  zb.setAttribute('aria-label', out?'Zoom in':'Zoom out');
+  zb.innerHTML = iconSVG(out ? 'zoom-in' : 'zoom-out', 19);
+}
+
+/* ================= ROUND 14 -- FINGERS ON THE MAP (frontdoor #432) =============
+   The owner: "add the movement with fingers in app." There were ZERO touchstart,
+   touchmove, gesturestart or pointer handlers anywhere on the map.
+
+   POINTER EVENTS, one code path for every input. Two fingers, one finger, a mouse
+   drag: all of them arrive as pointerdown/move/up, and the loop below treats a
+   gesture as a CENTROID and a SPREAD. One pointer has a spread of zero and a ratio
+   of one, so a pan is a pinch that is not scaling, and there is no second
+   algorithm to keep in step with the first.
+
+   WHERE THE TICKET IS WRONG, RECORDED RATHER THAN QUIETLY WORKED AROUND. It says
+   pointer events "give you trackpad pinch on a laptop for free, which is how it
+   will be demoed if the phone misbehaves". That is not how Chrome or Safari
+   deliver a trackpad pinch: they synthesise a `wheel` event with ctrlKey set, and
+   dispatch no pointer of any kind. A pointer-events-only implementation would have
+   done nothing on a laptop -- exactly in the situation the ticket names it as the
+   fallback for. So the wheel path below is not a nicety. NOT VERIFIED HERE: this
+   machine has no trackpad to pinch, and the claim above is about documented
+   browser behaviour, not a measurement. What IS measured is that the handler
+   scales the map when a ctrlKey wheel event is dispatched at it (round log).
+
+   ANCHORING. Every scale change is solved for the CENTRE that puts the coordinate
+   under the finger back under the finger. That is the ticket's "the tip anchor
+   stays on its coordinate at every scale", and it is arithmetic rather than a
+   promise: unproj() is the exact inverse of proj(), and the centre is then chosen
+   so proj() returns the pixel the finger is on. clampCentre() still runs, so the
+   frame can never be panned off the data.
+
+   REDUCED MOTION. There is nothing to disable: a scale change is a re-render, not
+   a transition, so it is instant for every user and identical under `.rm`. The one
+   thing that COULD have lagged under a finger is #map's own
+   `transition:transform var(--dur-map)`, which exists for the card sheet's pan --
+   .map-gesture takes it off for the length of the gesture, for everybody. That is
+   deliberately not conditioned on reduced motion: a rule that only holds for one
+   preference is the seam that breaks. ============================================ */
+const MAP_PAD = 22;          /* the pad every map projection is called with */
+const MAP_SLOP = 8;          /* px before a press becomes a drag, so a tap is a tap */
+const DOUBLETAP_MS = 300, DOUBLETAP_PX = 24, DOUBLETAP_K = 1/1.8;
+const mapPtrs = new Map();
+let mapGest = null, mapRaf = 0, lastTap = 0, lastTapX = 0, lastTapY = 0;
+/* set when a gesture actually moved, read by the capture-phase click listener, and
+   cleared by the next pointerdown. It is a SEPARATE flag rather than a test on
+   mapGest, because mapGest is already null by the time the click arrives -- the
+   click fires after the last pointerup, which is where the gesture is torn down. */
+let mapClickGuard = false;
+
+function scheduleMapRender(){
+  if(mapRaf) return;
+  mapRaf = requestAnimationFrame(()=>{ mapRaf=0; renderMap(); });
+}
+function mapLocal(e){
+  const r = mapEl.getBoundingClientRect();
+  return {x:e.clientX-r.left, y:e.clientY-r.top};
+}
+function centroidSpread(){
+  let sx=0, sy=0, n=0;
+  mapPtrs.forEach(p=>{ sx+=p.x; sy+=p.y; n++; });
+  const cx=sx/n, cy=sy/n;
+  let s=0;
+  mapPtrs.forEach(p=>{ s+=Math.hypot(p.x-cx,p.y-cy); });
+  return {x:cx, y:cy, spread:s/n, n};
+}
+/* put geo `g` under pixel (px,py) at the current mapK, then clamp */
+function anchorAt(g, px, py, W, H){
+  const hl=(BBOX.lat1-BBOX.lat0)/2*mapK, hg=(BBOX.lng1-BBOX.lng0)/2*mapK;
+  const u=(px-MAP_PAD)/(W-2*MAP_PAD), v=(py-MAP_PAD)/(H-2*MAP_PAD);
+  mapCentre = clampCentre({lat: g.lat - hl*(1-2*v), lng: g.lng + hg*(1-2*u)});
+}
+/* the public scale-about-a-point, used by the wheel path and the double tap */
+function zoomAbout(k, px, py){
+  const W=mapEl.clientWidth, H=mapEl.clientHeight;
+  if(!(W>40 && H>40)) return;
+  const g = unproj(px, py, W, H, MAP_PAD);
+  mapK = Math.max(K_MIN, Math.min(K_MAX, k));
+  anchorAt(g, px, py, W, H);
+  syncZoomBtn();
+}
+
+mapEl.addEventListener('pointerdown', e=>{
+  if(e.pointerType==='mouse' && e.button!==0) return;
+  mapClickGuard = false;
+  const p = mapLocal(e);
+  mapPtrs.set(e.pointerId, p);
+  const c = centroidSpread();
+  mapGest = {x:c.x, y:c.y, spread:c.spread, n:c.n, sx:c.x, sy:c.y, live:false};
+  /* a second finger re-bases the gesture; it never inherits the first one's slop */
+  if(c.n>1) mapGest.live = true;
+  if(mapGest.live) mapEl.classList.add('map-gesture');
+});
+mapEl.addEventListener('pointermove', e=>{
+  if(!mapPtrs.has(e.pointerId) || !mapGest) return;
+  mapPtrs.get(e.pointerId).x = mapLocal(e).x;
+  mapPtrs.get(e.pointerId).y = mapLocal(e).y;
+  const c = centroidSpread();
+  if(!mapGest.live){
+    if(Math.hypot(c.x-mapGest.sx, c.y-mapGest.sy) < MAP_SLOP){
+      mapGest.x=c.x; mapGest.y=c.y; mapGest.spread=c.spread;
+      return;                                   /* still a press, not a drag */
+    }
+    mapGest.live = true;
+    mapEl.classList.add('map-gesture');
+  }
+  const W=mapEl.clientWidth, H=mapEl.clientHeight;
+  if(!(W>40 && H>40)) return;
+  /* 1. the coordinate under where the gesture WAS, in the frame as it stands now */
+  const g = unproj(mapGest.x, mapGest.y, W, H, MAP_PAD);
+  /* 2. the scale, if the fingers changed their spread. Fingers apart -> a narrower
+        view box -> a SMALLER k, which is why this is the ratio and not its inverse. */
+  if(c.n>1 && mapGest.spread>4 && c.spread>4)
+    mapK = Math.max(K_MIN, Math.min(K_MAX, mapK * (mapGest.spread/c.spread)));
+  /* 3. the centre that puts that coordinate back under the fingers */
+  anchorAt(g, c.x, c.y, W, H);
+  mapGest.x=c.x; mapGest.y=c.y; mapGest.spread=c.spread; mapGest.n=c.n;
+  syncZoomBtn();
+  scheduleMapRender();
+});
+function endMapPointer(e){
+  if(!mapPtrs.has(e.pointerId)) return;
+  const wasLive = mapGest && mapGest.live;
+  mapPtrs.delete(e.pointerId);
+  if(mapPtrs.size===0){
+    mapGest = null;
+    /* ROUND 15: a press-and-hold that opened a cluster preview is not a tap either.
+       It is ORed in here rather than guarded separately, because the click guard is
+       already the one place that decides whether a pointer sequence was a
+       navigation, and two mechanisms deciding that is how a seam opens. */
+    mapClickGuard = !!wasLive || peekHeld;
+    peekHeld = false;
+    mapEl.classList.remove('map-gesture');
+    /* DOUBLE TAP TO ZOOM IN, CENTRED ON THE TAP -- the other gesture people try.
+       Never on a mark: a double tap on a pin is two taps on a pin, and the card it
+       opens is the answer the user asked for. */
+    if(!wasLive && e.type==='pointerup' && !(e.target.closest && e.target.closest('.pinbtn,.cluster'))){
+      const p = mapLocal(e), now = Date.now();
+      if(now-lastTap < DOUBLETAP_MS && Math.hypot(p.x-lastTapX, p.y-lastTapY) < DOUBLETAP_PX){
+        zoomAbout(mapK*DOUBLETAP_K, p.x, p.y);
+        renderMap();
+        lastTap = 0;
+      } else { lastTap = now; lastTapX = p.x; lastTapY = p.y; }
+    }
+  } else {
+    /* a finger left mid-pinch: re-base on what is still down rather than reading
+       the jump in centroid as a pan. Same reasoning as Round 13's pointercancel. */
+    const c = centroidSpread();
+    mapGest = {x:c.x, y:c.y, spread:c.spread, n:c.n, sx:c.x, sy:c.y, live:true};
+  }
+}
+mapEl.addEventListener('pointerup', endMapPointer);
+mapEl.addEventListener('pointercancel', endMapPointer);
+/* a gesture that moved destroys and rebuilds #pins under the finger, so no click
+   survives it -- but a mouse drag that ends over the same rebuilt pin would still
+   fire one, and a drag is not a tap. */
+mapEl.addEventListener('click', e=>{
+  if(mapClickGuard){ mapClickGuard=false; e.stopPropagation(); e.preventDefault(); }
+}, true);
+/* trackpad pinch (ctrlKey) and wheel. This is the laptop path -- see the note. */
+mapEl.addEventListener('wheel', e=>{
+  e.preventDefault();
+  const p = mapLocal(e);
+  zoomAbout(mapK * Math.exp(e.deltaY * (e.ctrlKey ? 0.010 : 0.0016)), p.x, p.y);
+  scheduleMapRender();
+}, {passive:false});
 function tierName(t){return t==='est'?'Estimated':t==='scan'?'Scanned on-site':'Owner-confirmed';}
 function tierChip(t){
   if(t==='est') return `<span class="tierchip est">${sparkle('var(--blue-ink,#1C4B7E)')} Estimated</span>`;
@@ -5704,13 +6849,108 @@ function tierChip(t){
    (D38); the disc is a real mark that stays, so it is keyed here, where it is seen.
    The disc is drawn by the same pinSVG('cluster') the map draws, at the legend's
    own size, with a representative count. */
-document.getElementById('legend').innerHTML =
-  `<span class="lg"><span class="lgpin">${pinSVG('est',pinPx('est','receipt'))}</span> Estimated</span>
-   <span class="lg"><span class="lgpin">${pinSVG('scan',pinPx('scan','receipt'))}</span> Scanned on-site</span>
-   <span class="lg"><span class="lgpin">${pinSVG('owner',pinPx('owner','receipt'))}</span> Owner-confirmed</span>
-   <span class="lg"><span class="lgpin">${pinSVG('cluster',22,{count:8})}</span> 8 places here</span>
-   <span class="legend-cta">How trust grows \u203a</span>`;
-document.getElementById('legend').addEventListener('click',e=>openSheet('sheet-trust', e.currentTarget));
+/* ROUND 15. The card becomes a control that opens, and the two explainers become
+   one. Three things move and nothing is deleted:
+     - the collapsed pill draws the three tier marks at the RECEIPT sizes the card
+       already used (24/28/32), so no size enters the token table that 9.2 measures;
+     - the match strip's three swatches are rows of this key now, present exactly
+       when a needs profile is, which is when they were present before;
+     - "How trust grows" is its own 48px control instead of a 19px span inside a
+       200x180px button, and it stops being deleted the moment a profile is applied.
+   The key's open state is remembered for the session: a user who wants it up keeps
+   it up, and the DEFAULT is shut because the owner's screen had ten things on it. */
+/* ROUND 16 REPLACES THE LAST PARAGRAPH ABOVE. The expand-in-place card is gone and
+   the rows live in #sheet-key; see the measurement and the rejected options in the
+   CSS above .legend. Two behaviour changes, both deliberate:
+     - the session memory of "open" is gone. A modal cannot stand open beside the
+       map, so there is no state to remember. The pill is the persistent half now
+       and it still draws all three tier marks.
+     - Escape, the Tab trap, background inert and focus return are no longer this
+       control's own code. They are the sheet component's, which is the same path
+       the other five map sheets take, so there is one implementation instead of
+       two and the key cannot drift from them. The announceUI() calls go with it:
+       a live-region "Map key shown." is what a disclosure needs, and a modal that
+       moves focus onto its own heading has already said the same thing in the way
+       every other sheet in this file says it. Announcing BOTH would say it twice. */
+/* ============ ROUND 17: THE KEY IS THE TIERS AND THE ROUTE ====================
+   The owner, having opened Round 16's sheet: "the key doesn't need to say 8 places
+   here when expanded to the location. mostly just needs the pins and how trust
+   grows."
+   FIRST, WHAT THE KEY ACTUALLY HELD, because the ticket for this round described
+   it wrongly and the wrong description would have licensed the wrong deletions. It
+   listed the seven rows as the three tiers, the numbered disc, the crosshair, the
+   PALE MATCH DISC, the DOUBLE SELECTION RING and the match strip. Measured on the
+   running page over 5 frames x 5 text steps x {no profile, wheelchair} = 50
+   configurations, #key-body's children were: Estimated, Scanned on-site,
+   Owner-confirmed, "8 places here", "Where you are", "How trust grows" (6 of 6
+   without a profile) plus the match strip (7 of 7 with one). There is no pale-disc
+   row and no double-ring row in this key and there never was one -- those two are
+   rungs of "Marks that are not tiers" in #sheet-trust, where Round 11 put them.
+   TWO ROWS COME OUT, and each keeps its teaching somewhere better or equal:
+     - THE NUMBERED DISC. Round 15 gave it a hover / press-and-hold / focus preview
+       that names the count and draws the mix one row per tier. That is teaching ON
+       the mark, which beats a row in a list, and the "A numbered disc" rung in
+       "Marks that are not tiers" is still there behind the row below. The key's row
+       was the third copy and it is the one the owner read out loud.
+     - THE CROSSHAIR. It is the user's own position: it is drawn where they are, the
+       control that recentres on it is named "Current location", the pins group's
+       accessible name says "Your location, 2nd & Colorado, is marked on the map",
+       and the "A crosshair" rung is still in "Marks that are not tiers". A mark
+       that means "you" does not need a legend line to be read as "you".
+   ONE ROW STAYS, and it stays for a measured reason rather than by omission. THE
+   MATCH STRIP is the only place in this file that pairs a halo LINE STYLE with its
+   meaning: solid = good, dashed = partial, dotted = not yet seen. Every other
+   pairing in the build (.matchchip in the card, .mstat in the list and the nearby
+   rail) is a chip with its own words, not the ring drawn round a pin. Delete it and
+   the three halo styles are named nowhere, and 5.7 would fail rather than hold. It
+   is also about the pins, which is what the owner asked the key to be about, and it
+   exists only while a needs profile does -- so the resting key is four rows.
+   THE ROUTE SAYS WHERE THE REST WENT. "How trust grows" gains one sub-line naming
+   what is behind it, because a key that no longer lists a mark has to say where
+   that mark is taught instead; without it the removal is a deletion. */
+function renderKey(){
+  document.getElementById('key-art').innerHTML =
+    ['est','scan','owner'].map(function(t){return pinSVG(t, pinPx(t,'receipt'));}).join('');
+  document.getElementById('key-chev').innerHTML = iconSVG('chevron',13);
+  var lbl = personaLabel();
+  document.getElementById('key-body').innerHTML =
+    '<span class="lg"><span class="lgpin">'+pinSVG('est',pinPx('est','receipt'))+'</span> Estimated</span>'
+  + '<span class="lg"><span class="lgpin">'+pinSVG('scan',pinPx('scan','receipt'))+'</span> Scanned on-site</span>'
+  + '<span class="lg"><span class="lgpin">'+pinSVG('owner',pinPx('owner','receipt'))+'</span> Owner-confirmed</span>'
+  + (personas.size
+      ? '<span class="key-match"><span>'+esc(lbl)+':</span>'
+        + '<span class="lg"><span class="sw good"></span>good</span>'
+        + '<span class="lg"><span class="sw partial"></span>partial</span>'
+        + '<span class="lg"><span class="sw unknown"></span>not yet seen</span></span>'
+      : '')
+  + '<button class="key-cta" id="key-cta"><span class="key-cta-main">How trust grows'
+    + '<span class="key-cta-sub">Plus the marks that are not tiers</span>'
+    + '</span><span aria-hidden="true">\u203a</span></button>';
+  document.getElementById('key-cta').addEventListener('click', function(e){
+    e.stopPropagation(); openSheet('sheet-trust', e.currentTarget);
+  });
+  /* the caption names whether the match rows are there, because their presence is a
+     fact about the user's profile and not about the key.
+     ROUND 17: "Every mark the map can draw" became a lie the moment two marks left,
+     so it is now a description of what is here. */
+  document.getElementById('key-cap').textContent = personas.size
+    ? 'What each pin\u2019s mark means, and how the map shows fit for ' + lbl + '.'
+    : 'What each pin\u2019s mark means.';
+  /* ROUND 17. THE PILL'S NAME LISTS WHAT THE KEY CONTAINS. It was a static
+     attribute in the markup naming seven marks, and it was already over-promising
+     before this round: it named "the pale disc behind a matched pin and the double
+     ring on the one you have open", neither of which was ever a row of this key.
+     It is written here instead, from the same condition that writes the rows, so
+     the name and the contents cannot drift apart again. */
+  document.getElementById('key-toggle').setAttribute('aria-label',
+    'Map key. Estimated, Scanned on-site, Owner-confirmed'
+    + (personas.size ? ', and how a good, partial or not-yet-seen match is drawn' : '')
+    + ', and how trust grows. Open the map key');
+}
+renderKey();
+document.getElementById('key-toggle').addEventListener('click', function(e){
+  openSheet('sheet-key', e.currentTarget);
+});
 
 /* ===================== card ===================== */
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -6936,18 +8176,21 @@ document.getElementById('btn-needs-skip').addEventListener('click',()=>{
   closeSheets();
 });
 function applyPersona(){
-  const ml=document.getElementById('match-legend');
   const lbl=personaLabel();
-  if(personas.size){
-    ml.classList.add('on');
-    document.getElementById('legend').classList.add('compact');   /* ROUND 8: see .legend.compact */
-    document.getElementById('ml-label').textContent=lbl+':';
-    document.getElementById('fab-needs-label').textContent=lbl;
-  } else {
-    ml.classList.remove('on');
-    document.getElementById('legend').classList.remove('compact');
-    document.getElementById('fab-needs-label').textContent='My needs';
-  }
+  /* ROUND 15. The match key is part of the map key now, so there is no second
+     floating strip to switch on and no .compact state to squeeze the first one with;
+     renderKey() puts the swatch row in exactly when a profile is set.
+     AND A DEFECT FOUND WHILE MEASURING, FIXED HERE. #fab-needs carried a static
+     aria-label of "My needs" while its VISIBLE text was rewritten to the persona --
+     "Wheelchair" on screen, "My needs" to a screen reader. That fails 7.6 and WCAG
+     2.5.3, and it also put the word "Wheelchair" on the map twice, because the
+     removable chip in #chiprow already says it. The button's visible text is now
+     constant, the chip stays the single place that names and un-names the profile,
+     and the accessible name CONTAINS the visible text and then adds the state. */
+  document.getElementById('fab-needs-label').textContent='My needs';
+  document.getElementById('fab-needs').setAttribute('aria-label',
+    personas.size ? 'My needs \u2014 matching for '+lbl+'. Change' : 'My needs');
+  renderKey();
   document.getElementById('prof-needs-sub').textContent = personas.size?'Matching for '+[...personas].map(k=>PERSONAS[k].label).join(', '):'Choose any that help \u2014 optional';
   document.getElementById('prof-needs-chips').innerHTML = [...personas].map(k=>`<span class="needchip">${PERSONAS[k].label}</span>`).join('');
   armPinFlux(); renderMap();
@@ -6963,8 +8206,7 @@ function renderNearby(){
   const nb=document.getElementById('nearby');
   if(!personas.size){
     nb.classList.remove('on');nb.innerHTML='';
-    document.getElementById('nearby-title').classList.remove('on');
-    document.querySelector('.map-fabs').classList.remove('lifted');
+    liftBottomRow(false);
     return;
   }
   const rank={good:0,partial:1};
@@ -6996,8 +8238,29 @@ function renderNearby(){
     nb.appendChild(b);
   });
   nb.classList.toggle('on',matches.length>0);
-  document.getElementById('nearby-title').classList.toggle('on',matches.length>0);
-  document.querySelector('.map-fabs').classList.toggle('lifted',matches.length>0);
+  liftBottomRow(matches.length>0);
+}
+function liftBottomRow(on){
+  syncFabLift(on);
+  document.querySelector('.map-fabs').classList.toggle('lifted',on);
+}
+/* the rail's bottom edge is 94px above the map's, so the FAB row has to sit at
+   94 + the rail's own height + a 12px gap. Both readings are of settled boxes. */
+function syncFabLift(on){
+  const nb=document.getElementById('nearby'), ph=document.getElementById('phone');
+  if(!nb||!ph) return;
+  if(on===undefined) on = nb.classList.contains('on');
+  if(!on){ ph.style.removeProperty('--fab-bottom-lift'); return; }
+  ph.style.setProperty('--fab-bottom-lift',
+    Math.round(94 + nb.getBoundingClientRect().height + 12) + 'px');
+}
+/* the app bar wraps, so its height is not a constant and the two columns hung off a
+   constant. This is the one place either of them learns where the bar ends. */
+function syncMapChromeTop(){
+  const bar=document.querySelector('#screen-map .apphead'), ph=document.getElementById('phone');
+  if(!bar||!ph) return;
+  const h=bar.getBoundingClientRect().height;
+  if(h>10) ph.style.setProperty('--map-chrome-top', Math.round(h-2)+'px');
 }
 
 /* ===================== filter sheet ===================== */
@@ -7015,7 +8278,9 @@ const FILT_FEATS=[['ramp','Ramp or bevel'],['handrails','Handrails'],['hardware'
 const FILT_DIST_MAX=1000;
 let filtFeats=new Set(), filtFresh='any', filtDist=FILT_DIST_MAX, filterApplied=false;
 /* straight-line feet from the located point, the same arithmetic distLabel prints */
-function distFt(p){ return Math.hypot((p.lng-LOC.lng)*314000, (p.lat-LOC.lat)*364000); }
+/* ROUND 15: the third copy of the two constants distLabel() carried inline. Three
+   call sites, one pair of names, same values. */
+function distFt(p){ return Math.hypot((p.lng-LOC.lng)*FT_DEG_LNG, (p.lat-LOC.lat)*FT_DEG_LAT); }
 function filterPass(p){
   for(const f of filtFeats){ if(!(p.f[f]&&p.f[f].v==='present')) return false; }
   /* ROUND 6: freshness asks how old the evidence is, in days. It used to ask only
@@ -7395,11 +8660,12 @@ function openClusterSheet(list, opener){
   const ul=document.getElementById('cluster-rows');
   const sorted=[...list].sort((a,b)=>Math.hypot(a.lat-LOC.lat,a.lng-LOC.lng)-Math.hypot(b.lat-LOC.lat,b.lng-LOC.lng));
   document.getElementById('cluster-h').textContent = sorted.length+' entrances grouped here';
-  const tiers={};
-  sorted.forEach(p=>{ const t=tierName(p.tier); tiers[t]=(tiers[t]||0)+1; });
+  /* ROUND 15: same order as the disc's arcs, its accessible name and the preview. */
+  const tiers={est:0,scan:0,owner:0};
+  sorted.forEach(p=>{ tiers[p.tier]++; });
   document.getElementById('cluster-cap').textContent =
     'These are too close together to draw as separate pins at this zoom \u2014 '
-    + Object.entries(tiers).map(([k,v])=>v+' '+k.toLowerCase()).join(', ')
+    + ['est','scan','owner'].filter(t=>tiers[t]).map(t=>tiers[t]+' '+tierName(t).toLowerCase()).join(', ')
     + '. Tap one to open it.';
   ul.innerHTML = sorted.map(listRowHTML).join('');
   ul.querySelectorAll('[data-open]').forEach(b=>b.addEventListener('click',()=>{
@@ -7418,7 +8684,12 @@ document.getElementById('skip-pins').addEventListener('click',()=>{
   announceUI('Skipped the map pins. Bottom navigation.');
 });
 document.getElementById('list-toggle').addEventListener('click',()=>setListOpen(!listOpen));
-document.getElementById('zoom-toggle').addEventListener('click',()=>{ closeSheets(); setZoom(!zoomedOut); });
+document.getElementById('zoom-toggle').addEventListener('click',()=>{
+  closeSheets();
+  /* jump to the OTHER named stop: from anywhere at or below street, out to
+     overview; from anywhere above street, back in to street. */
+  setZoom(mapK <= K_STREET + 1e-9);
+});
 /* ===================== the locate control, and where you actually are =====================
    THE DEFECT THIS REPLACES. The design source's handler was one line, and it asked
    the phone nothing: it reset the pan, returned the frame to the pilot bbox, and
@@ -7859,7 +9130,8 @@ document.getElementById('trust-ladder').innerHTML = `
 document.getElementById('mapkey-ladder').innerHTML = `
   <div class="rung"><span class="r-pin">${pinSVG('cluster',CLUSTER_PX,{count:8})}</span><div class="r-body"><span class="r-name">A numbered disc</span><br>How many entrances are grouped here, too close together to draw apart. Tap it: it zooms in on them, or lists them when there is no closer zoom.</div></div>
   <div class="rung"><span class="r-pin">${pinSVG('est',pinPx('est','overview'),{disc:true})}</span><div class="r-body"><span class="r-name">A pale disc</span><br>Under every pin once you set <b>My needs</b>: this one has been checked against them. The ring says how well it fits.</div></div>
-  <div class="rung"><span class="r-pin">${pinSVG('est',pinPx('est','overview'),{selected:true})}</span><div class="r-body"><span class="r-name">A double ring</span><br>The entrance you have open. Drawn outside the pin, never in its color.</div></div>`;
+  <div class="rung"><span class="r-pin">${pinSVG('est',pinPx('est','overview'),{selected:true})}</span><div class="r-body"><span class="r-name">A double ring</span><br>The entrance you have open. Drawn outside the pin, never in its color.</div></div>
+  <div class="rung"><span class="r-pin">${youHereSVG()}</span><div class="r-body"><span class="r-name">A crosshair</span><br>Where you are &mdash; ${LOC_NAME}. Every distance in the app is measured from it, and the locate button returns the map to it.</div></div>`;
 
 /* ===================== correction sheet -> "Correction submitted" (18) -> My contributions ===================== */
 const cNote=document.getElementById('correct-note');
@@ -8152,7 +9424,7 @@ function applyPrefs(){
      set it before .phone exists -- see the boot script at the top of this file. */
   document.documentElement.classList.toggle('rm',isReduced());
   document.querySelectorAll('[data-tsize-label]').forEach(el=>
-    el.textContent=TSIZE_LABEL[prefs.tsize]+' · '+TSIZE_PCT[prefs.tsize]);
+    el.textContent=TSIZE_LABEL[prefs.tsize]+' \u00b7 '+TSIZE_PCT[prefs.tsize]);
   document.querySelectorAll('.tsize-btn').forEach(b=>{const on=b.dataset.tsize===prefs.tsize;b.classList.toggle('sel',on);b.setAttribute('aria-pressed',on);});
   document.querySelectorAll('[data-pref]').forEach(t=>{
     const on = t.dataset.pref==='rm' ? isReduced() : !!prefs[t.dataset.pref];
@@ -8167,6 +9439,9 @@ function applyPrefs(){
   }
   /* the map is drawn, not styled -- repaint it so contrast follows the tokens */
   renderMap(); renderNearby();
+  /* ROUND 14: the coach's place depends on the text size, so it is re-measured
+     where the text size changes, not only where the line changes. */
+  if(typeof fitCoach==='function') fitCoach();
   if(selectedId && document.getElementById('sheet-card').classList.contains('on')) openCard(selectedId, cardPos);
   renderPreviewChips();
 }
@@ -8420,11 +9695,45 @@ function paintCoach(line, sub){
   if(isReduced()){
     c.classList.add('static'); c.classList.remove('swap');
     c.innerHTML = sub ? '<span>'+line+'</span><span>'+sub+'</span>' : '<span>'+line+'</span>';
+    fitCoach();
     return;
   }
   c.classList.remove('static');
   c.classList.add('swap');
-  setTimeout(()=>{ c.textContent=line; c.classList.remove('swap'); },160);
+  setTimeout(()=>{ c.textContent=line; c.classList.remove('swap'); fitCoach(); },160);
+}
+/* ROUND 14 -- THE COACH IS MEASURED INTO A PLACE IT FITS (frontdoor #458).
+   Two numbers decide it, both read from the live layout rather than from a text-size
+   class, so a longer line or a face with wider metrics gets the same treatment:
+     WIDTH. The pill's ceiling is the FRAME's width less 12px each side, not the
+       viewfinder's -- the viewfinder is 268-330px wide inside frames of 320-430 and
+       both are centred, so a pill wider than the picture is still centred on it and
+       still inside the phone. Written inline because the frame's width is not
+       available to the pill in CSS: its containing block is the viewfinder.
+     HEIGHT. Inside the viewfinder the pill has the band below the guide to live in,
+       which is 22% of the viewfinder's height (the guide is 62% tall, centred at
+       47%, so its lower edge is at 78%). If the pill plus its 12px offset plus 8px
+       of clearance does not fit that band, it goes BELOW the viewfinder instead and
+       the screen opens exactly that much room for it. Round 10 measured this
+       clearance at the three text steps that existed then; #458 asks for it at the
+       two new roots, and at 22.5px and 30px on a 320-wide frame it does not hold,
+       which is what this switch is for.
+   The class is always removed before the measurement, so the decision is taken from
+   the same un-dropped layout every time and cannot oscillate. */
+function fitCoach(){
+  const c=document.getElementById('coach'), vf=document.getElementById('viewfinder'),
+        sc=document.getElementById('scan-capture');
+  if(!c||!vf||!sc) return;
+  c.style.maxWidth = Math.max(160, phoneEl.clientWidth - 24) + 'px';
+  sc.classList.remove('coach-below');
+  sc.style.removeProperty('--coach-drop');
+  const vfH = vf.getBoundingClientRect().height;
+  const ch  = c.getBoundingClientRect().height;
+  if(!(vfH>0)) return;
+  if(vfH*0.22 < ch + 20){
+    sc.classList.add('coach-below');
+    sc.style.setProperty('--coach-drop', (ch + 18) + 'px');
+  }
 }
 
 function startCoach(){
@@ -8531,9 +9840,18 @@ function showScreen(id){
     if(tabOn[k]) b.setAttribute('aria-current','page'); else b.removeAttribute('aria-current');
   });
   moveNavIndicator();
-  /* I1: onboarding and the splash cover the nav completely -- take it out of the tab order */
+  /* I1: onboarding and the splash cover the nav completely -- take it out of the tab order.
+     ROUND 14 (#457): the capture screen joins them, for a different reason -- the nav
+     bar is display:none there, because its Scan ring and the shutter were the same
+     action drawn twice, 85px apart. A hidden bar must leave the tab order and the
+     accessibility tree with the pixels, so it is inert on exactly the same test the
+     stylesheet uses. */
   const nb=document.getElementById('navbar');
-  if(/^ob-/.test(id)) nb.setAttribute('inert',''); else nb.removeAttribute('inert');
+  if(/^ob-/.test(id) || id==='scan-capture') nb.setAttribute('inert',''); else nb.removeAttribute('inert');
+  phoneEl.dataset.screen = id;
+  /* ROUND 14: the coach's placement is decided by measurement, on the screen that
+     owns it, on the turn it becomes visible. */
+  if(id==='scan-capture') requestAnimationFrame(fitCoach);
   /* Round 4: the status bar rides on whatever chrome the screen has. The map now
      carries the board's dark app bar, and the welcome and the capture screen were
      already dark surfaces -- on those two the status bar was painting --ink on a
@@ -10582,7 +11900,7 @@ applyPrefs();
 /* first load: splash -> welcome (guest-first onboarding); a returning session
    (in-memory flag) would go straight to the map */
 if(!onboarded) runSplash();
-addEventListener('resize',()=>{fitPhone();renderMap();});
+addEventListener('resize',()=>{fitPhone();renderMap();fitCoach();});
 armMapObserver();
 </script>
 <script>
