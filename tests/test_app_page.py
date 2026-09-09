@@ -141,11 +141,55 @@ def test_the_scan_docstring_matches_what_the_code_does():
     assert "The simulated pipeline runs only where there is no server to talk to" in html
 
 
-def test_the_page_carries_a_short_max_age_and_nothing_else_about_caching():
+def test_the_page_is_revalidated_rather_than_held_for_a_window():
+    """The five-minute window fed the service worker a build older than the server (#483).
+
+    It used to be `public, max-age=300`. Watched in Chromium across a deploy, the new
+    worker's own fetch of /app was answered out of that window, so it filled its new,
+    correctly commit-named cache with the PREVIOUS build -- and then served it, from a
+    cache nothing was left to invalidate, for three consecutive loads. `no-cache` means
+    revalidate before reuse, so no cache anywhere can answer with a build the server has
+    replaced.
+    """
     response = page()
-    assert response.headers["Cache-Control"] == "public, max-age=300"
+    assert response.headers["Cache-Control"] == "no-cache"
+    assert "max-age" not in response.headers["Cache-Control"]
     assert "Expires" not in response.headers
-    assert "ETag" not in response.headers
+
+
+def test_an_unchanged_page_is_revalidated_without_sending_it_again():
+    """`no-cache` without a validator would mean 1.6 MB on every navigation.
+
+    The point of the header is correctness, and the point of the ETag is that
+    correctness stays cheap: a phone that already has the current build pays a
+    conditional request answered with no body at all.
+    """
+    client = create_app().test_client()
+    first = client.get("/app")
+    assert first.status_code == 200
+    etag = first.headers["ETag"]
+    assert etag
+
+    again = client.get("/app", headers={"If-None-Match": etag})
+    assert again.status_code == 304
+    assert again.get_data() == b""
+
+
+def test_the_validator_is_taken_from_the_page_itself():
+    """An ETag that cannot tell two builds apart is worse than none.
+
+    It is a digest of the page's own bytes rather than of FRONTDOOR_COMMIT, because
+    locally the commit is unset for every build -- which is exactly when a stale page
+    is hardest to notice. Being a digest is what makes it change on, and only on, a
+    change to the page.
+    """
+    from werkzeug.http import generate_etag
+
+    served = page()
+    assert served.headers["ETag"].strip('"') == generate_etag(served.get_data())
+    assert generate_etag(served.get_data() + b"<!-- a later build -->") != generate_etag(
+        served.get_data()
+    )
 
 
 def test_the_page_is_outside_the_cors_scope():
@@ -291,6 +335,74 @@ def test_the_page_registers_the_worker_and_links_the_manifest():
     html = page().get_data(as_text=True)
     assert '<link rel="manifest" href="/app-manifest.json">' in html
     assert 'navigator.serviceWorker.register("/app-sw.js")' in html
+
+
+def test_the_page_reloads_itself_once_when_a_new_build_takes_over():
+    """The load right after a deploy renders the previous build, and says nothing (#483).
+
+    /app is served cache-first, so the navigation is answered out of the old worker's
+    cache before the browser has even looked at /app-sw.js. Cache-first is kept -- the
+    page is 1.6 MB and has to open on one bar of signal -- so the page corrects itself:
+    when the new worker claims it, it reloads, once.
+
+    Watched in Chromium across two simulated deploys, the load after each deploy
+    rendered twice (old, then new, ~2.8 s apart) and every other load rendered once.
+    """
+    html = page().get_data(as_text=True)
+    assert 'navigator.serviceWorker.addEventListener("controllerchange"' in html
+    assert "location.reload();" in html
+
+
+def test_the_reload_cannot_loop():
+    """A worker that reloads on activation is one unlucky race from reloading forever.
+
+    Two guards, and both have to be here: a document that had no controller when it
+    loaded came off the network and is already current, so claim() on a first-ever visit
+    must not reload it; and no document may reload more than once whatever it is told.
+    """
+    html = page().get_data(as_text=True)
+    guard = html.split('addEventListener("controllerchange"', 1)[1].split("});", 1)[0]
+    assert "if (!swHadController || swReloaded) return;" in guard
+    assert "swReloaded = true;" in guard
+    # The flag has to be read from the controller at load time, not at event time: by the
+    # time the event fires there is always a controller, and the guard would never hold.
+    assert "var swHadController = !!navigator.serviceWorker.controller;" in html
+
+
+def test_the_new_worker_takes_over_without_waiting_for_the_precache():
+    """skipWaiting() used to be chained after cache.addAll(SHELL).
+
+    That put a 1.6 MB download between the stale page appearing and the new worker
+    claiming it -- and the page's reload cannot happen until the claim does. Measured
+    on localhost the takeover is ~1.7 s; behind the precache it is the download as well.
+    """
+    worker = (
+        resources.files("frontdoor_server").joinpath("app-sw.js").read_text(encoding="utf-8")
+    )
+    install = worker.split('addEventListener("install"', 1)[1].split("\n});", 1)[0]
+    assert "self.skipWaiting();" in install
+    before, after = install.split("self.skipWaiting();", 1)
+    assert "addAll(SHELL)" in before, "the precache is assigned before the takeover"
+    assert "await" not in before and ".then(() => self.skipWaiting())" not in install
+    assert "skipWaiting" not in after, "skipWaiting must be called once, not chained again"
+
+
+def test_the_previous_shell_is_only_dropped_once_this_one_is_in_place():
+    """Claiming early is what makes the correction fast; deleting early would cost the
+    offline promise.
+
+    activate() claims immediately, then waits for the precache before dropping the old
+    cache. Between the two there would otherwise be a window with the previous shell
+    gone and this one still filling, and a phone that lost signal inside it would have
+    no app to open -- the one failure this worker exists to prevent.
+    """
+    worker = (
+        resources.files("frontdoor_server").joinpath("app-sw.js").read_text(encoding="utf-8")
+    )
+    activate = worker.split('addEventListener("activate"', 1)[1].split("\n});", 1)[0]
+    assert activate.index("clients") < activate.index("precached") < activate.index(
+        "caches.delete"
+    ), activate
 
 
 def _block(html, start, end="\n}"):
