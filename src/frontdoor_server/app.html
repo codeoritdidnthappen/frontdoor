@@ -9636,8 +9636,45 @@ armMapObserver();
 <script>
 /* Installable app (TICK-327). Registered late and defensively: the page is the
    product, the worker is an optimisation. A browser without service workers, a
-   file:// open, or a registration failure must all still leave a working app. */
+   file:// open, or a registration failure must all still leave a working app.
+
+   The one-shot reload (#483). The worker serves /app cache-first, so the load
+   right after a deploy renders the previous build: the navigation is answered
+   from the old cache before the browser has looked at /app-sw.js at all. That
+   is silent, it looks exactly like a fix that did not ship, and it has been
+   reported as one. Cache-first is kept -- the page is 1.6 MB and has to open on
+   one bar of signal -- and the staleness is corrected rather than prevented:
+   the browser revalidates /app-sw.js (served no-cache), the new worker installs,
+   calls skipWaiting() and clients.claim(), and this listener reloads the
+   document once, so the second render is the deployed build. Measured on
+   localhost at about 2.9 s from the stale render to the correct one: ~1.7 s of
+   it is the browser starting and activating the new worker, the rest is
+   fetching the new page. It is a visible reload, and that is the price -- the
+   alternative is not seeing it at all.
+
+   Why this cannot loop, which is the whole risk of reloading from a worker:
+
+   - It reloads only if this document ALREADY had a controller when it loaded.
+     A first-ever visit is uncontrolled and its clients.claim() fires this event
+     too, but that document came off the network and is already current, so
+     reloading it would be a visible flash for nothing.
+   - It reloads at most once per document, and the reloaded document reloads
+     again only if a controller change happens to it in turn. After the reload
+     the new worker is already the controller and /app-sw.js is byte-identical
+     on the next fetch, so no further worker installs and no further event
+     fires. A second reload takes a second real deploy.
+   - The worker's own bytes are stable within a deploy: the only substitution
+     the server makes is the commit, fixed for the life of an image. A file that
+     differed per request would install a new worker on every load, which is
+     exactly how this pattern loops. That is not what is served. */
 if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+  var swHadController = !!navigator.serviceWorker.controller;
+  var swReloaded = false;
+  navigator.serviceWorker.addEventListener("controllerchange", function () {
+    if (!swHadController || swReloaded) return;
+    swReloaded = true;
+    location.reload();
+  });
   window.addEventListener("load", function () {
     navigator.serviceWorker.register("/app-sw.js").catch(function () {});
   });
