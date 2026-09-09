@@ -34,6 +34,13 @@ function mergeServerPin(pin, base){
      same pin exactly as before -- and the card turns it into the existing
      "Could you take another look?" nudge, which asks for a photo and claims nothing. */
   p.relook = pin.needs_relook===true;
+  /* TICK-491: what the place IS, straight from the server with the OpenStreetMap
+     element that said so. Assigned, never merged: a pin the server has no category
+     for loses any it was carrying, so the page can only ever show a kind the server
+     can currently cite. It is read by the Filters sheet and by nothing else -- not by
+     featsOf, not by matchOf, not by any tier or state below -- which is why this line
+     sits above the branch rather than inside it. */
+  p.cat = (pin.category && pin.category.key) ? pin.category : null;
   if(scanned){
     if(p.tier==='est') p.tier='scan';
     p.live=true;

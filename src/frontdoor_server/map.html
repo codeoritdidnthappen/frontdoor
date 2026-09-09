@@ -868,6 +868,10 @@ async function init() {
   // this map say something wrong — it makes it quietly stop asking. Reported for
   // the same reason as the rest: the loss is otherwise visible to nobody.
   if (payload.corrections_error) problems.push("re-look requests could not be loaded");
+  // TICK-491: the kind-of-place source. Losing it takes no pin off this map and
+  // changes no state — but it silently empties the app's "Kind of place" filter,
+  // so it is named here with the rest rather than being the one loss nobody sees.
+  if (payload.categories_error) problems.push("kind of place is missing");
   var incomplete = problems.length
     ? "This map is incomplete — " + problems.join("; ") + "."
     : "";

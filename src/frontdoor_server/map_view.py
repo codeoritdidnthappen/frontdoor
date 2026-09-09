@@ -21,6 +21,18 @@ frontdoor.external_data only ever emits agreeable lines publicly, a Commons
 line carries no accessibility claim at all, and the state is computed
 before provenance is attached.
 
+Kind of place (TICK-491, #491): when the segregated OSM category side file is
+present (FRONTDOOR_EXTERNAL_CATEGORIES, default
+data/external/osm_categories.json), a pin whose IDENTITY matches an OSM
+element -- an exact phone or website, or a name both sides carry -- gains an
+optional "category" object naming the human category, the raw OSM tag, how it
+matched, and the element's URL. It is what the place IS, never a claim about
+its entrance: it is attached after states and labels are computed, nothing
+downstream reads it, and it is not one of the engine's four criteria (#481).
+A pin with no identity match simply has no "category" key, which is the
+common case and which the app states rather than hides. Google Places is not
+a source for this -- see frontdoor.place_categories for the #242 posture.
+
 Community scans (TICK-262, #270): published scan records from the JSONL store
 (FRONTDOOR_SCANS, default data/scans.jsonl) are merged into the dataset before
 states are computed. The curated on-site publication (TICK-333,
@@ -69,6 +81,7 @@ from frontdoor.corrections import (
 )
 from frontdoor.external_data import load_side_file, provenance_for_place
 from frontdoor.map_states import prepare_map_payload
+from frontdoor.place_categories import category_for_place, load_category_records
 from frontdoor.scan_records import (
     DEFAULT_PUBLISHED_SCANS_PATH,
     DEFAULT_SCANS_PATH,
@@ -84,6 +97,8 @@ EXTERNAL_OSM_ENV = "FRONTDOOR_EXTERNAL_OSM"
 DEFAULT_EXTERNAL_OSM_PATH = "data/external/osm_accessibility.json"
 EXTERNAL_COMMONS_ENV = "FRONTDOOR_EXTERNAL_COMMONS"
 DEFAULT_EXTERNAL_COMMONS_PATH = "data/external/commons_imagery.json"
+EXTERNAL_CATEGORIES_ENV = "FRONTDOOR_EXTERNAL_CATEGORIES"
+DEFAULT_EXTERNAL_CATEGORIES_PATH = "data/external/osm_categories.json"
 
 map_page = Blueprint("map_page", __name__)
 
@@ -156,7 +171,43 @@ def map_data():
     payload["commons_error"] = commons_error
     _attach_scan_provenance(payload["pins"], scan_meta)
     _attach_relook(payload["pins"], dataset, relook)
+    payload["categories_error"] = _attach_category(payload["pins"], dataset)
     return payload
+
+
+def _attach_category(pins, dataset):
+    """Add the optional "category" object to pins that IDENTIFY with an OSM element.
+
+    Last, and deliberately: every state, label, checklist and tier above was
+    computed from inputs this function is not part of, so what a place *is*
+    can never move what its entrance *has*. It only ever adds a key.
+
+    The phone and website compared against are read from the dataset row and
+    never copied onto the payload -- the match is made here and the fields
+    stay where they were.
+
+    A pin with no identity match gets no "category" key at all. That is the
+    common case (122 of 186 in the demo area) and it is a statement about our
+    data, not about the business, which is why the app names the number
+    rather than quietly dropping those places.
+    """
+    records, error = load_category_records(
+        os.environ.get(EXTERNAL_CATEGORIES_ENV, DEFAULT_EXTERNAL_CATEGORIES_PATH)
+    )
+    if not records:
+        return error
+    rows = dataset if isinstance(dataset, dict) else {}
+    for pin in pins:
+        row = rows.get(pin["place_id"])
+        row = row if isinstance(row, dict) else {}
+        location = pin["location"]
+        category = category_for_place(
+            pin.get("name"), location["lat"], location["lng"],
+            row.get("phone"), row.get("website"), records,
+        )
+        if category:
+            pin["category"] = category
+    return error
 
 
 def _attach_provenance(pins):
